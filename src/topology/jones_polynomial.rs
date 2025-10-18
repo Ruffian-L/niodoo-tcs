@@ -10,7 +10,9 @@ struct Polynomial<T> {
 
 impl<T: Clone> Polynomial<T> {
     fn new() -> Self {
-        Self { terms: HashMap::new() }
+        Self {
+            terms: HashMap::new(),
+        }
     }
 
     fn add_monomial(&mut self, coeff: T, power: i32) {
@@ -27,7 +29,7 @@ impl<T: Clone> Polynomial<T> {
 pub struct KnotDiagram {
     pub crossings: Vec<Crossing>,
     pub gauss_code: Vec<i32>,
-    pub pd_code: Vec<[usize; 4]>,  // Planar diagram code
+    pub pd_code: Vec<[usize; 4]>, // Planar diagram code
 }
 
 #[derive(Debug, Clone)]
@@ -35,7 +37,7 @@ pub struct Crossing {
     id: usize,
     over_strand: usize,
     under_strand: usize,
-    sign: i8,  // +1 for positive, -1 for negative
+    sign: i8, // +1 for positive, -1 for negative
 }
 
 impl Crossing {
@@ -73,19 +75,17 @@ impl JonesPolynomial {
     /// Kauffman bracket via state summation
     fn kauffman_bracket(knot: &KnotDiagram) -> Polynomial<Complex<f32>> {
         let n = knot.crossings.len();
-        let num_states = 1 << n;  // 2^n states
+        let num_states = 1 << n; // 2^n states
 
         let mut bracket = Polynomial::new();
 
         // Sum over all states
         for state in 0..num_states {
-            let (circles, a_power, a_inv_power) =
-                Self::evaluate_state(knot, state);
+            let (circles, a_power, a_inv_power) = Self::evaluate_state(knot, state);
 
             let contribution = Complex::new(
-                (-1.0_f32).powi(circles as i32) *
-                2.0_f32.powi((circles - 1) as i32),
-                0.0
+                (-1.0_f32).powi(circles as i32) * 2.0_f32.powi((circles - 1) as i32),
+                0.0,
             );
 
             let power = a_power as i32 - a_inv_power as i32;
@@ -96,10 +96,7 @@ impl JonesPolynomial {
     }
 
     /// Evaluate a single state (Kauffman state)
-    fn evaluate_state(
-        knot: &KnotDiagram,
-        state: usize
-    ) -> (usize, usize, usize) {
+    fn evaluate_state(knot: &KnotDiagram, state: usize) -> (usize, usize, usize) {
         let mut graph: Graph<(), (), petgraph::Undirected> = Graph::new_undirected();
         let mut a_power = 0;
         let mut a_inv_power = 0;
@@ -113,7 +110,7 @@ impl JonesPolynomial {
                 graph.add_edge(
                     NodeIndex::new(crossing.id * 4),
                     NodeIndex::new(crossing.id * 4 + 1),
-                    ()
+                    (),
                 );
             } else {
                 // A^{-1}-smoothing
@@ -122,7 +119,7 @@ impl JonesPolynomial {
                 graph.add_edge(
                     NodeIndex::new(crossing.id * 4),
                     NodeIndex::new(crossing.id * 4 + 2),
-                    ()
+                    (),
                 );
             }
         }
@@ -134,10 +131,7 @@ impl JonesPolynomial {
     }
 
     /// Normalize bracket to Jones polynomial
-    fn normalize_bracket(
-        bracket: Polynomial<Complex<f32>>,
-        writhe: i32
-    ) -> Self {
+    fn normalize_bracket(bracket: Polynomial<Complex<f32>>, writhe: i32) -> Self {
         // V(t) = (-A^3)^{-writhe} * <K>
         // where A = t^{-1/4}
         let mut coefficients = HashMap::new();
@@ -167,7 +161,7 @@ impl JonesPolynomial {
                 jones.min_degree = 0;
                 jones.max_degree = 0;
                 jones
-            },
+            }
             KnotType::Trefoil => {
                 // V = t + t³ - t⁴
                 let mut jones = JonesPolynomial::new();
@@ -177,7 +171,7 @@ impl JonesPolynomial {
                 jones.min_degree = 1;
                 jones.max_degree = 4;
                 jones
-            },
+            }
             KnotType::FigureEight => {
                 // V = t^{-2} - t^{-1} + 1 - t + t²
                 let mut jones = JonesPolynomial::new();
@@ -189,8 +183,8 @@ impl JonesPolynomial {
                 jones.min_degree = -2;
                 jones.max_degree = 2;
                 jones
-            },
-            _ => Self::compute(&knot_type.to_diagram())
+            }
+            _ => Self::compute(&knot_type.to_diagram()),
         }
     }
 
@@ -239,9 +233,9 @@ impl KnotType {
                         Crossing::new(2, 2, 0, 1),
                     ],
                     gauss_code: vec![1, -2, 3, -1, 2, -3],
-                    pd_code: vec![[1,4,2,5], [3,6,4,1], [5,2,6,3]],
+                    pd_code: vec![[1, 4, 2, 5], [3, 6, 4, 1], [5, 2, 6, 3]],
                 }
-            },
+            }
             KnotType::FigureEight => {
                 // Simplified figure-eight representation
                 KnotDiagram {
@@ -252,9 +246,18 @@ impl KnotType {
                         Crossing::new(3, 3, 0, -1),
                     ],
                     gauss_code: vec![1, -2, 3, -4, -1, 2, -3, 4],
-                    pd_code: vec![[1,8,2,3], [3,1,4,14], [4,15,5,6], [6,5,7,8], [9,4,10,11], [11,10,12,13], [13,12,14,15], [7,16,9,2]],
+                    pd_code: vec![
+                        [1, 8, 2, 3],
+                        [3, 1, 4, 14],
+                        [4, 15, 5, 6],
+                        [6, 5, 7, 8],
+                        [9, 4, 10, 11],
+                        [11, 10, 12, 13],
+                        [13, 12, 14, 15],
+                        [7, 16, 9, 2],
+                    ],
                 }
-            },
+            }
             KnotType::Custom => panic!("Custom knot needs diagram"),
         }
     }

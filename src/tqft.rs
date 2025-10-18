@@ -4,11 +4,10 @@
 /// This module provides the mathematical foundation for higher-order reasoning
 /// about topological transitions in cognitive states, treating consciousness
 /// as a 2D TQFT via Frobenius algebra operations.
-
 use nalgebra::{DMatrix, DVector};
 use num_complex::Complex;
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Frobenius algebra: the core algebraic structure for 2D TQFT
 /// Encodes multiplication and comultiplication operations that preserve
@@ -230,8 +229,10 @@ impl TQFTEngine {
     /// Initialize standard cobordism operators (Atiyah-Segal axioms)
     fn initialize_operators(&mut self) {
         // Identity cobordism (cylinder) - acts as identity
-        self.operators
-            .insert(Cobordism::Identity, LinearOperator::identity(self.dimension));
+        self.operators.insert(
+            Cobordism::Identity,
+            LinearOperator::identity(self.dimension),
+        );
 
         // Birth (cap) - creates new component, maps empty to one element
         let mut birth_matrix = DMatrix::zeros(self.dimension, 1);
@@ -325,11 +326,11 @@ impl TQFTEngine {
 
         match (delta_b0, delta_b1, delta_b2) {
             (0, 0, 0) => Some(Cobordism::Identity),
-            (1, 0, 0) => Some(Cobordism::Split),   // More connected components
-            (-1, 0, 0) => Some(Cobordism::Merge),  // Fewer connected components
-            (0, 1, 0) => Some(Cobordism::Birth),   // New loop created
-            (0, -1, 0) => Some(Cobordism::Death),  // Loop destroyed
-            _ => None, // Complex topological change
+            (1, 0, 0) => Some(Cobordism::Split), // More connected components
+            (-1, 0, 0) => Some(Cobordism::Merge), // Fewer connected components
+            (0, 1, 0) => Some(Cobordism::Birth), // New loop created
+            (0, -1, 0) => Some(Cobordism::Death), // Loop destroyed
+            _ => None,                           // Complex topological change
         }
     }
 }
@@ -365,10 +366,7 @@ mod tests {
     #[test]
     fn test_cobordism_reasoning() {
         let engine = TQFTEngine::new(2).unwrap();
-        let initial = DVector::from_vec(vec![
-            Complex::new(1.0, 0.0),
-            Complex::new(0.0, 0.0),
-        ]);
+        let initial = DVector::from_vec(vec![Complex::new(1.0, 0.0), Complex::new(0.0, 0.0)]);
 
         let result = engine.reason(&initial, &[Cobordism::Identity]);
         assert!(result.is_ok());
@@ -379,7 +377,7 @@ mod tests {
     #[test]
     fn test_infer_cobordism() {
         let before = [1, 0, 0]; // One component, no loops
-        let after = [2, 0, 0];  // Two components
+        let after = [2, 0, 0]; // Two components
         let cobordism = TQFTEngine::infer_cobordism_from_betti(&before, &after);
         assert_eq!(cobordism, Some(Cobordism::Split));
     }

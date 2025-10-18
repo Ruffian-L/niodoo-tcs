@@ -154,9 +154,9 @@ impl CompassState {
         } else {
             // Ambiguous state: use arousal as tiebreaker
             if arousal > 0.5 {
-                StuckState::Stuck  // High arousal without positive valence = stuck
+                StuckState::Stuck // High arousal without positive valence = stuck
             } else {
-                StuckState::Unstuck  // Low arousal = calm/unstuck
+                StuckState::Unstuck // Low arousal = calm/unstuck
             }
         };
 
@@ -175,18 +175,18 @@ impl CompassState {
                 // Prediction error = how much we're failing
                 // High negative emotions = high error
                 (vec.sadness + vec.anger + vec.fear) / 3.0
-            },
+            }
             StuckState::Unstuck => {
                 // Prediction error = lack of positive confirmation
                 // Low joy = still some uncertainty
                 (1.0 - vec.joy).max(0.0)
-            },
+            }
         };
 
         Self {
             stuck,
             confidence,
-            entropy: 0.0,  // Computed separately for distribution
+            entropy: 0.0, // Computed separately for distribution
             emotional_vector: vec.clone(),
             prediction_error,
             timestamp: chrono::Utc::now(),
@@ -228,22 +228,22 @@ impl CompassState {
                 };
 
                 base_reward * confidence_bonus
-            },
+            }
 
             // REGRESSION: Unstuck → Stuck (negative reward)
             (StuckState::Unstuck, StuckState::Stuck) => {
-                -5.0  // Penalty for losing progress
-            },
+                -5.0 // Penalty for losing progress
+            }
 
             // PERSISTENCE: Stuck → Stuck (small negative to encourage change)
             (StuckState::Stuck, StuckState::Stuck) => {
-                -0.1 * self.prediction_error  // Proportional to how stuck we are
-            },
+                -0.1 * self.prediction_error // Proportional to how stuck we are
+            }
 
             // MAINTENANCE: Unstuck → Unstuck (small positive for stability)
             (StuckState::Unstuck, StuckState::Unstuck) => {
-                0.5  // Positive but not as strong as breakthrough
-            },
+                0.5 // Positive but not as strong as breakthrough
+            }
         }
     }
 
@@ -255,10 +255,10 @@ impl CompassState {
     /// Convert to 2-bit integer representation (for entropy calculations)
     pub fn to_bits(&self) -> u8 {
         match (self.stuck, self.confidence) {
-            (StuckState::Stuck, ConfidenceLevel::Low) => 0b00,      // State 0
-            (StuckState::Stuck, ConfidenceLevel::High) => 0b01,     // State 1
-            (StuckState::Unstuck, ConfidenceLevel::Low) => 0b10,    // State 2
-            (StuckState::Unstuck, ConfidenceLevel::High) => 0b11,   // State 3
+            (StuckState::Stuck, ConfidenceLevel::Low) => 0b00, // State 0
+            (StuckState::Stuck, ConfidenceLevel::High) => 0b01, // State 1
+            (StuckState::Unstuck, ConfidenceLevel::Low) => 0b10, // State 2
+            (StuckState::Unstuck, ConfidenceLevel::High) => 0b11, // State 3
         }
     }
 
@@ -488,23 +488,34 @@ mod tests {
 
         // Add 4 equiprobable states → should approach 2.0 bits
         for _ in 0..25 {
-            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(0.1, 0.8, 0.9, 0.9, 0.5)));
-            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(0.1, 0.1, 0.1, 0.1, 0.9)));
-            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(0.9, 0.1, 0.1, 0.1, 0.2)));
-            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(0.6, 0.2, 0.1, 0.1, 0.8)));
+            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(
+                0.1, 0.8, 0.9, 0.9, 0.5,
+            )));
+            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(
+                0.1, 0.1, 0.1, 0.1, 0.9,
+            )));
+            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(
+                0.9, 0.1, 0.1, 0.1, 0.2,
+            )));
+            tracker.observe(CompassState::from_emotional_vector(&EmotionalVector::new(
+                0.6, 0.2, 0.1, 0.1, 0.8,
+            )));
         }
 
         let entropy = tracker.current_entropy();
-        assert!(entropy > 1.8 && entropy <= 2.0, "Equiprobable states should have ~2.0 bits entropy");
+        assert!(
+            entropy > 1.8 && entropy <= 2.0,
+            "Equiprobable states should have ~2.0 bits entropy"
+        );
     }
 
     #[test]
     fn test_strategic_imperatives() {
-        let panic_vec = EmotionalVector::new(0.1, 0.8, 0.9, 0.9, 0.5);  // Stuck + uncertain
+        let panic_vec = EmotionalVector::new(0.1, 0.8, 0.9, 0.9, 0.5); // Stuck + uncertain
         let state = CompassState::from_emotional_vector(&panic_vec);
         assert_eq!(state.strategic_imperative(), StrategicAction::Panic);
 
-        let master_vec = EmotionalVector::new(0.9, 0.1, 0.1, 0.1, 0.2);  // Unstuck + certain
+        let master_vec = EmotionalVector::new(0.9, 0.1, 0.1, 0.1, 0.2); // Unstuck + certain
         let state = CompassState::from_emotional_vector(&master_vec);
         assert_eq!(state.strategic_imperative(), StrategicAction::Master);
     }

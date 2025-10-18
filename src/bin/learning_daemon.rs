@@ -1,9 +1,9 @@
-use niodoo_consciousness::consciousness_engine::PersonalNiodooConsciousness;
-use niodoo_consciousness::qwen_curator::{QloraCurator, QloraCuratorConfig};
-use niodoo_consciousness::python_integration::PythonQLoRAIntegration;
 use niodoo_consciousness::config::system_config::AppConfig;
+use niodoo_consciousness::consciousness_engine::PersonalNiodooConsciousness;
+use niodoo_consciousness::python_integration::PythonQLoRAIntegration;
+use niodoo_consciousness::qwen_curator::{QloraCurator, QloraCuratorConfig};
 use std::time::Duration;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Check if entropy has converged to ~2.0 bits (4 fundamental states)
 fn is_entropy_converged(entropy_history: &[f32]) -> bool {
@@ -87,9 +87,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             match python_integration.run_model_comparison() {
                                 Ok(results) => {
                                     info!("📊 Model comparison results:");
-                                    info!("   - Average latency improvement: {:.2}s", results.avg_latency_improvement);
-                   info!("   - Average ROUGE improvement: {:.3}", results.avg_rouge_improvement);
-                   info!("   - Average coherence improvement: {:.3}", results.avg_coherence_improvement);                                    if results.avg_rouge_improvement > 0.1 {
+                                    info!(
+                                        "   - Average latency improvement: {:.2}s",
+                                        results.avg_latency_improvement
+                                    );
+                                    info!(
+                                        "   - Average ROUGE improvement: {:.3}",
+                                        results.avg_rouge_improvement
+                                    );
+                                    info!(
+                                        "   - Average coherence improvement: {:.3}",
+                                        results.avg_coherence_improvement
+                                    );
+                                    if results.avg_rouge_improvement > 0.1 {
                                         info!("🎯 SUCCESS: Qwen shows significant improvement on emotional healing tasks!");
                                     } else {
                                         warn!("⚠️ Qwen improvement below threshold - may need more training data");
@@ -105,7 +115,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 } else {
-                    info!("⏳ Skipping fine-tune ({} cycles since last)", cycle_count - last_fine_tune_cycle);
+                    info!(
+                        "⏳ Skipping fine-tune ({} cycles since last)",
+                        cycle_count - last_fine_tune_cycle
+                    );
                 }
             }
         }

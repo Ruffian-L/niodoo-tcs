@@ -82,9 +82,8 @@ pub mod qt_bridge;
 pub mod silicon_synapse; // ENABLED - functional monitoring system
 
 // Advanced modules
-pub mod python_integration;
-pub mod gpu_acceleration;
 pub mod git_manifestation_logging;
+pub mod gpu_acceleration;
 pub mod learning_analytics;
 pub mod metacognition;
 pub mod oscillatory;
@@ -93,6 +92,7 @@ pub mod phase5_config;
 pub mod phase6_config;
 pub mod phase6_integration;
 pub mod philosophy;
+pub mod python_integration;
 pub mod qwen_curator;
 pub mod soul_resonance;
 

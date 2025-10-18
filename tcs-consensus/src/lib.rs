@@ -10,17 +10,43 @@ pub struct TokenProposal {
     pub emotional_coherence: f32,
 }
 
-/// Placeholder consensus module with fixed acceptance threshold.
-pub struct ConsensusModule {
+/// Single-node threshold-based acceptance helper for prototype pipelines.
+pub struct ThresholdConsensus {
     threshold: f32,
 }
 
-impl ConsensusModule {
+impl ThresholdConsensus {
     pub fn new(threshold: f32) -> Self {
         Self { threshold }
     }
 
     pub fn propose(&self, proposal: &TokenProposal) -> bool {
         proposal.persistence_score >= self.threshold
+    }
+}
+
+#[deprecated = "Use ThresholdConsensus; this alias remains during the transition away from the ConsensusModule name."]
+pub type ConsensusModule = ThresholdConsensus;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn honors_threshold() {
+        let module = ThresholdConsensus::new(0.8);
+        let accept = TokenProposal {
+            id: Uuid::new_v4(),
+            persistence_score: 0.85,
+            emotional_coherence: 0.5,
+        };
+        let reject = TokenProposal {
+            id: Uuid::new_v4(),
+            persistence_score: 0.65,
+            emotional_coherence: 0.5,
+        };
+
+        assert!(module.propose(&accept));
+        assert!(!module.propose(&reject));
     }
 }

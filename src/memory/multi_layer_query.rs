@@ -626,7 +626,7 @@ impl MultiLayerMemoryQuery {
         fs::create_dir_all(&self.checkpoint_dir)?;
 
         // Create Qwen-compatible LearningEvent for fine-tuning
-        use crate::qwen_curator::{LearningEvent as QwenLearningEvent, EmotionalState};
+        use crate::qwen_curator::{EmotionalState, LearningEvent as QwenLearningEvent};
 
         let qwen_event = QwenLearningEvent {
             timestamp: chrono::Utc::now().timestamp().to_string(),
@@ -689,7 +689,11 @@ impl MultiLayerMemoryQuery {
         let memory_json = serde_json::to_string_pretty(&memory_event)?;
         fs::write(&memory_filepath, memory_json)?;
 
-        tracing::info!("📝 Persisted learning events: Qwen-compatible ({}) and memory analysis ({})", qwen_filepath.display(), memory_filepath.display());
+        tracing::info!(
+            "📝 Persisted learning events: Qwen-compatible ({}) and memory analysis ({})",
+            qwen_filepath.display(),
+            memory_filepath.display()
+        );
         Ok(())
     }
 }

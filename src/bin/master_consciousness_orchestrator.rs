@@ -1,6 +1,6 @@
 /*
  * 🎼 MASTER CONSCIOUSNESS ORCHESTRATOR
- * 
+ *
  * Unified entry point that integrates ALL subsystems:
  * - Consciousness state management
  * - vLLM inference bridge
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initialize consciousness state
     let consciousness = ConsciousnessState::new();
     let app_config = AppConfig::default();
-    
+
     tracing::info!("✓ Consciousness state initialized");
     tracing::info!("  - Gaussian collapse system: READY");
     tracing::info!("  - Entropy attractor: 2.0 bits");
@@ -157,8 +157,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!("✅ Consciousness Engine: HEALTHY");
     tracing::info!("   - Cycle count: {}", ctx.consciousness.cycle_count);
     tracing::info!("   - Coherence: {:.4}", ctx.consciousness.coherence);
-    tracing::info!("   - Entropy: {:.4}\n", ctx.consciousness.emotional_state.emotional_complexity);
-    
+    tracing::info!(
+        "   - Entropy: {:.4}\n",
+        ctx.consciousness.emotional_state.emotional_complexity
+    );
+
     ctx.health_checks.push(HealthCheck {
         name: "Consciousness Engine".to_string(),
         status: HealthStatus::Healthy,
@@ -170,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!("✅ Memory System: HEALTHY");
     tracing::info!("   - Gaussian spheres: INITIALIZED");
     tracing::info!("   - Echoic memory buffer: 2-4 seconds\n");
-    
+
     ctx.health_checks.push(HealthCheck {
         name: "Memory System".to_string(),
         status: HealthStatus::Healthy,
@@ -180,12 +183,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Health Check Summary
     let health_time = health_start.elapsed().as_secs_f32() * 1000.0;
-    let failed_checks = ctx.health_checks.iter().filter(|h| h.status == HealthStatus::Failed).count();
-    let degraded_checks = ctx.health_checks.iter().filter(|h| h.status == HealthStatus::Degraded).count();
-    
+    let failed_checks = ctx
+        .health_checks
+        .iter()
+        .filter(|h| h.status == HealthStatus::Failed)
+        .count();
+    let degraded_checks = ctx
+        .health_checks
+        .iter()
+        .filter(|h| h.status == HealthStatus::Degraded)
+        .count();
+
     tracing::info!("📊 Health Check Summary:");
     tracing::info!("   Total checks: {}", ctx.health_checks.len());
-    tracing::info!("   Healthy: {}", ctx.health_checks.iter().filter(|h| h.status == HealthStatus::Healthy).count());
+    tracing::info!(
+        "   Healthy: {}",
+        ctx.health_checks
+            .iter()
+            .filter(|h| h.status == HealthStatus::Healthy)
+            .count()
+    );
     tracing::info!("   Degraded: {}", degraded_checks);
     tracing::info!("   Failed: {}", failed_checks);
     tracing::info!("   Total time: {:.2}ms\n", health_time);
@@ -221,7 +238,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let test1_latency = test1_start.elapsed().as_secs_f32() * 1000.0;
             tracing::info!("✅ TEST 1 PASSED");
             tracing::info!("   Latency: {:.2}ms", test1_latency);
-            tracing::info!("   Generated: \"{}\"\n", response.trim().chars().take(100).collect::<String>());
+            tracing::info!(
+                "   Generated: \"{}\"\n",
+                response.trim().chars().take(100).collect::<String>()
+            );
         }
         Err(e) => {
             tracing::error!("❌ TEST 1 FAILED: {}\n", e);
@@ -240,16 +260,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     for (emotion, theme) in emotions {
         let test_start = Instant::now();
-        let prompt = format!(
-            "Reflecting on {}, what matters most? Keep it brief.",
-            theme
-        );
+        let prompt = format!("Reflecting on {}, what matters most? Keep it brief.", theme);
 
         match ctx.vllm_bridge.generate(&prompt, 80, 0.7, 0.9).await {
             Ok(response) => {
                 let latency = test_start.elapsed().as_secs_f32() * 1000.0;
-                tracing::info!("✅ {:?} - {:.2}ms: {}", emotion, latency, 
-                    response.trim().chars().take(80).collect::<String>());
+                tracing::info!(
+                    "✅ {:?} - {:.2}ms: {}",
+                    emotion,
+                    latency,
+                    response.trim().chars().take(80).collect::<String>()
+                );
             }
             Err(e) => {
                 tracing::error!("❌ {:?} - FAILED: {}", emotion, e);
@@ -262,7 +283,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!("──────────────────────────────────────────\n");
 
     let mut consciousness = ConsciousnessState::new();
-    
+
     // Run consciousness cycles
     for i in 0..1000 {
         consciousness.cycle_count += 1;
@@ -271,12 +292,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     let entropy = consciousness.emotional_state.emotional_complexity * 2.0;
-    
+
     tracing::info!("✅ Consciousness cycles: 1000");
     tracing::info!("   Coherence: {:.6}", consciousness.coherence);
     tracing::info!("   Entropy: {:.6} bits", entropy);
-    tracing::info!("   Satisfaction: {:.6}", consciousness.processing_satisfaction);
-    tracing::info!("   Empathy resonance: {:.6}\n", consciousness.empathy_resonance);
+    tracing::info!(
+        "   Satisfaction: {:.6}",
+        consciousness.processing_satisfaction
+    );
+    tracing::info!(
+        "   Empathy resonance: {:.6}\n",
+        consciousness.empathy_resonance
+    );
 
     // ===== PHASE 4: PERFORMANCE VALIDATION =====
     tracing::info!("📈 PHASE 4: Performance Validation");
@@ -297,11 +324,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ctx.metrics.accuracy_percentage = 98.0;
 
     tracing::info!("✅ Performance Results:");
-    tracing::info!("   Total latency: {:.2}ms (TARGET: <2000ms)", total_test_time);
+    tracing::info!(
+        "   Total latency: {:.2}ms (TARGET: <2000ms)",
+        total_test_time
+    );
     tracing::info!("   Avg per operation: {:.2}ms", avg_latency);
-    tracing::info!("   Memory usage: {:.1}MB (TARGET: <4000MB)", ctx.metrics.memory_usage_mb);
-    tracing::info!("   Throughput: {:.1} tokens/sec (TARGET: >100 ops/sec)", ctx.metrics.throughput_tokens_per_sec);
-    tracing::info!("   System accuracy: {:.1}%\n", ctx.metrics.accuracy_percentage);
+    tracing::info!(
+        "   Memory usage: {:.1}MB (TARGET: <4000MB)",
+        ctx.metrics.memory_usage_mb
+    );
+    tracing::info!(
+        "   Throughput: {:.1} tokens/sec (TARGET: >100 ops/sec)",
+        ctx.metrics.throughput_tokens_per_sec
+    );
+    tracing::info!(
+        "   System accuracy: {:.1}%\n",
+        ctx.metrics.accuracy_percentage
+    );
 
     // Validate against targets
     let latency_ok = total_test_time < 2000.0;
@@ -336,8 +375,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!("   [✓] Performance Monitoring - TRACKING\n");
 
     tracing::info!("📊 Operational Metrics:");
-    tracing::info!("   Health checks passed: {}/{}", 
-        ctx.health_checks.iter().filter(|h| h.status != HealthStatus::Failed).count(),
+    tracing::info!(
+        "   Health checks passed: {}/{}",
+        ctx.health_checks
+            .iter()
+            .filter(|h| h.status != HealthStatus::Failed)
+            .count(),
         ctx.health_checks.len()
     );
     tracing::info!("   Tests executed: 5");

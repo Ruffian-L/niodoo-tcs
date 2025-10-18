@@ -6,19 +6,18 @@
 //! 3. Validate improvement with before/after comparison
 //! 4. Perform blue-green deployment validation
 
-use niodoo_consciousness::qwen_curator::{QloraCurator, QloraCuratorConfig};
-use niodoo_consciousness::qwen_integration::{QwenIntegrator, QwenConfig};
-use niodoo_consciousness::config::system_config::AppConfig;
-use std::process::Command;
-use std::path::PathBuf;
 use anyhow::Result;
-use tracing::{info, error};
+use niodoo_consciousness::config::system_config::AppConfig;
+use niodoo_consciousness::qwen_curator::{QloraCurator, QloraCuratorConfig};
+use niodoo_consciousness::qwen_integration::{QwenConfig, QwenIntegrator};
+use std::path::PathBuf;
+use std::process::Command;
+use tracing::{error, info};
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Run learning pipeline in thread with LARGE stack (64MB)
     // to handle: model loading, tensor operations, consciousness processing
-    let builder = std::thread::Builder::new()
-        .stack_size(128 * 1024 * 1024); // 128MB stack
+    let builder = std::thread::Builder::new().stack_size(128 * 1024 * 1024); // 128MB stack
 
     let result = builder
         .spawn(|| {
@@ -27,12 +26,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             rt.block_on(async_main())
         })?
         .join()
-        .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> {
-            "Thread panicked".into()
-        })?
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            e.into()
-        })?;
+        .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> { "Thread panicked".into() })?
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
 
     Ok(())
 }
@@ -90,14 +85,19 @@ async fn async_main() -> anyhow::Result<()> {
         "I want to understand my emotional patterns better".to_string(),
     ];
 
-    let validation_result = qwen_integrator.run_validation_comparison(
-        &validation_prompts,
-        None,
-        Some(&curator.output_dir().join("adapter_final")),
-    ).await?;
+    let validation_result = qwen_integrator
+        .run_validation_comparison(
+            &validation_prompts,
+            None,
+            Some(&curator.output_dir().join("adapter_final")),
+        )
+        .await?;
 
     println!("📊 Validation Results:");
-    println!("   Average Improvement: {:.3}", validation_result.average_improvement);
+    println!(
+        "   Average Improvement: {:.3}",
+        validation_result.average_improvement
+    );
     for comparison in &validation_result.comparisons {
         println!("   Prompt: {}...", &comparison.prompt[..50]);
         println!("   Improvement: {:.3}", comparison.improvement_score);
@@ -105,7 +105,9 @@ async fn async_main() -> anyhow::Result<()> {
 
     // Step 4: Blue-green deployment validation
     println!("\n🚀 Step 4: Blue-green deployment validation...");
-    let deployment_success = curator.validate_deployment(&validation_prompts, &mut qwen_integrator).await?;
+    let deployment_success = curator
+        .validate_deployment(&validation_prompts, &mut qwen_integrator)
+        .await?;
 
     if deployment_success {
         println!("🎉 Learning pipeline completed successfully!");

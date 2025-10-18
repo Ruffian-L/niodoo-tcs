@@ -14,15 +14,9 @@ pub mod events {
     /// High-level topological events bubbling out of the pipeline.
     #[derive(Debug, Clone)]
     pub enum TopologicalEvent {
-        PersistentHomologyDetected {
-            feature: PersistentFeature,
-        },
-        KnotComplexityIncrease {
-            new_complexity: f32,
-        },
-        ConsensusReached {
-            token_id: String,
-        },
+        PersistentHomologyDetected { feature: PersistentFeature },
+        KnotComplexityIncrease { new_complexity: f32 },
+        ConsensusReached { token_id: String },
         StateSnapshot(StateSnapshot),
     }
 

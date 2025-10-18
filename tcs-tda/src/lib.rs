@@ -47,7 +47,7 @@ impl TakensEmbedding {
         scores
             .windows(3)
             .find_map(|window| {
-                let (prev_tau, prev_mi) = window[0];
+                let (_, prev_mi) = window[0];
                 let (tau, mi) = window[1];
                 let (_, next_mi) = window[2];
                 if mi < prev_mi && mi < next_mi {
@@ -95,10 +95,7 @@ impl TakensEmbedding {
             .iter()
             .map(|v| v[0])
             .collect();
-        let y: Vec<f32> = time_series[delay..]
-            .iter()
-            .map(|v| v[0])
-            .collect();
+        let y: Vec<f32> = time_series[delay..].iter().map(|v| v[0]).collect();
 
         let bins = 32;
         let hx = entropy(&x, bins);
@@ -208,7 +205,11 @@ impl PersistentHomology {
         features
     }
 
-    pub fn witness_complex(&self, landmarks: &[DVector<f32>], witnesses: &[DVector<f32>]) -> Array2<f32> {
+    pub fn witness_complex(
+        &self,
+        landmarks: &[DVector<f32>],
+        witnesses: &[DVector<f32>],
+    ) -> Array2<f32> {
         let mut matrix = Array2::<f32>::zeros((landmarks.len(), landmarks.len()));
         for (i, l1) in landmarks.iter().enumerate() {
             for (j, l2) in landmarks.iter().enumerate().skip(i + 1) {
@@ -252,7 +253,9 @@ fn joint_entropy(x: &[f32], y: &[f32], bins: usize) -> f32 {
     for (&xi, &yi) in x.iter().zip(y.iter()) {
         let bx = ((xi - min_x) / bin_width_x).floor() as usize;
         let by = ((yi - min_y) / bin_width_y).floor() as usize;
-        *counts.entry((bx.min(bins - 1), by.min(bins - 1))).or_insert(0usize) += 1;
+        *counts
+            .entry((bx.min(bins - 1), by.min(bins - 1)))
+            .or_insert(0usize) += 1;
     }
 
     let total = x.len() as f32;
@@ -315,7 +318,10 @@ pub fn to_array(time_series: &[Vec<f32>]) -> Array2<f32> {
     }
     let rows = time_series.len();
     let cols = time_series[0].len();
-    let flat: Vec<f32> = time_series.iter().flat_map(|row| row.iter().copied()).collect();
+    let flat: Vec<f32> = time_series
+        .iter()
+        .flat_map(|row| row.iter().copied())
+        .collect();
     Array2::from_shape_vec((rows, cols), flat).unwrap_or_else(|_| Array2::zeros((0, 0)))
 }
 

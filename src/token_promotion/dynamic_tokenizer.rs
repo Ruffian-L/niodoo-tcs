@@ -308,10 +308,11 @@ impl TokenizerStats {
         }
         // OOV approximation: if we're using many extended tokens, OOV is decreasing
         // This is a simplified metric - real OOV would need to track actual misses
-        let extended_ratio = self.active_extended_tokens as f64 / (self.base_vocab_size as f64).max(1.0);
+        let extended_ratio =
+            self.active_extended_tokens as f64 / (self.base_vocab_size as f64).max(1.0);
         (1.0 - extended_ratio).max(0.0).min(1.0)
     }
-    
+
     /// Get total vocabulary size (base + extended)
     pub fn vocab_size(&self) -> usize {
         self.base_vocab_size + self.extended_vocab_size

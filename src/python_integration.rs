@@ -3,10 +3,10 @@
 //! This module provides Rust interfaces to call Python QLoRA training
 //! and model comparison scripts.
 
-use std::process::Command;
-use std::path::Path;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::process::Command;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelComparisonResult {
@@ -124,9 +124,7 @@ impl PythonQLoRAIntegration {
         println!("🔧 Checking Python environment...");
 
         // Check if Python is available
-        let python_check = Command::new(&self.python_path)
-            .arg("--version")
-            .output()?;
+        let python_check = Command::new(&self.python_path).arg("--version").output()?;
 
         if !python_check.status.success() {
             eprintln!("❌ Python not found");

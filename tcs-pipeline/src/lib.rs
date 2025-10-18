@@ -1,17 +1,22 @@
 //! Orchestrator wiring the Topological Cognitive System crates together
 //! with functional logic derived from the original monolithic crate.
 
+mod config;
+
 use anyhow::Result;
-use tcs_consensus::{ConsensusModule, TokenProposal};
+use tcs_consensus::{ThresholdConsensus, TokenProposal};
 use tcs_core::embeddings::EmbeddingBuffer;
 use tcs_core::events::{snapshot_event, TopologicalEvent};
 use tcs_core::state::CognitiveState;
 use tcs_core::{PersistentFeature, StageTimer};
 use tcs_knot::{CognitiveKnot, JonesPolynomial, KnotDiagram};
-use tcs_ml::{Brain, MotorBrain, UntryingAgent};
+use tcs_ml::{Brain, ExplorationAgent, MotorBrain};
 use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
 use tcs_tqft::FrobeniusAlgebra;
+use tracing::{debug, warn};
 use uuid::Uuid;
+
+pub use config::TCSConfig;
 
 /// Core orchestrator coordinating embedding, TDA, knot analysis, RL and consensus.
 pub struct TCSOrchestrator {
@@ -19,27 +24,40 @@ pub struct TCSOrchestrator {
     takens: TakensEmbedding,
     homology: PersistentHomology,
     knot_analyzer: JonesPolynomial,
-    rl_agent: UntryingAgent,
-    consensus: ConsensusModule,
+    rl_agent: ExplorationAgent,
+    consensus: ThresholdConsensus,
     tqft: FrobeniusAlgebra,
     state: CognitiveState,
     motor_brain: MotorBrain,
+    config: TCSConfig,
 }
 
 impl TCSOrchestrator {
     pub fn new(window: usize) -> Result<Self> {
+        Self::with_config(window, TCSConfig::default())
+    }
+
+    pub fn with_config(window: usize, config: TCSConfig) -> Result<Self> {
         let motor_brain = MotorBrain::new()?;
-        let takens = TakensEmbedding::new(3, 2, 3);
+        let takens = TakensEmbedding::new(
+            config.takens_dimension,
+            config.takens_delay,
+            config.takens_data_dim,
+        );
         Ok(Self {
             buffer: EmbeddingBuffer::new(window),
             takens,
-            homology: PersistentHomology::new(2, 2.5),
-            knot_analyzer: JonesPolynomial::new(256),
-            rl_agent: UntryingAgent::new(),
-            consensus: ConsensusModule::new(0.8),
-            tqft: FrobeniusAlgebra::new(2),
+            homology: PersistentHomology::new(
+                config.homology_max_dimension,
+                config.homology_max_edge_length,
+            ),
+            knot_analyzer: JonesPolynomial::new(config.jones_cache_capacity),
+            rl_agent: ExplorationAgent::new(),
+            consensus: ThresholdConsensus::new(config.consensus_threshold),
+            tqft: FrobeniusAlgebra::new(config.tqft_algebra_dimension),
             state: CognitiveState::default(),
             motor_brain,
+            config,
         })
     }
 
@@ -72,11 +90,11 @@ impl TCSOrchestrator {
             events.push(event);
         }
 
-    let rl_action = self.rl_agent.select_action(embedded[0].as_slice());
+        let rl_action = self.rl_agent.select_action(embedded[0].as_slice());
         let proposal = TokenProposal {
             id: Uuid::new_v4(),
             persistence_score: rl_action as f32,
-            emotional_coherence: 0.5,
+            emotional_coherence: self.config.default_coherence,
         };
 
         if self.consensus.propose(&proposal) {
@@ -88,10 +106,16 @@ impl TCSOrchestrator {
         self.state.increment_cycle();
         events.push(snapshot_event(self.state.snapshot()));
 
-        if self.tqft.is_associative() && self.tqft.is_coassociative() {
-            // Only log once the algebra checks out.
-            let _ = timer.elapsed();
+        if self.config.enable_tqft_checks {
+            match self.tqft.verify_axioms() {
+                Ok(_) => debug!(target: "tcs-pipeline::tqft", "Frobenius algebra axioms verified"),
+                Err(err) => {
+                    warn!(target: "tcs-pipeline::tqft", error = %err, "Frobenius algebra axiom check failed")
+                }
+            }
         }
+
+        let _ = timer.elapsed();
 
         // Run the motor brain to maintain feature parity with the old pipeline.
         let _brain_output = self.motor_brain.process(raw_input).await?;
@@ -99,13 +123,17 @@ impl TCSOrchestrator {
         Ok(events)
     }
 
-    fn update_state_from_features(&mut self, features: &[PersistenceFeature], events: &mut Vec<TopologicalEvent>) {
+    fn update_state_from_features(
+        &mut self,
+        features: &[PersistenceFeature],
+        events: &mut Vec<TopologicalEvent>,
+    ) {
         let mut betti = [0usize; 3];
-        for feature in features.iter().take(3) {
+        for feature in features.iter().take(self.config.feature_sampling_limit) {
             if feature.dimension < betti.len() {
                 betti[feature.dimension] += 1;
             }
-            if feature.persistence() > 0.1 {
+            if feature.persistence() > self.config.persistence_event_threshold {
                 let pf = PersistentFeature {
                     birth: feature.birth,
                     death: feature.death,
@@ -116,7 +144,8 @@ impl TCSOrchestrator {
             }
         }
         self.state.update_betti_numbers(betti);
-        self.state.update_metrics(0.6, 0.7);
+        self.state
+            .update_metrics(self.config.default_resonance, self.config.default_coherence);
     }
 
     fn analyse_knot(&mut self, features: &[PersistenceFeature]) -> Option<TopologicalEvent> {
@@ -129,13 +158,43 @@ impl TCSOrchestrator {
                 .map(|f| if f.dimension % 2 == 0 { 1 } else { -1 })
                 .collect(),
         };
-        let CognitiveKnot { complexity_score, .. } = self.knot_analyzer.analyze(&diagram);
-        if complexity_score > 1.0 {
+        let CognitiveKnot {
+            complexity_score, ..
+        } = self.knot_analyzer.analyze(&diagram);
+        if complexity_score > self.config.knot_complexity_threshold {
             Some(TopologicalEvent::KnotComplexityIncrease {
                 new_complexity: complexity_score,
             })
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn custom_consensus_threshold_is_used() {
+        let mut config = TCSConfig::default();
+        config.consensus_threshold = 0.9;
+        let orchestrator = TCSOrchestrator::with_config(16, config)
+            .expect("config-based construction should succeed");
+
+        let pass = TokenProposal {
+            id: Uuid::new_v4(),
+            persistence_score: 0.95,
+            emotional_coherence: orchestrator.config.default_coherence,
+        };
+        let fail = TokenProposal {
+            id: Uuid::new_v4(),
+            persistence_score: 0.85,
+            emotional_coherence: orchestrator.config.default_coherence,
+        };
+
+        assert!(orchestrator.consensus.propose(&pass));
+        assert!(!orchestrator.consensus.propose(&fail));
     }
 }

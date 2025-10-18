@@ -126,7 +126,9 @@ impl ConsciousnessScraper {
     }
 
     /// Start scraping process
-    pub async fn scrape(&mut self) -> Result<Vec<ScrapedLearningEvent>, Box<dyn std::error::Error>> {
+    pub async fn scrape(
+        &mut self,
+    ) -> Result<Vec<ScrapedLearningEvent>, Box<dyn std::error::Error>> {
         println!("🕷️ Starting consciousness training data scraping...");
         println!("📊 Target sites: {}", self.config.target_sites.len());
         println!("🔍 Keywords: {:?}", self.config.keywords);
@@ -157,7 +159,10 @@ impl ConsciousnessScraper {
     }
 
     /// Scrape a single site
-    async fn scrape_site(&mut self, base_url: &str) -> Result<Vec<ScrapedLearningEvent>, Box<dyn std::error::Error>> {
+    async fn scrape_site(
+        &mut self,
+        base_url: &str,
+    ) -> Result<Vec<ScrapedLearningEvent>, Box<dyn std::error::Error>> {
         let mut events = Vec::new();
         let mut urls_to_visit = vec![base_url.to_string()];
         let mut pages_scraped = 0;
@@ -194,7 +199,10 @@ impl ConsciousnessScraper {
     }
 
     /// Scrape a single page
-    async fn scrape_page(&self, url: &str) -> Result<Vec<ScrapedLearningEvent>, Box<dyn std::error::Error>> {
+    async fn scrape_page(
+        &self,
+        url: &str,
+    ) -> Result<Vec<ScrapedLearningEvent>, Box<dyn std::error::Error>> {
         println!("📄 Scraping: {}", url);
 
         let response = self.client.get(url).send().await?;
@@ -207,7 +215,12 @@ impl ConsciousnessScraper {
         for selector_str in &self.config.content_selectors {
             if let Ok(selector) = Selector::parse(selector_str) {
                 for element in document.select(&selector) {
-                    let content = element.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                    let content = element
+                        .text()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string();
 
                     if content.len() < 100 {
                         continue; // Skip too short content
@@ -215,7 +228,10 @@ impl ConsciousnessScraper {
 
                     // Check if content contains relevant keywords
                     let content_lower = content.to_lowercase();
-                    let has_keywords = self.config.keywords.iter()
+                    let has_keywords = self
+                        .config
+                        .keywords
+                        .iter()
                         .any(|keyword| content_lower.contains(keyword));
 
                     if !has_keywords {
@@ -223,7 +239,9 @@ impl ConsciousnessScraper {
                     }
 
                     // Extract title
-                    let title = self.extract_title(&document).unwrap_or_else(|| "Untitled".to_string());
+                    let title = self
+                        .extract_title(&document)
+                        .unwrap_or_else(|| "Untitled".to_string());
 
                     // Extract author
                     let author = self.extract_author(&document);
@@ -235,7 +253,10 @@ impl ConsciousnessScraper {
                         .to_string();
 
                     // Generate tags based on keywords found
-                    let tags = self.config.keywords.iter()
+                    let tags = self
+                        .config
+                        .keywords
+                        .iter()
                         .filter(|keyword| content_lower.contains(*keyword))
                         .cloned()
                         .collect();
@@ -262,7 +283,12 @@ impl ConsciousnessScraper {
         for selector_str in &self.config.title_selectors {
             if let Ok(selector) = Selector::parse(selector_str) {
                 if let Some(element) = document.select(&selector).next() {
-                    let title = element.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                    let title = element
+                        .text()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string();
                     if !title.is_empty() {
                         return Some(title);
                     }
@@ -277,7 +303,12 @@ impl ConsciousnessScraper {
         for selector_str in &self.config.author_selectors {
             if let Ok(selector) = Selector::parse(selector_str) {
                 if let Some(element) = document.select(&selector).next() {
-                    let author = element.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                    let author = element
+                        .text()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string();
                     if !author.is_empty() {
                         return Some(author);
                     }
@@ -288,27 +319,44 @@ impl ConsciousnessScraper {
     }
 
     /// Save scraped data to file
-    pub fn save_to_file(&self, events: &[ScrapedLearningEvent]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save_to_file(
+        &self,
+        events: &[ScrapedLearningEvent],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let json = serde_json::to_string_pretty(events)?;
         let mut file = File::create(&self.config.output_path)?;
         file.write_all(json.as_bytes())?;
-        println!("💾 Saved {} events to {}", events.len(), self.config.output_path);
+        println!(
+            "💾 Saved {} events to {}",
+            events.len(),
+            self.config.output_path
+        );
         Ok(())
     }
 
     /// Convert scraped events to LearningEvent format for training
-    pub fn convert_to_learning_events(&self, scraped_events: &[ScrapedLearningEvent]) -> Vec<niodoo_consciousness::qwen_curator::LearningEvent> {
-        scraped_events.iter().map(|scraped| {
-            niodoo_consciousness::qwen_curator::LearningEvent {
-                timestamp: scraped.timestamp.clone(),
-                input: format!("{}: {}", scraped.title, scraped.content.chars().take(200).collect::<String>()),
-                response: scraped.content.clone(),
-                emotional_state: None, // Could be inferred from content
-                coherence: None, // Could be computed
-                memory_activations: None,
-                topology_metrics: None,
-            }
-        }).collect()
+    pub fn convert_to_learning_events(
+        &self,
+        scraped_events: &[ScrapedLearningEvent],
+    ) -> Vec<niodoo_consciousness::qwen_curator::LearningEvent> {
+        scraped_events
+            .iter()
+            .map(|scraped| {
+                niodoo_consciousness::qwen_curator::LearningEvent {
+                    timestamp: scraped.timestamp.clone(),
+                    input: format!(
+                        "{}: {}",
+                        scraped.title,
+                        scraped.content.chars().take(200).collect::<String>()
+                    ),
+                    response: scraped.content.clone(),
+                    emotional_state: None, // Could be inferred from content
+                    coherence: None,       // Could be computed
+                    memory_activations: None,
+                    topology_metrics: None,
+                }
+            })
+            .collect()
     }
 }
 

@@ -416,9 +416,9 @@ pub struct ConsciousnessState {
     pub temporal_context: f64, // Temporal context awareness
 
     // Triple-Threat integration fields from multi_layer_query
-    pub emotional_entropy: f32,     // Shannon entropy of emotional resonance
-    pub mean_resonance: f32,        // Mean emotional resonance score
-    pub coherence_variance: f32,    // Variance in coherence scores
+    pub emotional_entropy: f32,  // Shannon entropy of emotional resonance
+    pub mean_resonance: f32,     // Mean emotional resonance score
+    pub coherence_variance: f32, // Variance in coherence scores
     pub last_trigger: Option<CycleTrigger>, // Last Triple-Threat trigger type
 
     // Qwen integration for enhanced consciousness processing

@@ -586,7 +586,10 @@ impl Phase5ConfigManager {
             self.config_file_path = file_path.to_string();
             tracing::info!("✅ Loaded Phase 5 configuration from: {}", file_path);
         } else {
-            tracing::info!("⚠️ Configuration file not found: {}, using defaults", file_path);
+            tracing::info!(
+                "⚠️ Configuration file not found: {}, using defaults",
+                file_path
+            );
         }
         Ok(())
     }
@@ -616,18 +619,26 @@ impl Phase5ConfigManager {
 
         // Metacognitive plasticity configuration
         if let Ok(val) = env::var(format!("{}_MAX_CONCURRENT_PROCESSES", prefix)) {
-            self.config.metacognitive_plasticity.max_concurrent_processes = val.parse()?;
+            self.config
+                .metacognitive_plasticity
+                .max_concurrent_processes = val.parse()?;
         }
         if let Ok(val) = env::var(format!("{}_MIN_HALLUCINATION_CONFIDENCE", prefix)) {
-            self.config.metacognitive_plasticity.min_hallucination_confidence = val.parse()?;
+            self.config
+                .metacognitive_plasticity
+                .min_hallucination_confidence = val.parse()?;
         }
 
         // Consciousness inversion configuration
         if let Ok(val) = env::var(format!("{}_MAX_CONCURRENT_INVERSIONS", prefix)) {
-            self.config.consciousness_inversion.max_concurrent_inversions = val.parse()?;
+            self.config
+                .consciousness_inversion
+                .max_concurrent_inversions = val.parse()?;
         }
         if let Ok(val) = env::var(format!("{}_MIN_CONSCIOUSNESS_COMPATIBILITY", prefix)) {
-            self.config.consciousness_inversion.min_consciousness_compatibility = val.parse()?;
+            self.config
+                .consciousness_inversion
+                .min_consciousness_compatibility = val.parse()?;
         }
 
         self.env_vars_loaded = true;

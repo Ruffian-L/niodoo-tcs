@@ -572,8 +572,8 @@ mod tests {
 }
 
 // Complete Persistent Homology Implementation as per TCS specification
-use ndarray::{Array2, ArrayView1};
 use nalgebra::DVector;
+use ndarray::{Array2, ArrayView1};
 // use sprs::{CsMat, TriMat};
 
 #[derive(Debug, Clone)]
@@ -591,10 +591,7 @@ impl PersistentHomology {
     }
 
     /// Build Vietoris-Rips complex with edge collapse optimization
-    pub fn build_vr_complex(
-        &self,
-        points: &[DVector<f32>]
-    ) -> SimplexTree {
+    pub fn build_vr_complex(&self, points: &[DVector<f32>]) -> SimplexTree {
         // Compute distance matrix with SIMD optimization
         let distances = self.compute_distance_matrix_simd(points);
 
@@ -611,7 +608,7 @@ impl PersistentHomology {
 
         // Add edges (1-simplices) with filtration values
         for i in 0..points.len() {
-            for j in i+1..points.len() {
+            for j in i + 1..points.len() {
                 let dist = collapsed[(i, j)];
                 if dist <= self.max_edge_length {
                     complex.insert(&[i, j], dist);
@@ -626,15 +623,12 @@ impl PersistentHomology {
     }
 
     /// SIMD-accelerated distance computation
-    fn compute_distance_matrix_simd(
-        &self,
-        points: &[DVector<f32>]
-    ) -> Array2<f32> {
+    fn compute_distance_matrix_simd(&self, points: &[DVector<f32>]) -> Array2<f32> {
         let n = points.len();
         let mut distances = Array2::zeros((n, n));
 
         for i in 0..n {
-            for j in i+1..n {
+            for j in i + 1..n {
                 let dist = euclidean_distance(&points[i], &points[j]);
                 distances[(i, j)] = dist;
                 distances[(j, i)] = dist;
@@ -651,10 +645,7 @@ impl PersistentHomology {
     }
 
     /// Compute persistence using matrix reduction algorithm
-    pub fn compute_persistence(
-        &self,
-        complex: &SimplexTree
-    ) -> PersistenceDiagram {
+    pub fn compute_persistence(&self, complex: &SimplexTree) -> PersistenceDiagram {
         // Placeholder - would implement matrix reduction algorithm
         PersistenceDiagram {
             dimension: 0,
@@ -676,7 +667,9 @@ pub struct SimplexTree {
 }
 
 impl SimplexTree {
-    fn new() -> Self { Self {} }
+    fn new() -> Self {
+        Self {}
+    }
     fn insert(&mut self, _simplex: &[usize], _filtration: f32) {}
     fn expansion(&mut self, _max_dim: usize) {}
 }
@@ -696,4 +689,3 @@ pub struct PersistencePoint {
     pub dimension: usize,
     pub representative: Option<Vec<usize>>,
 }
-

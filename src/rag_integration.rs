@@ -76,7 +76,7 @@ impl EmotionalVector {
             let anger = (emotional_state.arousal * (1.0 - emotional_state.dominance)) as f32;
             let fear = (emotional_state.arousal * (1.0 - emotional_state.pleasure)) as f32;
             let surprise = emotional_state.arousal as f32;
-            
+
             Some(Self::new(joy, sadness, anger, fear, surprise))
         } else {
             None
@@ -140,14 +140,17 @@ impl Document {
 
         let mut metadata = HashMap::new();
         metadata.insert("timestamp".to_string(), event.timestamp.clone());
-        
+
         if let Some(coherence) = event.coherence {
             metadata.insert("coherence".to_string(), coherence.to_string());
         }
-        
+
         if let Some(topology) = &event.topology_metrics {
             metadata.insert("curvature".to_string(), topology.curvature.to_string());
-            metadata.insert("twist_factor".to_string(), topology.twist_factor.to_string());
+            metadata.insert(
+                "twist_factor".to_string(),
+                topology.twist_factor.to_string(),
+            );
         }
 
         Ok(Self {
@@ -177,12 +180,14 @@ impl Document {
 
     /// Set importance score
     pub fn set_importance(&mut self, score: f32) {
-        self.metadata.insert("importance".to_string(), score.to_string());
+        self.metadata
+            .insert("importance".to_string(), score.to_string());
     }
 
     /// Mark as breakthrough memory
     pub fn mark_as_breakthrough(&mut self) {
-        self.metadata.insert("priority".to_string(), "breakthrough".to_string());
+        self.metadata
+            .insert("priority".to_string(), "breakthrough".to_string());
     }
 }
 
@@ -208,7 +213,11 @@ impl MemorySphere {
     pub fn from_document(doc: &Document) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
-            concept: doc.metadata.get("title").cloned().unwrap_or_else(|| "Untitled".to_string()),
+            concept: doc
+                .metadata
+                .get("title")
+                .cloned()
+                .unwrap_or_else(|| "Untitled".to_string()),
             emotional_profile: doc.embedding.clone(),
             content: doc.content.clone(),
             created_at: doc.created_at,
@@ -250,7 +259,7 @@ impl RagEngine {
             config,
         })
     }
-    
+
     /// Create a new RAG engine with default configuration
     pub fn with_defaults(base_dir: PathBuf) -> Result<Self> {
         Self::new(base_dir, RagConfig::default())
@@ -260,19 +269,19 @@ impl RagEngine {
     pub fn add_learning_event(&mut self, event: &LearningEvent) -> Result<()> {
         // Convert learning event to document
         let document = Document::from_learning_event(event)?;
-        
+
         // Create memory sphere from document
         let sphere = MemorySphere::from_document(&document);
-        
+
         // Add document to store
         self.documents.insert(document.id.clone(), document);
-        
+
         // Add sphere to memory
         self.spheres.push(sphere);
-        
+
         // Update links between spheres
         self.update_sphere_links()?;
-        
+
         Ok(())
     }
 
@@ -282,43 +291,43 @@ impl RagEngine {
         if self.spheres.len() < 2 {
             return Ok(());
         }
-        
+
         // Get the most recent sphere
         let latest_idx = self.spheres.len() - 1;
         let latest_sphere = &self.spheres[latest_idx];
         let latest_emotion = &latest_sphere.emotional_profile;
-        
+
         // Update links for the latest sphere
         let mut new_links = HashMap::new();
-        
+
         for (i, sphere) in self.spheres.iter().enumerate() {
             if i == latest_idx {
                 continue; // Skip self-link
             }
-            
+
             // Calculate emotional similarity
             let similarity = latest_emotion.similarity(&sphere.emotional_profile);
-            
+
             // Only create links with significant similarity (config-driven)
             if similarity > self.config.similarity_threshold_link {
                 new_links.insert(sphere.id.clone(), similarity);
             }
         }
-        
+
         // Update the links
         self.spheres[latest_idx].links = new_links;
-        
+
         Ok(())
     }
 
     /// Retrieve relevant documents based on emotional query
     pub fn retrieve(&self, query_emotion: &EmotionalVector, top_k: usize) -> Vec<(Document, f32)> {
         let mut results = Vec::new();
-        
+
         // Calculate similarity for each sphere
         for sphere in &self.spheres {
             let similarity = sphere.emotional_similarity(query_emotion);
-            
+
             // Only include results with significant similarity (config-driven)
             if similarity > self.config.similarity_threshold_retrieve {
                 if let Some(doc) = self.documents.get(&sphere.id) {
@@ -326,10 +335,10 @@ impl RagEngine {
                 }
             }
         }
-        
+
         // Sort by similarity (descending)
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         // Return top-k results
         results.into_iter().take(top_k).collect()
     }
@@ -340,12 +349,12 @@ impl RagEngine {
         let spheres_path = self.base_dir.join("memory_spheres.json");
         let spheres_json = serde_json::to_string_pretty(&self.spheres)?;
         std::fs::write(spheres_path, spheres_json)?;
-        
+
         // Save documents
         let docs_path = self.base_dir.join("documents.json");
         let docs_json = serde_json::to_string_pretty(&self.documents)?;
         std::fs::write(docs_path, docs_json)?;
-        
+
         Ok(())
     }
 
@@ -357,14 +366,14 @@ impl RagEngine {
             let spheres_json = std::fs::read_to_string(spheres_path)?;
             self.spheres = serde_json::from_str(&spheres_json)?;
         }
-        
+
         // Load documents if file exists
         let docs_path = self.base_dir.join("documents.json");
         if docs_path.exists() {
             let docs_json = std::fs::read_to_string(docs_path)?;
             self.documents = serde_json::from_str(&docs_json)?;
         }
-        
+
         Ok(())
     }
 
@@ -538,10 +547,7 @@ impl RagEngine {
             0.0
         };
 
-        let max_importance = all_docs
-            .iter()
-            .map(|d| d.importance())
-            .fold(0.0, f32::max);
+        let max_importance = all_docs.iter().map(|d| d.importance()).fold(0.0, f32::max);
 
         Ok(MemoryStats {
             total_documents: total_count,
@@ -623,10 +629,10 @@ impl ConsciousnessRagIntegration {
     /// Create a new consciousness-aware RAG integration
     pub fn new(base_dir: PathBuf) -> Result<Self> {
         let rag_engine = RagEngine::with_defaults(base_dir.clone())?;
-        
+
         // Initialize with neutral emotional state
         let current_emotion = EmotionalVector::new(0.5, 0.5, 0.5, 0.5, 0.5);
-        
+
         Ok(Self {
             rag_engine,
             current_emotion,
@@ -639,30 +645,36 @@ impl ConsciousnessRagIntegration {
         if let Some(emotion) = EmotionalVector::from_learning_event(event) {
             self.current_emotion = emotion;
         }
-        
+
         Ok(())
     }
 
     /// Process a batch of learning events
     pub fn process_batch(&mut self, events: &[LearningEvent]) -> Result<()> {
         let start_time = Instant::now();
-        
-        info!("🔄 Processing {} learning events for RAG integration", events.len());
-        
+
+        info!(
+            "🔄 Processing {} learning events for RAG integration",
+            events.len()
+        );
+
         for event in events {
             // Add event to RAG system
             self.rag_engine.add_learning_event(event)?;
-            
+
             // Update emotional state
             self.update_emotional_state(event)?;
         }
-        
+
         // Save RAG data
         self.rag_engine.save()?;
-        
+
         let duration = start_time.elapsed();
-        info!("✅ RAG processing completed in {:.2}ms", duration.as_millis());
-        
+        info!(
+            "✅ RAG processing completed in {:.2}ms",
+            duration.as_millis()
+        );
+
         Ok(())
     }
 
@@ -672,29 +684,36 @@ impl ConsciousnessRagIntegration {
     }
 
     /// Enhance training examples with RAG context
-    pub fn enhance_training_examples<T>(&self, examples: &mut [T], enhance_fn: impl Fn(&mut T, &Document, f32)) -> Result<()> {
+    pub fn enhance_training_examples<T>(
+        &self,
+        examples: &mut [T],
+        enhance_fn: impl Fn(&mut T, &Document, f32),
+    ) -> Result<()> {
         // Skip if no examples
         if examples.is_empty() {
             return Ok(());
         }
-        
+
         // Retrieve relevant documents
         let relevant_docs = self.retrieve_relevant_documents(3);
-        
+
         if relevant_docs.is_empty() {
             debug!("No relevant documents found for RAG enhancement");
             return Ok(());
         }
-        
-        info!("🔍 Enhancing training examples with {} relevant documents", relevant_docs.len());
-        
+
+        info!(
+            "🔍 Enhancing training examples with {} relevant documents",
+            relevant_docs.len()
+        );
+
         // Enhance each example
         for example in examples.iter_mut() {
             for (doc, score) in &relevant_docs {
                 enhance_fn(example, doc, *score);
             }
         }
-        
+
         Ok(())
     }
 }
@@ -702,20 +721,26 @@ impl ConsciousnessRagIntegration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_emotional_vector_similarity() {
         let v1 = EmotionalVector::new(0.8, 0.2, 0.1, 0.3, 0.5);
         let v2 = EmotionalVector::new(0.7, 0.3, 0.2, 0.2, 0.6);
-        
+
         let similarity = v1.similarity(&v2);
-        assert!(similarity > 0.9, "Similar vectors should have high similarity");
-        
+        assert!(
+            similarity > 0.9,
+            "Similar vectors should have high similarity"
+        );
+
         let v3 = EmotionalVector::new(0.1, 0.9, 0.8, 0.7, 0.2);
         let similarity = v1.similarity(&v3);
-        assert!(similarity < 0.5, "Different vectors should have low similarity");
+        assert!(
+            similarity < 0.5,
+            "Different vectors should have low similarity"
+        );
     }
-    
+
     #[test]
     fn test_document_from_learning_event() {
         let event = LearningEvent {
@@ -735,10 +760,12 @@ mod tests {
                 geodesic_distance: 0.7,
             }),
         };
-        
+
         let doc = Document::from_learning_event(&event).unwrap();
         assert!(doc.content.contains("How does consciousness work?"));
-        assert!(doc.content.contains("Consciousness emerges from complex neural patterns."));
+        assert!(doc
+            .content
+            .contains("Consciousness emerges from complex neural patterns."));
         assert!(doc.metadata.contains_key("coherence"));
         assert!(doc.metadata.contains_key("curvature"));
     }

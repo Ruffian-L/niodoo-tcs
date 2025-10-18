@@ -9,8 +9,14 @@
 
 use anyhow::{anyhow, Result};
 use candle_core::{DType, Device, Tensor};
-use candle_nn::{loss, AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap, Init, init::{DEFAULT_KAIMING_NORMAL, ZERO}};
+use candle_nn::{
+    init::{DEFAULT_KAIMING_NORMAL, ZERO},
+    loss, AdamW, Init, Optimizer, ParamsAdamW, VarBuilder, VarMap,
+};
 use candle_transformers::models::qwen2::{Config as QwenConfig, ModelForCausalLM};
+use chrono;
+use csv;
+use safetensors;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -19,9 +25,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokenizers::Tokenizer;
 use tracing::{debug, error, info, warn};
-use csv;
-use chrono;
-use safetensors;
 
 use crate::config::system_config::AppConfig;
 use crate::rag_integration::ConsciousnessRagIntegration;
@@ -86,13 +89,10 @@ pub struct LoraConfig {
 impl Default for LoraConfig {
     fn default() -> Self {
         Self {
-            rank: 8,               // Low rank for 4-bit quantization
-            alpha: 16.0,           // 2 * rank scaling
-            dropout: 0.05,         // Small dropout for regularization
-            target_modules: vec![
-                "q_proj".to_string(),
-                "v_proj".to_string(),
-            ],
+            rank: 8,       // Low rank for 4-bit quantization
+            alpha: 16.0,   // 2 * rank scaling
+            dropout: 0.05, // Small dropout for regularization
+            target_modules: vec!["q_proj".to_string(), "v_proj".to_string()],
         }
     }
 }
@@ -144,7 +144,10 @@ impl QloraCuratorConfig {
         if !checkpoint_dir.exists() {
             fs::create_dir_all(&checkpoint_dir)
                 .map_err(|e| anyhow!("Failed to create checkpoint dir: {}", e))?;
-            info!("📁 Created checkpoint directory: {}", checkpoint_dir.display());
+            info!(
+                "📁 Created checkpoint directory: {}",
+                checkpoint_dir.display()
+            );
         }
 
         if !output_dir.exists() {
@@ -197,11 +200,19 @@ impl LoraAdapter {
         device: &Device,
     ) -> Result<Self> {
         // Create trainable variables in varmap
-        let lora_a_var = varmap.get(&[in_dim, rank], "lora_a", DEFAULT_KAIMING_NORMAL, DType::F32, device)?;
+        let lora_a_var = varmap.get(
+            &[in_dim, rank],
+            "lora_a",
+            DEFAULT_KAIMING_NORMAL,
+            DType::F32,
+            device,
+        )?;
         let lora_b_var = varmap.get(&[rank, out_dim], "lora_b", ZERO, DType::F32, device)?;
 
-        debug!("🔧 Created LoRA adapter: {}x{} -> rank {} (alpha: {})",
-               in_dim, out_dim, rank, alpha);
+        debug!(
+            "🔧 Created LoRA adapter: {}x{} -> rank {} (alpha: {})",
+            in_dim, out_dim, rank, alpha
+        );
 
         Ok(Self {
             rank,
@@ -211,7 +222,7 @@ impl LoraAdapter {
             dropout,
         })
     }
-    
+
     /// Create a new LoRA adapter for testing purposes
     pub fn new(
         in_dim: usize,
@@ -225,8 +236,10 @@ impl LoraAdapter {
         let lora_a = Tensor::randn(0.0, 1.0, &[in_dim, rank], device)?;
         let lora_b = Tensor::zeros(&[rank, out_dim], DType::F32, device)?;
 
-        debug!("🔧 Created test LoRA adapter: {}x{} -> rank {} (alpha: {})",
-               in_dim, out_dim, rank, alpha);
+        debug!(
+            "🔧 Created test LoRA adapter: {}x{} -> rank {} (alpha: {})",
+            in_dim, out_dim, rank, alpha
+        );
 
         Ok(Self {
             rank,
@@ -419,7 +432,10 @@ impl QloraCurator {
         }
 
         if all_weights.is_empty() {
-            return Err(anyhow!("No model weights found in {}", model_path.display()));
+            return Err(anyhow!(
+                "No model weights found in {}",
+                model_path.display()
+            ));
         }
 
         info!("📦 Loaded {} weight tensors", all_weights.len());
@@ -428,8 +444,10 @@ impl QloraCurator {
 
     /// Initialize LoRA adapters for target modules
     pub fn initialize_adapters(&mut self) -> Result<()> {
-        info!("🔧 Initializing LoRA adapters (rank: {}, alpha: {})",
-              self.config.lora_config.rank, self.config.lora_config.alpha);
+        info!(
+            "🔧 Initializing LoRA adapters (rank: {}, alpha: {})",
+            self.config.lora_config.rank, self.config.lora_config.alpha
+        );
 
         // For Qwen2-0.5B: hidden_size = 896, num_heads = 14
         // Each attention head: 896 / 14 = 64 dims
@@ -464,7 +482,10 @@ impl QloraCurator {
         let mut events = Vec::new();
 
         if !csv_path.exists() {
-            warn!("⚠️ Learning events CSV file does not exist: {}", csv_path.display());
+            warn!(
+                "⚠️ Learning events CSV file does not exist: {}",
+                csv_path.display()
+            );
             return Ok(events);
         }
 
@@ -481,8 +502,14 @@ impl QloraCurator {
             let entropy: f64 = record.get(2).unwrap_or("0.0").parse().unwrap_or(0.0);
             let oov_rate: f64 = record.get(5).unwrap_or("0.0").parse().unwrap_or(0.0);
 
-            let input = format!("Process consciousness data with entropy {:.3} and OOV rate {:.3}", entropy, oov_rate);
-            let response = format!("Consciousness processed cycle {} with improved coherence", cycle);
+            let input = format!(
+                "Process consciousness data with entropy {:.3} and OOV rate {:.3}",
+                entropy, oov_rate
+            );
+            let response = format!(
+                "Consciousness processed cycle {} with improved coherence",
+                cycle
+            );
 
             let event = LearningEvent {
                 timestamp: chrono::Utc::now().timestamp().to_string(),
@@ -500,8 +527,6 @@ impl QloraCurator {
         info!("✅ Loaded {} learning events", events.len());
         Ok(events)
     }
-
-
 
     /// Fine-tune the model using REAL QLoRA in Rust
     /// REAL IMPLEMENTATION: Performs actual training with LoRA adapters
@@ -526,7 +551,7 @@ impl QloraCurator {
         // 4. Prepare training data
         let training_data = self.prepare_training_data(&training_pairs)?;
         info!("📚 Prepared {} training examples", training_data.len());
-        
+
         // 5. Initialize optimizer
         // Use the varmap to create the optimizer
         // This is the correct way to initialize the optimizer in Candle
@@ -536,52 +561,67 @@ impl QloraCurator {
                 lr: self.config.learning_rate,
                 weight_decay: 0.01, // Default weight decay
                 ..Default::default()
-            }
+            },
         )?;
 
         // 6. Training loop - REAL IMPLEMENTATION
-        info!("🏃 Starting training loop ({} epochs, batch_size: {})",
-              self.config.epochs, self.config.batch_size);
+        info!(
+            "🏃 Starting training loop ({} epochs, batch_size: {})",
+            self.config.epochs, self.config.batch_size
+        );
 
         for epoch_idx in 0..self.config.epochs {
             self.epoch = epoch_idx;
             info!("📈 Epoch {}/{}", epoch_idx + 1, self.config.epochs);
-            
+
             // Initialize batch tracking
             let mut epoch_loss = 0.0;
             let mut num_batches = 0;
-            
+
             // Process batches
             for batch_idx in 0..(training_data.len() / self.config.batch_size) {
                 self.step += 1;
-                
+
                 let start_idx = batch_idx * self.config.batch_size;
-                let end_idx = std::cmp::min((batch_idx + 1) * self.config.batch_size, training_data.len());
+                let end_idx = std::cmp::min(
+                    (batch_idx + 1) * self.config.batch_size,
+                    training_data.len(),
+                );
                 let batch = &training_data[start_idx..end_idx];
-                
+
                 // Train the batch and get loss
                 // We need to use a helper function to avoid borrow checker issues
                 let batch_loss = self.train_batch_helper(batch, &mut optimizer)?;
-                
+
                 epoch_loss += batch_loss;
                 num_batches += 1;
-                
+
                 // Update current loss
                 self.current_loss = batch_loss;
-                
+
                 // Log progress every 10 steps
                 if self.step % 10 == 0 {
                     info!("🔄 Step {} - Batch Loss: {:.4}", self.step, batch_loss);
                 }
             }
-            
+
             // Report real loss
-            let avg_loss = if num_batches > 0 { epoch_loss / num_batches as f64 } else { 0.0 };
+            let avg_loss = if num_batches > 0 {
+                epoch_loss / num_batches as f64
+            } else {
+                0.0
+            };
             self.current_loss = avg_loss; // Update with average epoch loss
-            info!("📊 Epoch {} completed - Average Loss: {:.4}", epoch_idx + 1, avg_loss);
-            
+            info!(
+                "📊 Epoch {} completed - Average Loss: {:.4}",
+                epoch_idx + 1,
+                avg_loss
+            );
+
             // Save checkpoint periodically
-            if (epoch_idx + 1) % self.config.epochs == 0 || (epoch_idx + 1) % self.config.save_steps == 0 {
+            if (epoch_idx + 1) % self.config.epochs == 0
+                || (epoch_idx + 1) % self.config.save_steps == 0
+            {
                 self.save_checkpoint()?;
             }
         }
@@ -599,42 +639,36 @@ impl QloraCurator {
     /// Compute loss for a training example using real QLoRA implementation
     fn compute_loss(&mut self, input_ids: &[u32], label_ids: &[u32]) -> Result<f64> {
         // Create input tensor
-        let input_tensor = Tensor::from_vec(
-            input_ids.to_vec(),
-            &[1, input_ids.len()],
-            &self.device
-        )?;
-        
+        let input_tensor =
+            Tensor::from_vec(input_ids.to_vec(), &[1, input_ids.len()], &self.device)?;
+
         // Create label tensor
-        let label_tensor = Tensor::from_vec(
-            label_ids.to_vec(),
-            &[1, label_ids.len()],
-            &self.device
-        )?;
-        
+        let label_tensor =
+            Tensor::from_vec(label_ids.to_vec(), &[1, label_ids.len()], &self.device)?;
+
         // Forward pass through model (forward() requires mutable access in Candle)
         let mut logits = self.model.as_mut().unwrap().forward(&input_tensor, 0)?;
-        
+
         // Apply LoRA adapters if available
         if !self.adapters.is_empty() {
             if let Some(adapter) = self.adapters.values().next() {
                 // Reshape logits for LoRA application
                 let vocab_size = logits.dims()[1];
                 let seq_len = input_ids.len();
-                
+
                 let logits_reshaped = logits.reshape(&[1, seq_len, vocab_size])?;
-                
+
                 // Apply LoRA
                 let lora_output = adapter.forward(&logits_reshaped)?;
-                
+
                 // Add LoRA contribution (scaled)
                 logits = (logits_reshaped + lora_output)?.flatten_all()?;
             }
         }
-        
+
         // Compute cross-entropy loss
         let loss = loss::cross_entropy(&logits.flatten_all()?, &label_tensor.flatten_all()?)?;
-        
+
         // Return real loss value
         let loss_value = loss.to_scalar::<f32>()? as f64;
         Ok(loss_value)
@@ -652,28 +686,37 @@ impl QloraCurator {
 
         for event in events {
             // Format as instruction-response pair with emotional context
-            let mut instruction = format!("### Instruction: {}\n### Context: Emotional healing event", event.input);
-            
+            let mut instruction = format!(
+                "### Instruction: {}\n### Context: Emotional healing event",
+                event.input
+            );
+
             // Add emotional state if available
             if let Some(emotional_state) = &event.emotional_state {
-                instruction.push_str(&format!("\n### Emotional State: Pleasure={:.2}, Arousal={:.2}, Dominance={:.2}",
-                    emotional_state.pleasure, emotional_state.arousal, emotional_state.dominance));
+                instruction.push_str(&format!(
+                    "\n### Emotional State: Pleasure={:.2}, Arousal={:.2}, Dominance={:.2}",
+                    emotional_state.pleasure, emotional_state.arousal, emotional_state.dominance
+                ));
             }
-            
+
             // Add coherence if available
             if let Some(coherence) = event.coherence {
                 instruction.push_str(&format!("\n### Coherence: {:.2}", coherence));
             }
-            
+
             // Add response marker
             instruction.push_str("\n### Response:");
-            
+
             let response = event.response.clone();
 
             // Tokenize
-            let input_ids = self.tokenizer.encode(instruction, true)
+            let input_ids = self
+                .tokenizer
+                .encode(instruction, true)
                 .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
-            let response_ids = self.tokenizer.encode(response, true)
+            let response_ids = self
+                .tokenizer
+                .encode(response, true)
                 .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
 
             // Combine input and response for training
@@ -697,42 +740,51 @@ impl QloraCurator {
         // Enhance training examples with RAG context if available
         if let Some(rag) = &self.rag_integration {
             // Define enhancement function
-            let enhance_fn = |example: &mut TrainingExample, doc: &crate::rag_integration::Document, score: f32| {
+            let enhance_fn = |example: &mut TrainingExample,
+                              doc: &crate::rag_integration::Document,
+                              score: f32| {
                 // Skip if example is already at max length
                 if example.input_ids.len() >= self.config.max_seq_length {
                     return;
                 }
-                
+
                 // Create RAG context
-                let rag_context = format!("\n### Similar Experience (relevance: {:.2}): {}", 
-                    score, doc.content);
-                
+                let rag_context = format!(
+                    "\n### Similar Experience (relevance: {:.2}): {}",
+                    score, doc.content
+                );
+
                 // Tokenize RAG context
                 if let Ok(context_encoding) = self.tokenizer.encode(rag_context, false) {
                     let context_ids = context_encoding.get_ids();
-                    
+
                     // Calculate available space
                     let available_space = self.config.max_seq_length - example.input_ids.len();
-                    
+
                     // Add as much context as fits
                     if available_space > 0 {
-                        let context_to_add = &context_ids[0..context_ids.len().min(available_space)];
-                        
+                        let context_to_add =
+                            &context_ids[0..context_ids.len().min(available_space)];
+
                         // Find position to insert (before the response marker)
-                        let response_marker_pos = example.input_ids
+                        let response_marker_pos = example
+                            .input_ids
                             .windows(3)
                             .position(|w| w == [35, 35, 35]) // "###" token IDs (approximate)
                             .unwrap_or(example.input_ids.len() / 2);
-                        
+
                         // Insert context
-                        example.input_ids.splice(response_marker_pos..response_marker_pos, context_to_add.iter().cloned());
-                        
+                        example.input_ids.splice(
+                            response_marker_pos..response_marker_pos,
+                            context_to_add.iter().cloned(),
+                        );
+
                         // Update labels
                         example.labels = example.input_ids.clone();
                     }
                 }
             };
-            
+
             // Enhance training examples
             if let Err(e) = rag.enhance_training_examples(&mut training_data, enhance_fn) {
                 warn!("⚠️ Failed to enhance training examples with RAG: {}", e);
@@ -755,13 +807,13 @@ impl QloraCurator {
     ) -> Result<f64> {
         // Reset gradients at the beginning of each batch (AdamW doesn't have zero_grad)
         // The backward_step will handle gradient computation
-        
+
         // Convert batch to tensors
         let batch_size = batch.len();
         if batch_size == 0 {
             return Ok(0.0); // Return early for empty batches
         }
-        
+
         let seq_len = batch[0].input_ids.len();
 
         // Create input tensor (batch_size, seq_len)
@@ -774,7 +826,11 @@ impl QloraCurator {
             }
         }
 
-        let input_tensor = Tensor::from_vec(input_tensor_data, &[batch_size as usize, seq_len], &self.device)?;
+        let input_tensor = Tensor::from_vec(
+            input_tensor_data,
+            &[batch_size as usize, seq_len],
+            &self.device,
+        )?;
 
         // Forward pass with LoRA injection
         let mut logits = model.forward(&input_tensor, 0)?;
@@ -800,9 +856,12 @@ impl QloraCurator {
 
         // For causal LM, we predict next tokens, so shift labels
         let labels_tensor = Tensor::from_vec(
-            batch.iter().flat_map(|ex| ex.labels.clone()).collect::<Vec<_>>(),
+            batch
+                .iter()
+                .flat_map(|ex| ex.labels.clone())
+                .collect::<Vec<_>>(),
             &[batch_size as usize, seq_len],
-            &self.device
+            &self.device,
         )?;
 
         // Compute loss (cross-entropy)
@@ -814,28 +873,34 @@ impl QloraCurator {
 
         // Get loss value
         let loss_value = loss.to_scalar::<f32>()? as f64;
-        
+
         // Log detailed metrics every 50 steps
         if self.step % 50 == 0 {
-            debug!("🔍 Batch details - Size: {}, Seq length: {}, Loss: {:.6}", 
-                   batch_size, seq_len, loss_value);
-            
+            debug!(
+                "🔍 Batch details - Size: {}, Seq length: {}, Loss: {:.6}",
+                batch_size, seq_len, loss_value
+            );
+
             // Calculate gradient norm for monitoring training stability
             let grad_norm = self.calculate_gradient_norm()?;
             debug!("📊 Gradient norm: {:.6}", grad_norm);
         }
-        
+
         Ok(loss_value)
     }
-    
+
     /// Helper function to train a batch and avoid borrow checker issues
-    fn train_batch_helper(&mut self, batch: &[TrainingExample], optimizer: &mut AdamW) -> Result<f64> {
+    fn train_batch_helper(
+        &mut self,
+        batch: &[TrainingExample],
+        optimizer: &mut AdamW,
+    ) -> Result<f64> {
         // Convert batch to tensors
         let batch_size = batch.len();
         if batch_size == 0 {
             return Ok(0.0); // Return early for empty batches
         }
-        
+
         let seq_len = batch[0].input_ids.len();
 
         // Create input tensor (batch_size, seq_len)
@@ -848,11 +913,15 @@ impl QloraCurator {
             }
         }
 
-        let input_tensor = Tensor::from_vec(input_tensor_data, &[batch_size as usize, seq_len], &self.device)?;
+        let input_tensor = Tensor::from_vec(
+            input_tensor_data,
+            &[batch_size as usize, seq_len],
+            &self.device,
+        )?;
 
         // Get mutable model reference
         let model = self.model.as_mut().unwrap();
-        
+
         // Forward pass with LoRA injection
         let mut logits = model.forward(&input_tensor, 0)?;
 
@@ -861,10 +930,10 @@ impl QloraCurator {
             // Get the first adapter (in a real implementation, we'd apply to specific layers)
             if let Some(adapter) = self.adapters.values().next() {
                 let vocab_size = logits.dims()[2];
-                
+
                 // Apply LoRA to logits
                 let lora_output = adapter.forward(&logits)?;
-                
+
                 // Add LoRA contribution (scaled by alpha/rank)
                 logits = (logits + lora_output)?;
             }
@@ -897,7 +966,7 @@ impl QloraCurator {
         let loss_value = loss.to_scalar::<f32>()? as f64;
         Ok(loss_value)
     }
-    
+
     /// Public wrapper for train_batch to maintain API compatibility
     #[deprecated(note = "Use train_batch_helper instead to avoid borrow checker issues")]
     fn train_batch(
@@ -908,25 +977,28 @@ impl QloraCurator {
     ) -> Result<f64> {
         self.train_batch_internal(model, batch, optimizer)
     }
-    
+
     /// Calculate gradient norm for monitoring training stability
     fn calculate_gradient_norm(&self) -> Result<f64> {
         let mut total_norm_squared = 0.0;
         let vars = self.varmap.all_vars();
-        
+
         for var in vars {
             // In Candle, we need to use a different approach to get gradients
             // This is a simplified version that just checks parameter norms
             let norm_squared = var.sqr()?.sum_all()?.to_scalar::<f32>()?;
             total_norm_squared += norm_squared as f64;
         }
-        
+
         Ok(total_norm_squared.sqrt())
     }
 
     /// Save training checkpoint with complete state for resumption
     fn save_checkpoint(&self) -> Result<()> {
-        let checkpoint_path = self.config.output_dir.join(format!("checkpoint-{}", self.step));
+        let checkpoint_path = self
+            .config
+            .output_dir
+            .join(format!("checkpoint-{}", self.step));
         fs::create_dir_all(&checkpoint_path)?;
 
         info!("💾 Saving checkpoint to {}", checkpoint_path.display());
@@ -934,23 +1006,23 @@ impl QloraCurator {
         // Save adapter weights using safetensors format
         for (name, adapter) in &self.adapters {
             let adapter_file = checkpoint_path.join(format!("{}.safetensors", name));
-            
+
             // Create a map of tensor names to tensors
             let mut tensors = std::collections::HashMap::new();
-            
+
             // Add LoRA A and B matrices
             tensors.insert(format!("{}.lora_a", name), adapter.lora_a.clone());
             tensors.insert(format!("{}.lora_b", name), adapter.lora_b.clone());
-            
+
             // Save using safetensors
             safetensors::tensor::serialize_to_file(&tensors, &None, &adapter_file)?;
-            
+
             debug!("💾 Saved adapter: {}", adapter_file.display());
         }
 
         // Save optimizer state
         let optimizer_file = checkpoint_path.join("optimizer.json");
-        
+
         // Instead of using safetensors, we'll save a simple metadata file
         // with information about the optimizer state
         let optimizer_info = serde_json::json!({
@@ -960,15 +1032,15 @@ impl QloraCurator {
             "step": self.step,
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
-        
+
         // Save optimizer info
         fs::write(
             optimizer_file,
-            serde_json::to_string_pretty(&optimizer_info)?
+            serde_json::to_string_pretty(&optimizer_info)?,
         )?;
-        
+
         info!("💾 Saved optimizer state metadata");
-        
+
         // Save parameter norms for debugging
         let mut param_norms = Vec::new();
         for var in self.varmap.all_vars() {
@@ -976,18 +1048,15 @@ impl QloraCurator {
                 param_norms.push(norm);
             }
         }
-        
+
         // Save parameter norms to a separate file
         if !param_norms.is_empty() {
             let norms_file = checkpoint_path.join("param_norms.json");
-            fs::write(
-                norms_file,
-                serde_json::to_string_pretty(&param_norms)?
-            )?;
-            
+            fs::write(norms_file, serde_json::to_string_pretty(&param_norms)?)?;
+
             info!("💾 Saved parameter norms for {} tensors", param_norms.len());
         }
-        
+
         // Save training metadata with detailed information
         let metadata = serde_json::json!({
             "step": self.step,
@@ -1007,74 +1076,77 @@ impl QloraCurator {
             "adapter_count": self.adapters.len(),
             "training_progress": format!("{:.1}%", (self.epoch as f64 / self.config.epochs as f64) * 100.0)
         });
-        
+
         fs::write(
             checkpoint_path.join("metadata.json"),
-            serde_json::to_string_pretty(&metadata)?
+            serde_json::to_string_pretty(&metadata)?,
         )?;
 
         info!("✅ Checkpoint saved successfully at step {}", self.step);
         Ok(())
     }
-    
+
     /// Load checkpoint for resuming training
     pub fn load_checkpoint(&mut self, checkpoint_path: &Path) -> Result<()> {
         info!("📂 Loading checkpoint from {}", checkpoint_path.display());
-        
+
         if !checkpoint_path.exists() {
-            return Err(anyhow!("Checkpoint path does not exist: {}", checkpoint_path.display()));
+            return Err(anyhow!(
+                "Checkpoint path does not exist: {}",
+                checkpoint_path.display()
+            ));
         }
-        
+
         // Load metadata first
         let metadata_path = checkpoint_path.join("metadata.json");
         if metadata_path.exists() {
             let metadata_str = fs::read_to_string(metadata_path)?;
             let metadata: serde_json::Value = serde_json::from_str(&metadata_str)?;
-            
+
             // Restore training state
             if let Some(step) = metadata.get("step").and_then(|v| v.as_u64()) {
                 self.step = step as usize;
                 info!("📊 Resuming from step {}", self.step);
             }
-            
+
             if let Some(epoch) = metadata.get("epoch").and_then(|v| v.as_u64()) {
                 self.epoch = epoch as usize;
                 info!("📊 Resuming from epoch {}", self.epoch);
             }
-            
+
             if let Some(loss) = metadata.get("loss").and_then(|v| v.as_f64()) {
                 self.current_loss = loss;
                 info!("📊 Previous loss: {:.4}", self.current_loss);
             }
         }
-        
+
         // Load adapter weights
         for module_name in &self.config.lora_config.target_modules {
             let adapter_file = checkpoint_path.join(format!("{}.safetensors", module_name));
-            
+
             if adapter_file.exists() {
                 info!("📂 Loading adapter: {}", adapter_file.display());
-                
+
                 // Load tensors from safetensors file
                 let tensors = candle_core::safetensors::load(&adapter_file, &self.device)?;
-                
+
                 // Get the adapter
                 if let Some(adapter) = self.adapters.get_mut(module_name) {
                     // Replace adapter weights
                     let lora_a_key = format!("{}.lora_a", module_name);
                     let lora_b_key = format!("{}.lora_b", module_name);
-                    
+
                     if let Some(lora_a) = tensors.get(&lora_a_key) {
                         adapter.lora_a = lora_a.clone();
                     }
-                    
+
                     if let Some(lora_b) = tensors.get(&lora_b_key) {
                         adapter.lora_b = lora_b.clone();
                     }
                 }
             }
         }
-        
+
         info!("✅ Checkpoint loaded successfully");
         Ok(())
     }
@@ -1095,27 +1167,37 @@ impl QloraCurator {
             "scaling_factor": self.config.lora_config.alpha / self.config.lora_config.rank as f64,
             "adapter_format_version": "1.0"
         });
-        
+
         fs::write(
             adapter_path.join("adapter_config.json"),
-            serde_json::to_string_pretty(&lora_config)?
+            serde_json::to_string_pretty(&lora_config)?,
         )?;
 
         // Save adapter weights using safetensors format
         for (name, adapter) in &self.adapters {
             let adapter_file = adapter_path.join(format!("{}.safetensors", name));
-            
+
             // Create a map of tensor names to tensors
             let mut tensors = std::collections::HashMap::new();
-            
+
             // Add LoRA A and B matrices with proper naming convention
             tensors.insert(format!("{}.lora_a", name), adapter.lora_a.clone());
             tensors.insert(format!("{}.lora_b", name), adapter.lora_b.clone());
-            
+
             // Calculate and save parameter norms for validation
-            let a_norm = adapter.lora_a.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?;
-            let b_norm = adapter.lora_b.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?;
-            
+            let a_norm = adapter
+                .lora_a
+                .sqr()?
+                .sum_all()?
+                .sqrt()?
+                .to_scalar::<f32>()?;
+            let b_norm = adapter
+                .lora_b
+                .sqr()?
+                .sum_all()?
+                .sqrt()?
+                .to_scalar::<f32>()?;
+
             // Add metadata to safetensors
             let metadata = Some(std::collections::HashMap::from([
                 ("format".to_string(), "qlora".to_string()),
@@ -1123,16 +1205,23 @@ impl QloraCurator {
                 ("a_norm".to_string(), a_norm.to_string()),
                 ("b_norm".to_string(), b_norm.to_string()),
                 ("rank".to_string(), self.config.lora_config.rank.to_string()),
-                ("alpha".to_string(), self.config.lora_config.alpha.to_string()),
+                (
+                    "alpha".to_string(),
+                    self.config.lora_config.alpha.to_string(),
+                ),
             ]));
-            
+
             // Save using safetensors with metadata
             safetensors::tensor::serialize_to_file(&tensors, &metadata, &adapter_file)?;
-            
-            info!("💾 Saved final adapter: {} (A norm: {:.4}, B norm: {:.4})", 
-                  adapter_file.display(), a_norm, b_norm);
+
+            info!(
+                "💾 Saved final adapter: {} (A norm: {:.4}, B norm: {:.4})",
+                adapter_file.display(),
+                a_norm,
+                b_norm
+            );
         }
-        
+
         // Save comprehensive model metadata
         let training_history = serde_json::json!({
             "epochs": self.epoch + 1,
@@ -1142,7 +1231,7 @@ impl QloraCurator {
             "batch_size": self.config.batch_size,
             "gradient_accumulation_steps": self.config.gradient_accumulation_steps
         });
-        
+
         let metadata = serde_json::json!({
             "model_info": {
                 "model_type": "qwen2",
@@ -1166,19 +1255,20 @@ impl QloraCurator {
             "adapter_info": {
                 "modules": self.config.lora_config.target_modules,
                 "total_parameters": self.adapters.len() * self.config.lora_config.rank * 2 * 896, // 896 is hidden_size
-                "compression_ratio": format!("{:.2}%", 
-                    (self.adapters.len() * self.config.lora_config.rank * 2 * 896) as f64 / 
+                "compression_ratio": format!("{:.2}%",
+                    (self.adapters.len() * self.config.lora_config.rank * 2 * 896) as f64 /
                     (500_000_000.0) * 100.0) // Approximate 0.5B model size
             }
         });
-        
+
         fs::write(
             adapter_path.join("model_metadata.json"),
-            serde_json::to_string_pretty(&metadata)?
+            serde_json::to_string_pretty(&metadata)?,
         )?;
-        
+
         // Create a README file with usage instructions
-        let readme = format!(r#"# QLoRA Fine-tuned Qwen2 Adapter
+        let readme = format!(
+            r#"# QLoRA Fine-tuned Qwen2 Adapter
 
 ## Model Information
 - Base model: Qwen2-0.5B-Instruct
@@ -1229,15 +1319,15 @@ let output = model.generate(input_ids, max_length, temperature)?;
 
 ## License
 This adapter inherits the license of the base Qwen2 model.
-"#, 
-        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
-        self.current_loss,
-        self.epoch + 1,
-        self.step,
-        self.config.learning_rate,
-        self.config.batch_size
+"#,
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
+            self.current_loss,
+            self.epoch + 1,
+            self.step,
+            self.config.learning_rate,
+            self.config.batch_size
         );
-        
+
         fs::write(adapter_path.join("README.md"), readme)?;
 
         info!("✅ Final adapter saved successfully with comprehensive metadata");
@@ -1254,23 +1344,31 @@ This adapter inherits the license of the base Qwen2 model.
         info!("🔄 Running blue-green deployment validation");
 
         // Run validation comparison
-        let validation_result = qwen_integrator.run_validation_comparison(
-            validation_prompts,
-            None, // before adapter
-            Some(&self.config.output_dir.join("adapter_final")),
-        ).await?;
+        let validation_result = qwen_integrator
+            .run_validation_comparison(
+                validation_prompts,
+                None, // before adapter
+                Some(&self.config.output_dir.join("adapter_final")),
+            )
+            .await?;
 
         // Check if improvement meets threshold
         let min_improvement_threshold = 0.1; // 10% improvement required
-        let deployment_successful = validation_result.average_improvement >= min_improvement_threshold;
+        let deployment_successful =
+            validation_result.average_improvement >= min_improvement_threshold;
 
         if deployment_successful {
-            info!("✅ Deployment validation passed - Average improvement: {:.3}", validation_result.average_improvement);
+            info!(
+                "✅ Deployment validation passed - Average improvement: {:.3}",
+                validation_result.average_improvement
+            );
             // TODO: Implement actual traffic switching in production
             info!("🚀 Would switch traffic to green environment in production");
         } else {
-            warn!("⚠️ Deployment validation failed - Average improvement: {:.3} (threshold: {:.3})",
-                  validation_result.average_improvement, min_improvement_threshold);
+            warn!(
+                "⚠️ Deployment validation failed - Average improvement: {:.3} (threshold: {:.3})",
+                validation_result.average_improvement, min_improvement_threshold
+            );
             info!("🔙 Would rollback to blue environment in production");
         }
 

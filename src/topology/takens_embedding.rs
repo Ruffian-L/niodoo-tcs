@@ -1,4 +1,4 @@
-use nalgebra::{DVector, DMatrix};
+use nalgebra::{DMatrix, DVector};
 use rayon::prelude::*;
 // use statistical::*;
 use std::collections::HashMap;
@@ -6,9 +6,9 @@ use std::collections::HashMap;
 /// Takens' Embedding Theorem implementation for time series reconstruction
 #[derive(Debug, Clone)]
 pub struct TakensEmbedding {
-    dimension: usize,      // M - embedding dimension
-    delay: usize,         // tau - time delay
-    data_dim: usize,      // D - original data dimension
+    dimension: usize, // M - embedding dimension
+    delay: usize,     // tau - time delay
+    data_dim: usize,  // D - original data dimension
 }
 
 impl TakensEmbedding {
@@ -31,9 +31,8 @@ impl TakensEmbedding {
         }
 
         // Find first local minimum
-        for i in 1..mi_values.len()-1 {
-            if mi_values[i].1 < mi_values[i-1].1 &&
-               mi_values[i].1 < mi_values[i+1].1 {
+        for i in 1..mi_values.len() - 1 {
+            if mi_values[i].1 < mi_values[i - 1].1 && mi_values[i].1 < mi_values[i + 1].1 {
                 return mi_values[i].0;
             }
         }
@@ -43,30 +42,25 @@ impl TakensEmbedding {
     }
 
     /// Compute false nearest neighbors to find optimal M
-    pub fn optimal_dimension(
-        time_series: &[Vec<f32>],
-        tau: usize
-    ) -> usize {
+    pub fn optimal_dimension(time_series: &[Vec<f32>], tau: usize) -> usize {
         let max_dim = 15;
-        let rtol = 15.0;  // Threshold for false neighbors
+        let rtol = 15.0; // Threshold for false neighbors
 
         for m in 1..max_dim {
             let embedded = Self::embed_static(time_series, m, tau);
             let fnn_ratio = Self::false_nearest_neighbors(&embedded, rtol);
 
-            if fnn_ratio < 0.01 {  // Less than 1% false neighbors
+            if fnn_ratio < 0.01 {
+                // Less than 1% false neighbors
                 return m;
             }
         }
 
-        5  // Default fallback
+        5 // Default fallback
     }
 
     /// Main embedding function with parallel processing
-    pub fn embed(
-        &self,
-        time_series: &[Vec<f32>]
-    ) -> Vec<DVector<f32>> {
+    pub fn embed(&self, time_series: &[Vec<f32>]) -> Vec<DVector<f32>> {
         let n = time_series.len();
         let embed_len = n - self.dimension * self.delay;
 
@@ -85,11 +79,7 @@ impl TakensEmbedding {
     }
 
     /// Static version for optimal parameter search
-    fn embed_static(
-        time_series: &[Vec<f32>],
-        m: usize,
-        tau: usize
-    ) -> Vec<DVector<f32>> {
+    fn embed_static(time_series: &[Vec<f32>], m: usize, tau: usize) -> Vec<DVector<f32>> {
         let n = time_series.len();
         let data_dim = time_series[0].len();
         let embed_len = n - m * tau;
@@ -108,15 +98,12 @@ impl TakensEmbedding {
     }
 
     /// Compute false nearest neighbors ratio
-    fn false_nearest_neighbors(
-        embedded: &[DVector<f32>],
-        rtol: f32
-    ) -> f32 {
+    fn false_nearest_neighbors(embedded: &[DVector<f32>], rtol: f32) -> f32 {
         let mut false_neighbors = 0;
         let total_pairs = embedded.len() * (embedded.len() - 1) / 2;
 
         for i in 0..embedded.len() {
-            for j in i+1..embedded.len() {
+            for j in i + 1..embedded.len() {
                 let dist = (embedded[i].clone() - embedded[j].clone()).norm();
                 // Simplified FNN calculation
                 if dist > rtol {
@@ -129,15 +116,10 @@ impl TakensEmbedding {
     }
 
     /// Mutual information calculation
-    fn mutual_information(
-        time_series: &[Vec<f32>],
-        delay: usize
-    ) -> f32 {
+    fn mutual_information(time_series: &[Vec<f32>], delay: usize) -> f32 {
         // Simplified mutual information using correlation
         // For full implementation, would need proper entropy calculation
-        let x: Vec<f32> = time_series.iter()
-            .flat_map(|v| v.iter().cloned())
-            .collect();
+        let x: Vec<f32> = time_series.iter().flat_map(|v| v.iter().cloned()).collect();
 
         let y: Vec<f32> = time_series[delay..]
             .iter()
@@ -146,7 +128,7 @@ impl TakensEmbedding {
 
         // Approximate MI with correlation
         let corr = Self::correlation(&x, &y);
-        -corr.abs().ln()  // Simplified
+        -corr.abs().ln() // Simplified
     }
 
     fn correlation(x: &[f32], y: &[f32]) -> f32 {
@@ -157,8 +139,7 @@ impl TakensEmbedding {
         let sum_x2 = x.iter().map(|v| v * v).sum::<f32>();
         let sum_y2 = y.iter().map(|v| v * v).sum::<f32>();
 
-        (n as f32 * sum_xy - sum_x * sum_y) /
-        ((n as f32 * sum_x2 - sum_x * sum_x) *
-         (n as f32 * sum_y2 - sum_y * sum_y)).sqrt()
+        (n as f32 * sum_xy - sum_x * sum_y)
+            / ((n as f32 * sum_x2 - sum_x * sum_x) * (n as f32 * sum_y2 - sum_y * sum_y)).sqrt()
     }
 }

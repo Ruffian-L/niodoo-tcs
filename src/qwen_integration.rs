@@ -358,7 +358,8 @@ impl QwenIntegrator {
         if shape != expected {
             return Err(anyhow!(
                 "Shape mismatch: got {:?}, expected {:?}",
-                shape, expected
+                shape,
+                expected
             ));
         }
         Ok(())
@@ -608,7 +609,10 @@ impl QwenIntegrator {
         before_adapter_path: Option<&Path>,
         after_adapter_path: Option<&Path>,
     ) -> Result<ValidationResult> {
-        info!("🔍 Running validation comparison on {} prompts", validation_prompts.len());
+        info!(
+            "🔍 Running validation comparison on {} prompts",
+            validation_prompts.len()
+        );
 
         let mut before_responses = Vec::new();
         let mut after_responses = Vec::new();
@@ -632,7 +636,11 @@ impl QwenIntegrator {
         }
 
         // Compare responses
-        for (i, (before, after)) in before_responses.iter().zip(after_responses.iter()).enumerate() {
+        for (i, (before, after)) in before_responses
+            .iter()
+            .zip(after_responses.iter())
+            .enumerate()
+        {
             let comparison = ValidationComparison {
                 prompt: validation_prompts[i].clone(),
                 before_response: before.clone(),
@@ -642,11 +650,13 @@ impl QwenIntegrator {
             comparisons.push(comparison);
         }
 
-        let avg_improvement = comparisons.iter()
-            .map(|c| c.improvement_score)
-            .sum::<f64>() / comparisons.len() as f64;
+        let avg_improvement =
+            comparisons.iter().map(|c| c.improvement_score).sum::<f64>() / comparisons.len() as f64;
 
-        info!("✅ Validation complete - Average improvement: {:.3}", avg_improvement);
+        info!(
+            "✅ Validation complete - Average improvement: {:.3}",
+            avg_improvement
+        );
 
         Ok(ValidationResult {
             comparisons,
@@ -666,10 +676,12 @@ impl QwenIntegrator {
 
         // Check for emotional keywords
         let emotional_keywords = ["feel", "emotion", "understand", "empathy", "support"];
-        let before_emotional = emotional_keywords.iter()
+        let before_emotional = emotional_keywords
+            .iter()
             .filter(|&word| before.to_lowercase().contains(word))
             .count() as f64;
-        let after_emotional = emotional_keywords.iter()
+        let after_emotional = emotional_keywords
+            .iter()
             .filter(|&word| after.to_lowercase().contains(word))
             .count() as f64;
 
@@ -692,9 +704,8 @@ mod tests {
     #[tokio::test]
     async fn test_qwen_integrator_creation() {
         let paths = PathConfig::default();
-        let model_path = env::var("QWEN_MODEL_PATH").unwrap_or_else(|_| {
-            "/home/beelink/models/Qwen2-0.5B-Instruct".to_string()
-        });
+        let model_path = env::var("QWEN_MODEL_PATH")
+            .unwrap_or_else(|_| "/home/beelink/models/Qwen2-0.5B-Instruct".to_string());
 
         let config = QwenConfig {
             model_path,

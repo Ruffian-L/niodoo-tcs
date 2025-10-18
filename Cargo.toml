@@ -49,10 +49,7 @@ version = "0.1.0"
 # Core tensor and inference libraries (ORT preferred over Candle for CUDA stability)
 ndarray = { version = "0.15", features = ["rayon", "blas"] }
 ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
-# Temporarily disable ORT while the new ML module uses a mocked interface.
-# The full ONNX runtime integration will return once we wire the GPU build.
-# (Linker fails against ring-core when the download helper runs.)
-# ort = { version = "1.16", features = ["cuda"] }
+ort = { version = "1.16", default-features = false, features = ["load-dynamic"] }
 tokenizers = "0.15"
 hf-hub = "0.3"
 
@@ -76,11 +73,12 @@ dashmap = "6.1"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
 mimalloc = "0.1"
+num-complex = "0.4"
 
 half = "2.4.0"
-rand = "0.9.0"
-rand_chacha = "0.9.0"
-rand_distr = "0.5.0"
+rand = "0.8"
+rand_chacha = "0.3"
+rand_distr = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 
 # Data structures & serialization - UPDATED

@@ -3,9 +3,9 @@
 //! Completes the before/after comparison that was interrupted in learning_pipeline.rs
 //! Proves that QLoRA training actually improved the model's performance
 
-use niodoo_consciousness::qwen_integration::{QwenIntegrator, QwenConfig};
-use std::path::PathBuf;
 use anyhow::Result;
+use niodoo_consciousness::qwen_integration::{QwenConfig, QwenIntegrator};
+use std::path::PathBuf;
 use tracing::{info, warn};
 
 #[tokio::main]
@@ -52,17 +52,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut integrator = QwenIntegrator::new(config)?;
 
     // This method will generate before/after responses and calculate improvement
-    let validation_result = integrator.run_validation_comparison(
-        &validation_prompts,
-        None, // before adapter (use base model)
-        Some(&adapter_path), // after adapter (use fine-tuned model)
-    ).await?;
+    let validation_result = integrator
+        .run_validation_comparison(
+            &validation_prompts,
+            None,                // before adapter (use base model)
+            Some(&adapter_path), // after adapter (use fine-tuned model)
+        )
+        .await?;
 
     // Display detailed results
     println!("\n📊 VALIDATION RESULTS");
     println!("====================");
 
-    println!("📈 Average Improvement Score: {:.3}", validation_result.average_improvement);
+    println!(
+        "📈 Average Improvement Score: {:.3}",
+        validation_result.average_improvement
+    );
 
     println!("\n🔍 Detailed Comparisons:");
     for (i, comparison) in validation_result.comparisons.iter().enumerate() {
@@ -77,14 +82,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("\n🎯 TRAINING EFFECTIVENESS ASSESSMENT");
     println!("====================================");
 
-    let positive_improvements = validation_result.comparisons.iter()
+    let positive_improvements = validation_result
+        .comparisons
+        .iter()
         .filter(|c| c.improvement_score > 0.0)
         .count();
 
     let avg_improvement = validation_result.average_improvement;
 
-    println!("✅ Prompts with positive improvement: {}/{}", positive_improvements, validation_prompts.len());
-    println!("� Average improvement across all prompts: {:.3}", avg_improvement);
+    println!(
+        "✅ Prompts with positive improvement: {}/{}",
+        positive_improvements,
+        validation_prompts.len()
+    );
+    println!(
+        "� Average improvement across all prompts: {:.3}",
+        avg_improvement
+    );
 
     if avg_improvement > 0.1 {
         println!("🎯 VERDICT: TRAINING SUCCESSFUL ✅");
@@ -99,7 +113,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     println!("\n🔬 TRAINING VALIDATION COMPLETE");
     println!("================================");
-    println!("Status: QLoRA training effectiveness verified through empirical before/after comparison");
+    println!(
+        "Status: QLoRA training effectiveness verified through empirical before/after comparison"
+    );
 
     Ok(())
 }

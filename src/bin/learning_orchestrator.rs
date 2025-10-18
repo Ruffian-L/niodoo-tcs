@@ -10,18 +10,17 @@
 ///
 /// This binary runs the complete consciousness processing pipeline with
 /// real learning feedback loops for continuous improvement.
-
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use niodoo_consciousness::evolutionary::EvolutionaryPersonalityEngine;
 use niodoo_consciousness::learning_analytics::{
     LearningAnalyticsConfig, LearningAnalyticsEngine, LearningEventType, LearningMetrics,
 };
-use niodoo_consciousness::evolutionary::EvolutionaryPersonalityEngine;
-use niodoo_consciousness::tqft::{TQFTEngine, Cobordism};
+use niodoo_consciousness::tqft::{Cobordism, TQFTEngine};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error, instrument};
-use rand::Rng;
+use tracing::{error, info, instrument, warn};
 
 /// Full learning orchestrator state
 pub struct LearningOrchestrator {
@@ -158,7 +157,10 @@ impl LearningOrchestrator {
 
     /// Process a consciousness state through full learning pipeline
     #[instrument(skip(self), name = "process_with_learning")]
-    pub async fn process_state_with_learning(&self, state_data: Vec<f32>) -> Result<LearningResult> {
+    pub async fn process_state_with_learning(
+        &self,
+        state_data: Vec<f32>,
+    ) -> Result<LearningResult> {
         let state_id = format!("state_{:06}", self.performance_history.read().await.len());
         info!("Processing {} with full learning pipeline", state_id);
 
@@ -181,13 +183,17 @@ impl LearningOrchestrator {
         if self.config.enable_analytics {
             info!("Stage 1/4: Topological Analysis");
             result.topological_features = self.analyze_topology(&state_data).await?;
-            result.reasoning_applied.push("TopologicalAnalysis".to_string());
+            result
+                .reasoning_applied
+                .push("TopologicalAnalysis".to_string());
         }
 
         // Stage 2: Pattern Detection
         info!("Stage 2/4: Pattern Detection");
         result.detected_patterns = self.detect_patterns(&state_data).await?;
-        result.reasoning_applied.push("PatternDetection".to_string());
+        result
+            .reasoning_applied
+            .push("PatternDetection".to_string());
 
         // Stage 3: TQFT Reasoning
         if self.config.enable_tqft_reasoning {
@@ -222,11 +228,8 @@ impl LearningOrchestrator {
 
         // Estimate Betti numbers
         let mean = state_data.iter().sum::<f32>() / state_data.len() as f32;
-        let variance = state_data
-            .iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f32>()
-            / state_data.len() as f32;
+        let variance =
+            state_data.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / state_data.len() as f32;
 
         let b0 = 1;
         let b1 = if variance > 0.5 { 1 } else { 0 };
@@ -244,11 +247,8 @@ impl LearningOrchestrator {
         let mut patterns = Vec::new();
 
         let mean = state_data.iter().sum::<f32>() / state_data.len() as f32;
-        let variance = state_data
-            .iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f32>()
-            / state_data.len() as f32;
+        let variance =
+            state_data.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / state_data.len() as f32;
 
         if variance > 0.5 {
             patterns.push(CognitivePattern {
@@ -262,10 +262,7 @@ impl LearningOrchestrator {
         // Oscillatory pattern
         if state_data.len() >= 4 {
             let diffs: Vec<f32> = state_data.windows(2).map(|w| w[1] - w[0]).collect();
-            let sign_changes = diffs
-                .windows(2)
-                .filter(|w| w[0] * w[1] < 0.0)
-                .count();
+            let sign_changes = diffs.windows(2).filter(|w| w[0] * w[1] < 0.0).count();
 
             if sign_changes > 2 {
                 patterns.push(CognitivePattern {
@@ -286,8 +283,7 @@ impl LearningOrchestrator {
         let betti_before = [1, 0, 0];
         let betti_after = result.topological_features.betti_numbers;
 
-        if let Some(cobordism) =
-            TQFTEngine::infer_cobordism_from_betti(&betti_before, &betti_after)
+        if let Some(cobordism) = TQFTEngine::infer_cobordism_from_betti(&betti_before, &betti_after)
         {
             result
                 .reasoning_applied
@@ -321,7 +317,8 @@ impl LearningOrchestrator {
         let plasticity = 0.5 + (result.topological_features.complexity_score * 0.3);
 
         // Progress score
-        let progress_score = (learning_rate * 0.3 + retention_score * 0.3 + adaptation_effectiveness * 0.4).min(1.0);
+        let progress_score =
+            (learning_rate * 0.3 + retention_score * 0.3 + adaptation_effectiveness * 0.4).min(1.0);
 
         Ok(LearningFeedback {
             learning_rate,
@@ -359,19 +356,19 @@ impl LearningOrchestrator {
 
     /// Run evolutionary learning on accumulated data
     pub async fn run_evolution_cycle(&self, num_generations: usize) -> Result<()> {
-        info!("🧬 Starting evolution cycle ({} generations)", num_generations);
+        info!(
+            "🧬 Starting evolution cycle ({} generations)",
+            num_generations
+        );
 
         let mut evolution = self.evolution_engine.write().await;
 
         for gen in 0..num_generations {
             // Generate mock user feedback (in real system, from metrics)
             let mut rng = rand::rng();
-            let user_feedback: Vec<f32> = (0..50)
-                .map(|_| rng.gen_range(0.3..0.9))
-                .collect();
-            let neurodivergent_effectiveness: Vec<f32> = (0..50)
-                .map(|_| rng.gen_range(0.4..0.95))
-                .collect();
+            let user_feedback: Vec<f32> = (0..50).map(|_| rng.gen_range(0.3..0.9)).collect();
+            let neurodivergent_effectiveness: Vec<f32> =
+                (0..50).map(|_| rng.gen_range(0.4..0.95)).collect();
 
             evolution
                 .evolve_generation(user_feedback, neurodivergent_effectiveness)
@@ -424,7 +421,8 @@ impl LearningOrchestrator {
             / results.len() as f32;
 
         let evolution = self.evolution_engine.read().await;
-        let evolution_fitness = evolution.get_best_personality_configuration()
+        let evolution_fitness = evolution
+            .get_best_personality_configuration()
             .map(|b| b.fitness)
             .unwrap_or(0.0);
         drop(evolution);
@@ -482,11 +480,7 @@ impl LearningOrchestrator {
         }
 
         let mean = data.iter().sum::<f32>() / data.len() as f32;
-        let variance = data
-            .iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f32>()
-            / data.len() as f32;
+        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / data.len() as f32;
 
         let range = data.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
             - data.iter().cloned().fold(f32::INFINITY, f32::min);
@@ -539,7 +533,10 @@ async fn main() -> Result<()> {
         test_states.push(state);
     }
 
-    info!("📊 Processing batch of {} consciousness states", test_states.len());
+    info!(
+        "📊 Processing batch of {} consciousness states",
+        test_states.len()
+    );
 
     // Process batch with learning
     let results = orchestrator.process_batch(test_states).await?;
@@ -562,15 +559,9 @@ async fn main() -> Result<()> {
         report.learning_progress * 100.0
     );
     info!("Patterns Identified: {}", report.patterns_identified);
-    info!(
-        "Average Complexity Score: {:.3}",
-        report.avg_complexity
-    );
+    info!("Average Complexity Score: {:.3}", report.avg_complexity);
     info!("Learning Rate Trend: {:.3}", report.learning_rate_trend);
-    info!(
-        "Retention Improvement: {:.3}",
-        report.retention_improvement
-    );
+    info!("Retention Improvement: {:.3}", report.retention_improvement);
     info!("");
     info!("🧬 Evolution Stats:");
     info!("{}", report.evolution_fitness);
@@ -582,7 +573,10 @@ async fn main() -> Result<()> {
     info!("════════════════════════════════════════");
     info!("");
     info!("✨ Learning orchestrator completed successfully!");
-    info!("The system learned and adapted through {} consciousness states", report.total_states_processed);
+    info!(
+        "The system learned and adapted through {} consciousness states",
+        report.total_states_processed
+    );
 
     Ok(())
 }
@@ -607,7 +601,10 @@ mod tests {
         let orchestrator = LearningOrchestrator::new(config).await.unwrap();
 
         let state = vec![0.5, 0.3, 0.7, 0.2, 0.6];
-        let result = orchestrator.process_state_with_learning(state).await.unwrap();
+        let result = orchestrator
+            .process_state_with_learning(state)
+            .await
+            .unwrap();
 
         assert!(!result.reasoning_applied.is_empty());
         assert!(result.learning_feedback.learning_rate >= 0.0);
@@ -646,7 +643,10 @@ mod tests {
         let orchestrator = LearningOrchestrator::new(config).await.unwrap();
 
         let state = vec![0.5, 0.3, 0.7, 0.2];
-        orchestrator.process_state_with_learning(state).await.unwrap();
+        orchestrator
+            .process_state_with_learning(state)
+            .await
+            .unwrap();
 
         let report = orchestrator.generate_report().await.unwrap();
         assert!(report.total_states_processed >= 0);

@@ -1,15 +1,13 @@
+use crate::config::system_config::AppConfig;
+use crate::consciousness::ConsciousnessState;
+use crate::memory::guessing_spheres::{EmotionalVector, GuessingMemorySystem, SphereId};
+use crate::memory::multi_layer_query::MultiLayerMemoryQuery;
+use crate::persistent_learning::{LearningMetrics, LearningRoutine};
+use crate::qwen_curator::{QloraCurator, QloraCuratorConfig};
+use crate::rag::local_embeddings::{Document, MathematicalEmbeddingModel};
 /// Triple-Threat Learning Routine for Persistent Harness
 /// Runs continuous hallucination detection tests and generates healing curve data
 use anyhow::Result;
-use crate::consciousness::ConsciousnessState;
-use crate::memory::guessing_spheres::{
-    EmotionalVector, GuessingMemorySystem, SphereId,
-};
-use crate::memory::multi_layer_query::MultiLayerMemoryQuery;
-use crate::persistent_learning::{LearningMetrics, LearningRoutine};
-use crate::rag::local_embeddings::{Document, MathematicalEmbeddingModel};
-use crate::qwen_curator::{QloraCurator, QloraCuratorConfig};
-use crate::config::system_config::AppConfig;
 
 /// Learning routine that cycles through triple-threat trigger scenarios
 pub struct TripleThreatRoutine {

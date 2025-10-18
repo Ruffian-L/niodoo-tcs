@@ -215,13 +215,19 @@ impl MetacognitionEngine {
     }
 
     /// Make an ethical decision
-    pub fn make_decision(&mut self, decision_type: DecisionType, considerations: Vec<String>) -> Result<MetacognitiveDecision> {
+    pub fn make_decision(
+        &mut self,
+        decision_type: DecisionType,
+        considerations: Vec<String>,
+    ) -> Result<MetacognitiveDecision> {
         use crate::consciousness_constants::*;
 
         let confidence = self.calculate_confidence(&decision_type, &considerations);
         let ethical_score = self.evaluate_ethical_impact(&considerations);
 
-        let outcome = if ethical_score >= self.ethical_framework.ethical_threshold && confidence >= self.state.decision_threshold {
+        let outcome = if ethical_score >= self.ethical_framework.ethical_threshold
+            && confidence >= self.state.decision_threshold
+        {
             DecisionOutcome::Approved
         } else if ethical_score < ETHICAL_REJECTION_THRESHOLD {
             DecisionOutcome::Rejected
@@ -243,13 +249,21 @@ impl MetacognitionEngine {
     }
 
     /// Record a metacognitive event
-    pub fn record_event(&mut self, event_type: EventType, description: String, metadata: HashMap<String, String>) -> Result<Uuid> {
+    pub fn record_event(
+        &mut self,
+        event_type: EventType,
+        description: String,
+        metadata: HashMap<String, String>,
+    ) -> Result<Uuid> {
         let event = MetacognitiveEvent {
             id: Uuid::new_v4(),
             event_type,
             description,
             timestamp: SystemTime::now(),
-            consciousness_state: self.consciousness_state.as_ref().map(|_| "active".to_string()),
+            consciousness_state: self
+                .consciousness_state
+                .as_ref()
+                .map(|_| "active".to_string()),
             metadata,
         };
 
@@ -269,9 +283,9 @@ impl MetacognitionEngine {
         };
 
         // Adjust based on number of considerations
-        let consideration_factor =
-            (considerations.len() as f32 * CONSIDERATION_CONFIDENCE_INCREMENT)
-                .min(CONSIDERATION_CONFIDENCE_MAX_BONUS);
+        let consideration_factor = (considerations.len() as f32
+            * CONSIDERATION_CONFIDENCE_INCREMENT)
+            .min(CONSIDERATION_CONFIDENCE_MAX_BONUS);
 
         (base_confidence + consideration_factor).min(1.0).max(0.0)
     }
@@ -283,7 +297,10 @@ impl MetacognitionEngine {
 
         for consideration in considerations {
             for (principle, weight) in &self.ethical_framework.decision_weights {
-                if consideration.to_lowercase().contains(&principle.to_lowercase()) {
+                if consideration
+                    .to_lowercase()
+                    .contains(&principle.to_lowercase())
+                {
                     total_weight += weight;
                     weighted_score += weight * self.state.ethical_awareness;
                 }
@@ -301,7 +318,8 @@ impl MetacognitionEngine {
     pub fn reflect(&mut self) -> Result<()> {
         use crate::consciousness_constants::*;
 
-        let reflection_duration = Duration::from_secs(self.reflection_capabilities.reflection_interval_sec);
+        let reflection_duration =
+            Duration::from_secs(self.reflection_capabilities.reflection_interval_sec);
 
         // Record reflection event
         self.record_event(
@@ -321,17 +339,23 @@ impl MetacognitionEngine {
     /// Get decision statistics
     pub fn get_decision_stats(&self) -> DecisionStats {
         let total_decisions = self.decision_history.len();
-        let approved_decisions = self.decision_history.iter()
+        let approved_decisions = self
+            .decision_history
+            .iter()
             .filter(|d| matches!(d.outcome, DecisionOutcome::Approved))
             .count();
-        let rejected_decisions = self.decision_history.iter()
+        let rejected_decisions = self
+            .decision_history
+            .iter()
             .filter(|d| matches!(d.outcome, DecisionOutcome::Rejected))
             .count();
 
         let avg_confidence = if total_decisions > 0 {
-            self.decision_history.iter()
+            self.decision_history
+                .iter()
                 .map(|d| d.confidence)
-                .sum::<f32>() / total_decisions as f32
+                .sum::<f32>()
+                / total_decisions as f32
         } else {
             0.0
         };
@@ -363,11 +387,3 @@ pub struct DecisionStats {
     /// Average confidence across all decisions
     pub avg_confidence: f32,
 }
-
-
-
-
-
-
-
-

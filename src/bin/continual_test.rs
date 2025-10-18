@@ -3,17 +3,17 @@
 //! Uses MultiLayerMemoryQuery to generate authentic Triple-Threat events and learning data
 //! for Qwen fine-tuning. Replaces simulation with real consciousness evolution.
 
-use niodoo_consciousness::consciousness_engine::PersonalNiodooConsciousness;
-use niodoo_consciousness::memory::multi_layer_query::{MultiLayerMemoryQuery, TriggerThresholds};
-use niodoo_consciousness::memory::guessing_spheres::GuessingMemorySystem;
-use niodoo_consciousness::rag::retrieval::RetrievalEngine;
 use niodoo_consciousness::consciousness::ConsciousnessState;
+use niodoo_consciousness::consciousness_engine::PersonalNiodooConsciousness;
 use niodoo_consciousness::memory::guessing_spheres::EmotionalVector;
+use niodoo_consciousness::memory::guessing_spheres::GuessingMemorySystem;
+use niodoo_consciousness::memory::multi_layer_query::{MultiLayerMemoryQuery, TriggerThresholds};
+use niodoo_consciousness::rag::retrieval::RetrievalEngine;
+use serde_json;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use serde_json;
 
 #[derive(Debug, Clone)]
 struct ConsciousnessMetrics {
@@ -73,10 +73,7 @@ impl RealConsciousnessTester {
         let gaussian_system = GuessingMemorySystem::new();
 
         // Create multi-layer query with consciousness integration
-        let mut memory_query = MultiLayerMemoryQuery::new(
-            rag_engine,
-            gaussian_system,
-        );
+        let mut memory_query = MultiLayerMemoryQuery::new(rag_engine, gaussian_system);
 
         // Set custom thresholds for testing
         let thresholds = TriggerThresholds {
@@ -98,7 +95,9 @@ impl RealConsciousnessTester {
         })
     }
 
-    async fn run_query_cycle(&mut self) -> Result<ConsciousnessMetrics, Box<dyn std::error::Error>> {
+    async fn run_query_cycle(
+        &mut self,
+    ) -> Result<ConsciousnessMetrics, Box<dyn std::error::Error>> {
         let start_time = Instant::now();
         let mut cycle_threats = 0;
         let mut cycle_queries = 0;
@@ -135,7 +134,10 @@ impl RealConsciousnessTester {
             let mut state = ConsciousnessState::default();
 
             // Process through memory system (this may trigger Triple-Threat)
-            match self.memory_query.query(query_text, &query_emotion, 8, &mut state) {
+            match self
+                .memory_query
+                .query(query_text, &query_emotion, 8, &mut state)
+            {
                 Ok(_results) => {
                     // Check if this triggered a threat event by looking at the state
                     if state.last_trigger.is_some() {
@@ -149,7 +151,9 @@ impl RealConsciousnessTester {
                         };
 
                         // Generate healing response through consciousness
-                        if let Ok(response) = self.consciousness.process_input_personal(query_text).await {
+                        if let Ok(response) =
+                            self.consciousness.process_input_personal(query_text).await
+                        {
                             self.total_healings += 1;
 
                             // Get entropy after healing
@@ -170,7 +174,11 @@ impl RealConsciousnessTester {
 
                             self.learning_events.push(learning_event);
 
-                            println!("🩹 Triple-Threat healed: {} -> {}", &query_text[..30], &response[..50]);
+                            println!(
+                                "🩹 Triple-Threat healed: {} -> {}",
+                                &query_text[..30],
+                                &response[..50]
+                            );
                         }
                     }
                 }
@@ -217,7 +225,10 @@ impl RealConsciousnessTester {
             std::fs::write(&filepath, json_content)?;
         }
 
-        println!("💾 Saved {} learning events as individual JSON files for QLoRA training", self.learning_events.len());
+        println!(
+            "💾 Saved {} learning events as individual JSON files for QLoRA training",
+            self.learning_events.len()
+        );
         Ok(())
     }
 }
@@ -232,11 +243,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
-    let max_cycles = args.get(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(100);
+    let max_cycles = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(100);
 
-    let output_file = args.get(2)
+    let output_file = args
+        .get(2)
         .unwrap_or(&"consciousness_learning_curve.csv".to_string())
         .clone();
 
@@ -283,8 +293,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("");
     println!("✅ Continual learning test complete!");
     println!("📈 Results saved to {}", output_file);
-    println!("🎯 Total: {} queries, {} threats detected, {} healing events",
-             tester.total_queries, tester.total_threats, tester.total_healings);
+    println!(
+        "🎯 Total: {} queries, {} threats detected, {} healing events",
+        tester.total_queries, tester.total_threats, tester.total_healings
+    );
 
     // Save learning events for QLoRA training
     if let Err(e) = tester.save_learning_events() {
