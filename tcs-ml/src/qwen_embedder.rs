@@ -425,7 +425,7 @@ impl QwenEmbedder {
         Ok(embeddings)
     }
 
-    /// Reset KV cache for fresh context (new conversation/consciousness thread)
+    /// Reset KV cache for fresh context (new conversation/state thread)
     pub fn reset_cache(&mut self) {
         println!("🔄 Resetting KV cache for fresh context");
         self.init_kv_cache();

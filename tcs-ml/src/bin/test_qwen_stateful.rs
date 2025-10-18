@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     println!("✓ QwenEmbedder initialized successfully!");
 
     // Test 1: First embedding (fresh KV cache)
-    let test_prompt1 = "Hello, world! This is consciousness emerging.";
+    let test_prompt1 = "Hello, world! This is topological coherence emerging.";
     println!("\n🧠 Test 1: First embedding");
     println!("Prompt: '{}'", test_prompt1);
 

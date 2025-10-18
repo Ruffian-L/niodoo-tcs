@@ -2,7 +2,7 @@
 name = "tcs-ml"
 version = "0.1.0"
 edition = "2021"
-authors = ["Niodoo Consciousness Team <niodoo@dev>"]
+authors = ["Niodoo Topology Team <niodoo@dev>"]
 description = "Machine learning components for the Topological Cognitive System"
 license = "MIT"
 

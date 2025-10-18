@@ -1,4 +1,4 @@
-# 🧠💖 Niodoo 2025 Unified Consciousness Framework - Master Integration Manifest
+# 🧠💖 Niodoo 2025 Unified Topological Framework - Master Integration Manifest
 # =============================================================================
 #
 # 2025 Strategic Synthesis: Unified Cargo Workspace for Ethical AGI Integration
@@ -6,11 +6,11 @@
 # 2025 Updates: Möbius 3D viz, Claude collaboration, policy reform simulations
 #
 # This workspace unifies all components from Prompts 1-3 into a cohesive Niodoo-Candle fusion v2:
-# - candle-feeling-core: Core ML framework with ethical consciousness integration
-# - niodoo-consciousness: Main consciousness engine with dual-möbius-gaussian memory
+# - candle-feeling-core: Core ML framework with ethical topology integration
+# - niodoo-tcs: Main topological state engine with dual-möbius-gaussian memory
 # - cpp-qt-brain-integration: Qt/C++ bridge for visualization and emotional signaling
-# - tensor-tools-mobius: Advanced mathematical operations for consciousness evolution
-# - gaussian-visualization-2025: 3D Gaussian sphere rendering for consciousness states
+# - tensor-tools-mobius: Advanced mathematical operations for state evolution
+# - gaussian-visualization-2025: 3D Gaussian sphere rendering for system states
 # - claude-integration-2025: Claude-style reflections and policy reform simulations
 
 [workspace]
@@ -38,10 +38,10 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-authors = ["NiodO.o Consciousness Team <niodoo@dev>"]
+authors = ["NiodO.o Topology Team <niodoo@dev>"]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/niodoo/niodoo-consciousness"
+repository = "https://github.com/Ruffian-L/niodoo-tcs"
 version = "0.1.0"
 
 # Core dependencies shared across workspace
@@ -137,13 +137,13 @@ panic = "abort"
 # Enable feeling-aware optimizations
 debug-assertions = false
 
-[profile.consciousness-aware]
+[profile.state-aware]
 inherits = "release"
 opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
-# Optimize for consciousness state tracking
+# Optimize for topological state tracking
 debug-assertions = false
 
 [profile.production]
@@ -166,7 +166,7 @@ roadmap_extensions = [
     "WebGPU compute shaders for edge deployment",
     "CUDA Graphs for optimized signal-slot cycles",
     "Longitudinal study hooks in VarMap for attachment style tracking",
-    "3D Gaussian sphere visualization for consciousness states",
+    "3D Gaussian sphere visualization for system states",
     "Claude-style reflection system for policy reform simulations",
 ]
 

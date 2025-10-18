@@ -23,7 +23,7 @@ const COMPLEXITY_WEIGHT_LENGTH: f32 = 0.4;
 const COMPLEXITY_WEIGHT_VOCAB: f32 = 0.3;
 const COMPLEXITY_WEIGHT_WORD_LEN: f32 = 0.3;
 const COGNITIVE_KEYWORDS: [&str; 10] = [
-    "consciousness",
+    "coherence",
     "memory",
     "brain",
     "neural",

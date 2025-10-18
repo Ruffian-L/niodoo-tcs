@@ -2,7 +2,7 @@
 name = "tcs-core"
 version = "0.1.0"
 edition = "2021"
-authors = ["Niodoo Consciousness Team <niodoo@dev>"]
+authors = ["Niodoo Topology Team <niodoo@dev>"]
 description = "Core cognitive state machines and embeddings for the Topological Cognitive System"
 license = "MIT"
 
