@@ -49,7 +49,7 @@ version = "0.1.0"
 # Core tensor and inference libraries (ORT preferred over Candle for CUDA stability)
 ndarray = { version = "0.15", features = ["rayon", "blas"] }
 ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
-ort = { version = "1.16", default-features = false, features = ["load-dynamic"] }
+ort = { version = "1.16", default-features = false, features = ["load-dynamic", "half"] }
 tokenizers = "0.15"
 hf-hub = "0.3"
 

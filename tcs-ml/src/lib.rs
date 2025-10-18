@@ -15,6 +15,9 @@ use tracing::{info, warn};
 const CHAR_NORMALIZATION_DIVISOR: f32 = 255.0;
 #[cfg(feature = "onnx")]
 const INFERENCE_HEAD_SAMPLES: usize = 5;
+
+#[cfg(feature = "onnx")]
+use half::f16;
 const DEFAULT_ACTION_SPACE: usize = 8;
 const ENERGY_PERTURBATION_MOD: usize = 4;
 const COMPLEXITY_LENGTH_NORM: f32 = 1000.0;
@@ -46,12 +49,15 @@ mod inference_backend {
         use std::sync::{Arc, Mutex};
 
         use anyhow::{anyhow, Context, Result};
-        use ndarray::{Array2, CowArray};
+        use ndarray::{Array2, Array3, Array4, CowArray};
         use ort::{
             environment::Environment,
             session::{Session, SessionBuilder},
             value::Value,
         };
+        #[cfg(feature = "tokenizers")]
+        use tokenizers::Tokenizer;
+        use crate::f16;
 
         #[derive(Clone)]
         pub struct ModelBackend {
@@ -59,6 +65,8 @@ mod inference_backend {
             environment: Arc<Environment>,
             model_path: Arc<Mutex<Option<PathBuf>>>,
             session: Arc<Mutex<Option<Arc<Session>>>>,
+            #[cfg(feature = "tokenizers")]
+            tokenizer: Arc<Mutex<Option<Tokenizer>>>,
         }
 
         impl ModelBackend {
@@ -73,6 +81,8 @@ mod inference_backend {
                     environment: Arc::new(environment),
                     model_path: Arc::new(Mutex::new(None)),
                     session: Arc::new(Mutex::new(None)),
+                    #[cfg(feature = "tokenizers")]
+                    tokenizer: Arc::new(Mutex::new(None)),
                 })
             }
 
@@ -86,6 +96,44 @@ mod inference_backend {
                     Some(PathBuf::from(model_path));
 
                 *self.session.lock().expect("session mutex poisoned") = Some(Arc::new(session));
+
+                #[cfg(feature = "tokenizers")]
+                {
+                    // Try to load tokenizer from model directory
+                    if let Some(model_dir) = PathBuf::from(model_path).parent() {
+                        // First try parent directory (same level as onnx folder)
+                        let mut tokenizer_path = model_dir.to_path_buf();
+                        tokenizer_path.pop(); // Go up one level from onnx/ to model root
+                        tokenizer_path.push("tokenizer.json");
+                        
+                        if tokenizer_path.exists() {
+                            match Tokenizer::from_file(&tokenizer_path) {
+                                Ok(tokenizer) => {
+                                    *self.tokenizer.lock().expect("tokenizer mutex poisoned") = Some(tokenizer);
+                                    tracing::info!("Loaded tokenizer from {:?}", tokenizer_path);
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Failed to load tokenizer from {:?}: {}", tokenizer_path, e);
+                                }
+                            }
+                        } else {
+                            // Also try in the same directory as the model
+                            let mut alt_path = model_dir.to_path_buf();
+                            alt_path.push("tokenizer.json");
+                            if alt_path.exists() {
+                                match Tokenizer::from_file(&alt_path) {
+                                    Ok(tokenizer) => {
+                                        *self.tokenizer.lock().expect("tokenizer mutex poisoned") = Some(tokenizer);
+                                        tracing::info!("Loaded tokenizer from {:?}", alt_path);
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("Failed to load tokenizer from {:?}: {}", alt_path, e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Ok(())
             }
@@ -103,27 +151,69 @@ mod inference_backend {
                     return Err(anyhow!("ONNX model has no inputs"));
                 }
 
-                let feature_len = prompt.len().max(1);
-                let mut encoded = Vec::with_capacity(feature_len);
-                if feature_len == 1 && prompt.is_empty() {
-                    encoded.push(0.0);
-                } else {
-                    for ch in prompt.chars() {
-                        // TODO(tokenizers): swap naive char normalization with HuggingFace `tokenizers` once the
-                        // production ONNX language model lands.
-                        encoded.push(ch as u32 as f32 / crate::CHAR_NORMALIZATION_DIVISOR);
+                // Try to use tokenizer first, fall back to naive approach
+                let (input_ids, attention_mask) = {
+                    #[cfg(feature = "tokenizers")]
+                    {
+                        let tokenizer_guard = self.tokenizer.lock().expect("tokenizer mutex poisoned");
+                        if let Some(ref tokenizer) = *tokenizer_guard {
+                            let encoding = tokenizer
+                                .encode(prompt, true)
+                                .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
+                            let input_ids: Vec<i64> = encoding.get_ids().iter().map(|x| *x as i64).collect();
+                            let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|x| *x as i64).collect();
+                            drop(tokenizer_guard);
+                            (input_ids, attention_mask)
+                        } else {
+                            drop(tokenizer_guard);
+                            // Fall back to naive char normalization
+                            let feature_len = prompt.len().max(1);
+                            let mut encoded = Vec::with_capacity(feature_len);
+                            if feature_len == 1 && prompt.is_empty() {
+                                encoded.push(0);
+                            } else {
+                                for ch in prompt.chars() {
+                                    encoded.push((ch as u32) as i64);
+                                }
+                            }
+                            let attention_mask = vec![1i64; encoded.len()];
+                            (encoded, attention_mask)
+                        }
                     }
-                }
+                    #[cfg(not(feature = "tokenizers"))]
+                    {
+                        // Fall back to naive char normalization for backwards compatibility
+                        let feature_len = prompt.len().max(1);
+                        let mut encoded = Vec::with_capacity(feature_len);
+                        if feature_len == 1 && prompt.is_empty() {
+                            encoded.push(0);
+                        } else {
+                            for ch in prompt.chars() {
+                                encoded.push((ch as u32) as i64);
+                            }
+                        }
+                        let attention_mask = vec![1i64; encoded.len()];
+                        (encoded, attention_mask)
+                    }
+                };
 
-                let tensor = Array2::from_shape_vec((1, encoded.len()), encoded)
-                    .context("failed to convert prompt into tensor")?
+                // Create input tensors
+                let input_ids_tensor = Array2::from_shape_vec((1, input_ids.len()), input_ids)
+                    .context("failed to create input_ids tensor")?
                     .into_dyn();
-                let tensor = CowArray::from(tensor);
-                let input_value = Value::from_array(session.allocator(), &tensor)
-                    .context("failed to create ORT input tensor")?;
+                let attention_mask_tensor = Array2::from_shape_vec((1, attention_mask.len()), attention_mask)
+                    .context("failed to create attention_mask tensor")?
+                    .into_dyn();
+
+                let input_ids_cow = CowArray::from(input_ids_tensor);
+                let attention_mask_cow = CowArray::from(attention_mask_tensor);
+                let input_ids_value = Value::from_array(session.allocator(), &input_ids_cow)
+                    .context("failed to create input_ids ORT value")?;
+                let attention_mask_value = Value::from_array(session.allocator(), &attention_mask_cow)
+                    .context("failed to create attention_mask ORT value")?;
 
                 let outputs = session
-                    .run(vec![input_value])
+                    .run(vec![input_ids_value, attention_mask_value])
                     .context("failed to execute ONNX session")?;
 
                 let first_output = outputs
@@ -145,13 +235,171 @@ mod inference_backend {
                             values
                         )
                     }
-                    Err(_) => format!(
-                        "{} (onnx) executed successfully but output type was not f32",
-                        self.name
-                    ),
+                    Err(_) => {
+                        // Try extracting as f16 and convert to f32
+                        match first_output.try_extract::<f16>() {
+                            Ok(tensor) => {
+                                let view = tensor.view();
+                                let values: Vec<f32> = view
+                                    .iter()
+                                    .take(crate::INFERENCE_HEAD_SAMPLES)
+                                    .map(|&x| f16::to_f32(x))
+                                    .collect();
+                                format!(
+                                    "{} (onnx) produced {} f16 values (converted to f32), head={:?}",
+                                    self.name,
+                                    view.len(),
+                                    values
+                                )
+                            }
+                            Err(_) => format!(
+                                "{} (onnx) executed successfully but output type was neither f32 nor f16",
+                                self.name
+                            ),
+                        }
+                    }
                 };
 
                 Ok(summary)
+            }
+
+            /// Extract embeddings as Vec<f32> for TCS pipeline integration
+            pub fn extract_embeddings(&self, prompt: &str) -> Result<Vec<f32>> {
+                let session = {
+                    let guard = self.session.lock().expect("session mutex poisoned");
+                    guard
+                        .as_ref()
+                        .cloned()
+                        .ok_or_else(|| anyhow!("ONNX session not available"))?
+                };
+
+                if session.inputs.is_empty() {
+                    return Err(anyhow!("ONNX model has no inputs"));
+                }
+
+                // Try to use tokenizer first, fall back to naive approach
+                let (input_ids, attention_mask) = {
+                    #[cfg(feature = "tokenizers")]
+                    {
+                        let tokenizer_guard = self.tokenizer.lock().expect("tokenizer mutex poisoned");
+                        if let Some(ref tokenizer) = *tokenizer_guard {
+                            let encoding = tokenizer
+                                .encode(prompt, true)
+                                .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
+                            let input_ids: Vec<i64> = encoding.get_ids().iter().map(|x| *x as i64).collect();
+                            let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|x| *x as i64).collect();
+                            drop(tokenizer_guard);
+                            (input_ids, attention_mask)
+                        } else {
+                            drop(tokenizer_guard);
+                            // Fall back to naive char normalization
+                            let feature_len = prompt.len().max(1);
+                            let mut encoded = Vec::with_capacity(feature_len);
+                            if feature_len == 1 && prompt.is_empty() {
+                                encoded.push(0);
+                            } else {
+                                for ch in prompt.chars() {
+                                    encoded.push((ch as u32) as i64);
+                                }
+                            }
+                            let attention_mask = vec![1i64; encoded.len()];
+                            (encoded, attention_mask)
+                        }
+                    }
+                    #[cfg(not(feature = "tokenizers"))]
+                    {
+                        // Fall back to naive char normalization for backwards compatibility
+                        let feature_len = prompt.len().max(1);
+                        let mut encoded = Vec::with_capacity(feature_len);
+                        if feature_len == 1 && prompt.is_empty() {
+                            encoded.push(0);
+                        } else {
+                            for ch in prompt.chars() {
+                                encoded.push((ch as u32) as i64);
+                            }
+                        }
+                        let attention_mask = vec![1i64; encoded.len()];
+                        (encoded, attention_mask)
+                    }
+                };
+
+                // Store the sequence length before moving input_ids
+                let seq_len = input_ids.len();
+                
+                // Create input tensors
+                let input_ids_tensor = Array2::from_shape_vec((1, input_ids.len()), input_ids)
+                    .context("failed to create input_ids tensor")?
+                    .into_dyn();
+                let attention_mask_tensor = Array2::from_shape_vec((1, attention_mask.len()), attention_mask)
+                    .context("failed to create attention_mask tensor")?
+                    .into_dyn();
+
+                let input_ids_cow = CowArray::from(input_ids_tensor);
+                let attention_mask_cow = CowArray::from(attention_mask_tensor);
+                let input_ids_value = Value::from_array(session.allocator(), &input_ids_cow)
+                    .context("failed to create input_ids ORT value")?;
+                let attention_mask_value = Value::from_array(session.allocator(), &attention_mask_cow)
+                    .context("failed to create attention_mask ORT value")?;
+
+                // For now, let's try running with just the basic inputs and see what error we get
+                // This will help us understand what the model actually expects
+                println!("Model expects {} inputs", session.inputs.len());
+                for (i, input) in session.inputs.iter().enumerate() {
+                    println!("  Input {}: name='{}', shape={:?}", i, input.name, input.input_type);
+                }
+                
+                // Start with just the basic inputs
+                let input_values = vec![input_ids_value, attention_mask_value];
+
+                let outputs = session
+                    .run(input_values)
+                    .context("failed to execute ONNX session")?;
+
+                let first_output = outputs
+                    .first()
+                    .ok_or_else(|| anyhow!("ONNX model produced no outputs"))?;
+
+                // The output is logits [batch_size, seq_len, vocab_size = 151936]
+                // For embeddings, take the last token's logits and use first 512 as embedding
+                
+                // Extract as f32 vector, handling both f32 and f16 tensors
+                let logits_vec: Vec<f32> = match first_output.try_extract::<f32>() {
+                    Ok(tensor) => tensor.view().iter().copied().collect(),
+                    Err(_) => {
+                        // Try extracting as f16 and convert to f32
+                        match first_output.try_extract::<f16>() {
+                            Ok(tensor) => tensor.view().iter().map(|&x| f16::to_f32(x)).collect(),
+                            Err(e) => return Err(anyhow!("Failed to extract tensor as f32 or f16: {}", e)),
+                        }
+                    }
+                };
+                
+                // For embedding extraction, we need to know the tensor shape
+                // The logits should be [batch_size, seq_len, vocab_size]
+                // We'll assume batch_size=1 and calculate from total elements
+                let total_elements = logits_vec.len();
+                let vocab_size = 151936; // Qwen2.5 vocab size
+                let seq_len = total_elements / vocab_size;
+                
+                if total_elements != seq_len * vocab_size {
+                    return Err(anyhow!("Unexpected logits shape: total_elements={}, expected_vocab_size={}", total_elements, vocab_size));
+                }
+                
+                // Get last token logits and take first 512 dimensions as embedding
+                let last_token_start = (seq_len - 1) * vocab_size;
+                let embedding_size = 512.min(vocab_size);
+                
+                if last_token_start + embedding_size > logits_vec.len() {
+                    return Err(anyhow!("Cannot extract embedding: insufficient logits data"));
+                }
+                
+                let embeddings: Vec<f32> = logits_vec[last_token_start..last_token_start + embedding_size].to_vec();
+                
+                // Pad to exactly 512 dimensions if needed
+                let mut final_embeddings = embeddings;
+                final_embeddings.resize(512, 0.0);
+
+                Ok(final_embeddings)
             }
 
             pub fn is_loaded(&self) -> bool {
@@ -191,6 +439,21 @@ mod inference_backend {
                 Ok(format!("{} inference for: {}", self.name, prompt))
             }
 
+            pub fn extract_embeddings(&self, prompt: &str) -> Result<Vec<f32>> {
+                // Mock embeddings based on prompt length and content
+                let mut embeddings = Vec::with_capacity(512); // Common embedding size
+                let chars: Vec<char> = prompt.chars().collect();
+                for i in 0..512 {
+                    let val = if i < chars.len() {
+                        (chars[i] as u32 as f32) / 1000.0 // Normalize to reasonable range
+                    } else {
+                        0.0
+                    };
+                    embeddings.push(val);
+                }
+                Ok(embeddings)
+            }
+
             #[allow(dead_code)]
             pub fn is_loaded(&self) -> bool {
                 *self.loaded.lock().expect("model mutex poisoned")
@@ -200,6 +463,10 @@ mod inference_backend {
 }
 
 use inference_backend::ModelBackend;
+pub use inference_backend::ModelBackend as InferenceModelBackend;
+
+mod qwen_embedder;
+pub use qwen_embedder::QwenEmbedder;
 
 /// Simple exploration agent that perturbs cognitive knots with stochastic moves.
 #[derive(Debug)]
@@ -298,6 +565,7 @@ impl MotorBrain {
                 format!("{:?} backend unavailable ({err})", self.brain_type)
             }
         };
+
         let patterns = self.analyse_input_patterns(input);
         let response = match patterns.intent {
             Intent::HelpRequest => self.generate_help_response(&patterns),
@@ -310,6 +578,59 @@ impl MotorBrain {
             "Motor Brain Analysis:\n{}\n{}",
             backend_summary, response
         ))
+    }
+
+    /// Extract embeddings from input for TCS pipeline integration
+    pub async fn extract_embeddings(&self, input: &str) -> Result<Vec<f32>> {
+        match self.model.extract_embeddings(input) {
+            Ok(embeddings) => {
+                info!(
+                    target: "tcs-ml::motor_brain",
+                    "Extracted {} embeddings from input",
+                    embeddings.len()
+                );
+                Ok(embeddings)
+            }
+            Err(err) => {
+                warn!(
+                    target: "tcs-ml::motor_brain",
+                    error = %err,
+                    "Failed to extract embeddings, using fallback"
+                );
+                // Fallback: generate simple embeddings from input patterns
+                self.generate_fallback_embeddings(input)
+            }
+        }
+    }
+
+    /// Generate fallback embeddings when model inference fails
+    fn generate_fallback_embeddings(&self, input: &str) -> Result<Vec<f32>> {
+        let patterns = self.analyse_input_patterns(input);
+        let mut embeddings = vec![0.0; 512]; // Standard embedding size
+        
+        // Encode basic patterns into embeddings
+        embeddings[0] = patterns.complexity;
+        embeddings[1] = patterns.length as f32 / 1000.0; // Normalize length
+        embeddings[2] = patterns.keywords.len() as f32 / 10.0; // Normalize keyword count
+        
+        // Encode intent as one-hot-like pattern
+        match patterns.intent {
+            Intent::HelpRequest => embeddings[3] = 1.0,
+            Intent::EmotionalQuery => embeddings[4] = 1.0,
+            Intent::TechnicalQuery => embeddings[5] = 1.0,
+            Intent::CreativeQuery => embeddings[6] = 1.0,
+            Intent::GeneralQuery => embeddings[7] = 1.0,
+        }
+        
+        // Fill remaining with normalized character data
+        let chars: Vec<char> = input.chars().collect();
+        for (i, embedding) in embeddings.iter_mut().enumerate().skip(8) {
+            if i - 8 < chars.len() {
+                *embedding = (chars[i - 8] as u32 as f32) / 65536.0; // Normalize Unicode
+            }
+        }
+        
+        Ok(embeddings)
     }
 
     fn analyse_input_patterns(&self, input: &str) -> InputPatterns {

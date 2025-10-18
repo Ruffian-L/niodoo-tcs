@@ -10,7 +10,7 @@ use tcs_core::events::{snapshot_event, TopologicalEvent};
 use tcs_core::state::CognitiveState;
 use tcs_core::{PersistentFeature, StageTimer};
 use tcs_knot::{CognitiveKnot, JonesPolynomial, KnotDiagram};
-use tcs_ml::{Brain, ExplorationAgent, MotorBrain};
+use tcs_ml::{ExplorationAgent, MotorBrain};
 use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
 use tcs_tqft::FrobeniusAlgebra;
 use tracing::{debug, warn};
@@ -117,8 +117,9 @@ impl TCSOrchestrator {
 
         let _ = timer.elapsed();
 
-        // Run the motor brain to maintain feature parity with the old pipeline.
-        let _brain_output = self.motor_brain.process(raw_input).await?;
+        // Process input through MotorBrain and ingest embeddings into pipeline
+        let brain_embeddings = self.motor_brain.extract_embeddings(raw_input).await?;
+        self.ingest_sample(brain_embeddings);
 
         Ok(events)
     }
