@@ -502,6 +502,7 @@ use inference_backend::ModelBackend;
 pub use inference_backend::ModelBackend as InferenceModelBackend;
 
 pub mod qwen_config;
+pub use qwen_config::QwenConfig;
 mod qwen_embedder;
 pub use qwen_embedder::QwenEmbedder;
 

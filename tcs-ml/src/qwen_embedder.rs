@@ -118,7 +118,7 @@ impl QwenEmbedder {
         self.attention_cache.clear();
     }
 
-    /// Stateful embedding: takes prompt, updates KV cache, returns 512-dim vec
+    /// Stateful embedding: takes prompt, updates KV cache, returns configured embedding vector
     pub fn embed(&mut self, prompt: &str) -> Result<Vec<f32>> {
         let (tokens, raw_attention_mask) = self.tokenize(prompt)?;
         if tokens.is_empty() {
@@ -380,7 +380,7 @@ impl QwenEmbedder {
         ))
     }
 
-    /// Extract 512-dimensional embeddings from logits
+    /// Extract embedding vector from the model logits
     fn extract_embeddings(&self, logits: &Value) -> Result<Vec<f32>> {
         // Handle both f32 and f16 outputs
         let logits_vec: Vec<f32> = match logits.try_extract::<f32>() {

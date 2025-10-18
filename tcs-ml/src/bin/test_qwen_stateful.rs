@@ -9,7 +9,7 @@ fn main() -> Result<()> {
             "models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx".to_string()
         });
 
-    let mut embedder = QwenEmbedder::new(model_path)?;
+    let mut embedder = QwenEmbedder::new(&model_path)?;
 
     println!("✓ QwenEmbedder initialized successfully!");
 
@@ -79,7 +79,7 @@ fn main() -> Result<()> {
                             println!("  - Embedding extraction: ✓");
                             println!("  - Stateful KV cache: ✓");
                             println!("  - Cache reset: ✓");
-                            println!("  - 512-dim output: ✓");
+                            println!("  - {}-dim output: ✓", emb3.len());
                         }
                         Err(e) => {
                             println!("✗ Failed third embedding: {}", e);
