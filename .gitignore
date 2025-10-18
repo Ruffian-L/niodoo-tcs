@@ -78,3 +78,4 @@ BULLSHIT_QUARANTINE/
 # System files
 Thumbs.db
 .directory
+.claude/
