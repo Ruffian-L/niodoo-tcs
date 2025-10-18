@@ -43,26 +43,26 @@ async fn main() -> Result<()> {
         .extract_embeddings(&prompt)
         .await
         .with_context(|| "failed to extract embeddings".to_string())?;
-    
+
     println!("Extracted {} embeddings", embeddings.len());
-    
+
     // Show first 10 embeddings
     if embeddings.len() >= 10 {
         println!("First 10 embeddings: {:?}", &embeddings[0..10]);
     } else {
         println!("All embeddings: {:?}", embeddings);
     }
-    
+
     // Show some statistics
     let mean: f32 = embeddings.iter().sum::<f32>() / embeddings.len() as f32;
     let min = embeddings.iter().fold(f32::INFINITY, |a, &b| a.min(b));
     let max = embeddings.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-    
+
     println!("Embedding statistics:");
     println!("  Mean: {:.6}", mean);
     println!("  Min:  {:.6}", min);
     println!("  Max:  {:.6}", max);
-    
+
     println!("\n✅ Test completed successfully!");
     Ok(())
 }

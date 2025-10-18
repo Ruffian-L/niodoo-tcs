@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
 
     // Load the Qwen2.5 model
     let model_path = "/home/ruffian/Desktop/Niodoo-Final/models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_fp16.onnx";
-    
+
     // Test prompts to demonstrate different capabilities
     let test_prompts = vec![
         "Write a short Rust function that adds two numbers.",

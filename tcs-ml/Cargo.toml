@@ -22,6 +22,7 @@ tokenizers = { version = "0.20", optional = true, default-features = false, feat
 half = { version = "2.3", optional = true }
 rand = { workspace = true }
 serde = { workspace = true }
+toml = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

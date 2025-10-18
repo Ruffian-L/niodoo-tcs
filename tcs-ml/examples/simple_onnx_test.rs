@@ -22,24 +22,30 @@ async fn main() -> Result<()> {
     println!("Prompt: {}", prompt);
 
     let mut brain = MotorBrain::new()?;
-    
+
     // Test without loading model first
     println!("\n📊 Testing basic embedding extraction (fallback mode):");
     let fallback_embeddings = brain.extract_embeddings(&prompt).await?;
-    println!("Generated {} fallback embeddings", fallback_embeddings.len());
-    println!("First 5 embeddings: {:?}", &fallback_embeddings[0..5.min(fallback_embeddings.len())]);
+    println!(
+        "Generated {} fallback embeddings",
+        fallback_embeddings.len()
+    );
+    println!(
+        "First 5 embeddings: {:?}",
+        &fallback_embeddings[0..5.min(fallback_embeddings.len())]
+    );
 
     // Now try loading the model
     println!("\n🔧 Loading ONNX model...");
     match brain.load_model(&model_path).await {
         Ok(_) => {
             println!("✅ Model loaded successfully!");
-            
+
             // Test text processing
             println!("\n🔤 Testing text processing:");
             let response = brain.process(&prompt).await?;
             println!("{}", response);
-            
+
             // Test embedding extraction
             println!("\n🔢 Testing embedding extraction:");
             let embeddings = brain.extract_embeddings(&prompt).await?;
@@ -47,12 +53,15 @@ async fn main() -> Result<()> {
             if embeddings.len() >= 5 {
                 println!("First 5 embeddings: {:?}", &embeddings[0..5]);
             }
-            
+
             let mean: f32 = embeddings.iter().sum::<f32>() / embeddings.len() as f32;
             let min = embeddings.iter().fold(f32::INFINITY, |a, &b| a.min(b));
             let max = embeddings.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-            
-            println!("Statistics - Mean: {:.6}, Min: {:.6}, Max: {:.6}", mean, min, max);
+
+            println!(
+                "Statistics - Mean: {:.6}, Min: {:.6}, Max: {:.6}",
+                mean, min, max
+            );
         }
         Err(e) => {
             println!("❌ Failed to load model: {}", e);
