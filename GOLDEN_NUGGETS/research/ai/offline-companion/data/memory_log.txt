@@ -1,0 +1,12 @@
+User: Hey buddy howa are you
+Assistant: Assistant: I hear you. Hey buddy howa are you
+Assistant:
+User: are you there
+Assistant: Assistant: I hear you. are you there
+Assistant:
+User: YOOO
+Assistant: Assistant: I hear you. YOOO
+Assistant:
+User: hello
+Assistant: Assistant: I hear you. hello
+Assistant:

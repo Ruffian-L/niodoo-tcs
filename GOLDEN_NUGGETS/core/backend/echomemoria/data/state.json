@@ -1,0 +1,28 @@
+{
+  "profile": {
+    "persona": ""
+  },
+  "persona": {
+    "traits": {
+      "playfulness": 0.7,
+      "diligence": 0.5,
+      "patience": 0.6
+    }
+  },
+  "memory": {
+    "vectorStoreMeta": {}
+  },
+  "quests": {
+    "active": [],
+    "completed": []
+  },
+  "rewards": {
+    "xp": 0,
+    "badges": []
+  },
+  "stats": {
+    "sessions": 0,
+    "dayStreak": 0,
+    "tasksDoneToday": 0
+  }
+}

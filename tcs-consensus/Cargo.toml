@@ -1,0 +1,17 @@
+[package]
+name = "tcs-consensus"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Consciousness Team <niodoo@dev>"]
+description = "Consensus and vocabulary evolution mechanisms for the Topological Cognitive System"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+dashmap = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

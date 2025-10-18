@@ -1,0 +1,16 @@
+[package]
+name = "tcs-ml"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Consciousness Team <niodoo@dev>"]
+description = "Machine learning components for the Topological Cognitive System"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+ndarray = { workspace = true }
+ndarray-linalg = { workspace = true }
+rand = { workspace = true }
+rand_distr = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }

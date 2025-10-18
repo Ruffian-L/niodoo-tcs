@@ -1,0 +1,1 @@
+import QtQuick; import QtQuick.Window; import Niodoo 1.0; Window { visible: true; width: 400; height: 300; Rectangle { anchors.fill: parent; color: "red"; Text { anchors.centerIn: parent; text: "Test"; } } }

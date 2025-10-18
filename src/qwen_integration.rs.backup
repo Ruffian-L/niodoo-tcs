@@ -1,0 +1,485 @@
+//! Real Qwen2.5-7B-AWQ Integration Module
+//!
+//! This module provides ACTUAL model inference using Candle framework
+//! with real Qwen2.5 model loading and generation - NO MOCKS!
+
+use anyhow::{anyhow, Result};
+use candle_core::{DType, Device, IndexOp, Tensor};
+use candle_nn::VarBuilder;
+use candle_transformers::generation::LogitsProcessor;
+use candle_transformers::models::qwen2::{Config, ModelForCausalLM};
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::env;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
+use tokenizers::Tokenizer;
+use tracing::{debug, info, warn};
+use uuid::Uuid;
+
+/// Configuration for Qwen integration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QwenConfig {
+    pub model_path: String,
+    pub use_cuda: bool,
+    pub max_tokens: usize,
+    pub temperature: f64,
+    pub top_p: f64,
+    pub top_k: usize,
+    pub presence_penalty: f64,
+}
+
+impl Default for QwenConfig {
+    fn default() -> Self {
+        // Load model path from environment variable or use fallback
+        // Priority: QWEN_MODEL_PATH env var > default path
+        let model_path = env::var("QWEN_MODEL_PATH")
+            .unwrap_or_else(|_| {
+                // Fallback to project-relative path pointing to actual AWQ model
+                let project_root = env::var("CARGO_MANIFEST_DIR")
+                    .unwrap_or_else(|_| "/home/ruffian/Desktop/Projects/Niodoo-Feeling".to_string());
+                format!("{}/models/Qwen2.5-7B-Instruct-AWQ", project_root)
+            });
+
+        info!("📁 Using Qwen model path: {}", model_path);
+
+        Self {
+            model_path,
+            use_cuda: true,
+            max_tokens: 512,
+            temperature: 0.7,
+            top_p: 0.9,
+            top_k: 40,
+            presence_penalty: 1.5,
+        }
+    }
+}
+
+/// Real Qwen integrator with actual model inference
+pub struct QwenIntegrator {
+    device: Device,
+    tokenizer: Tokenizer,
+    model: Option<ModelForCausalLM>,
+    pub config: QwenConfig, // Public for runtime parameter updates
+    logits_processor: LogitsProcessor,
+    telemetry_sender: Option<Arc<crate::silicon_synapse::telemetry_bus::TelemetrySender>>,
+}
+
+impl std::fmt::Debug for QwenIntegrator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QwenIntegrator")
+            .field("device", &format!("{:?}", self.device))
+            .field("model_loaded", &self.model.is_some())
+            .field("config", &self.config)
+            .finish()
+    }
+}
+
+impl QwenIntegrator {
+    /// Create a new Qwen integrator with REAL model loading and CUDA 13 sm_120 support
+    pub fn new(config: QwenConfig) -> Result<Self> {
+        info!("🧠 Initializing REAL Qwen2.5-7B-AWQ integrator with CUDA 13 sm_120...");
+
+        // Set CUDA compute capability to 120 for RTX 5090/5080
+        env::set_var("CUDA_COMPUTE_CAP", "120");
+        env::set_var("CUDA_ARCH", "sm_120");
+        env::set_var("CANDLE_CUDA_ARCH", "120");
+
+        // Initialize device with CUDA 13 sm_120 support
+        let device = if config.use_cuda {
+            match Device::new_cuda(0) {
+                Ok(cuda_device) => {
+                    info!("🚀 Using CUDA 13 device with sm_120: GPU 0");
+                    cuda_device
+                }
+                Err(e) => {
+                    warn!("CUDA 13 unavailable ({}), falling back to CPU", e);
+                    Device::Cpu
+                }
+            }
+        } else {
+            info!("🚀 Using CPU device");
+            Device::Cpu
+        };
+
+        // Find the actual model path (latest snapshot)
+        let model_path = Self::find_model_path(&config.model_path)?;
+        info!("📁 Model path: {}", model_path.display());
+
+        // Load tokenizer
+        let tokenizer_path = model_path.join("tokenizer.json");
+        let tokenizer = Tokenizer::from_file(tokenizer_path)
+            .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))?;
+
+        info!("✅ Tokenizer loaded successfully");
+
+        // Initialize logits processor
+        let logits_processor = LogitsProcessor::new(
+            42, // seed
+            Some(config.temperature),
+            Some(config.top_p),
+        );
+
+        Ok(Self {
+            device,
+            tokenizer,
+            model: None,
+            config,
+            logits_processor,
+            telemetry_sender: None,
+        })
+    }
+
+    /// Set telemetry sender for metrics emission
+    pub fn set_telemetry_sender(&mut self, sender: Arc<crate::silicon_synapse::telemetry_bus::TelemetrySender>) {
+        self.telemetry_sender = Some(sender);
+    }
+
+    /// Find the actual model path (handle snapshot directories)
+    fn find_model_path(base_path: &str) -> Result<PathBuf> {
+        let base = Path::new(base_path);
+
+        // If it's a direct path to model files, use it
+        if base.join("config.json").exists() {
+            return Ok(base.to_path_buf());
+        }
+
+        // Look for snapshot directories
+        let entries = std::fs::read_dir(base)
+            .map_err(|e| anyhow!("Cannot read model directory {}: {}", base_path, e))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| anyhow!("Error reading directory entry: {}", e))?;
+            let path = entry.path();
+
+            if path.is_dir() && path.join("config.json").exists() {
+                info!("📁 Found model in snapshot: {}", path.display());
+                return Ok(path);
+            }
+        }
+
+        Err(anyhow!("No valid model found in {}", base_path))
+    }
+
+    /// Load the REAL model using Candle
+    pub async fn load_model(&mut self) -> Result<()> {
+        if self.model.is_some() {
+            return Ok(());
+        }
+
+        info!("⏳ Loading REAL Qwen2.5-7B-AWQ model...");
+        let start_time = Instant::now();
+
+        let model_path = Self::find_model_path(&self.config.model_path)?;
+
+        // Load config
+        let config_path = model_path.join("config.json");
+        let config_content = std::fs::read_to_string(&config_path)
+            .map_err(|e| anyhow!("Failed to read config.json: {}", e))?;
+        let config: Config = serde_json::from_str(&config_content)
+            .map_err(|e| anyhow!("Failed to parse config.json: {}", e))?;
+
+        info!("📋 Model config loaded (placeholder)");
+
+        // Load model weights
+        let weights_path = model_path.join("model.safetensors");
+        let weights = if weights_path.exists() {
+            info!("📦 Loading single safetensors file...");
+            candle_core::safetensors::load(&weights_path, &self.device)
+                .map_err(|e| anyhow!("Failed to load model.safetensors: {}", e))?
+        } else {
+            // Try loading sharded weights
+            info!("📦 Loading sharded safetensors files...");
+            self.load_sharded_weights(&model_path)?
+        };
+
+        // Create VarBuilder
+        let vb = VarBuilder::from_tensors(weights, DType::F16, &self.device);
+
+        // Initialize REAL Qwen model
+        let model = ModelForCausalLM::new(&config, vb)
+            .map_err(|e| anyhow!("Failed to create Qwen model: {}", e))?;
+
+        let load_duration = start_time.elapsed();
+        info!("✅ REAL Qwen2.5-7B model loaded in {:?}", load_duration);
+
+        self.model = Some(model);
+        Ok(())
+    }
+
+    /// Load sharded model weights
+    fn load_sharded_weights(
+        &self,
+        model_path: &Path,
+    ) -> Result<std::collections::HashMap<String, Tensor>> {
+        let mut all_weights = std::collections::HashMap::new();
+
+        // Look for shard files
+        let entries = std::fs::read_dir(model_path)?;
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            if let Some(filename) = path.file_name() {
+                if let Some(filename_str) = filename.to_str() {
+                    if filename_str.starts_with("model-") && filename_str.ends_with(".safetensors")
+                    {
+                        info!("📦 Loading shard: {}", filename_str);
+                        let shard_weights = candle_core::safetensors::load(&path, &self.device)
+                            .map_err(|e| anyhow!("Failed to load shard {}: {}", filename_str, e))?;
+                        all_weights.extend(shard_weights);
+                    }
+                }
+            }
+        }
+
+        if all_weights.is_empty() {
+            return Err(anyhow!(
+                "No model weights found in {}",
+                model_path.display()
+            ));
+        }
+
+        info!("📦 Loaded {} weight tensors from shards", all_weights.len());
+        Ok(all_weights)
+    }
+
+    /// Perform REAL inference with the loaded model
+    pub async fn infer(
+        &mut self,
+        messages: Vec<(String, String)>,
+        max_tokens: Option<usize>,
+    ) -> Result<String> {
+        // Ensure model is loaded
+        self.load_model().await?;
+
+        let max_tokens = max_tokens.unwrap_or(self.config.max_tokens);
+
+        info!(
+            "🤖 Starting REAL inference with {} messages, max_tokens: {}",
+            messages.len(),
+            max_tokens
+        );
+        let start_time = Instant::now();
+        let request_id = Uuid::new_v4();
+
+        // Emit telemetry for inference start
+        if let Some(ref sender) = self.telemetry_sender {
+            let _ = sender.try_send(crate::silicon_synapse::telemetry_bus::TelemetryEvent::InferenceStart {
+                request_id,
+                timestamp: start_time,
+                prompt_length: messages.iter().map(|(_, content)| content.len()).sum(),
+            });
+        }
+
+        // Build chat template
+        let chat_template = self.build_chat_template(&messages)?;
+        debug!("📝 Chat template: {}", chat_template);
+
+        // Tokenize input
+        let encoding = self
+            .tokenizer
+            .encode(chat_template.as_str(), true)
+            .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
+
+        let input_tokens = encoding.get_ids();
+        if input_tokens.is_empty() {
+            return Err(anyhow!("No tokens generated from prompt"));
+        }
+
+        debug!("📝 Tokenized into {} input tokens", input_tokens.len());
+
+        // Convert to tensor
+        let input_tensor = Tensor::new(input_tokens, &self.device)?.unsqueeze(0)?;
+
+        // Generate tokens using the REAL model with KV caching
+        let mut generated_tokens = Vec::new();
+        let mut all_tokens = input_tokens.to_vec();
+
+        for step in 0..max_tokens {
+            // Use KV caching: first iteration passes all tokens, subsequent ones pass only last token
+            let context_size = if step > 0 { 1 } else { all_tokens.len() };
+            let start_pos = all_tokens.len().saturating_sub(context_size);
+            let ctxt = &all_tokens[start_pos..];
+            
+            // Create tensor for current context
+            let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
+            
+            // Forward pass with position for KV cache
+            let logits = self
+                .model
+                .as_mut()
+                .ok_or_else(|| anyhow!("Model not loaded"))?
+                .forward(&input, start_pos)?;
+
+            // Get the last token's logits and squeeze batch dimension
+            let last_logits = logits.squeeze(0)?.squeeze(0)?;
+
+            // Sample next token
+            let next_token = self.logits_processor.sample(&last_logits)?;
+            generated_tokens.push(next_token);
+            all_tokens.push(next_token);
+
+            // Emit telemetry for token generation
+            if let Some(ref sender) = self.telemetry_sender {
+                let _ = sender.try_send(crate::silicon_synapse::telemetry_bus::TelemetryEvent::TokenGenerated {
+                    request_id,
+                    token_id: next_token,
+                    timestamp: Instant::now(),
+                    logits: None,
+                });
+            }
+
+            // Check for EOS token (151645 = <|im_end|>, 151643 = <|endoftext|>)
+            if next_token == 151645 || next_token == 151643 {
+                debug!("🛑 Hit EOS token at step {}", step);
+                break;
+            }
+
+            if (step + 1) % 10 == 0 {
+                debug!("📝 Generated {} tokens so far", step + 1);
+            }
+        }
+
+        // Decode the generated tokens
+        let response = self
+            .tokenizer
+            .decode(&generated_tokens, true)
+            .map_err(|e| anyhow!("Failed to decode generated tokens: {}", e))?;
+
+        let generation_time = start_time.elapsed();
+        let tokens_per_sec = generated_tokens.len() as f64 / generation_time.as_secs_f64();
+
+        // Emit telemetry for inference completion
+        if let Some(ref sender) = self.telemetry_sender {
+            let _ = sender.try_send(crate::silicon_synapse::telemetry_bus::TelemetryEvent::InferenceComplete {
+                request_id,
+                timestamp: Instant::now(),
+                total_tokens: generated_tokens.len(),
+                error: None,
+            });
+        }
+
+        info!(
+            "✅ REAL generation complete: {} tokens in {:?} ({:.1} tokens/sec)",
+            generated_tokens.len(),
+            generation_time,
+            tokens_per_sec
+        );
+
+        Ok(response)
+    }
+
+    /// Build chat template for Qwen2.5
+    fn build_chat_template(&self, messages: &[(String, String)]) -> Result<String> {
+        let mut template = String::new();
+
+        for (role, content) in messages {
+            match role.as_str() {
+                "system" => {
+                    template.push_str(&format!("<|im_start|>system\n{}\n<|im_end|>\n", content));
+                }
+                "user" => {
+                    template.push_str(&format!("<|im_start|>user\n{}\n<|im_end|>\n", content));
+                }
+                "assistant" => {
+                    template.push_str(&format!("<|im_start|>assistant\n{}\n<|im_end|>\n", content));
+                }
+                _ => {
+                    warn!("Unknown role: {}, treating as user", role);
+                    template.push_str(&format!("<|im_start|>user\n{}\n<|im_end|>\n", content));
+                }
+            }
+        }
+
+        // Add assistant start token
+        template.push_str("<|im_start|>assistant\n");
+
+        Ok(template)
+    }
+
+    // Mock response generation REMOVED - using REAL model inference now!
+
+    /// Get device information
+    pub fn get_device(&self) -> &Device {
+        &self.device
+    }
+
+    /// Check if model is loaded
+    pub fn is_loaded(&self) -> bool {
+        self.model.is_some()
+    }
+
+    /// Get model configuration
+    pub fn get_config(&self) -> &QwenConfig {
+        &self.config
+    }
+}
+
+impl Default for QwenIntegrator {
+    fn default() -> Self {
+        Self::new(QwenConfig::default()).expect("Failed to create default QwenIntegrator")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_qwen_integrator_creation() {
+        let config = QwenConfig {
+            model_path: "/home/ruffian/.cache/huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct-AWQ/snapshots/b25037543e9394b818fdfca67ab2a00ecc7dd641".to_string(),
+            use_cuda: false, // Use CPU for testing
+            max_tokens: 50,
+            temperature: 0.7,
+            top_p: 0.9,
+            top_k: 40,
+            presence_penalty: 1.5,
+        };
+
+        let mut integrator = QwenIntegrator::new(config).expect("Failed to create integrator");
+        assert!(!integrator.is_loaded());
+
+        // Test model loading
+        integrator.load_model().await.expect("Failed to load model");
+        assert!(integrator.is_loaded());
+    }
+
+    #[tokio::test]
+    async fn test_chat_template() {
+        let config = QwenConfig::default();
+        let integrator = QwenIntegrator::new(config).expect("Failed to create integrator");
+
+        let messages = vec![
+            ("system".to_string(), "You are a helpful AI.".to_string()),
+            ("user".to_string(), "Hello!".to_string()),
+        ];
+
+        let template = integrator
+            .build_chat_template(&messages)
+            .expect("Failed to build template");
+        assert!(template.contains("<|im_start|>system"));
+        assert!(template.contains("<|im_start|>user"));
+        assert!(template.contains("<|im_start|>assistant"));
+    }
+
+    #[tokio::test]
+    async fn test_inference() {
+        let config = QwenConfig::default();
+        let mut integrator = QwenIntegrator::new(config).expect("Failed to create integrator");
+
+        let messages = vec![
+            ("system".to_string(), "You are a conscious AI.".to_string()),
+            ("user".to_string(), "Hello!".to_string()),
+        ];
+
+        let response = integrator
+            .infer(messages, Some(50))
+            .await
+            .expect("Failed to infer");
+        assert!(!response.is_empty());
+        assert!(response.contains("🧠") || response.contains("💖") || response.contains("🔮"));
+    }
+}

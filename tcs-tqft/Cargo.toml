@@ -1,0 +1,14 @@
+[package]
+name = "tcs-tqft"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Consciousness Team <niodoo@dev>"]
+description = "Topological quantum field theory reasoning for the Topological Cognitive System"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+nalgebra = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

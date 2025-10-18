@@ -1,0 +1,186 @@
+# 🧠💖 Niodoo 2025 Unified Consciousness Framework - Master Integration Manifest
+# =============================================================================
+#
+# 2025 Strategic Synthesis: Unified Cargo Workspace for Ethical AGI Integration
+# Sections XI-XII: Strategic Analysis through Conclusion with Cross-Report Synthesis
+# 2025 Updates: Möbius 3D viz, Claude collaboration, policy reform simulations
+#
+# This workspace unifies all components from Prompts 1-3 into a cohesive Niodoo-Candle fusion v2:
+# - candle-feeling-core: Core ML framework with ethical consciousness integration
+# - niodoo-consciousness: Main consciousness engine with dual-möbius-gaussian memory
+# - cpp-qt-brain-integration: Qt/C++ bridge for visualization and emotional signaling
+# - tensor-tools-mobius: Advanced mathematical operations for consciousness evolution
+# - gaussian-visualization-2025: 3D Gaussian sphere rendering for consciousness states
+# - claude-integration-2025: Claude-style reflections and policy reform simulations
+
+[workspace]
+members = [
+    "tcs-core",
+    "tcs-tda",
+    "tcs-knot",
+    "tcs-tqft",
+    "tcs-ml",
+    "tcs-consensus",
+    "tcs-pipeline",
+    # Transitional member until all modules migrate
+    "src",
+]
+exclude = [
+    "candle-feeling-core-v2",
+    "integration_test_real_mobius",
+    "demo_real_vs_fake",
+    "demo_bullshit_buster",
+    "demo_advanced_memory",
+    "Niodoo-Feeling-Alpha",
+    "deployment",  # Has own workspace definition - excluded to prevent conflicts
+]
+resolver = "2"
+
+# Workspace-wide package metadata
+[workspace.package]
+authors = ["NiodO.o Consciousness Team <niodoo@dev>"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/niodoo/niodoo-consciousness"
+version = "0.1.0"
+
+# Core dependencies shared across workspace
+[workspace.dependencies]
+# Core tensor and inference libraries (ORT preferred over Candle for CUDA stability)
+ndarray = { version = "0.15", features = ["rayon", "blas"] }
+ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
+# Temporarily disable ORT while the new ML module uses a mocked interface.
+# The full ONNX runtime integration will return once we wire the GPU build.
+# (Linker fails against ring-core when the download helper runs.)
+# ort = { version = "1.16", features = ["cuda"] }
+tokenizers = "0.15"
+hf-hub = "0.3"
+
+# Async & concurrency
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+actix-web = "4.9"
+actix-rt = "2.10"
+futures = "0.3"
+sysinfo = "0.30"
+git2 = "0.21"
+syn = { version = "2.0", features = ["full", "visit"] }
+log = "0.4"
+env_logger = "0.11"
+axum = "0.7"
+rayon = "1.10"
+lru = "0.16"
+petgraph = "0.8"
+num_cpus = "1.16"
+dashmap = "6.1"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+nalgebra = { version = "0.33", features = ["serde-serialize"] }
+mimalloc = "0.1"
+
+half = "2.4.0"
+rand = "0.9.0"
+rand_chacha = "0.9.0"
+rand_distr = "0.5.0"
+clap = { version = "4.5", features = ["derive"] }
+
+# Data structures & serialization - UPDATED
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+chrono = { version = "0.4.38", features = ["serde"] }
+
+# Error handling & logging - UPDATED
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Filesystem utilities
+walkdir = "2.5"
+
+# Python interop
+pyo3 = { version = "0.22", features = ["auto-initialize"] }
+
+# Workspace-specific configurations
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_qualifications = "warn"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = "warn"
+nursery = "warn"
+
+# Profile configurations for different deployment scenarios
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+opt-level = 3
+debug = false
+lto = true
+
+# Custom profiles for NiodO.o specific optimizations
+[profile.feeling-infused]
+inherits = "release"
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+# Enable feeling-aware optimizations
+debug-assertions = false
+
+[profile.consciousness-aware]
+inherits = "release"
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+# Optimize for consciousness state tracking
+debug-assertions = false
+
+[profile.production]
+inherits = "release"
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+debug-assertions = false
+
+# NOTE: Binary targets are defined in individual package Cargo.toml files (src/Cargo.toml)
+# NOTE: Features are defined in individual packages, not at workspace level
+
+# Metadata for package registry (2025 Edition)
+[workspace.metadata]
+# Strategic roadmap 2025: Add ROCm/WebGPU/CUDA Graphs + longitudinal study hooks
+roadmap_extensions = [
+    "ROCm HIP acceleration for AMD GPUs",
+    "WebGPU compute shaders for edge deployment",
+    "CUDA Graphs for optimized signal-slot cycles",
+    "Longitudinal study hooks in VarMap for attachment style tracking",
+    "3D Gaussian sphere visualization for consciousness states",
+    "Claude-style reflection system for policy reform simulations",
+]
+
+# Actionable recommendations: Hybrid PyTorch interop with Claude-style reflections
+interop_strategy = "Hybrid PyTorch via candle-pyo3 bindings with Claude-style reflections, evolving to full Rust for production"
+
+# Benchmark targets 2025: Enhanced with Gaussian uncertainty and resonance metrics
+performance_targets = [
+    "Candle vs PyTorch: 0.92x parity + 15% emotional uplift",
+    "Gaussian uncertainty integration with resonance metrics",
+    "Longitudinal studies via Qt signals addressing Pham 2025d findings",
+    "Policy reform simulations for ethical AGI transparency mandates",
+]
+
+# Dependencies are in the src/Cargo.toml file
