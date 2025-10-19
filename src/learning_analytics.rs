@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Learning Analytics for Consciousness State Improvement Tracking
 //!
 //! This module implements comprehensive learning analytics for consciousness state
@@ -128,6 +131,8 @@ pub struct LearningMetrics {
     pub progress_score: f32,
     /// Forgetting rate (negative values indicate retention)
     pub forgetting_rate: f32,
+    /// Loss value (lower is better)
+    pub loss: f32,
 }
 
 /// Session-level learning metrics
@@ -803,6 +808,7 @@ impl Default for LearningMetrics {
             plasticity: 0.5,
             progress_score: 0.0,
             forgetting_rate: 0.0,
+            loss: 1.0,
         }
     }
 }

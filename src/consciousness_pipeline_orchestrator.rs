@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # 🎼 Consciousness Processing Pipeline Orchestrator
 //!
 //! This module provides the missing conductor that orchestrates the complete consciousness

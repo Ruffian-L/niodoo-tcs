@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Advanced Performance Benchmark Suite for Phase 2 Optimizations
 use tracing::{error, info, warn};
 // This benchmark suite tests the advanced performance optimizations

@@ -1,12 +1,18 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+//!
 //! Machine learning agents and inference adapters migrated from the
 //! original `src/` tree. We expose both the exploration agent and the
 //! multi-brain inference interface so the orchestrator can keep
 //! running while we restructure the project.
 
+#[cfg(feature = "onnx")]
+use anyhow::Context;
 use anyhow::Result;
 use async_trait::async_trait;
 use rand::distributions::{Distribution, Uniform};
-use rand::{rngs::StdRng, SeedableRng};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{info, warn};
@@ -503,7 +509,11 @@ pub use inference_backend::ModelBackend as InferenceModelBackend;
 
 pub mod qwen_config;
 pub use qwen_config::QwenConfig;
+#[cfg(feature = "onnx")]
 mod qwen_embedder;
+#[cfg(feature = "onnx")]
+pub mod qwen_error;
+#[cfg(feature = "onnx")]
 pub use qwen_embedder::QwenEmbedder;
 
 /// Simple exploration agent that perturbs cognitive knots with stochastic moves.
@@ -580,14 +590,22 @@ pub trait Brain: Send + Sync {
 pub struct MotorBrain {
     brain_type: BrainType,
     model: ModelBackend,
+    #[cfg(feature = "onnx")]
+    qwen_embedder: std::sync::Arc<std::sync::Mutex<Option<QwenEmbedder>>>,
 }
 
 impl MotorBrain {
     pub fn new() -> Result<Self> {
         info!("Initializing Motor Brain (Fast & Practical)");
+        let model = ModelBackend::new("motor")?;
+        #[cfg(feature = "onnx")]
+        let qwen_embedder = std::sync::Arc::new(std::sync::Mutex::new(None));
+
         Ok(Self {
             brain_type: BrainType::Motor,
-            model: ModelBackend::new("motor")?,
+            model,
+            #[cfg(feature = "onnx")]
+            qwen_embedder,
         })
     }
 
@@ -620,12 +638,49 @@ impl MotorBrain {
 
     /// Extract embeddings from input for TCS pipeline integration
     pub async fn extract_embeddings(&self, input: &str) -> Result<Vec<f32>> {
+        if input.trim().is_empty() {
+            #[cfg(feature = "onnx")]
+            {
+                self.reset_embedding_cache();
+                info!(
+                    target: "tcs-ml::motor_brain",
+                    "Received empty prompt; reset Qwen embedder cache"
+                );
+            }
+            return self.generate_fallback_embeddings(input);
+        }
+
+        #[cfg(feature = "onnx")]
+        {
+            match self.embed_with_qwen(input) {
+                Ok(Some((embeddings, context_len))) => {
+                    info!(
+                        target: "tcs-ml::motor_brain",
+                        dims = embeddings.len(),
+                        context = context_len,
+                        "Extracted Qwen stateful embeddings"
+                    );
+                    return Ok(embeddings);
+                }
+                Ok(None) => {
+                    // Env var missing or embedder not initialised; fall back silently.
+                }
+                Err(err) => {
+                    warn!(
+                        target: "tcs-ml::motor_brain",
+                        error = %err,
+                        "Qwen embedder failed; falling back"
+                    );
+                }
+            }
+        }
+
         match self.model.extract_embeddings(input) {
             Ok(embeddings) => {
                 info!(
                     target: "tcs-ml::motor_brain",
-                    "Extracted {} embeddings from input",
-                    embeddings.len()
+                    dims = embeddings.len(),
+                    "Extracted embeddings via legacy backend"
                 );
                 Ok(embeddings)
             }
@@ -633,13 +688,92 @@ impl MotorBrain {
                 warn!(
                     target: "tcs-ml::motor_brain",
                     error = %err,
-                    "Failed to extract embeddings, using fallback"
+                    "Failed to extract embeddings, using heuristic fallback"
                 );
-                // Fallback: generate simple embeddings from input patterns
                 self.generate_fallback_embeddings(input)
             }
         }
     }
+
+    #[cfg(feature = "onnx")]
+    fn ensure_qwen_embedder(&self) -> Result<bool> {
+        {
+            let guard = self
+                .qwen_embedder
+                .lock()
+                .expect("qwen embedder mutex poisoned");
+            if guard.is_some() {
+                return Ok(false);
+            }
+        }
+
+        let model_path = match std::env::var("QWEN_MODEL_PATH") {
+            Ok(path) => path,
+            Err(_) => return Ok(false),
+        };
+
+        let embedder = QwenEmbedder::new(&model_path)
+            .with_context(|| format!("failed to initialize QwenEmbedder from {model_path}"))?;
+
+        {
+            let mut guard = self
+                .qwen_embedder
+                .lock()
+                .expect("qwen embedder mutex poisoned");
+            *guard = Some(embedder);
+        }
+
+        if let Err(err) = self.model.load(&model_path) {
+            warn!(
+                target: "tcs-ml::motor_brain",
+                error = %err,
+                "Failed to prime legacy ONNX backend while initializing Qwen embedder"
+            );
+        }
+
+        info!(
+            target: "tcs-ml::motor_brain",
+            "Initialized Qwen embedder from {}",
+            model_path
+        );
+        Ok(true)
+    }
+
+    #[cfg(feature = "onnx")]
+    fn embed_with_qwen(&self, input: &str) -> Result<Option<(Vec<f32>, usize)>> {
+        let _ = self.ensure_qwen_embedder()?;
+
+        let mut guard = self
+            .qwen_embedder
+            .lock()
+            .expect("qwen embedder mutex poisoned");
+
+        if let Some(embedder) = guard.as_mut() {
+            let embeddings = embedder.embed(input)?;
+            let context_len = embedder.context_length();
+            Ok(Some((embeddings, context_len)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[cfg(feature = "onnx")]
+    pub fn reset_embedding_cache(&self) {
+        let mut guard = self
+            .qwen_embedder
+            .lock()
+            .expect("qwen embedder mutex poisoned");
+        if let Some(embedder) = guard.as_mut() {
+            embedder.reset_cache();
+            info!(
+                target: "tcs-ml::motor_brain",
+                "Reset Qwen embedder KV cache"
+            );
+        }
+    }
+
+    #[cfg(not(feature = "onnx"))]
+    pub fn reset_embedding_cache(&self) {}
 
     /// Generate fallback embeddings when model inference fails
     fn generate_fallback_embeddings(&self, input: &str) -> Result<Vec<f32>> {
@@ -756,6 +890,20 @@ impl Brain for MotorBrain {
 
     async fn load_model(&mut self, model_path: &str) -> Result<()> {
         self.model.load(model_path)?;
+        #[cfg(feature = "onnx")]
+        {
+            let embedder = QwenEmbedder::new(model_path)?;
+            let mut guard = self
+                .qwen_embedder
+                .lock()
+                .expect("qwen embedder mutex poisoned");
+            *guard = Some(embedder);
+            info!(
+                target: "tcs-ml::motor_brain",
+                "Loaded Qwen embedder from {}",
+                model_path
+            );
+        }
         Ok(())
     }
 

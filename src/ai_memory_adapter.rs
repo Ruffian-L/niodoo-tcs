@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! AI memory adapter module placeholder
 //! 
 //! This module provides AI memory adaptation functionality

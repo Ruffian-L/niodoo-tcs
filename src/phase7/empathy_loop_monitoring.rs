@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 7: Empathy Loop Monitoring System
 //!
 //! This module implements real-time monitoring of empathy loops in consciousness processing,

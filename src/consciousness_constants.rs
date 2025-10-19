@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Consciousness System Mathematical Constants
 //!
 //! This module defines all mathematical constants used throughout the consciousness

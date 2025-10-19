@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Simplified GPU Acceleration Module for Consciousness Processing
 //!
 //! This module provides simplified GPU-accelerated implementations of consciousness processing

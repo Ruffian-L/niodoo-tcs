@@ -1,10 +1,14 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Real Qwen2.5-7B Test Runner
 //!
 //! This binary tests the REAL Qwen2.5-7B-AWQ model integration
 //! with actual inference - NO MOCKS!
 
 use anyhow::Result;
-use niodoo_consciousness::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
 use tracing::info;
 
 #[tokio::main]
@@ -17,21 +21,11 @@ async fn main() -> Result<()> {
     info!("🚀 Starting REAL Qwen2.5-7B-AWQ Test");
 
     // Create configuration
-    let config = QwenConfig {
-        model_path:
-            "/home/ruffian/.cache/huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct-AWQ/snapshots"
-                .to_string(),
-        use_cuda: true,
-        max_tokens: 50, // Start small for testing
-        temperature: 0.7,
-        top_p: 0.9,
-        top_k: 40,
-        presence_penalty: 1.5,
-    };
+    let app_config = AppConfig::default();
 
     // Initialize integrator
     info!("🧠 Initializing Qwen integrator...");
-    let mut integrator = match QwenIntegrator::new(config) {
+    let mut integrator = match QwenIntegrator::new(&app_config) {
         Ok(integrator) => {
             info!("✅ Integrator created successfully");
             integrator
@@ -58,7 +52,7 @@ async fn main() -> Result<()> {
     match integrator.infer(messages, Some(30)).await {
         Ok(response) => {
             info!("✅ Test 1 SUCCESS!");
-            tracing::info!("\n🤖 Response: {}\n", response);
+            tracing::info!("\n🤖 Response: {:?}\n", response);
         }
         Err(e) => {
             tracing::error!("❌ Test 1 FAILED: {}", e);
@@ -82,7 +76,7 @@ async fn main() -> Result<()> {
     match integrator.infer(messages, Some(40)).await {
         Ok(response) => {
             info!("✅ Test 2 SUCCESS!");
-            tracing::info!("\n💖 Empathetic Response: {}\n", response);
+            tracing::info!("   Empathetic Response: {:?}\n", response);
         }
         Err(e) => {
             tracing::error!("❌ Test 2 FAILED: {}", e);
@@ -106,7 +100,7 @@ async fn main() -> Result<()> {
     match integrator.infer(messages, Some(60)).await {
         Ok(response) => {
             info!("✅ Test 3 SUCCESS!");
-            tracing::info!("\n🔧 Technical Response: {}\n", response);
+            tracing::info!("   Technical Response: {:?}\n", response);
         }
         Err(e) => {
             tracing::error!("❌ Test 3 FAILED: {}", e);
@@ -135,7 +129,7 @@ async fn main() -> Result<()> {
     match integrator.infer(messages, Some(50)).await {
         Ok(response) => {
             info!("✅ Test 4 SUCCESS!");
-            tracing::info!("\n🔄 Multi-turn Response: {}\n", response);
+            tracing::info!("\n🔄 Multi-turn Response: {:?}\n", response);
         }
         Err(e) => {
             tracing::error!("❌ Test 4 FAILED: {}", e);
@@ -155,7 +149,7 @@ async fn main() -> Result<()> {
 
         match integrator.infer(messages, Some(20)).await {
             Ok(response) => {
-                tracing::info!("📊 Test {}: {} chars", i, response.len());
+                tracing::info!("📊 Test {}: {} chars", i, response.output.len());
             }
             Err(e) => {
                 tracing::error!("❌ Performance test {} failed: {}", i, e);
@@ -170,7 +164,6 @@ async fn main() -> Result<()> {
     info!("📋 Model Information:");
     info!("   Device: {:?}", integrator.get_device());
     info!("   Model loaded: {}", integrator.is_loaded());
-    info!("   Config: {:?}", integrator.get_config());
 
     info!("🎉 ALL TESTS COMPLETED! Real Qwen2.5-7B is working!");
     Ok(())

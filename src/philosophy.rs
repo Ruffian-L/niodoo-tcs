@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Philosophy module placeholder
 //!
 //! This module provides philosophical frameworks for consciousness

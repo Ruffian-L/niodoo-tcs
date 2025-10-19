@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Git Manifestation Logging System
 //!
 //! This module implements structured JSONL format logging for consciousness analysis,

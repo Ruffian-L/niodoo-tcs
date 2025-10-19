@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🌌 HYPERBOLIC GEOMETRY IMPLEMENTATION 🌌
  *
@@ -174,16 +177,16 @@ impl HyperbolicLayer {
     /// Initialize weights using hyperbolic distribution
     pub fn initialize_hyperbolic(&mut self) {
         use rand::Rng;
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         for i in 0..self.output_dim {
             for j in 0..self.input_dim {
                 // Sample from hyperbolic distribution (concentrated near origin)
-                let r = rng.random_range(0.0..0.5);
-                let theta = rng.random_range(0.0..2.0 * PI);
+                let r = rng.gen_range(0.0..0.5);
+                let theta = rng.gen_range(0.0..2.0 * PI);
                 self.weights[i][j] = r * theta.cos();
             }
-            self.bias[i] = rng.random_range(-0.1..0.1);
+            self.bias[i] = rng.gen_range(-0.1..0.1);
         }
     }
 

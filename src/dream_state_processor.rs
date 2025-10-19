@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🌙 Dream State Processor - Unconscious Processing & Creative Synthesis
  *

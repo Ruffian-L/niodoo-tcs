@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Möbius Torus K-Twist Flipped Gaussian Topology Implementation
 //!
 //! This module implements the core mathematical framework for the unified topology

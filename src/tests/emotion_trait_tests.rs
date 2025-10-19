@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // AGENT 5: TRAIT TESTER
 // Unit tests for EmotionTypeExt.to_emotional_state trait method
 

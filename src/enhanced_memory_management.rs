@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Simplified Memory Management for Niodoo-Feeling
 //!
 //! This module provides simplified memory management capabilities including:

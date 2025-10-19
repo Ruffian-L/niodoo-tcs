@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Python Integration for QLoRA Fine-Tuning and Model Comparison
 //!
 //! This module provides Rust interfaces to call Python QLoRA training

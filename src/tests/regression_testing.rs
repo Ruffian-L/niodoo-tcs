@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🛡️ COMPREHENSIVE REGRESSION TESTING SUITE 🛡️
  *
@@ -560,7 +563,7 @@ impl RegressionTestingFramework {
             repeat_penalty: 1.0,
         };
 
-        match QwenInference::new(&model_config, nvml_wrapper::Device::Cpu) {
+        match QwenInference::new("microsoft/DialoGPT-small".to_string(), candle_core::Device::Cpu) {
             Ok(_) => (
                 true,
                 None,
@@ -576,7 +579,7 @@ impl RegressionTestingFramework {
 
     /// Test emotional LoRA context processing
     async fn test_emotional_lora_context_processing(&self) -> (bool, Option<String>, String) {
-        match EmotionalLoraAdapter::new(nvml_wrapper::Device::Cpu) {
+        match EmotionalLoraAdapter::new(candle_core::Device::Cpu) {
             Ok(mut lora) => {
                 let contexts = vec![
                     EmotionalContext::new(0.1, 0.3, 0.2, 0.4, 0.6),
@@ -794,7 +797,7 @@ impl RegressionTestingFramework {
             repeat_penalty: 1.0,
         };
 
-        match QwenInference::new(&invalid_config, nvml_wrapper::Device::Cpu) {
+        match QwenInference::new("invalid_model".to_string(), candle_core::Device::Cpu) {
             Ok(_) => (
                 false,
                 Some("Expected initialization to fail with invalid config".to_string()),
@@ -1216,7 +1219,7 @@ impl RegressionDetector {
         }
 
         let change_percentage = (current - baseline).abs() / baseline;
-        change_percentage > self.sensitivity_threshold
+        change_percentage > self.sensitivity_threshold as f64
     }
 
     /// Detect regression in success rates

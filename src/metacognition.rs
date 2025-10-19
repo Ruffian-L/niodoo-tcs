@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Metacognition Engine for Ethical Decision Making and Self-Reflection
 //!
 //! This module provides metacognitive capabilities for the consciousness system,

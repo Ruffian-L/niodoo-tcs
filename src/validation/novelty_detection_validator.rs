@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Novelty Detection Validator
 //!
 //! Phase 4: Mathematical Validation Module
@@ -869,12 +872,11 @@ mod tests {
         let b = Array1::from_vec(vec![1.0, 0.0, 0.0]);
 
         let similarity = reference.cosine_similarity(&a.view(), &b.view());
-        let config = ValidationConfig::default();
-        assert!((similarity - 1.0).abs() < config.test_assertion_threshold); // Identical vectors
+        assert!((similarity - 1.0).abs() < 1e-10); // Identical vectors
 
         let c = Array1::from_vec(vec![0.0, 1.0, 0.0]);
         let similarity = reference.cosine_similarity(&a.view(), &c.view());
-        assert!(similarity.abs() < config.test_assertion_threshold); // Orthogonal vectors
+        assert!(similarity.abs() < 1e-10); // Orthogonal vectors
     }
 
     #[test]
@@ -885,11 +887,11 @@ mod tests {
         let b = Array1::from_vec(vec![1.0, 0.0, 0.0]);
 
         let novelty = reference.bounded_novelty_transformation(&a.view(), &b.view());
-        assert!(novelty.abs() < config.test_assertion_threshold); // Identical vectors should have zero novelty
+        assert!(novelty.abs() < 1e-10); // Identical vectors should have zero novelty
 
         let c = Array1::from_vec(vec![0.0, 1.0, 0.0]);
         let novelty = reference.bounded_novelty_transformation(&a.view(), &c.view());
-        assert!((novelty - 1.0).abs() < config.test_assertion_threshold); // Orthogonal vectors should have novelty 1
+        assert!((novelty - 1.0).abs() < 1e-10); // Orthogonal vectors should have novelty 1
     }
 
     #[test]
@@ -905,6 +907,7 @@ mod tests {
 
     #[test]
     fn test_validator_cosine_similarity() {
+        let config = ValidationConfig::default();
         let validator = NoveltyDetectionValidator::new(0.175, 1e-6);
 
         // Test with reference implementation (should have zero error)
@@ -918,6 +921,7 @@ mod tests {
 
     #[test]
     fn test_validator_novelty_transformation() {
+        let config = ValidationConfig::default();
         let validator = NoveltyDetectionValidator::new(0.175, 1e-6);
 
         // Test with reference implementation (should have zero error)

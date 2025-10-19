@@ -1,12 +1,15 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Unit tests to validate triple-threat trigger system
 /// Ensures each pathway (mismatch, stagnation, variance) fires correctly
-use niodoo_consciousness::consciousness::ConsciousnessState;
-use niodoo_consciousness::memory::guessing_spheres::{
+use crate::consciousness::ConsciousnessState;
+use crate::memory::guessing_spheres::{
     EmotionalVector, GuessingMemorySystem, SphereId,
 };
-use niodoo_consciousness::memory::multi_layer_query::MultiLayerMemoryQuery;
-use niodoo_consciousness::rag::local_embeddings::{Document, MathematicalEmbeddingModel};
-use niodoo_consciousness::rag::RetrievalEngine;
+use crate::memory::multi_layer_query::MultiLayerMemoryQuery;
+use crate::rag::local_embeddings::{Document, MathematicalEmbeddingModel};
+use crate::rag::RetrievalEngine;
 use std::sync::{Arc, Mutex};
 
 #[test]

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Phase 6 integration module for the consciousness engine
 //!
 //! This module handles GPU acceleration, learning analytics, logging, and production deployment features.
@@ -217,6 +220,10 @@ impl Phase6Manager {
                     .get("forgetting_rate")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0) as f32,
+                loss: data
+                    .get("loss")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(1.0) as f32,
             };
 
             learning_engine

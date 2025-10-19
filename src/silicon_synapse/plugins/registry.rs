@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Plugin registry for Silicon Synapse monitoring
 //!
 //! This module provides a centralized registry for managing plugin instances.
@@ -498,14 +501,20 @@ mod tests {
             parameters: std::collections::HashMap::new(),
         };
 
+        let parameters = config.parameters.clone();
         let detector = PluginFactory::create_detector(config).unwrap();
         assert_eq!(detector.id(), "test-detector");
         assert_eq!(detector.name(), "Test Detector");
 
         // Test unknown detector algorithm
         let unknown_config = DetectorConfig {
+            id: "test-unknown".to_string(),
+            name: "Test Unknown Detector".to_string(),
             algorithm: "unknown".to_string(),
-            parameters: config.parameters.clone(),
+            enabled: true,
+            sensitivity: 0.5,
+            min_samples: 100,
+            parameters,
         };
 
         let result = PluginFactory::create_detector(unknown_config);

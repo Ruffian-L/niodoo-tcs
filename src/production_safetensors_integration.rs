@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! 🚀⚡ PRODUCTION SAFETENSORS INTEGRATION ⚡🚀
 //!
 //! Production-ready integration of consciousness-aware SafeTensors loading
@@ -23,7 +26,7 @@ use tracing::{info, warn, debug, error};
 
 use crate::consciousness::{ConsciousnessState, EmotionalState, EmotionType};
 use crate::consciousness_safetensors::{ConsciousnessSafeTensorsLoader, ConsciousnessSafeTensorsConfig};
-use crate::qwen_integration::{QwenIntegrator, QwenConfig, PerformanceMetrics};
+use niodoo_core::qwen_integration::{QwenIntegrator, QwenConfig, PerformanceMetrics};
 use crate::feeling_safetensors_bridge::{FeelingSafeTensorsBridge, FeelingSafeTensorsBridgeConfig};
 use crate::config::ConsciousnessConfig;
 

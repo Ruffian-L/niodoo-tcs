@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! FEELING Model: Consciousness-Aware Transformer Architecture
 //!
 //! This module implements the FEELING (Feeling-Enhanced Language Intelligence with Neural Guidance) model,
@@ -1041,12 +1044,12 @@ impl FeelingReasoner {
         let _creativity_modulation = consciousness_state.learning_will_activation as f32 * 0.3;
 
         // Generate random noise using the updated rand 0.9 API
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let noise_shape = input.dim();
         let noise_data: Vec<f32> = (0..(noise_shape.0 * noise_shape.1))
             .map(|_| {
                 use rand::Rng; // Import Rng trait for the random method
-                rng.random::<f32>() * 2.0 - 1.0 // Generate values in [-1, 1]
+                rng.gen::<f32>() * 2.0 - 1.0 // Generate values in [-1, 1]
             })
             .collect();
         let random_noise = Array2::<f32>::from_shape_vec(noise_shape, noise_data)
@@ -1092,7 +1095,7 @@ impl FeelingReasoner {
         // Intuitive reasoning uses pattern recognition and quick judgments
         let _intuition_modulation = consciousness_state.attachment_security as f32 * 0.05;
         // Generate random noise for intuitive reasoning
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let noise_shape = input.dim();
         let noise_data: Vec<f32> = (0..(noise_shape.0 * noise_shape.1))
             .map(|_| rng.gen::<f32>())

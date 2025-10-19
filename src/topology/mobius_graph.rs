@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use std::collections::HashSet;
 use std::f64::consts::PI;
 
@@ -93,14 +96,14 @@ impl MobiusGraph {
 
     /// Process a thought through the Möbius topology
     pub fn process_thought(&mut self, input: &str, config: &ConsciousnessConfig) -> Vec<NodeIndex> {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // Generate emotional vector and curvature dynamically
         let emotional_vec: Vec<f64> = (0..5)
-            .map(|_| rng.random_range(-config.emotional_plasticity..config.emotional_plasticity))
+            .map(|_| rng.gen_range(-config.emotional_plasticity..config.emotional_plasticity))
             .collect();
 
-        let curvature = rng.random_range(0.0..2.0 * std::f64::consts::PI);
+        let curvature = rng.gen_range(0.0..2.0 * std::f64::consts::PI);
 
         let thought_node = ThoughtNode {
             content: input.to_string(),
@@ -163,7 +166,7 @@ impl MobiusGraph {
             }
 
             // Randomly select next node
-            let next_node = neighbors[rand::rng().random_range(0..neighbors.len())];
+            let next_node = neighbors[rand::thread_rng().gen_range(0..neighbors.len())];
             path.push(next_node);
             current = next_node;
         }

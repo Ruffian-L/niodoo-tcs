@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Plugin system for Silicon Synapse monitoring
 //!
 //! This module provides a trait-based plugin system that allows for extensible

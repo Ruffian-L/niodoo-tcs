@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 pub mod hive {
     use anyhow::Result;
     use futures::future::join_all;

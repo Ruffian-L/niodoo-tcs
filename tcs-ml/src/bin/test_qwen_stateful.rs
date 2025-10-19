@@ -1,13 +1,14 @@
+#![cfg(feature = "onnx-with-tokenizers")]
+
 use anyhow::Result;
 use tcs_ml::QwenEmbedder;
 
 fn main() -> Result<()> {
     println!("🚀 Testing QwenEmbedder with stateful KV cache...");
 
-    let model_path = std::env::var("QWEN_MODEL_PATH")
-        .unwrap_or_else(|_| {
-            "models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx".to_string()
-        });
+    let model_path = std::env::var("QWEN_MODEL_PATH").unwrap_or_else(|_| {
+        "models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx".to_string()
+    });
 
     let mut embedder = QwenEmbedder::new(&model_path)?;
 

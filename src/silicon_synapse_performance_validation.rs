@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! ⚡🧠 SILICON SYNAPSE PERFORMANCE VALIDATION 🧠⚡
 //!
 //! Comprehensive performance validation system for consciousness-aware
@@ -19,7 +22,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH, Duration};
 use tracing::{info, warn, debug, error};
 
 use crate::consciousness::{ConsciousnessState, EmotionalState, EmotionType};
-use crate::qwen_integration::PerformanceMetrics;
+use niodoo_core::qwen_integration::PerformanceMetrics;
 use crate::consciousness_safetensors::LoadingMetrics;
 use crate::feeling_safetensors_bridge::BridgeMetrics;
 use crate::config::ConsciousnessConfig;

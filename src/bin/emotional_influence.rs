@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠💭 PROOF: EMOTIONAL STATES CHANGE AI BEHAVIOR
  *
@@ -10,9 +13,9 @@
 use niodoo_consciousness::{
     config::{system_config::ConsciousnessConfig, AppConfig},
     consciousness::{ConsciousnessState, EmotionType},
-    qwen_integration::QwenIntegrator,
     vllm_bridge::VLLMBridge,
 };
+use niodoo_core::qwen_integration::QwenIntegrator;
 use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

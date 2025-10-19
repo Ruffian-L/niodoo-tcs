@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Comprehensive test suite for k-twisted torus geometry validation
 //!
 //! This module provides extensive tests for the mathematical validation framework,

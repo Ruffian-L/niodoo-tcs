@@ -1,5 +1,7 @@
-use anyhow::{anyhow, Context, Result};
-use ndarray::{concatenate, Array2, Array4, Axis, CowArray};
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
+use ndarray::{concatenate, s, Array2, Array4, Axis, CowArray};
 use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -7,8 +9,11 @@ use std::sync::Arc;
 #[cfg(feature = "tokenizers")]
 use tokenizers::Tokenizer;
 
+use tracing::{debug, info, warn};
+
 use crate::f16;
 use crate::qwen_config::QwenConfig;
+use crate::qwen_error::{QwenError, QwenResult};
 
 /// Stateful Qwen embedder with KV cache management
 #[derive(Debug)]
@@ -24,12 +29,12 @@ pub struct QwenEmbedder {
 
 impl QwenEmbedder {
     /// Create embedder with default config (Qwen2.5-Coder 0.5B)
-    pub fn new(model_path: &str) -> Result<Self> {
+    pub fn new(model_path: &str) -> QwenResult<Self> {
         Self::with_config(model_path, QwenConfig::default())
     }
 
     /// Create embedder with custom configuration
-    pub fn with_config(model_path: &str, config: QwenConfig) -> Result<Self> {
+    pub fn with_config(model_path: &str, config: QwenConfig) -> QwenResult<Self> {
         config.validate()?;
 
         let env = Arc::new(Environment::builder().with_name("qwen_embedder").build()?);
@@ -50,18 +55,28 @@ impl QwenEmbedder {
             if tokenizer_path.exists() {
                 match Tokenizer::from_file(&tokenizer_path) {
                     Ok(t) => {
-                        println!("✓ Loaded tokenizer from: {:?}", tokenizer_path);
+                        info!(
+                            target: "tcs-ml::qwen_embedder",
+                            path = ?tokenizer_path,
+                            "Loaded tokenizer"
+                        );
                         Some(t)
                     }
                     Err(e) => {
-                        println!("⚠ Failed to load tokenizer: {}, using fallback", e);
+                        warn!(
+                            target: "tcs-ml::qwen_embedder",
+                            error = %e,
+                            path = ?tokenizer_path,
+                            "Failed to load tokenizer; using fallback"
+                        );
                         None
                     }
                 }
             } else {
-                println!(
-                    "⚠ Tokenizer not found at {:?}, using fallback",
-                    tokenizer_path
+                warn!(
+                    target: "tcs-ml::qwen_embedder",
+                    path = ?tokenizer_path,
+                    "Tokenizer not found; using fallback"
                 );
                 None
             }
@@ -79,13 +94,11 @@ impl QwenEmbedder {
     }
 
     /// Tokenize input with fallback to character encoding
-    fn tokenize(&self, prompt: &str) -> Result<(Vec<i64>, Vec<i64>)> {
+    fn tokenize(&self, prompt: &str) -> QwenResult<(Vec<i64>, Vec<i64>)> {
         #[cfg(feature = "tokenizers")]
         {
             if let Some(ref tokenizer) = self.tokenizer {
-                let encoding = tokenizer
-                    .encode(prompt, true)
-                    .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
+                let encoding = tokenizer.encode(prompt, true)?;
                 let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&x| x as i64).collect();
                 let attention_mask: Vec<i64> = encoding
                     .get_attention_mask()
@@ -95,6 +108,7 @@ impl QwenEmbedder {
                 return Ok((input_ids, attention_mask));
             }
         }
+        // Feature tokenizers is disabled - use fallback
 
         // Fallback: character encoding
         let chars: Vec<i64> = prompt.chars().map(|c| (c as u32) as i64).collect();
@@ -110,7 +124,8 @@ impl QwenEmbedder {
             let value_name = format!("past_key_values.{}.value", layer);
 
             // Empty cache: [batch=1, heads, seq_len=0, head_dim]
-            let empty_cache = Array4::<f32>::zeros((1, self.config.num_heads, 0, self.config.head_dim));
+            let empty_cache =
+                Array4::<f32>::zeros((1, self.config.num_heads, 0, self.config.head_dim));
             self.kv_cache.insert(key_name, empty_cache.clone());
             self.kv_cache.insert(value_name, empty_cache);
         }
@@ -119,20 +134,21 @@ impl QwenEmbedder {
     }
 
     /// Stateful embedding: takes prompt, updates KV cache, returns configured embedding vector
-    pub fn embed(&mut self, prompt: &str) -> Result<Vec<f32>> {
+    pub fn embed(&mut self, prompt: &str) -> QwenResult<Vec<f32>> {
         let (tokens, raw_attention_mask) = self.tokenize(prompt)?;
         if tokens.is_empty() {
-            return Err(anyhow!("Prompt produced no tokens"));
+            return Err(QwenError::EmptyPrompt);
         }
 
         let attention_mask = if raw_attention_mask.len() == tokens.len() {
             raw_attention_mask
         } else {
             if !raw_attention_mask.is_empty() {
-                println!(
-                    "⚠️ Tokenizer attention mask length {} mismatched token count {}, falling back to ones",
-                    raw_attention_mask.len(),
-                    tokens.len()
+                warn!(
+                    target: "tcs-ml::qwen_embedder",
+                    mask_len = raw_attention_mask.len(),
+                    token_len = tokens.len(),
+                    "Tokenizer attention mask length mismatch; falling back to ones"
                 );
             }
             vec![1i64; tokens.len()]
@@ -158,33 +174,39 @@ impl QwenEmbedder {
         Ok(last_embeddings)
     }
 
-    fn run_inference_step(&mut self, step_tokens: &[i64], step_mask: &[i64]) -> Result<Vec<f32>> {
+    fn run_inference_step(
+        &mut self,
+        step_tokens: &[i64],
+        step_mask: &[i64],
+    ) -> QwenResult<Vec<f32>> {
         let seq_len = step_tokens.len();
         if seq_len == 0 {
-            return Err(anyhow!("Inference step received no tokens"));
+            return Err(QwenError::EmptyInferenceStep);
         }
 
         if step_mask.len() != seq_len {
-            return Err(anyhow!(
-                "Attention mask length {} does not match token count {}",
-                step_mask.len(),
-                seq_len
-            ));
+            return Err(QwenError::AttentionMaskMismatch {
+                mask_len: step_mask.len(),
+                token_len: seq_len,
+            });
         }
 
         let total_seq_len = self.current_seq_len + seq_len;
         if total_seq_len > self.config.max_seq_len {
-            return Err(anyhow!(
-                "Sequence too long: total context {} would exceed max_seq_len {}",
+            return Err(QwenError::SequenceTooLong {
                 total_seq_len,
-                self.config.max_seq_len
-            ));
+                max_seq_len: self.config.max_seq_len,
+            });
         }
 
         let batch_size = 1;
 
         // Create all tensors and keep them alive for the entire inference call
-        let input_ids_array = Array2::from_shape_vec((batch_size, seq_len), step_tokens.to_vec())?;
+        let input_ids_array = Array2::from_shape_vec((batch_size, seq_len), step_tokens.to_vec())
+            .map_err(|e| QwenError::TensorBuild {
+            name: "input_ids",
+            source: e.into(),
+        })?;
 
         let mut attention_total = Vec::with_capacity(self.attention_cache.len() + seq_len);
         attention_total.extend_from_slice(&self.attention_cache);
@@ -192,11 +214,19 @@ impl QwenEmbedder {
         debug_assert_eq!(attention_total.len(), total_seq_len);
 
         let attention_mask_array =
-            Array2::from_shape_vec((batch_size, attention_total.len()), attention_total.clone())?;
+            Array2::from_shape_vec((batch_size, attention_total.len()), attention_total.clone())
+                .map_err(|e| QwenError::TensorBuild {
+                    name: "attention_mask",
+                    source: e.into(),
+                })?;
 
         let position_ids: Vec<i64> =
             (self.current_seq_len as i64..(self.current_seq_len + seq_len) as i64).collect();
-        let position_ids_array = Array2::from_shape_vec((batch_size, seq_len), position_ids)?;
+        let position_ids_array = Array2::from_shape_vec((batch_size, seq_len), position_ids)
+            .map_err(|e| QwenError::TensorBuild {
+                name: "position_ids",
+                source: e.into(),
+            })?;
 
         // Convert to CowArrays and keep them alive
         let input_ids_cow = CowArray::from(input_ids_array.into_dyn());
@@ -220,14 +250,17 @@ impl QwenEmbedder {
         }
 
         // Now create Value objects from the stored CowArrays
-        let input_ids_value = Value::from_array(self.session.allocator(), &input_ids_cow)?;
-        let attention_mask_value =
-            Value::from_array(self.session.allocator(), &attention_mask_cow)?;
-        let position_ids_value = Value::from_array(self.session.allocator(), &position_ids_cow)?;
+        let input_ids_value = Value::from_array(self.session.allocator(), &input_ids_cow)
+            .map_err(|e| QwenError::OnnxInference { source: e })?;
+        let attention_mask_value = Value::from_array(self.session.allocator(), &attention_mask_cow)
+            .map_err(|e| QwenError::OnnxInference { source: e })?;
+        let position_ids_value = Value::from_array(self.session.allocator(), &position_ids_cow)
+            .map_err(|e| QwenError::OnnxInference { source: e })?;
 
         let mut kv_values = Vec::with_capacity(self.config.num_layers * 2);
         for kv_cow in &kv_cows {
-            let kv_value = Value::from_array(self.session.allocator(), kv_cow)?;
+            let kv_value = Value::from_array(self.session.allocator(), kv_cow)
+                .map_err(|e| QwenError::OnnxInference { source: e })?;
             kv_values.push(kv_value);
         }
 
@@ -235,28 +268,31 @@ impl QwenEmbedder {
         let mut input_values = vec![input_ids_value, attention_mask_value, position_ids_value];
         input_values.extend(kv_values);
 
-        if seq_len > 1 || self.current_seq_len == 0 {
-            println!("Running ONNX inference with {} inputs", input_values.len());
+        let context_before = self.current_seq_len;
+        if seq_len > 1 || context_before == 0 {
+            debug!(
+                target: "tcs-ml::qwen_embedder",
+                input_count = input_values.len(),
+                seq_len,
+                context_before,
+                "Running ONNX inference"
+            );
         }
 
         // Run inference (all CowArrays are still alive here)
-        let outputs = self
-            .session
-            .run(input_values)
-            .context("Failed to execute ONNX session")?;
+        let outputs = self.session.run(input_values)?;
 
         if outputs.is_empty() {
-            return Err(anyhow!("ONNX model produced no outputs"));
+            return Err(QwenError::NoOutputs);
         }
 
         // Ensure we received logits + KV cache outputs
         let expected_outputs = 1 + self.config.num_layers * 2;
         if outputs.len() < expected_outputs {
-            return Err(anyhow!(
-                "Expected at least {} outputs (logits + KV cache), got {}",
-                expected_outputs,
-                outputs.len()
-            ));
+            return Err(QwenError::UnexpectedOutputCount {
+                expected: expected_outputs,
+                actual: outputs.len(),
+            });
         }
 
         // Extract embeddings from logits (first output)
@@ -297,12 +333,19 @@ impl QwenEmbedder {
         // Update sequence length for next inference
         self.current_seq_len = updated_context_len;
         self.attention_cache = attention_total;
+        self.truncate_cache_if_needed();
+        debug_assert_eq!(
+            self.attention_cache.len(),
+            self.current_seq_len,
+            "attention cache and sequence length diverged"
+        );
 
         if seq_len > 1 || previous_context_len == 0 {
-            println!(
-                "✓ Extracted {}-dim embeddings, context length: {}",
-                embeddings.len(),
-                self.current_seq_len
+            info!(
+                target: "tcs-ml::qwen_embedder",
+                dims = embeddings.len(),
+                context_len = self.current_seq_len,
+                "Extracted embeddings"
             );
         }
 
@@ -310,38 +353,46 @@ impl QwenEmbedder {
     }
 
     /// Extract KV cache tensor as owned Array4<f32>
-    fn extract_kv_tensor(value: &Value, name: &str) -> Result<Array4<f32>> {
+    fn extract_kv_tensor(value: &Value, name: &str) -> QwenResult<Array4<f32>> {
         if let Ok(tensor) = value.try_extract::<f32>() {
             let view = tensor.view();
             let dims = view.shape().to_vec();
             if dims.len() != 4 {
-                return Err(anyhow!(
-                    "{}: expected 4D f32 tensor, got shape {:?}",
-                    name,
-                    dims
-                ));
+                return Err(QwenError::TensorRankMismatch {
+                    name: name.to_string(),
+                    shape: dims,
+                });
             }
             let data: Vec<f32> = view.iter().copied().collect();
-            return Array4::from_shape_vec((dims[0], dims[1], dims[2], dims[3]), data)
-                .map_err(|e| anyhow!("{}: failed to construct f32 tensor: {}", name, e));
+            return Array4::from_shape_vec((dims[0], dims[1], dims[2], dims[3]), data).map_err(
+                |e| QwenError::TensorMaterialise {
+                    name: name.to_string(),
+                    source: e.into(),
+                },
+            );
         }
 
         if let Ok(tensor) = value.try_extract::<f16>() {
             let view = tensor.view();
             let dims = view.shape().to_vec();
             if dims.len() != 4 {
-                return Err(anyhow!(
-                    "{}: expected 4D f16 tensor, got shape {:?}",
-                    name,
-                    dims
-                ));
+                return Err(QwenError::TensorRankMismatch {
+                    name: name.to_string(),
+                    shape: dims,
+                });
             }
             let data: Vec<f32> = view.iter().map(|&x| f16::to_f32(x)).collect();
-            return Array4::from_shape_vec((dims[0], dims[1], dims[2], dims[3]), data)
-                .map_err(|e| anyhow!("{}: failed to convert f16 tensor to f32: {}", name, e));
+            return Array4::from_shape_vec((dims[0], dims[1], dims[2], dims[3]), data).map_err(
+                |e| QwenError::TensorMaterialise {
+                    name: name.to_string(),
+                    source: e.into(),
+                },
+            );
         }
 
-        Err(anyhow!("{}: tensor is neither f32 nor f16", name))
+        Err(QwenError::UnsupportedTensorType {
+            name: name.to_string(),
+        })
     }
 
     /// Merge existing KV cache with newly returned present tensors
@@ -350,7 +401,7 @@ impl QwenEmbedder {
         present: Array4<f32>,
         new_tokens: usize,
         name: &str,
-    ) -> Result<Array4<f32>> {
+    ) -> QwenResult<Array4<f32>> {
         let previous_len = existing.shape()[2];
         let present_len = present.shape()[2];
 
@@ -361,8 +412,12 @@ impl QwenEmbedder {
 
         if present_len == new_tokens {
             // Model returned only the new tokens: concatenate with past cache
-            let merged = concatenate(Axis(2), &[existing.view(), present.view()])
-                .map_err(|e| anyhow!("{}: failed to concatenate KV cache: {}", name, e))?;
+            let merged = concatenate(Axis(2), &[existing.view(), present.view()]).map_err(|e| {
+                QwenError::KvConcat {
+                    name: name.to_string(),
+                    source: e.into(),
+                }
+            })?;
             return Ok(merged);
         }
 
@@ -371,49 +426,96 @@ impl QwenEmbedder {
             return Ok(present);
         }
 
-        Err(anyhow!(
-            "{}: unexpected KV cache lengths (previous={}, new_tokens={}, present={})",
-            name,
-            previous_len,
+        Err(QwenError::InvalidKvShape {
+            name: name.to_string(),
+            previous: previous_len,
             new_tokens,
-            present_len
-        ))
+            present: present_len,
+        })
+    }
+
+    fn truncate_cache_if_needed(&mut self) {
+        let window = self.config.cache_window;
+        if self.current_seq_len <= window {
+            return;
+        }
+
+        let before = self.current_seq_len;
+        let trim = before - window;
+
+        for layer in 0..self.config.num_layers {
+            let key_name = format!("past_key_values.{}.key", layer);
+            if let Some(tensor) = self.kv_cache.get_mut(&key_name) {
+                if tensor.shape()[2] > window {
+                    let trimmed = tensor.slice(s![.., .., trim.., ..]).to_owned();
+                    *tensor = trimmed;
+                }
+            }
+
+            let value_name = format!("past_key_values.{}.value", layer);
+            if let Some(tensor) = self.kv_cache.get_mut(&value_name) {
+                if tensor.shape()[2] > window {
+                    let trimmed = tensor.slice(s![.., .., trim.., ..]).to_owned();
+                    *tensor = trimmed;
+                }
+            }
+        }
+
+        if trim >= self.attention_cache.len() {
+            self.attention_cache.clear();
+        } else {
+            self.attention_cache.drain(0..trim);
+        }
+
+        self.current_seq_len = window;
+        info!(
+            target: "tcs-ml::qwen_embedder",
+            before,
+            window,
+            trim,
+            "Trimmed KV cache window"
+        );
     }
 
     /// Extract embedding vector from the model logits
-    fn extract_embeddings(&self, logits: &Value) -> Result<Vec<f32>> {
+    fn extract_embeddings(&self, logits: &Value) -> QwenResult<Vec<f32>> {
         // Handle both f32 and f16 outputs
         let logits_vec: Vec<f32> = match logits.try_extract::<f32>() {
             Ok(tensor) => tensor.view().iter().copied().collect(),
-            Err(_) => {
-                // Try f16 and convert to f32
-                match logits.try_extract::<f16>() {
-                    Ok(tensor) => tensor.view().iter().map(|&x| f16::to_f32(x)).collect(),
-                    Err(e) => return Err(anyhow!("Failed to extract tensor as f32 or f16: {}", e)),
+            Err(_) => match logits.try_extract::<f16>() {
+                Ok(tensor) => tensor.view().iter().map(|&x| f16::to_f32(x)).collect(),
+                Err(_) => {
+                    return Err(QwenError::UnsupportedTensorType {
+                        name: "logits".to_string(),
+                    })
                 }
-            }
+            },
         };
 
         // Logits shape should be [batch=1, seq_len, vocab_size]
         let total_elements = logits_vec.len();
         let vocab_size = self.config.vocab_size;
+        if vocab_size == 0 {
+            return Err(QwenError::InvalidLogitsShape {
+                total_elements,
+                vocab_size,
+            });
+        }
         let seq_len = total_elements / vocab_size;
 
         if total_elements != seq_len * vocab_size {
-            return Err(anyhow!(
-                "Unexpected logits shape: total_elements={}, expected batch*seq*vocab",
-                total_elements
-            ));
+            return Err(QwenError::InvalidLogitsShape {
+                total_elements,
+                vocab_size,
+            });
         }
 
         // Take last token's logits and extract configured embedding dimensions
-        let last_token_start = (seq_len - 1) * vocab_size;
+        let last_token_start = (seq_len.saturating_sub(1)) * vocab_size;
         let embedding_size = self.config.embed_dim.min(vocab_size);
 
         if last_token_start + embedding_size > logits_vec.len() {
-            return Err(anyhow!(
-                "Cannot extract embedding: insufficient logits data"
-            ));
+            return Err(QwenError::InsufficientLogits);
         }
 
         let mut embeddings: Vec<f32> =
@@ -427,7 +529,10 @@ impl QwenEmbedder {
 
     /// Reset KV cache for fresh context (new conversation/state thread)
     pub fn reset_cache(&mut self) {
-        println!("🔄 Resetting KV cache for fresh context");
+        info!(
+            target: "tcs-ml::qwen_embedder",
+            "Resetting KV cache for fresh context"
+        );
         self.init_kv_cache();
     }
 
@@ -445,35 +550,45 @@ impl QwenEmbedder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ndarray::Array4;
 
     #[test]
-    fn test_kv_cache_initialization() {
-        let config = QwenConfig::default();
-        let mut embedder = QwenEmbedder::with_config("dummy_path", config.clone()).unwrap();
-        embedder.init_kv_cache();
+    fn merge_returns_present_when_full_sequence() {
+        let existing = Array4::from_shape_vec((1, 1, 3, 1), vec![0.0, 1.0, 2.0]).unwrap();
+        let present =
+            Array4::from_shape_vec((1, 1, 5, 1), vec![10.0, 11.0, 12.0, 13.0, 14.0]).unwrap();
+        let present_clone = present.clone();
 
-        assert_eq!(embedder.kv_cache.len(), config.num_layers * 2); // key + value per layer
-        assert_eq!(embedder.current_seq_len, 0);
-
-        for layer in 0..config.num_layers {
-            let key_name = format!("past_key_values.{}.key", layer);
-            let value_name = format!("past_key_values.{}.value", layer);
-
-            let key_cache = embedder.kv_cache.get(&key_name).unwrap();
-            let value_cache = embedder.kv_cache.get(&value_name).unwrap();
-
-            assert_eq!(key_cache.shape(), &[1, config.num_heads, 0, config.head_dim]);
-            assert_eq!(value_cache.shape(), &[1, config.num_heads, 0, config.head_dim]);
-        }
+        let merged = QwenEmbedder::merge_kv_cache(&existing, present, 2, "layer").unwrap();
+        assert_eq!(merged, present_clone);
     }
 
     #[test]
-    fn test_tokenization_fallback() {
-        let embedder = QwenEmbedder::new("dummy_path").unwrap();
-        let (input_ids, attention_mask) = embedder.tokenize("Hello, world!").unwrap();
+    fn merge_appends_when_incremental_present() {
+        let existing = Array4::from_shape_vec((1, 1, 3, 1), vec![0.0, 1.0, 2.0]).unwrap();
+        let present = Array4::from_shape_vec((1, 1, 2, 1), vec![3.0, 4.0]).unwrap();
 
-        assert!(!input_ids.is_empty());
-        assert_eq!(input_ids.len(), attention_mask.len());
-        assert!(attention_mask.iter().all(|&x| x == 1));
+        let merged = QwenEmbedder::merge_kv_cache(&existing, present, 2, "layer").unwrap();
+        assert_eq!(merged.shape(), &[1, 1, 5, 1]);
+        let values: Vec<f32> = merged.iter().copied().collect();
+        let expected = vec![0.0, 1.0, 2.0, 3.0, 4.0];
+        assert_eq!(values, expected);
+    }
+
+    #[test]
+    fn merge_falls_back_when_present_expands_beyond_sum() {
+        let existing = Array4::from_shape_vec((1, 1, 3, 1), vec![0.0, 1.0, 2.0]).unwrap();
+        let present = Array4::from_shape_vec((1, 1, 6, 1), vec![5.0; 6]).unwrap();
+
+        let merged = QwenEmbedder::merge_kv_cache(&existing, present.clone(), 1, "layer").unwrap();
+        assert_eq!(merged, present);
+    }
+
+    #[test]
+    fn merge_errors_when_present_shrinks_context() {
+        let existing = Array4::from_shape_vec((1, 1, 3, 1), vec![0.0, 1.0, 2.0]).unwrap();
+        let present = Array4::from_shape_vec((1, 1, 2, 1), vec![5.0, 6.0]).unwrap();
+        let err = QwenEmbedder::merge_kv_cache(&existing, present, 1, "layer");
+        assert!(err.is_err());
     }
 }

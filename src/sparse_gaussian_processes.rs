@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
 use tracing::{info, error, warn};
  * 🚀 SPARSE GAUSSIAN PROCESSES FOR O(n) COMPLEXITY 🚀
@@ -883,18 +886,18 @@ impl ScalabilityComparator {
     /// Generate synthetic consciousness data for testing
     fn generate_synthetic_data(&self, size: usize) -> Vec<(Vector3<f32>, f32)> {
         use rand::prelude::*;
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         (0..size)
             .map(|_i| {
-                let x = rng.random_range(-10.0_f32..10.0_f32);
-                let y = rng.random_range(-10.0_f32..10.0_f32);
-                let z = rng.random_range(-5.0_f32..5.0_f32);
+                let x = rng.gen_range(-10.0_f32..10.0_f32);
+                let y = rng.gen_range(-10.0_f32..10.0_f32);
+                let z = rng.gen_range(-5.0_f32..5.0_f32);
 
                 let point = Vector3::new(x, y, z);
 
                 // Generate target as function of position (for testing)
-                let target = (x * x + y * y + z * z).sin() + rng.random_range(-0.1_f32..0.1_f32);
+                let target = (x * x + y * y + z * z).sin() + rng.gen_range(-0.1_f32..0.1_f32);
 
                 (point, target)
             })

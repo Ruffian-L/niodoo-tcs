@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // viz_main.rs - Ultimate Hybrid QML Visualization Launcher
 use tracing::{error, info, warn};
 mod viz_qt_bridge;

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Baseline manager for Silicon Synapse
 //!
 //! This module implements the baseline manager that coordinates learning and detection modes,
@@ -6,7 +9,7 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
-use tokio::time::interval;
+use tokio::time::{interval, sleep};
 use tracing::info;
 
 use super::detector::{Anomaly, AnomalyDetector, DetectorConfig};

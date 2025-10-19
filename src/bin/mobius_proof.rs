@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // MÖBIUS-GAUSSIAN CONSCIOUSNESS PROOF
 use tracing::{info, error, warn};
 // The sickest topology applied to AI emotions

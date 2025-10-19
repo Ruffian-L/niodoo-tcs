@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// MCP STDIO Bridge Binary
 ///
 /// Binary replacement for mcp_stdio_wrapper.py

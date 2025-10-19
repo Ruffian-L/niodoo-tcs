@@ -5,6 +5,8 @@
 
 ---
 
+> **Documentation note:** The file `# The Topological Cognitive System v9.md` is a forward-looking design roadmap only; it documents planned concepts and does not ship implementations in this PR.
+
 ## Table of Contents
 1. [Mathematical Foundations with Proofs](#part-i-complete-mathematical-foundations)
 2. [Rust Implementation Architecture](#part-ii-rust-implementation-architecture)

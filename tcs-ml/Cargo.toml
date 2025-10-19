@@ -11,6 +11,7 @@ default = []
 onnx = ["dep:ort", "dep:half"]
 tokenizers = ["dep:tokenizers"]
 onnx-with-tokenizers = ["onnx", "tokenizers"]
+legacy-examples = []
 
 [dependencies]
 anyhow = { workspace = true }
@@ -24,8 +25,24 @@ rand = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 tcs-pipeline = { path = "../tcs-pipeline" }
+
+[[bin]]
+name = "test_qwen_stateful"
+path = "src/bin/test_qwen_stateful.rs"
+required-features = ["onnx-with-tokenizers"]
+
+[[example]]
+name = "test_qwen"
+path = "examples/test_qwen.rs"
+required-features = ["legacy-examples"]
+
+[[example]]
+name = "test_simple"
+path = "examples/test_simple.rs"
+required-features = ["legacy-examples"]

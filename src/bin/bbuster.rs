@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use walkdir::WalkDir;

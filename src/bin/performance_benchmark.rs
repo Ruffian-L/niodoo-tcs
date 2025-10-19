@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Performance Benchmark for RTX 6000 <50ms/token Target
 //!
 //! This binary runs comprehensive performance validation to ensure

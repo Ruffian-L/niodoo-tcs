@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠 Agent 2: MemorySyncMaster
  * Queries semantic + emotional layers for resonance >0.4

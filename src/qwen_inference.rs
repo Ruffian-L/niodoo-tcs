@@ -1,9 +1,13 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Qwen inference module - Real integration wrapper
 //!
 //! This module provides a simplified interface to the real QwenIntegrator
 //! NO STUBS - All inference goes through real Candle-based model
 
-use crate::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
+use niodoo_core::config::system_config::{AppConfig, ModelConfig, EthicsConfig};
 use anyhow::Result;
 use candle_core::Device;
 use serde::{Deserialize, Serialize};
@@ -23,23 +27,40 @@ impl QwenInference {
     pub fn new(model_name: String, device: Device) -> Result<Self, String> {
         info!("🧠 Creating REAL QwenInference (not a stub!)");
 
-        let config = QwenConfig {
-            model_path: model_name.clone(),
-            use_cuda: matches!(device, Device::Cuda(_)),
-            max_tokens: 512,
-            temperature: 0.7,
-            top_p: 0.9,
-            top_k: 40,
-            presence_penalty: 1.5,
-        };
+        let mut app_config = AppConfig::default();
+        app_config.models.qwen_runtime.model_dir = model_name.clone();
+        app_config.models.qwen_runtime.use_cuda = matches!(device, Device::Cuda(_));
 
-        let integrator = QwenIntegrator::new(config)
+        let integrator = QwenIntegrator::new(&app_config)
             .map_err(|e| format!("Failed to create QwenIntegrator: {}", e))?;
 
         Ok(Self {
             integrator: Arc::new(Mutex::new(integrator)),
             model_name,
             max_tokens: 512,
+        })
+    }
+
+    /// Create new Qwen inference engine with ethics configuration
+    pub fn new_with_ethics(
+        model_config: &ModelConfig,
+        device: Device,
+        ethics_config: &EthicsConfig,
+    ) -> Result<Self, String> {
+        info!("🧠 Creating REAL QwenInference with ethics config");
+
+        // Create AppConfig from the provided configs
+        let mut app_config = AppConfig::default();
+        app_config.models = model_config.clone();
+        app_config.ethics = ethics_config.clone();
+
+        let integrator = QwenIntegrator::new(&app_config)
+            .map_err(|e| format!("Failed to create QwenIntegrator: {}", e))?;
+
+        Ok(Self {
+            integrator: Arc::new(Mutex::new(integrator)),
+            model_name: model_config.qwen_runtime.model_dir.clone(),
+            max_tokens: model_config.max_tokens,
         })
     }
 
@@ -78,16 +99,17 @@ impl QwenInference {
         // Update config with provided parameters
         {
             let mut integrator = self.integrator.lock().await;
-            integrator.config.temperature = temperature;
-            integrator.config.top_p = top_p;
+            integrator.set_temperature(temperature);
+            integrator.set_top_p(top_p);
         }
 
         // Call REAL inference through QwenIntegrator
         let mut integrator = self.integrator.lock().await;
-        integrator
+        let result = integrator
             .infer(messages, Some(max_tokens))
             .await
-            .map_err(|e| format!("Inference failed: {}", e))
+            .map_err(|e| format!("Inference failed: {}", e))?;
+        Ok(result.output)
     }
 
     /// Synchronous generate wrapper (spawns async runtime)
@@ -121,9 +143,9 @@ impl Default for QwenInference {
     fn default() -> Self {
         warn!("⚠️ Using default QwenInference - should use new() in production");
 
-        let config = QwenConfig::default();
+        let app_config = AppConfig::default();
         let integrator =
-            QwenIntegrator::new(config).expect("Failed to create default QwenInference");
+            QwenIntegrator::new(&app_config).expect("Failed to create default QwenInference");
 
         Self {
             integrator: Arc::new(Mutex::new(integrator)),

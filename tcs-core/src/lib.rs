@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+//!
 //! Core cognitive state management and embedding scaffolding for the
 //! Topological Cognitive System workspace. This module centralises the
 //! structures that previously lived inside `src/` so other crates can
@@ -129,6 +132,11 @@ pub mod embeddings {
 
         pub fn is_ready(&self) -> bool {
             self.queue.len() == self.capacity
+        }
+
+        /// Clear all buffered embeddings, preserving capacity.
+        pub fn clear(&mut self) {
+            self.queue.clear();
         }
     }
 }

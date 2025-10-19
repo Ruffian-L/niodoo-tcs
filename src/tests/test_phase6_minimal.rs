@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;

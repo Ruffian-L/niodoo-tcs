@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧬⚡ Evolutionary Personality Adaptation Engine
  *
@@ -67,33 +70,33 @@ pub struct PersonalityGenes {
 impl PersonalityGenes {
     /// Create random personality genes
     pub fn random() -> Self {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         Self {
-            // Random personality weights
-            analyst_weight: rng.random_range(0.0..1.0),
-            intuitive_weight: rng.random_range(0.0..1.0),
-            visionary_weight: rng.random_range(0.0..1.0),
-            engineer_weight: rng.random_range(0.0..1.0),
-            sage_weight: rng.random_range(0.0..1.0),
-            risk_assessor_weight: rng.random_range(0.0..1.0),
-            diplomat_weight: rng.random_range(0.0..1.0),
-            philosopher_weight: rng.random_range(0.0..1.0),
-            learner_weight: rng.random_range(0.0..1.0),
-            balancer_weight: rng.random_range(0.0..1.0),
-            rebel_weight: rng.random_range(0.0..1.0),
+                        // Random personality weights
+            analyst_weight: rng.gen_range(0.0..1.0),
+            intuitive_weight: rng.gen_range(0.0..1.0),
+            visionary_weight: rng.gen_range(0.0..1.0),
+            engineer_weight: rng.gen_range(0.0..1.0),
+            sage_weight: rng.gen_range(0.0..1.0),
+            risk_assessor_weight: rng.gen_range(0.0..1.0),
+            diplomat_weight: rng.gen_range(0.0..1.0),
+            philosopher_weight: rng.gen_range(0.0..1.0),
+            learner_weight: rng.gen_range(0.0..1.0),
+            balancer_weight: rng.gen_range(0.0..1.0),
+            rebel_weight: rng.gen_range(0.0..1.0),
 
             // Random emotional parameters
-            empathy_sensitivity: rng.random_range(0.3..0.9),
-            authenticity_threshold: rng.random_range(0.4..0.8),
-            masking_detection_sensitivity: rng.random_range(0.2..0.8),
-            hyperfocus_adaptation: rng.random_range(0.5..0.95),
-            sensory_overload_response: rng.random_range(0.3..0.7),
+            empathy_sensitivity: rng.gen_range(0.3..0.9),
+            authenticity_threshold: rng.gen_range(0.4..0.8),
+            masking_detection_sensitivity: rng.gen_range(0.2..0.8),
+            hyperfocus_adaptation: rng.gen_range(0.5..0.95),
+            sensory_overload_response: rng.gen_range(0.3..0.7),
 
             // Random learning parameters
-            learning_rate: rng.random_range(0.01..0.3),
-            memory_retention: rng.random_range(0.7..0.95),
-            pattern_recognition_strength: rng.random_range(0.5..0.9),
+            learning_rate: rng.gen_range(0.01..0.3),
+            memory_retention: rng.gen_range(0.7..0.95),
+            pattern_recognition_strength: rng.gen_range(0.5..0.9),
 
             fitness: 0.0,
             generation: 0,
@@ -104,85 +107,85 @@ impl PersonalityGenes {
 
     /// Mutate this personality configuration
     pub fn mutate(&mut self, mutation_rate: f32) {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // Mutate personality weights
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.analyst_weight =
-                (self.analyst_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.analyst_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.intuitive_weight =
-                (self.intuitive_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.intuitive_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.visionary_weight =
-                (self.visionary_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.visionary_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.engineer_weight =
-                (self.engineer_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.engineer_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
-            self.sage_weight = (self.sage_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+        if rng.gen::<f32>() < mutation_rate {
+            self.sage_weight = (self.sage_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.risk_assessor_weight =
-                (self.risk_assessor_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.risk_assessor_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.diplomat_weight =
-                (self.diplomat_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.diplomat_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.philosopher_weight =
-                (self.philosopher_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.philosopher_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.learner_weight =
-                (self.learner_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.learner_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.balancer_weight =
-                (self.balancer_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+                (self.balancer_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
-            self.rebel_weight = (self.rebel_weight + rng.random_range(-0.1..0.1)).clamp(0.0, 1.0);
+        if rng.gen::<f32>() < mutation_rate {
+            self.rebel_weight = (self.rebel_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
 
         // Mutate emotional parameters
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.empathy_sensitivity =
-                (self.empathy_sensitivity + rng.random_range(-0.05..0.05)).clamp(0.0, 1.0);
+                (self.empathy_sensitivity + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.authenticity_threshold =
-                (self.authenticity_threshold + rng.random_range(-0.05..0.05)).clamp(0.0, 1.0);
+                (self.authenticity_threshold + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.masking_detection_sensitivity = (self.masking_detection_sensitivity
-                + rng.random_range(-0.05..0.05))
+                + rng.gen_range(-0.05..0.05))
             .clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.hyperfocus_adaptation =
-                (self.hyperfocus_adaptation + rng.random_range(-0.05..0.05)).clamp(0.0, 1.0);
+                (self.hyperfocus_adaptation + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
-        if rng.random::<f32>() < mutation_rate {
+        if rng.gen::<f32>() < mutation_rate {
             self.sensory_overload_response =
-                (self.sensory_overload_response + rng.random_range(-0.05..0.05)).clamp(0.0, 1.0);
+                (self.sensory_overload_response + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
     }
 
     /// Crossover with another personality configuration
     pub fn crossover(&self, other: &PersonalityGenes) -> (PersonalityGenes, PersonalityGenes) {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let mut child1 = self.clone();
         let mut child2 = other.clone();
 
         // Single-point crossover for personality weights
-        if rng.random::<f32>() < CROSSOVER_RATE {
-            let crossover_point = rng.random_range(0..11);
+        if rng.gen::<f32>() < CROSSOVER_RATE {
+            let crossover_point = rng.gen_range(0..11);
 
             if crossover_point <= 0 {
                 std::mem::swap(&mut child1.analyst_weight, &mut child2.analyst_weight);
@@ -226,31 +229,31 @@ impl PersonalityGenes {
         }
 
         // Uniform crossover for emotional parameters
-        if rng.random_bool(0.5) {
+        if rng.gen_bool(0.5) {
             std::mem::swap(
                 &mut child1.empathy_sensitivity,
                 &mut child2.empathy_sensitivity,
             );
         }
-        if rng.random_bool(0.5) {
+        if rng.gen_bool(0.5) {
             std::mem::swap(
                 &mut child1.authenticity_threshold,
                 &mut child2.authenticity_threshold,
             );
         }
-        if rng.random_bool(0.5) {
+        if rng.gen_bool(0.5) {
             std::mem::swap(
                 &mut child1.masking_detection_sensitivity,
                 &mut child2.masking_detection_sensitivity,
             );
         }
-        if rng.random_bool(0.5) {
+        if rng.gen_bool(0.5) {
             std::mem::swap(
                 &mut child1.hyperfocus_adaptation,
                 &mut child2.hyperfocus_adaptation,
             );
         }
-        if rng.random_bool(0.5) {
+        if rng.gen_bool(0.5) {
             std::mem::swap(
                 &mut child1.sensory_overload_response,
                 &mut child2.sensory_overload_response,
@@ -343,8 +346,9 @@ impl EvolutionaryPersonalityEngine {
 
         // Calculate fitness for each individual (parallel processing like genetic_mona)
         // Generate random efficiencies outside parallel section to avoid thread safety issues
+        let mut rng = rand::thread_rng();
         let efficiencies: Vec<f32> = (0..self.population.len())
-            .map(|_| rand::rng().random_range(0.7..0.9))
+            .map(|_| rng.gen_range(0.7..0.9))
             .collect();
 
         self.population
@@ -423,11 +427,11 @@ impl EvolutionaryPersonalityEngine {
 
     /// Tournament selection (like genetic_mona's selection strategy)
     fn tournament_selection(&self) -> PersonalityGenes {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let mut best_individual = &self.population[0];
 
         for _ in 0..TOURNAMENT_SIZE {
-            let candidate = &self.population[rng.random_range(0..self.population.len())];
+            let candidate = &self.population[rng.gen_range(0..self.population.len())];
             if candidate.fitness > best_individual.fitness {
                 best_individual = candidate;
             }
@@ -482,12 +486,12 @@ impl EvolutionaryPersonalityEngine {
 
         while self.is_running && self.current_generation < GENERATION_LIMIT {
             // Mock user feedback for testing (in real system, this comes from actual interactions)
-            let mut rng = rand::rng();
+            let mut rng = rand::thread_rng();
             let user_feedback: Vec<f32> = (0..POPULATION_SIZE)
-                .map(|_| rng.random_range(0.3..0.9))
+                .map(|_| rng.gen_range(0.3..0.9))
                 .collect();
             let neurodivergent_effectiveness: Vec<f32> = (0..POPULATION_SIZE)
-                .map(|_| rng.random_range(0.4..0.95))
+                .map(|_| rng.gen_range(0.4..0.95))
                 .collect();
 
             self.evolve_generation(user_feedback, neurodivergent_effectiveness)

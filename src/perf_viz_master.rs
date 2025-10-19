@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * ⚡ Agent 7: PerfVizMaster
  * Optimize Repeater, FPS >60 on RTX 6000

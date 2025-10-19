@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Unit tests for core Niodoo consciousness components
 use tracing::{error, info, warn};
 

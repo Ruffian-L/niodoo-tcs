@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🔗 Agent 1: QwenVizLink
  * Pipes Qwen3-Coder-30B-AWQ to QML visualization props

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+//!
 //! Topological data analysis toolkit implementing the mathematical
 //! routines referenced in the README. The goal is to provide solid,
 //! reusable primitives while we continue migrating higher-level logic.

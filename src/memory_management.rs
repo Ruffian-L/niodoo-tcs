@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Memory Management System for Consciousness Processing
 //!
 //! This module implements advanced memory management for consciousness state tracking,
@@ -558,7 +561,7 @@ pub struct ConsciousnessMemoryTracker {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AccessPattern {
+pub struct AccessPattern {
     /// Consciousness state ID
     id: String,
     /// Total access count

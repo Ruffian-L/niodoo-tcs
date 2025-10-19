@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Hardcoded Value Scanner CLI
 ///
 /// Binary replacement for scripts/hardcoded_value_buster.py

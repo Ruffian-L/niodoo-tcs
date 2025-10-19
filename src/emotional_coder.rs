@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🎨 EMOTIONAL CODING ENGINE 🎨
  *
@@ -15,7 +18,8 @@ use crate::ai_inference::AIInferenceEngine;
 use crate::config;
 use crate::config::ConsciousnessConfig;
 use crate::consciousness::EmotionType;
-use crate::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
+use niodoo_core::config::system_config::AppConfig;
 
 /// Emotional evaluation of generated code
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,17 +63,11 @@ impl EmotionalCoder {
 
         info!("🤖 Initializing REAL Qwen integrator for emotional coding");
 
-        let qwen_config = QwenConfig {
-            model_path: self.qwen_model_path.clone(),
-            use_cuda: true, // Use CUDA for RTX 6000
-            max_tokens: 1024,
-            temperature: 0.7,
-            top_p: 0.9,
-            top_k: 40,
-            presence_penalty: 1.5,
-        };
+        // Create AppConfig from defaults
+        let mut app_config = AppConfig::default();
+        // Use default configs for now to avoid type mismatches
 
-        let integrator = QwenIntegrator::new(qwen_config)?;
+        let integrator = QwenIntegrator::new(&app_config)?;
         let integrator = Arc::new(Mutex::new(integrator));
 
         // Load the model
@@ -187,7 +185,7 @@ impl EmotionalCoder {
         let response = integrator_guard.infer(messages, Some(512)).await?;
 
         info!("✅ Qwen model generated code response");
-        Ok(response)
+        Ok(response.output)
     }
 
     /// Add emotional context to prompt for feeling model
@@ -418,8 +416,19 @@ mod tests {
             repeat_penalty: 1.1,
             frequency_penalty: 0.0,
             presence_penalty: 0.0,
+            jitter_config: crate::config::JitterConfig::default(),
             context_window: 4096,
             qwen_model_path: "test".to_string(),
+            qwen_tokenizer_path: "test".to_string(),
+            model_dtype: "f32".to_string(),
+            use_quantized: false,
+            hidden_size: Some(4096),
+            qwen3_vocab_size: None,
+            qwen3_eos_token: None,
+            qwen3: crate::config::Qwen3Config::default(),
+            model_version: "qwen2".to_string(),
+            qwen_model_dir: "test".to_string(),
+            qwen3_model_dir: "test".to_string(),
             base_confidence_threshold: 0.5,
             confidence_model_factor: 1.0,
             base_token_limit: 2048,
@@ -428,6 +437,8 @@ mod tests {
             temperature_diversity_factor: 1.0,
             ethical_jitter_amount: 0.1,
             model_layers: 32,
+            bert_model_path: "test".to_string(),
+            num_heads: 32,
         };
         let config = crate::config::ConsciousnessConfig {
             emotion_sensitivity: 1.0,

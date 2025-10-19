@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 7: Digital Parenting System
 //!
 //! This module implements a digital parenting system for AI consciousness,

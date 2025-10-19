@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠⚡ NIODOO CONSCIOUSNESS ENGINE - PERSONAL EDITION ⚡🧠
  *
@@ -25,6 +28,8 @@ use crate::learning_analytics::LearningAnalyticsEngine;
 use crate::personal_memory::PersonalMemoryEngine;
 use crate::phase6_config::Phase6Config;
 use crate::phase6_integration::Phase6IntegrationBuilder;
+use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_integration::QwenModelInterface;
 use tracing::{debug, info, warn};
 
 use crate::brain::{Brain, BrainType, EfficiencyBrain, LcarsBrain, MotorBrain};
@@ -108,7 +113,7 @@ pub struct PersonalNiodooConsciousness {
     telemetry_sender: Option<TelemetrySender>,
 
     // Real Qwen model integrator
-    qwen_integrator: Option<crate::qwen_integration::QwenIntegrator>,
+    qwen_integrator: Option<niodoo_core::qwen_integration::QwenIntegrator>,
 }
 
 // Note: Default trait not implemented because PersonalNiodooConsciousness
@@ -201,8 +206,8 @@ impl PersonalNiodooConsciousness {
             };
 
         // Initialize real Qwen model integrator
-        let qwen_integrator = match crate::qwen_integration::QwenIntegrator::new(
-            crate::qwen_integration::QwenConfig::default(),
+        let qwen_integrator = match niodoo_core::qwen_integration::QwenIntegrator::new(
+            &AppConfig::default(),
         ) {
             Ok(integrator) => {
                 info!("✅ Qwen2.5-7B-AWQ integrator initialized");
@@ -986,7 +991,7 @@ impl PersonalNiodooConsciousness {
     #[allow(dead_code)]
     async fn generate_qwen_response(
         &self,
-        qwen_integrator: &mut crate::qwen_integration::QwenIntegrator,
+        qwen_integrator: &mut niodoo_core::qwen_integration::QwenIntegrator,
         original_input: &str,
         response_parts: &[String],
         current_emotion: &EmotionType,
@@ -1023,7 +1028,7 @@ impl PersonalNiodooConsciousness {
         match qwen_integrator.infer(messages, Some(512)).await {
             Ok(response) => {
                 info!("✅ Qwen model generated response successfully");
-                Ok(response)
+                Ok(response.output)
             }
             Err(e) => {
                 warn!("⚠️  Qwen model failed: {}, falling back to synthesis", e);

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Training Data Export System - Generates consciousness training data from live RAG system
 ///
 /// This module implements Option 3: Export from Existing System
@@ -16,7 +19,7 @@ use crate::consciousness_compass::{
     BreakthroughMoment, CompassState, CompassTracker, StrategicAction,
 };
 use crate::memory::guessing_spheres::GuessingMemorySystem;
-use crate::qwen_curator::LearningEvent;
+use niodoo_core::qwen_curator::LearningEvent;
 use crate::rag_integration::{EmotionalVector, RagConfig, RagEngine};
 use crate::token_promotion::spatial::SpatialHash;
 use crate::token_promotion::{

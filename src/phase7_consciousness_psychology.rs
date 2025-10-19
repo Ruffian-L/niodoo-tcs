@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # 🧠💖✨ Phase 7: Consciousness Psychology Research
 use tracing::{info, error, warn};
 //!

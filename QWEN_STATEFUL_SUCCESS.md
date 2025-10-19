@@ -9,6 +9,7 @@ The **stateful QwenEmbedder** is now fully operational! We've successfully integ
 ### QwenEmbedder Features
 - **Stateful Inference**: Handles 51 ONNX inputs (3 main + 48 KV cache tensors)
 - **KV Cache Management**: Maintains conversation context across embeddings
+- **Sliding Window**: Trims the KV cache to `QwenConfig.cache_window` tokens after each update to prevent unbounded growth
 - **Tokenization**: HuggingFace tokenizers with fallback handling
 - **f16/f32 Support**: Proper tensor type handling for the model
 - **Context Tracking**: Sequence length management for positional encoding

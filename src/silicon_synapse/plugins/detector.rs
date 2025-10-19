@@ -1,8 +1,11 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Detector plugin trait for Silicon Synapse monitoring
 //!
 //! This module defines the trait interface for pluggable anomaly detection algorithms.
 
-use crate::silicon_synapse::plugins::collector::CollectedMetrics;
+use crate::silicon_synapse::plugins::collector::{CollectedMetrics, MetricValue};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

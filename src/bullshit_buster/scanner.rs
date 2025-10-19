@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Hardcoded Value Scanner - Detects magic numbers and hardcoded values in code
 ///
 /// Converted from scripts/hardcoded_value_buster.py to idiomatic Rust

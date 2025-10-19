@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Gaussian Process Kernel with K-Twist Topology Influence
 //!
 //! This module implements RBF kernels that incorporate the K-Twist topology

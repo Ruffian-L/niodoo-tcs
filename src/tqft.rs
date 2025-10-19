@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Topological Quantum Field Theory (TQFT) Engine
 /// Implements Atiyah-Segal axioms for consciousness reasoning
 ///

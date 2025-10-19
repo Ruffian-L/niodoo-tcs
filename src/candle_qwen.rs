@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠💖 CANDLE-BASED QWEN 2.5 INTEGRATION - NO HARD CODED BULLSHIT
  *

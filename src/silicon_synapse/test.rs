@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Integration tests for Silicon Synapse telemetry bus and aggregation engine
 use tracing::{info, error, warn};
 

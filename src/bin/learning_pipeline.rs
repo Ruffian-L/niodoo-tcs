@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Complete Learning Pipeline Test
 //!
 //! Runs the full consciousness learning loop:
@@ -7,9 +10,9 @@
 //! 4. Perform blue-green deployment validation
 
 use anyhow::Result;
-use niodoo_consciousness::config::system_config::AppConfig;
-use niodoo_consciousness::qwen_curator::{QloraCurator, QloraCuratorConfig};
-use niodoo_consciousness::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_curator::{QloraCurator, QloraCuratorConfig};
+use niodoo_core::qwen_integration::QwenIntegrator;
 use std::path::PathBuf;
 use std::process::Command;
 use tracing::{error, info};
@@ -71,10 +74,8 @@ async fn async_main() -> anyhow::Result<()> {
 
     // Step 3: Run validation comparison
     println!("\n🔍 Step 3: Running validation comparison...");
-    let mut qwen_config = QwenConfig::default();
-    // Force CPU mode for validation to avoid CUDA compatibility issues
-    qwen_config.use_cuda = false;
-    let mut qwen_integrator = QwenIntegrator::new(qwen_config)?;
+    let app_config = AppConfig::default();
+    let mut qwen_integrator = QwenIntegrator::new(&app_config)?;
 
     // Define validation prompts
     let validation_prompts = vec![

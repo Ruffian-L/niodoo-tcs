@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! K-Twisted Torus Geometry Validator
 //!
 //! Phase 4: Mathematical Validation Module
@@ -440,6 +443,7 @@ mod tests {
 
     #[test]
     fn test_reference_implementation_normal() {
+        let config = ValidationConfig::default();
         let reference = KTwistReferenceImplementation::default();
 
         // Test normal calculation
@@ -474,6 +478,7 @@ mod tests {
 
     #[test]
     fn test_validator_position_validation() {
+        let config = ValidationConfig::default();
         let validator = KTwistGeometryValidator::new(5.0, 1.5, 1.0, 1e-6);
 
         // Test with reference implementation (should have zero error)

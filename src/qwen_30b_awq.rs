@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+//!
 //! Knot theory utilities for computing Jones polynomials and deriving
 //! cognitive complexity metrics used downstream in the orchestrator.
 

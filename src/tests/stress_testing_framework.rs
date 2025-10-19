@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🔧 COMPREHENSIVE STRESS TESTING FRAMEWORK 🔧
  *
@@ -486,7 +489,7 @@ impl StressTestingFramework {
             0 => {
                 // Consciousness engine operation
                 if let Ok(mut engine) = PersonalNiodooConsciousness::new().await {
-                    let _ = engine.process_cycle().await;
+                    let _: Result<(), NiodoError> = engine.process_cycle().await;
                 }
             }
             1 => {
@@ -497,19 +500,18 @@ impl StressTestingFramework {
                         k: 10,
                         threshold: 0.1,
                     };
-                    let _ = memory.query(query).await;
+                    let _: Result<Vec<MemoryResult>, MemoryError> = memory.query(query).await;
                 }
             }
             2 => {
                 // Ethics evaluation
-                if let Ok(mut ethics) = EthicsIntegrationLayer::new(EthicsConfig::default()).await {
-                    let _ = ethics
-                        .evaluate_ethical_compliance(&format!(
-                            "Stress test content {}",
-                            operation_id
-                        ))
-                        .await;
-                }
+                let ethics = EthicsIntegrationLayer::new(EthicsIntegrationConfig::default());
+                let _: Result<EthicsEvaluation, EthicsError> = ethics
+                    .evaluate_ethical_compliance(&format!(
+                        "Stress test content {}",
+                        operation_id
+                    ))
+                    .await;
             }
             3 => {
                 // Qwen inference simulation
@@ -525,7 +527,7 @@ impl StressTestingFramework {
                     repeat_penalty: 1.0,
                 };
 
-                if let Ok(_inference) = QwenInference::new(&model_config, nvml_wrapper::Device::Cpu)
+                if let Ok(_inference) = QwenInference::new("microsoft/DialoGPT-small".to_string(), candle_core::Device::Cpu)
                 {
                     // Simulate inference time
                     sleep(Duration::from_millis(100)).await;
@@ -533,7 +535,7 @@ impl StressTestingFramework {
             }
             4 => {
                 // Emotional processing
-                if let Ok(mut lora) = EmotionalLoraAdapter::new(nvml_wrapper::Device::Cpu) {
+                if let Ok(mut lora) = EmotionalLoraAdapter::new(candle_core::Device::Cpu) {
                     let context = EmotionalContext::new(0.5, 0.5, 0.5, 0.5, 0.5);
                     let _ = lora.apply_neurodivergent_blending(&context).await;
                 }

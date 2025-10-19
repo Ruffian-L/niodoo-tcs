@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🔀 Agent 9: DiffConverger
  * Merge src/qwen_inference.rs + qml/viz_standalone.qml + demo

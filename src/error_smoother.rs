@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🛡️ Agent 6: ErrorSmoother
  * Handles rank/NaN errors, logs "Why suppress cross-flip?"

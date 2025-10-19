@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Simplified Caching System for Niodoo-Feeling
 //!
 //! This module provides a simplified caching system with:

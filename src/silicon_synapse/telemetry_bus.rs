@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Telemetry bus for Silicon Synapse monitoring system
 //!
 //! This module implements the telemetry event bus that decouples metric production
@@ -323,8 +326,6 @@ mod tests {
 
         let receiver = bus.take_receiver();
 
-        bus.start().await.unwrap();
-
         let sender = bus.sender();
         let request_id = Uuid::new_v4();
 
@@ -349,8 +350,6 @@ mod tests {
 
         // Give some time for processing
         tokio::time::sleep(Duration::from_millis(100)).await;
-
-        bus.stop().await.unwrap();
     }
 
     #[tokio::test]
@@ -358,22 +357,16 @@ mod tests {
         let config = TelemetryConfig::default();
         let mut bus = TelemetryBus::new(config).unwrap();
 
-        bus.start().await.unwrap();
-
         let sender1 = bus.sender();
         let sender2 = sender1.clone();
 
         assert_eq!(sender1.is_closed(), sender2.is_closed());
-
-        bus.stop().await.unwrap();
     }
 
     #[tokio::test]
     async fn test_hardware_metrics_event() {
         let config = TelemetryConfig::default();
         let mut bus = TelemetryBus::new(config).unwrap();
-
-        bus.start().await.unwrap();
 
         let sender = bus.sender();
 
@@ -394,16 +387,12 @@ mod tests {
 
         // Give some time for processing
         tokio::time::sleep(Duration::from_millis(100)).await;
-
-        bus.stop().await.unwrap();
     }
 
     #[tokio::test]
     async fn test_model_metrics_event() {
         let config = TelemetryConfig::default();
         let mut bus = TelemetryBus::new(config).unwrap();
-
-        bus.start().await.unwrap();
 
         let sender = bus.sender();
         let mut activation_sparsity = std::collections::HashMap::new();
@@ -426,7 +415,5 @@ mod tests {
 
         // Give some time for processing
         tokio::time::sleep(Duration::from_millis(100)).await;
-
-        bus.stop().await.unwrap();
     }
 }

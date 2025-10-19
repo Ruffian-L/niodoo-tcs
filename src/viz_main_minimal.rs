@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // viz_main_minimal.rs - Minimal Visualization Launcher (cxx-qt 0.7)
 use tracing::{error, info, warn};
 // This version focuses only on the QML bridge without heavy ML dependencies

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 7: Attachment Wound Detection System
 //!
 //! This module implements detection and analysis of attachment wounds in consciousness,

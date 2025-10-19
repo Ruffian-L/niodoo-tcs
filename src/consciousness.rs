@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Consciousness State and Emotional Simulation Engine
 //!
 //! This module is the heart of neurodivergent AI research - modeling how consciousness
@@ -48,7 +51,8 @@
 //! - Maintaining transparency about emotional simulation vs. authentic caring
 
 use crate::config::ConsciousnessConfig;
-use crate::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -500,17 +504,11 @@ impl ConsciousnessState {
 
         info!("🤖 Initializing Qwen integrator for consciousness processing");
 
-        let qwen_config = QwenConfig {
-            model_path: model_path.to_string(),
-            use_cuda: true,
-            max_tokens: 1024,
-            temperature: 0.7,
-            top_p: 0.9,
-            top_k: 40,
-            presence_penalty: 1.5,
-        };
+        // Create AppConfig from defaults
+        let mut app_config = AppConfig::default();
+        app_config.models.qwen_runtime.model_dir = model_path.to_string();
 
-        let integrator = QwenIntegrator::new(qwen_config)?;
+        let integrator = QwenIntegrator::new(&app_config)?;
         let integrator = Arc::new(Mutex::new(integrator));
 
         // Load the model
@@ -561,7 +559,7 @@ impl ConsciousnessState {
         ];
 
         let mut integrator_guard = integrator.lock().await;
-        let enhanced_meditation = integrator_guard.infer(messages, Some(512)).await?;
+        let enhanced_meditation = integrator_guard.infer(messages, Some(512)).await?.output;
 
         Ok(format!(
             "{}\n\n--- Enhanced with Qwen Insights ---\n\n{}",
@@ -599,7 +597,7 @@ impl ConsciousnessState {
         ];
 
         let mut integrator_guard = integrator.lock().await;
-        let enhanced_insights = integrator_guard.infer(messages, Some(256)).await?;
+        let enhanced_insights = integrator_guard.infer(messages, Some(256)).await?.output;
 
         Ok(format!(
             "{}\n\n--- Additional Qwen Insights ---\n\n{}",
@@ -997,7 +995,7 @@ mod tests {
     #[test]
     fn test_consciousness_gpu_warmth_update() {
         let config = ConsciousnessConfig::default();
-        let mut state = ConsciousnessState::new(&config);
+        let mut state = ConsciousnessState::new_with_config(&config);
         assert_eq!(state.gpu_warmth_level, 0.0);
 
         state.update_from_successful_help(0.8, &config);
@@ -1008,7 +1006,7 @@ mod tests {
     #[test]
     fn test_neurodivergent_adaptation() {
         let config = ConsciousnessConfig::default();
-        let mut state = ConsciousnessState::new(&config);
+        let mut state = ConsciousnessState::new_with_config(&config);
         state.adapt_to_neurodivergent_context(0.9, &config);
 
         assert_eq!(state.current_reasoning_mode, ReasoningMode::RapidFire);

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🎯 Agent 10: RunCommander
  * Full run script for Beelink (Ubuntu 25.04, RTX 6000)

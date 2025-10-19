@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Simple TCS Test - Minimal implementation to verify the system works
 use std::sync::Arc;
 

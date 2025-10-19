@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠 SMART CAPACITY CALCULATION UTILITIES 🧠
  *
@@ -347,14 +350,25 @@ mod tests {
     #[test]
     fn test_convenience_functions() {
         // These should not panic and return reasonable values
-        let _worker = capacity_convenience::worker_pool();
-        let _memory = threshold_capacity_convenience::memory_vector();
-        let _perf = capacity_convenience::performance_history();
-        let _violation = capacity_convenience::violation_tracking();
-        let _guidance = capacity_convenience::guidance();
-        let _recs = capacity_convenience::recommendations();
-        let _analysis = capacity_convenience::analysis_results();
-        let _stages = capacity_convenience::stage_breakdown();
-        let _embeddings = capacity_convenience::embeddings();
+        let worker = convenience::worker_pool();
+        let memory = convenience::memory_vector();
+        let perf = convenience::performance_history();
+        let violation = convenience::violation_tracking();
+        let guidance = convenience::guidance();
+        let recs = convenience::recommendations();
+        let analysis = convenience::analysis_results();
+        let stages = convenience::stage_breakdown();
+        let embeddings = convenience::embeddings();
+
+        // Assert all return positive values
+        assert!(worker > 0, "worker_pool should return positive capacity");
+        assert!(memory > 0, "memory_vector should return positive capacity");
+        assert!(perf > 0, "performance_history should return positive capacity");
+        assert!(violation > 0, "violation_tracking should return positive capacity");
+        assert!(guidance > 0, "guidance should return positive capacity");
+        assert!(recs > 0, "recommendations should return positive capacity");
+        assert!(analysis > 0, "analysis_results should return positive capacity");
+        assert!(stages > 0, "stage_breakdown should return positive capacity");
+        assert!(embeddings > 0, "embeddings should return positive capacity");
     }
 }

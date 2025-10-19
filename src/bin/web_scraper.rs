@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Web Scraper for Consciousness Learning Training Data
 //!
 //! Scrapes emotional, psychological, and consciousness-related content
@@ -12,6 +15,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
+use niodoo_core::qwen_curator::LearningEvent;
 
 /// Learning event scraped from web content
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -338,11 +342,11 @@ impl ConsciousnessScraper {
     pub fn convert_to_learning_events(
         &self,
         scraped_events: &[ScrapedLearningEvent],
-    ) -> Vec<niodoo_consciousness::qwen_curator::LearningEvent> {
+    ) -> Vec<LearningEvent> {
         scraped_events
             .iter()
             .map(|scraped| {
-                niodoo_consciousness::qwen_curator::LearningEvent {
+                LearningEvent {
                     timestamp: scraped.timestamp.clone(),
                     input: format!(
                         "{}: {}",

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! OPTIMIZED Time-Series Data Compression for Silicon Synapse - Phase 7.5
 //!
 //! This module implements efficient time-series data compression for telemetry metrics:

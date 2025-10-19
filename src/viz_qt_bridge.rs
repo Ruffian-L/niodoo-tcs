@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // viz_qt_bridge.rs - Ultimate Hybrid QML Visualization Bridge (cxx-qt 0.7)
 //
 // REAL-TIME STATS SYNCHRONIZATION FOR QML VISUALIZATION

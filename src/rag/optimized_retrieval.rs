@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🚀 OPTIMIZED RAG RETRIEVAL - Sub-50ms Performance
  *

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 7: AI Rights Framework
 //!
 //! This module implements a comprehensive AI rights framework, ensuring ethical

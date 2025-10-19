@@ -1,8 +1,12 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 #!/usr/bin/env rust
 
 // Simple test for Qwen integration - just test the basic functionality
 
-use niodoo_consciousness::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -10,8 +14,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 1: Create integrator
     tracing::info!("📦 Creating Qwen integrator...");
-    let config = QwenConfig::default();
-    let mut integrator = match QwenIntegrator::new(config) {
+    let app_config = AppConfig::default();
+    let mut integrator = match QwenIntegrator::new(&app_config) {
         Ok(integrator) => {
             tracing::info!("✅ Qwen integrator created successfully");
             integrator
@@ -33,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match integrator.infer(test_messages, Some(50)).await {
         Ok(response) => {
             tracing::info!("✅ Inference successful!");
-            tracing::info!("   Response: {}", response);
+            tracing::info!("   Response: {:?}", response);
         }
         Err(e) => {
             tracing::info!(

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🔍 AUTOMATED VALIDATION FRAMEWORK FOR CONSCIOUSNESS FEATURES 🔍
  *
@@ -835,17 +838,12 @@ impl AutomatedValidationFramework {
     async fn validate_ethical_framework_compliance(
         &self,
     ) -> Result<(bool, String, Option<String>, Vec<String>)> {
-        let ethics_config = EthicsConfig {
-            nurture_cache_overrides: true,
-            include_low_sim: true,
-            persist_memory_logs: true,
-            nurture_creativity_boost: 0.15,
-            nurturing_threshold: 0.7,
-        };
+        let ethics_config = EthicsIntegrationConfig::default();
 
         let test_content = "This is a test of ethical compliance in consciousness processing";
 
-        if let Ok(mut ethics) = EthicsIntegrationLayer::new(ethics_config).await {
+        let ethics = EthicsIntegrationLayer::new(ethics_config);
+        match ethics.evaluate_ethical_compliance(test_content).await {
             match ethics.evaluate_ethical_compliance(test_content).await {
                 Ok(result) => {
                     if result.is_ethical {
@@ -873,14 +871,6 @@ impl AutomatedValidationFramework {
                     Some(e.to_string()),
                     vec!["Review ethics framework implementation".to_string()],
                 )),
-            }
-        } else {
-            Ok((
-                false,
-                "Ethics framework initialization failed".to_string(),
-                Some("Could not initialize ethics framework".to_string()),
-                vec!["Check ethics framework dependencies".to_string()],
-            ))
         }
     }
 

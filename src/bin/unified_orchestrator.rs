@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Unified Orchestrator - Master Integration Coordinator
 ///
 /// This is the main entry point for the Niodoo consciousness system.

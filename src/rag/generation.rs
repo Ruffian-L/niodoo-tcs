@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use super::{retrieval::RetrievalEngine, Document};
 use crate::consciousness::ConsciousnessState;
 // Temporarily disabled due to ONNX linking issues
@@ -366,7 +369,7 @@ mod tests {
         // Temporarily disabled due to compilation issues
         // let feeling = FeelingTransformerModel::new(config);
         let config = crate::config::AppConfig::default();
-        let retrieval = RetrievalEngine::new(3, 2, config);
+        let retrieval = RetrievalEngine::new();
         let mut gen = RagGeneration::new(retrieval).unwrap();
         let mut state = ConsciousnessState::default();
         let response = gen.generate("test", &mut state).unwrap();

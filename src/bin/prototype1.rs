@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use anyhow::{Context, Result};
 
 use candle_core::{DType, Device, Tensor};

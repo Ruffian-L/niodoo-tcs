@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Optimized Brain Coordination Module
 //!
 //! This module provides high-performance async patterns and memory pooling

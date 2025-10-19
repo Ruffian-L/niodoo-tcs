@@ -42,6 +42,8 @@ env/
 *.log
 *.bak
 *.orig
+Cargo.toml.backup
+*.backup
 
 # CUDA/GPU artifacts
 *.ptx

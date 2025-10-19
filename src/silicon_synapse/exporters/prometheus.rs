@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Prometheus exporter for Silicon Synapse
 //!
 //! This module implements a Prometheus-compatible HTTP endpoint for exposing Silicon Synapse metrics.

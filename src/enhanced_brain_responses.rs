@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Enhanced brain responses module placeholder
 //!
 //! This module provides enhanced brain response processing

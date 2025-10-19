@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use std::collections::HashMap;
 use tracing::{info, warn, error};
 use std::time::{Duration, Instant};

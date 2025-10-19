@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Performance Validation for <50ms/token Target
 //!
 //! This module validates that the consciousness-aware inference meets the

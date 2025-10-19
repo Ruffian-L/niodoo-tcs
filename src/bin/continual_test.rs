@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Real Continual Learning Test - Processes actual queries through consciousness system
 //!
 //! Uses MultiLayerMemoryQuery to generate authentic Triple-Threat events and learning data

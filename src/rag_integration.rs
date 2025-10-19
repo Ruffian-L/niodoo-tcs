@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! RAG Integration for Consciousness-Aware Training
 //!
 //! This module provides Retrieval-Augmented Generation (RAG) capabilities
@@ -18,7 +21,7 @@ use std::time::Instant;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::qwen_curator::{EmotionalState, LearningEvent, TopologyMetrics};
+use niodoo_core::qwen_curator::{EmotionalState, LearningEvent, TopologyMetrics};
 
 /// Configuration for RAG retrieval system - NO HARDCODED VALUES
 #[derive(Clone, Debug, Serialize, Deserialize)]

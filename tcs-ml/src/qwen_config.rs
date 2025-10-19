@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use serde::{Deserialize, Serialize};
 
 /// Configuration for Qwen model architecture
@@ -11,10 +14,17 @@ pub struct QwenConfig {
     pub head_dim: usize,
     /// Maximum sequence length supported
     pub max_seq_len: usize,
+    /// Maximum number of cached tokens to retain after each step
+    #[serde(default = "default_cache_window")]
+    pub cache_window: usize,
     /// Embedding dimension for TCS pipeline
     pub embed_dim: usize,
     /// Vocabulary size for logits extraction
     pub vocab_size: usize,
+}
+
+fn default_cache_window() -> usize {
+    2048
 }
 
 impl QwenConfig {
@@ -22,9 +32,10 @@ impl QwenConfig {
     pub fn qwen25_coder_05b() -> Self {
         Self {
             num_layers: 24,
-            num_heads: 2,  // Simplified for 0.5B model
+            num_heads: 2, // Simplified for 0.5B model
             head_dim: 64,
             max_seq_len: 2048,
+            cache_window: 2048,
             embed_dim: 512,
             vocab_size: 151936,
         }
@@ -37,6 +48,7 @@ impl QwenConfig {
             num_heads: 32,
             head_dim: 128,
             max_seq_len: 4096,
+            cache_window: 2048,
             embed_dim: 512,
             vocab_size: 151936,
         }
@@ -62,6 +74,16 @@ impl QwenConfig {
         }
         if self.max_seq_len == 0 {
             return Err(anyhow::anyhow!("max_seq_len must be > 0"));
+        }
+        if self.cache_window == 0 {
+            return Err(anyhow::anyhow!("cache_window must be > 0"));
+        }
+        if self.cache_window > self.max_seq_len {
+            return Err(anyhow::anyhow!(
+                "cache_window ({}) cannot exceed max_seq_len ({})",
+                self.cache_window,
+                self.max_seq_len
+            ));
         }
         if self.embed_dim == 0 {
             return Err(anyhow::anyhow!("embed_dim must be > 0"));

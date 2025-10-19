@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+//!
 //! Consensus and shared vocabulary scaffolding for the Topological Cognitive System.
 
 use uuid::Uuid;

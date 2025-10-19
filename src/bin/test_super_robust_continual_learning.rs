@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use consciousness_core::{ConsciousnessInstance, ConsciousnessConfig};
 use std::sync::{Arc, Mutex};
 use std::thread;

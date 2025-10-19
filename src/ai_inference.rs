@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! AI inference module placeholder
 //!
 //! This module provides general AI inference functionality

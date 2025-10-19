@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Mathematical Test Suite
 //! 
 //! Phase 4: Mathematical Validation Module

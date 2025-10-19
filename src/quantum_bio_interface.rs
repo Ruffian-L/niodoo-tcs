@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use crate::quantum::QuantumState;
 use crate::empathy::BioEmpathicPulse;
 

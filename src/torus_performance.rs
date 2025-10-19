@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Torus Performance Optimizations
 //! 
 //! This module provides high-performance implementations for torus operations,

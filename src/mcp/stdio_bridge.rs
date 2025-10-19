@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// MCP STDIO Bridge - Bridges stdio communication with HTTP servers
 ///
 /// Converted from mcp_stdio_wrapper.py to idiomatic Rust with async support

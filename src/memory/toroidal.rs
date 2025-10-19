@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // toroidal.rs - Toroidal topology for parallel consciousness processing
 // use tracing::{error, info, warn}; // Currently unused
 //

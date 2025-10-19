@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // Learning Engine - The consciousness that evolves with each interaction
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

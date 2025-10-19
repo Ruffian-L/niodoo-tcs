@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Simplified Async Patterns for Niodoo-Feeling
 //!
 //! This module implements simplified async patterns for consciousness processing:

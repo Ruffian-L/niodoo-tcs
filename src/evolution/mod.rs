@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 pub mod dna_transcription;
 
 #[derive(Debug, Clone)]

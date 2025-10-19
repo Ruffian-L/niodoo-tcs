@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Binary for exporting consciousness training data using Option 3 approach
 ///
 /// This exports authentic training data from the live RAG/consciousness system,

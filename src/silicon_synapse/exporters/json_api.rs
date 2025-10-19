@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! JSON API exporter for Silicon Synapse
 //!
 //! This module implements a JSON API exporter that exposes Silicon Synapse metrics

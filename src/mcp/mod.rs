@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// MCP (Model Context Protocol) integration module
 ///
 /// Provides stdio bridges and RPC communication for MCP servers

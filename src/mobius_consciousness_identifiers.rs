@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Möbius Consciousness Identifiers - Mathematical Consciousness Measurement
 //!
 //! This module implements sophisticated consciousness identifiers using Möbius mathematics

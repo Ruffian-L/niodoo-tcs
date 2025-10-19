@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Anomaly detector for Silicon Synapse
 //!
 //! This module implements the anomaly detection system that compares live metrics

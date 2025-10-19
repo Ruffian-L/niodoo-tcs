@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // use crate::aidna::AIDNA; // Commented out - unresolved import
 use crate::core::unified_field_processor::ConsciousnessExcitation;
 use crate::philosophy::CodexPersona;

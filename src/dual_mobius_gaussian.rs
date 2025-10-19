@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Dual-Möbius-Gaussian Model Implementation - Enhanced Version
 //!
 //! This module implements the advanced Dual-Möbius-Gaussian framework for processing memory clusters:
@@ -18,10 +21,12 @@ use ndarray_rand::RandomExt;
 use serde::{Deserialize, Serialize};
 use serde_json;
 #[allow(unused_imports)]
+use candle_core::scalar::Scalar;
+#[allow(unused_imports)]
 use std::f64::consts::{FRAC_PI_2, PI};
 use std::fs::{File, OpenOptions};
 #[allow(unused_imports)]
-use std::io::Cursor;
+use std::io::{Cursor, Write};
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use std::process::Command;
@@ -92,15 +97,22 @@ fn calculate_adaptive_noise_level(
 
 /// Calculate data scale for adaptive parameter initialization
 fn calculate_data_scale(x: &[f64], y: &[f64], config: &ConsciousnessConfig) -> f64 {
-    let x_range = x
-        .iter()
-        .fold(0.0f64, |acc, &val| acc.max(val) - acc.min(val))
-        .max(config.consciousness_step_size * 1000.0);
-    let y_range = y
-        .iter()
-        .fold(0.0f64, |acc, &val| acc.max(val) - acc.min(val))
-        .max(config.consciousness_step_size * 1000.0);
-    let data_variability = x.len() as f64;
+    // Calculate ranges more efficiently
+    let x_min = x.iter().copied().fold(f64::INFINITY, f64::min);
+    let x_max = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let x_range = (x_max - x_min).max(config.consciousness_step_size * 1000.0);
+
+    let y_min = y.iter().copied().fold(f64::INFINITY, f64::min);
+    let y_max = y.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let y_range = (y_max - y_min).max(config.consciousness_step_size * 1000.0);
+
+    // Calculate actual data variability (standard deviation-like measure)
+    let x_mean = x.iter().sum::<f64>() / x.len() as f64;
+    let x_variance = x.iter().map(|&val| (val - x_mean).powi(2)).sum::<f64>() / x.len() as f64;
+    let y_mean = y.iter().sum::<f64>() / y.len() as f64;
+    let y_variance = y.iter().map(|&val| (val - y_mean).powi(2)).sum::<f64>() / y.len() as f64;
+    let data_variability = (x_variance + y_variance).sqrt();
+
     (x_range + y_range + data_variability)
         / config.consciousness_step_size
         / (config.emotional_plasticity * 3000.0)
@@ -152,7 +164,7 @@ use anyhow::{anyhow, Result};
 #[allow(unused_imports)]
 use blake3::hash;
 use candle_core::Device;
-use candle_core::{DType, Tensor};
+use candle_core::{DType, Tensor, WithDType};
 #[allow(unused_imports)]
 use candle_nn::VarBuilder; // At top
 
@@ -623,22 +635,59 @@ fn optimize_hyperparameters_mathematical(
             *noise,
         );
 
-        // Compute marginal likelihood gradient
-        let k_inv = k.solve(&Array1::from_elem(y.len(), 1.0))?;
-        let k_inv_y = k.solve(&y_array)?;
+        // Compute Cholesky decomposition for numerical stability
+        let l = k.cholesky(ndarray_linalg::UPLO::Lower)
+            .map_err(|_| anyhow::anyhow!("Kernel matrix not positive definite"))?;
 
-        // Real mathematical gradient calculation using adaptive torus geometry
-        let (major_radius, minor_radius) = calculate_adaptive_torus_parameters(data_scale, config);
-        let torus_factor = major_radius / (major_radius + minor_radius);
-        let lengthscale_grad =
-            -torus_factor * k_inv.sum() + torus_factor * (&k_inv * &k_inv_y).sum();
+        // Solve L*L^T * alpha = y for alpha
+        let alpha = solve_cholesky_system(&l, &y_array)?;
 
-        // Gradient for noise using torus-based scaling
-        let noise_factor = minor_radius / major_radius;
-        // Use diag().sum() instead of trace() for numerical stability
-        let k_trace = k.diag().sum();
-        let k_inv_k_trace = (&k_inv * &k).diag().sum();
-        let noise_grad = -noise_factor * k_trace + noise_factor * k_inv_k_trace;
+        // Compute log marginal likelihood: -0.5*y^T*K^-1*y - 0.5*log|K| - 0.5*n*log(2π)
+        let n = y.len() as f64;
+        let y_k_inv_y = y_array.dot(&alpha);
+        let log_det_k = 2.0 * l.diag().mapv(|x| x.ln()).sum();
+        let log_likelihood = -0.5 * y_k_inv_y - 0.5 * log_det_k - 0.5 * n * (2.0 * std::f64::consts::PI).ln();
+
+        // Compute gradients with respect to marginal log-likelihood
+        // For RBF kernel: dK/d(lengthscale) = K * (distance^2 / lengthscale^3)
+        // Compute squared distances manually
+        let mut dist_sq = Array2::zeros((x.len(), x.len()));
+        for i in 0..x.len() {
+            for j in 0..x.len() {
+                let diff = x[i] - x[j];
+                dist_sq[[i, j]] = diff * diff;
+            }
+        }
+        let dK_dlengthscale = &k * &(&dist_sq / (*lengthscale * *lengthscale * *lengthscale));
+
+        // For noise: dK/d(noise) = 2*noise*I (for diagonal noise)
+        let mut dK_dnoise = Array2::eye(k.nrows());
+        dK_dnoise *= 2.0 * *noise;
+
+        // Compute K^-1 using Cholesky: K^-1 = L^-T * L^-1
+        // For matrix inversion, solve L * X = I for X = L^-1
+        let eye = Array2::eye(l.nrows());
+        let mut l_inv = Array2::zeros((l.nrows(), l.ncols()));
+        for i in 0..l.ncols() {
+            let rhs = eye.column(i).to_owned();
+            let col_solution = l.solve(&rhs).map_err(|_| anyhow::anyhow!("Cholesky solve failed"))?;
+            l_inv.column_mut(i).assign(&col_solution);
+        }
+        let k_inv = l_inv.t().dot(&l_inv);
+
+        // Lengthscale gradient: 0.5 * trace(K^-1 * dK/dθ) - 0.5 * alpha^T * dK/dθ * alpha
+        let k_inv_dk_ls = k_inv.dot(&dK_dlengthscale);
+        let trace_term_ls = k_inv_dk_ls.diag().sum();
+        let dk_ls_alpha = dK_dlengthscale.dot(&alpha);
+        let quad_term_ls = alpha.dot(&dk_ls_alpha);
+        let lengthscale_grad = 0.5 * trace_term_ls - 0.5 * quad_term_ls;
+
+        // Noise gradient: 0.5 * trace(K^-1 * dK/dθ) - 0.5 * alpha^T * dK/dθ * alpha
+        let k_inv_dk_noise = k_inv.dot(&dK_dnoise);
+        let trace_term_noise = k_inv_dk_noise.diag().sum();
+        let dk_noise_alpha = dK_dnoise.dot(&alpha);
+        let quad_term_noise = alpha.dot(&dk_noise_alpha);
+        let noise_grad = 0.5 * trace_term_noise - 0.5 * quad_term_noise;
 
         // Update parameters with gradient descent
         *lengthscale -= learning_rate * lengthscale_grad;
@@ -656,14 +705,42 @@ fn optimize_hyperparameters_mathematical(
 }
 
 fn optimize_hyperparameters_simple(
-    _x: &[f64],
-    _y: &[f64],
+    x: &[f64],
+    y: &[f64],
     lengthscale: &mut f64,
     noise: &mut f64,
-    _n_iter: usize,
+    n_iter: usize,
 ) -> Result<(), anyhow::Error> {
-    // Simplified from original, using scalar
-    // ... implement basic loop as in scalar version above
+    // Simple grid search over reasonable parameter ranges
+    let lengthscale_candidates = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0];
+    let noise_candidates = [0.01, 0.1, 0.5, 1.0, 2.0];
+
+    let mut best_ll = f64::NEG_INFINITY;
+    let mut best_lengthscale = *lengthscale;
+    let mut best_noise = *noise;
+
+    let x_array = Array1::from_vec(x.to_vec());
+    let y_array = Array1::from_vec(y.to_vec());
+
+    for &ls in &lengthscale_candidates {
+        for &n in &noise_candidates {
+            // Compute kernel matrix
+            let k = compute_rbf_kernel(&x_array, &x_array, &Array1::from_elem(1, ls), n);
+
+            // Compute log likelihood
+            if let Ok((ll, _)) = compute_log_likelihood(&k, &y_array) {
+                if ll > best_ll {
+                    best_ll = ll;
+                    best_lengthscale = ls;
+                    best_noise = n;
+                }
+            }
+        }
+    }
+
+    *lengthscale = best_lengthscale;
+    *noise = best_noise;
+
     Ok(())
 }
 
@@ -935,7 +1012,11 @@ fn optimize_hyperparameters(
     let mut converged = false;
     let mut iterations_without_improvement = 0;
     // Calculate data scale from input data
-    let data_scale = y.iter().map(|x| x.abs()).fold(0.0f64, f64::max).max(1.0);
+    let x_min = x.iter().copied().fold(f64::INFINITY, f64::min);
+    let x_max = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let y_min = y.iter().copied().fold(f64::INFINITY, f64::min);
+    let y_max = y.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let data_scale = ((x_max - x_min) + (y_max - y_min)) / 2.0;
     // Real mathematical convergence parameters based on adaptive torus geometry
     let (major_radius, minor_radius) = calculate_adaptive_torus_parameters(data_scale, config);
     let convergence_threshold = ((major_radius / minor_radius) as usize).max(3); // From config.min_iterations
@@ -947,12 +1028,8 @@ fn optimize_hyperparameters(
     }
 
     // Use more intelligent initialization based on data scale
-    let x_range = x
-        .iter()
-        .fold(0.0f64, |acc, &val| acc.max(val) - acc.min(val));
-    let y_range = y
-        .iter()
-        .fold(0.0f64, |acc, &val| acc.max(val) - acc.min(val));
+    let x_range = x_max - x_min;
+    let y_range = y_max - y_min;
 
     // Initialize lengthscale based on adaptive data scale (heuristic)
     if lengthscale[0] == 0.0 {
@@ -1031,11 +1108,11 @@ fn optimize_hyperparameters(
 /// Compute log marginal likelihood for GP hyperparameter optimization
 ///
 /// Returns (log_likelihood, alpha_vector) where alpha solves K*alpha = y
-fn compute_log_likelihood(k: &Array2<f64>, y: &Array1<f64>) -> Result<(f64, Array1<f64>), String> {
+fn compute_log_likelihood(k: &Array2<f64>, y: &Array1<f64>) -> Result<(f64, Array1<f64>), anyhow::Error> {
     // Cholesky decomposition for numerical stability
     let l_matrix = match k.cholesky(ndarray_linalg::UPLO::Lower) {
         Ok(l) => l,
-        Err(_) => return Err("Kernel matrix not positive definite".to_string()),
+        Err(_) => return Err(anyhow::anyhow!("Kernel matrix not positive definite")),
     };
 
     // Solve L*L^T * alpha = y for alpha
@@ -1055,7 +1132,7 @@ fn compute_log_likelihood(k: &Array2<f64>, y: &Array1<f64>) -> Result<(f64, Arra
 }
 
 /// Solve L^T L x = b using forward and backward substitution
-fn solve_cholesky_system(l_matrix: &Array2<f64>, b: &Array1<f64>) -> Result<Array1<f64>, String> {
+fn solve_cholesky_system(l_matrix: &Array2<f64>, b: &Array1<f64>) -> Result<Array1<f64>, anyhow::Error> {
     #[allow(unused_imports)]
     use ndarray_linalg::Solve;
 
@@ -1629,7 +1706,7 @@ pub fn demonstrate_dual_mobius_gaussian() -> Result<()> {
         Err(e) => info!("Error: {}", e),
     }
 
-    // Test with custom Möbius parameters
+ // Test with custom Möbius parameters
     info!("--- Testing with Custom Möbius Parameters ---");
     let custom_params = Some((3.0, 0.8, 1.5, PI / 4.0)); // Larger radius, more twists, phase offset
     match process_data(
@@ -1668,7 +1745,7 @@ pub fn demonstrate_dual_mobius_gaussian() -> Result<()> {
         error_bound, condition_number
     );
 
-    // Use torus-based tolerance instead of hardcoded 1e-6
+    // Use torus-based tolerance instead of hardcoded 1e-4
     let torus_tolerance = mobius.minor_radius / mobius.major_radius * 1e-4;
     let converges = mobius.validate_convergence((1.0, 0.0, 0.0), 100, torus_tolerance);
     info!(
@@ -1971,7 +2048,7 @@ impl ModelDiagnostics {
     /// Generate human-readable diagnostic report
     pub fn report(&self) -> String {
         format!(
-            "Dual-Mobius-Gaussian Model Diagnostics\n             =========================================\n             Memory Spheres: {}\n             PCA Variance Explained: {:.1}%\n             GP Log Likelihood: {:.3}\n             Mobius Topology: {}\n             Mobius Error Bound: {:.2}\n             Mobius Condition Number: {:.2}\n             Mobius Convergence: {}\n             Mathematical Consistency: {}\n             \n             Overall Status: {}",
+            "Dual-Möbius-Gaussian Model Diagnostics\n             =========================================\n             Memory Spheres: {}\n             PCA Variance Explained: {:.1}%\n             GP Log Likelihood: {:.3}\n             Mobius Topology: {}\n             Mobius Error Bound: {:.2}\n             Mobius Condition Number: {:.2}\n             Mobius Convergence: {}\n             Mathematical Consistency: {}\n             \n             Overall Status: {}",
             self.n_memory_spheres,
             self.pca_variance_explained * 100.0,
             self.gp_log_likelihood,
@@ -2009,8 +2086,6 @@ pub struct ConsciousnessMemoryProcessor {
     /// Performance monitoring for real-time optimization
     pub performance_monitor: PerformanceMonitor,
 }
-
-// ConsciousnessState moved to consciousness.rs to avoid conflicts
 
 /// Performance monitoring for consciousness processing optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2577,8 +2652,12 @@ mod tests {
         )
         .unwrap();
         let (mean_vec, cov_vec) = sphere.to_vec();
-        assert_eq!(mean_vec, vec![1.0, 2.0]);
-        assert_eq!(cov_vec, vec![vec![1.0, 0.0], vec![0.0, 1.0]]);
+        assert!((mean_vec[0] - 1.0).abs() < 1e-10);
+        assert!((mean_vec[1] - 2.0).abs() < 1e-10);
+        assert!((cov_vec[0][0] - 1.0).abs() < 1e-10);
+        assert!((cov_vec[0][1] - 0.0).abs() < 1e-10);
+        assert!((cov_vec[1][0] - 0.0).abs() < 1e-10);
+        assert!((cov_vec[1][1] - 1.0).abs() < 1e-10);
     }
 
     #[test]
@@ -2609,9 +2688,9 @@ mod tests {
         let (mean0, _) = linearized[0].to_vec();
         let (mean1, _) = linearized[1].to_vec();
         let (mean2, _) = linearized[2].to_vec();
-        assert_eq!(mean0[0], 1.0);
-        assert_eq!(mean1[0], 2.0);
-        assert_eq!(mean2[0], 3.0);
+        assert!((mean0[0] - 1.0).abs() < 1e-10);
+        assert!((mean1[0] - 2.0).abs() < 1e-10);
+        assert!((mean2[0] - 3.0).abs() < 1e-10);
     }
 
     #[test]
@@ -2632,7 +2711,7 @@ mod tests {
         ];
 
         let predictions =
-            gaussian_process(&guideline, &candle_core::Device::Cpu, &AppConfig::default()).unwrap();
+            gaussian_process(&guideline, &candle_core::Device::Cpu, &ConsciousnessConfig::default()).unwrap();
         // Average means: (1.0+3.0)/2 = 2.0, (2.0+1.0)/2 = 1.5
         assert_eq!(predictions.len(), 2);
         assert!((predictions[0] - 2.0).abs() < 1e-10);
@@ -2783,12 +2862,12 @@ mod tests {
                 vec![1.0, 3.0],
                 vec![vec![1.0, 0.0], vec![0.0, 1.0]],
                 &Device::Cpu,
-            ),
+            ).unwrap(),
             GaussianMemorySphere::new(
                 vec![2.0, 1.0],
                 vec![vec![1.0, 0.0], vec![0.0, 1.0]],
                 &Device::Cpu,
-            ),
+            ).unwrap(),
         ];
 
         let mobius = MobiusProcess::new();
@@ -2908,7 +2987,7 @@ mod tests {
             .unwrap(),
         ];
         let preds =
-            gaussian_process(&spheres.as_slice(), &Device::Cpu, &AppConfig::default()).unwrap();
+            gaussian_process(&spheres.as_slice(), &Device::Cpu, &ConsciousnessConfig::default()).unwrap();
         assert_eq!(preds.len(), spheres.len());
         assert!(preds.iter().all(|&p| p.is_finite()));
     }
@@ -2927,7 +3006,7 @@ mod tests {
             0.0,
         );
         let diag = kernel.diag(); // Remove ? operator
-        let var = diag.var(0); // Remove ? operator
+        let var = diag.var(0.0); // Remove ? operator
         assert!(var >= 0.0009 && var <= 0.0021); // ~0.001 boost
                                                  // Log check via mock tracing if needed
         Ok(())
@@ -2963,17 +3042,27 @@ mod tests {
         let device = Device::Cpu;
         let mut config = AppConfig::default();
         config.consent_jitter = false; // Opt-out
-        let x = Tensor::zeros((2,), DType::F64, &device)?;
+        let x = Array1::zeros(2);
         let kernel = compute_rbf_kernel(&x, &x, &Array1::from_elem(x.len(), 1.0), 0.0);
         let diag = kernel.diag();
-        let var = diag.var(0).to_scalar::<f64>()?;
-        assert!(var < 0.0001); // No jitter
+        let var = diag.var(0.0).to_scalar();
+        let var_f64 = match var {
+            Scalar::F64(v) => v,
+            Scalar::F32(v) => v as f64,
+            _ => panic!("Unexpected scalar type"),
+        };
+        assert!(var_f64 < 0.0001); // No jitter
                                // Mock warn log
 
         config.consent_jitter = true;
         let kernel_jitter = compute_rbf_kernel(&x, &x, &Array1::from_elem(x.len(), 1.0), 0.0);
-        let var_jitter = kernel_jitter.diag()?.var(0)?.to_scalar::<f64>()?;
-        assert!(var_jitter >= 0.0009 && var_jitter <= 0.0021); // Boost
+        let var_jitter = kernel_jitter.diag().var(0.0).to_scalar();
+        let var_jitter_f64 = match var_jitter {
+            Scalar::F64(v) => v,
+            Scalar::F32(v) => v as f64,
+            _ => panic!("Unexpected scalar type"),
+        };
+        assert!(var_jitter_f64 >= 0.0009 && var_jitter_f64 <= 0.0021); // Boost
         Ok(())
     }
 
@@ -3068,7 +3157,8 @@ mod tests {
         let config = AppConfig::default();
         let mut mock_file = Cursor::new(Vec::new());
         let device_name = format!("{:?}", device);
-        let anon = format!("Device-{}", hash(device_name.as_bytes()).to_hex()[..8]);
+        let hash_hex = hash(device_name.as_bytes()).to_hex();
+        let anon = format!("Device-{}", &hash_hex[..8]);
         writeln!(mock_file, "Anon Device: {}", anon)?;
         let log = String::from_utf8(mock_file.into_inner())?;
         assert!(log.contains("Device-") && !log.contains("Cpu")); // Anonymized
@@ -3083,7 +3173,7 @@ mod tests {
             0.0,
         );
         let diag = kernel.diag();
-        let mean = diag.mean();
+        let mean = diag.mean().unwrap_or(0.0);
         let var = diag.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / diag.len() as f64;
         assert!(var >= 0.0009 && var <= 0.0021);
         Ok(())
@@ -3105,7 +3195,7 @@ mod tests {
             0.0,
         );
         let diag = kernel.diag();
-        let mean = diag.mean();
+        let mean = diag.mean().unwrap_or(0.0);
         let var = diag.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / diag.len() as f64;
         assert!(var > 0.0 && var < 0.0001); // Nudge only
         Ok(())

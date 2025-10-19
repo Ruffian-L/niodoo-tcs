@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use candle_core::{Device, Tensor};
 use ndarray::{Array1, Array2};
 use ndarray_linalg::Norm; // For cosine distance calculation

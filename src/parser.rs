@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Code Parser for Bullshit Buster - AST Analysis for Non-Orientable Path Detection
 //!
 //! This module implements topological analysis of Rust code using Möbius topology

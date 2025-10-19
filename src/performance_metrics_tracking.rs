@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Performance Metrics Tracking for Consciousness Evolution
 //!
 //! This module implements comprehensive performance metrics tracking for consciousness

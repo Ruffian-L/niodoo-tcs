@@ -13,6 +13,9 @@ tokio-stream = "0.1"
 lazy_static = "1.4.0"
 parking_lot = "0.12"
 
+# Workspace dependencies (member package)
+niodoo-core = { path = "../niodoo-core" }
+
 # Data structures and serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -51,9 +54,15 @@ ndarray-linalg = { workspace = true }
 nalgebra = { workspace = true }
 unicode-segmentation = "1.11"
 
+# Candle ML framework
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+
 # Random number generation - UPDATED for half crate compatibility
 rand = { workspace = true }
 rand_distr = { workspace = true }
+rand_chacha = { workspace = true }
 
 # Parallel processing
 rayon = "1.10"
@@ -98,7 +107,7 @@ clap = { version = "4.0", features = ["derive"] }
 qmetaobject = { version = "0.2", optional = true }
 
 # Real AI inference dependencies - Make optional (temporarily disabled for linking fix)
-# ort = { version = "1.16.3", features = ["cuda"], optional = true }
+ort = { version = "1.16.3", features = ["cuda"], optional = true }
 hf-hub = { version = "0.3", optional = true }
 tokenizers = "0.15"
 llama-cpp-2 = "0.1"  # Keep as is
@@ -122,7 +131,7 @@ tokio-tungstenite = "0.21"
 futures-util = "0.3"
 
 # RAG modules
-usearch = "0.6"
+usearch = "2.21.0"
 
 # Git integration
 git2 = "0.18"
@@ -143,6 +152,7 @@ reqwest = { version = "0.12.23", default-features = false, features = ["json", "
 scraper = "0.19"
 
 # TCS (Topological Cognitive System) dependencies
+tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
 num-complex = "0.4"
 num-traits = "0.2"
 statrs = "0.16"
@@ -205,7 +215,7 @@ gaussian-processes = []
 k-twist = ["mobius-torus", "gaussian-processes"]
 cuda = []
 parallel = []
-onnx = []  # Feature flag for ONNX support (conditional compilation)
+onnx = ["dep:ort"]  # Feature flag for ONNX support (conditional compilation)
 hf-hub = ["dep:hf-hub"]
 
 [[bin]]
@@ -295,6 +305,10 @@ path = "bin/test_qwen_simple.rs"
 [[bin]]
 name = "geometry_demo"
 path = "geometry_demo.rs"
+
+[[bin]]
+name = "test_integration"
+path = "bin/test_integration.rs"
 
 # NOTE: embed_codebase binary is defined in embeddings-system/Cargo.toml
 # It belongs to the embeddings-system workspace member, not the main src package

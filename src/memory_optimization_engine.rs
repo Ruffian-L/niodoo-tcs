@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Memory Optimization Engine for Phase 3 Performance Optimizations
 //!
 //! This module provides advanced memory optimization techniques including:

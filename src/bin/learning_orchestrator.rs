@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Advanced Learning Orchestrator with Full Learning Loop
 ///
 /// Integrates:
@@ -152,6 +155,7 @@ impl LearningOrchestrator {
             tqft_engine: Arc::new(tqft_engine),
             performance_history: Arc::new(RwLock::new(Vec::new())),
             config,
+            state_counter: Arc::new(RwLock::new(0)),
         })
     }
 
@@ -340,6 +344,7 @@ impl LearningOrchestrator {
             plasticity: result.learning_feedback.plasticity,
             progress_score: result.learning_feedback.progress_score,
             forgetting_rate: 0.0,
+            loss: 1.0 - result.learning_feedback.progress_score, // Convert progress to loss
         };
 
         analytics
@@ -365,7 +370,7 @@ impl LearningOrchestrator {
 
         for gen in 0..num_generations {
             // Generate mock user feedback (in real system, from metrics)
-            let mut rng = rand::rng();
+            let mut rng = rand::thread_rng();
             let user_feedback: Vec<f32> = (0..50).map(|_| rng.gen_range(0.3..0.9)).collect();
             let neurodivergent_effectiveness: Vec<f32> =
                 (0..50).map(|_| rng.gen_range(0.4..0.95)).collect();

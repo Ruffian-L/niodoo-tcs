@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // src/real_model.rs
 // Real AI model integration for RTX A6000 testing
 

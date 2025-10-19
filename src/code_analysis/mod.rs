@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! SOC 2 Compliance Analysis using K-Twist Topology
 //!
 //! This module implements SOC 2 compliance prediction and analysis

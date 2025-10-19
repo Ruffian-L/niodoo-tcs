@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Comprehensive Optimization Benchmark Suite for Phase 2
 use tracing::{error, info, warn};
 // This benchmark suite tests all Phase 2 optimizations including:
@@ -9,6 +12,7 @@ use tracing::{error, info, warn};
 // - Monitoring system overhead
 
 // use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::black_box;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 

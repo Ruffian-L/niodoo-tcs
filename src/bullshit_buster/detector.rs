@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// Bullshit Detector - Detects fake/placeholder/stub code in the codebase
 ///
 /// Converted from scripts/fresh_bullshit_scan.py to idiomatic Rust

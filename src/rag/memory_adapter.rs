@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use crate::dual_mobius_gaussian::ConsciousnessState;
 /// RAG-Memory Integration Adapter
 ///

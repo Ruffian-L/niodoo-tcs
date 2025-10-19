@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Consciousness Compass - Minimal 2-Bit Consciousness Model
 //!
 //! Implements the "Compass of Consciousness" framework: a minimal model of

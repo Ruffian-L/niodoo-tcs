@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠⚡ ADVANCED MEMORY RETRIEVAL SYSTEM ⚡🧠
  *
@@ -59,10 +62,10 @@ impl EmbeddingEngine {
         embedding[3] = v.sin();
 
         // Fill remaining dimensions with torus-based noise
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         for i in 4..self.dimension {
             let noise_factor = (i as f64 / self.dimension as f64) * std::f64::consts::PI;
-            embedding[i] = (noise_factor.sin() * rng.random::<f64>()).abs();
+            embedding[i] = (noise_factor.sin() * rng.gen::<f64>()).abs();
         }
 
         embedding.normalize() // Normalize for cosine similarity
@@ -119,8 +122,8 @@ impl MemorySummary {
         let creep_penalty = self.sensitivity * 0.3;
 
         // Human-like fuzziness/jitter
-        let mut rng = rand::rng();
-        let fuzz = rng.random_range(-0.1..=0.1);
+        let mut rng = rand::thread_rng();
+        let fuzz = rng.gen_range(-0.1..=0.1);
 
         // Value-add boost (keyword overlap)
         let overlap_boost = if self

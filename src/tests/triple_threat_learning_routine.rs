@@ -1,10 +1,16 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use crate::config::system_config::AppConfig;
 use crate::consciousness::ConsciousnessState;
 use crate::memory::guessing_spheres::{EmotionalVector, GuessingMemorySystem, SphereId};
 use crate::memory::multi_layer_query::MultiLayerMemoryQuery;
-use crate::persistent_learning::{LearningMetrics, LearningRoutine};
-use crate::qwen_curator::{QloraCurator, QloraCuratorConfig};
+use crate::persistent_learning::LearningRoutine;
+use crate::learning_analytics::LearningMetrics;
+use niodoo_core::qwen_curator::{QloraCurator, QloraCuratorConfig};
 use crate::rag::local_embeddings::{Document, MathematicalEmbeddingModel};
+use crate::rag::RetrievalEngine;
+use std::sync::{Arc, Mutex};
 /// Triple-Threat Learning Routine for Persistent Harness
 /// Runs continuous hallucination detection tests and generates healing curve data
 use anyhow::Result;
@@ -55,10 +61,10 @@ impl TripleThreatRoutine {
         );
 
         // Get app config for curator initialization
-        let app_config = AppConfig::default();
+        let config = niodoo_core::config::AppConfig::default();
 
         // Create curator configuration
-        let curator_config = QloraCuratorConfig::from_app_config(&app_config)?;
+        let curator_config = QloraCuratorConfig::from_app_config(&config)?;
 
         // Initialize and run fine-tuning
         let mut curator = QloraCurator::new(curator_config)?;
@@ -104,11 +110,15 @@ impl TripleThreatRoutine {
         let loss = 1.0 - (results.len() as f32 / 8.0); // Higher loss when fewer results
         let novelty_score = state.authenticity_metric; // Use authenticity as proxy for novelty
 
-        Ok(LearningMetrics::new(
+        Ok(LearningMetrics {
+            learning_rate: 0.1,
+            retention_score: 0.5,
+            adaptation_effectiveness: novelty_score,
+            plasticity: 0.5,
+            progress_score: 1.0 - loss, // Convert loss to progress (lower loss = higher progress)
+            forgetting_rate: 0.0,
             loss,
-            novelty_score,
-            Some(format!("mismatch_crisis cycle={}", self.cycle)),
-        ))
+        })
     }
 
     /// Run uniform stagnation scenario
@@ -145,11 +155,15 @@ impl TripleThreatRoutine {
         let loss = 1.0 - (results.len() as f32 / 8.0);
         let novelty_score = state.authenticity_metric;
 
-        Ok(LearningMetrics::new(
+        Ok(LearningMetrics {
+            learning_rate: 0.1,
+            retention_score: 0.5,
+            adaptation_effectiveness: novelty_score,
+            plasticity: 0.5,
+            progress_score: 1.0 - loss,
+            forgetting_rate: 0.0,
             loss,
-            novelty_score,
-            Some(format!("uniform_stagnation cycle={}", self.cycle)),
-        ))
+        })
     }
 
     /// Run variance spike scenario
@@ -197,11 +211,15 @@ impl TripleThreatRoutine {
         let loss = 1.0 - (results.len() as f32 / 8.0);
         let novelty_score = state.authenticity_metric;
 
-        Ok(LearningMetrics::new(
+        Ok(LearningMetrics {
+            learning_rate: 0.1,
+            retention_score: 0.5,
+            adaptation_effectiveness: novelty_score,
+            plasticity: 0.5,
+            progress_score: 1.0 - loss,
+            forgetting_rate: 0.0,
             loss,
-            novelty_score,
-            Some(format!("variance_spike cycle={}", self.cycle)),
-        ))
+        })
     }
 
     /// Run healthy diversity scenario (baseline)
@@ -245,11 +263,15 @@ impl TripleThreatRoutine {
         let loss = 1.0 - (results.len() as f32 / 8.0);
         let novelty_score = state.authenticity_metric;
 
-        Ok(LearningMetrics::new(
+        Ok(LearningMetrics {
+            learning_rate: 0.1,
+            retention_score: 0.5,
+            adaptation_effectiveness: novelty_score,
+            plasticity: 0.5,
+            progress_score: 1.0 - loss,
+            forgetting_rate: 0.0,
             loss,
-            novelty_score,
-            Some(format!("healthy_diversity cycle={}", self.cycle)),
-        ))
+        })
     }
 }
 
@@ -296,7 +318,7 @@ impl LearningRoutine for TripleThreatRoutine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use niodoo_consciousness::persistent_learning::{
+    use crate::persistent_learning::{
         ConsoleMetricsReporter, DiskMetricsReporter, HarnessConfig, PersistentLearningHarness,
     };
     use std::time::Duration;
@@ -305,7 +327,7 @@ mod tests {
     #[test]
     fn triple_threat_harness_smoke_test() -> Result<()> {
         let dir = tempfile::tempdir()?;
-        let config = HarnessConfig::new(dir.path(), Duration::from_millis(100))
+                let config = HarnessConfig::new(dir.path(), Duration::from_millis(100))
             .with_persist_every(4)
             .with_max_steps(Some(16)); // 4 cycles × 4 scenarios
 
@@ -323,24 +345,22 @@ mod tests {
     #[test]
     #[ignore]
     fn triple_threat_continuous() -> Result<()> {
-        let checkpoint_dir = "./persistent_runs/triple_threat";
+        let checkpoint_dir = std::path::Path::new("./persistent_runs/triple_threat");
         let config = HarnessConfig::new(checkpoint_dir, Duration::from_secs(2))
             .with_persist_every(100) // Save state every 100 steps
             .with_max_steps(None); // Run forever
 
-        let console = ConsoleMetricsReporter::new(10); // Print every 10 steps
-        let disk =
-            DiskMetricsReporter::new("./persistent_runs/triple_threat/healing_curves.jsonl")?;
+        let reporter = ConsoleMetricsReporter::new(10); // Print every 10 steps
         let routine = TripleThreatRoutine::new();
 
-        let reporters = (console, disk);
-        let mut harness = PersistentLearningHarness::new(config, routine, reporters)?;
+        let mut harness = PersistentLearningHarness::new(config, routine, reporter)?;
 
         println!("🚀 Starting continuous triple-threat testing...");
         println!("📊 Metrics: ./persistent_runs/triple_threat/healing_curves.jsonl");
         println!("💾 State: ./persistent_runs/triple_threat/learning_state.json");
         println!("⚡ Press Ctrl+C to stop (state will persist)");
 
-        harness.run_forever()
+        harness.run(None)?; // Run until interrupted
+        Ok(())
     }
 }

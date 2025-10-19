@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // src/advanced_empathy.rs
 // Advanced Empathy System based on the Bio-Computational Model
 // Integrating slime mold algorithms, Q-learning, and epigenetic encoding
@@ -551,9 +554,9 @@ impl EmpathyQNetwork {
 
             // Epsilon-greedy with empathy bias
             use rand::Rng; // Import Rng trait for random and random_range methods
-            let mut rng = rand::rng();
-            if rng.random::<f64>() < self.epsilon {
-                rng.random_range(0..self.action_dim)
+            let mut rng = rand::thread_rng();
+            if rng.gen::<f64>() < self.epsilon {
+                rng.gen_range(0..self.action_dim)
             } else {
                 enhanced_q
                     .iter()

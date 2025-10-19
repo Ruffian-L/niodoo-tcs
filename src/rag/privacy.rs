@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -47,8 +50,11 @@ impl EmbeddingPrivacyShield {
     /// Add differential privacy noise to embedding
     pub fn add_noise(embedding: &Array1<f32>, noise_scale: f32) -> Array1<f32> {
         use rand_distr::{Distribution, Normal};
+        use rand_chacha::ChaCha8Rng;
+        use rand_chacha::rand_core::SeedableRng;
 
-        let mut rng = rand::rng();
+        // Use ChaCha8Rng which is compatible across rand versions
+        let mut rng = ChaCha8Rng::from_entropy();
         let normal = Normal::new(0.0, noise_scale as f64).unwrap();
 
         Array1::from_vec(

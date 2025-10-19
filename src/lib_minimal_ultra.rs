@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Niodoo-Feeling: Minimal Core Consciousness Framework ULTRA
 //!
 //! Minimal build configuration for BUILD MASTER to get core consciousness framework compiling

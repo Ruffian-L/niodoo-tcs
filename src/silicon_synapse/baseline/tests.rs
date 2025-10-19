@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Comprehensive tests for baseline learning and anomaly detection
 //!
 //! This module contains tests with synthetic normal data and known outliers

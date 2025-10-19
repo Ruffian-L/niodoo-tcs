@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Exporter plugin trait for Silicon Synapse monitoring
 //!
 //! This module defines the trait interface for pluggable metric exporters.

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Bullshit Buster Demo - Topological Code Analysis
 //!
 //! Demonstrates the Code Parser's ability to detect hardcoded values, stubs,

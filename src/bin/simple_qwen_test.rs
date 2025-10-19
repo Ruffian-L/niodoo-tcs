@@ -1,10 +1,14 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Simple Qwen Integration Test
 //!
 //! This is a minimal test to verify the Qwen integrator works
 //! without the full consciousness engine complexity.
 
 use anyhow::Result;
-use niodoo_consciousness::qwen_integration::QwenIntegrator;
+use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_integration::{QwenIntegrator, QwenModelInterface};
 use tracing::{info, warn};
 
 #[tokio::main]
@@ -18,7 +22,8 @@ async fn main() -> Result<()> {
 
     // Test 1: Create integrator
     info!("📦 Creating Qwen integrator...");
-    let mut integrator = QwenIntegrator::default();
+    let app_config = AppConfig::default();
+    let mut integrator = QwenIntegrator::new(&app_config)?;
     info!("✅ Qwen integrator created successfully");
 
     // Test 2: Test inference
@@ -34,7 +39,7 @@ async fn main() -> Result<()> {
     match integrator.infer(messages, Some(100)).await {
         Ok(response) => {
             info!("✅ Inference successful!");
-            tracing::info!("Response: {}", response);
+            tracing::info!("Response: {:?}", response);
         }
         Err(e) => {
             warn!("⚠️  Inference failed: {}", e);
@@ -57,7 +62,7 @@ async fn main() -> Result<()> {
     match integrator.infer(consciousness_messages, Some(150)).await {
         Ok(response) => {
             info!("✅ Consciousness-aware inference successful!");
-            tracing::info!("Consciousness Response: {}", response);
+            tracing::info!("Consciousness Response: {:?}", response);
         }
         Err(e) => {
             warn!("⚠️  Consciousness-aware inference failed: {}", e);
@@ -76,7 +81,7 @@ async fn main() -> Result<()> {
 
         match integrator.infer(test_messages, Some(50)).await {
             Ok(response) => {
-                tracing::info!("Test {}: {}", i, response);
+                tracing::info!("Test {}: {:?}", i, response);
             }
             Err(e) => {
                 warn!("Test {} failed: {}", i, e);

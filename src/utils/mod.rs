@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Utility Modules
 //!
 //! Collection of utility modules for the Niodoo consciousness framework

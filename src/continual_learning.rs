@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠💖✨ Continual Learning Pipeline for Dynamic Skill Acquisition and Knowledge Updates
  *

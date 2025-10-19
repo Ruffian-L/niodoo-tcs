@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // Real Memory Bridge - Connects Rust with Python Persistent Memory Engine
 // NO HARDCODED RESPONSES - actual memory persistence with semantic understanding
 

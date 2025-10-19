@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
@@ -27,7 +30,7 @@ impl Default for TCSConfig {
         Self {
             takens_dimension: 3,
             takens_delay: 2,
-            takens_data_dim: 3,
+            takens_data_dim: 512,
             homology_max_dimension: 2,
             homology_max_edge_length: 2.5,
             jones_cache_capacity: 256,

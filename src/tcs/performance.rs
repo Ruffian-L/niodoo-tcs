@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+//!
 //! Orchestrator wiring the Topological Cognitive System crates together
 //! with functional logic derived from the original monolithic crate.
 
@@ -13,7 +16,7 @@ use tcs_knot::{CognitiveKnot, JonesPolynomial, KnotDiagram};
 use tcs_ml::{ExplorationAgent, MotorBrain};
 use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
 use tcs_tqft::FrobeniusAlgebra;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 pub use config::TCSConfig;
@@ -69,8 +72,27 @@ impl TCSOrchestrator {
         self.buffer.is_ready()
     }
 
+    /// Reset buffered embeddings and the MotorBrain cache for a fresh session.
+    pub fn reset_brain_context(&mut self) {
+        self.buffer.clear();
+        self.motor_brain.reset_embedding_cache();
+        self.state = CognitiveState::default();
+        info!(
+            target: "tcs-pipeline::orchestrator",
+            "Reset orchestrator buffer and MotorBrain cache"
+        );
+    }
+
     pub async fn process(&mut self, raw_input: &str) -> Result<Vec<TopologicalEvent>> {
         let mut events = Vec::new();
+        if raw_input.trim().is_empty() {
+            info!(
+                target: "tcs-pipeline::orchestrator",
+                "Empty input received; clearing stateful caches"
+            );
+            self.reset_brain_context();
+            return Ok(events);
+        }
         if !self.ready() {
             return Ok(events);
         }
@@ -119,6 +141,17 @@ impl TCSOrchestrator {
 
         // Process input through MotorBrain and ingest embeddings into pipeline
         let brain_embeddings = self.motor_brain.extract_embeddings(raw_input).await?;
+        let embedding_dim = brain_embeddings.len();
+        if embedding_dim != self.takens.data_dim {
+            debug!(
+                target: "tcs-pipeline::orchestrator",
+                old = self.takens.data_dim,
+                new = embedding_dim,
+                "Updating Takens data dimension to match embedder output"
+            );
+            self.takens.data_dim = embedding_dim;
+            self.config.takens_data_dim = embedding_dim;
+        }
         self.ingest_sample(brain_embeddings);
 
         Ok(events)

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Feeling Transformer - Qwen30B Integration Module
 //!
 //! This module integrates the FEELING (Feeling-Enhanced Language Intelligence with Neural Guidance)

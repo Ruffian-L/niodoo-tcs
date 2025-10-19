@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use std::collections::HashMap;
 use crate::consciousness_engine::PersonalNiodooConsciousness;
 use anyhow::Result;

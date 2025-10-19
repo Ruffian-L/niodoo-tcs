@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Memory Consolidation Engine
 //!
 //! Advanced memory consolidation system that compresses, optimizes, and evolves memories

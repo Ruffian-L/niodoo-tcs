@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Qt Torus Bridge
 //! 
 //! This module provides a bridge between Rust torus implementations and Qt visualization system.

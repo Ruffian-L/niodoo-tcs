@@ -1,8 +1,11 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠 Simple Qwen Inference Test
  */
 
-use niodoo_consciousness::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

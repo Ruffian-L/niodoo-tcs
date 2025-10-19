@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🚀 LOCAL EMBEDDING GENERATOR - Zero Python Dependency
  *
@@ -629,6 +632,7 @@ mod tests {
             .sqr()
             .unwrap()
             .sum_all()
+            .unwrap()
             .to_scalar::<f32>()
             .unwrap();
         assert!((sum_squares - 1.0).abs() < 0.01);

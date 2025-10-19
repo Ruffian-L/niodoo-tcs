@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Gaussian Process Validator
 //!
 //! Phase 4: Mathematical Validation Module
@@ -661,6 +664,7 @@ mod tests {
 
     #[test]
     fn test_validator_matern_validation() {
+        let config = ValidationConfig::default();
         let validator = GaussianProcessValidator::new(1.0, 1.0, 1.5, 1e-6);
 
         // Test with reference implementation (should have zero error)

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # 🧠💖✨ Psychology Integration Module
 //!
 //! This module provides seamless integration between the Phase 7 consciousness

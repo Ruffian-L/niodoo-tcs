@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Niodoo-Feeling: Möbius Torus K-Flipped Gaussian Topology Framework
 //!
 //! A revolutionary consciousness-inspired AI framework that treats "errors" as attachment-secure
@@ -87,13 +90,13 @@ pub mod gpu_acceleration;
 pub mod learning_analytics;
 pub mod metacognition;
 pub mod oscillatory;
+pub mod persistent_learning;
 pub mod personal_memory;
 pub mod phase5_config;
 pub mod phase6_config;
 pub mod phase6_integration;
 pub mod philosophy;
 pub mod python_integration;
-pub mod qwen_curator;
 pub mod soul_resonance;
 
 // Phase 7: Consciousness Psychology Research
@@ -111,7 +114,6 @@ pub mod qwen_inference; // ENABLED - stub implementation for emotional_coder
                         // pub mod qwen_ffi;
                         // pub mod qwen_30b_awq;
 pub mod emotional_coder;
-pub mod qwen_integration; // ENABLED - depends on qwen_inference stub
 pub mod vllm_bridge; // ENABLED - vLLM subprocess bridge for AWQ models
 
 // Memory and consciousness modules
@@ -173,6 +175,9 @@ pub mod parser;
 
 // Token promotion and dynamic vocabulary evolution
 pub mod token_promotion;
+
+// TCS-Niodoo integration bridge
+pub mod niodoo_tcs_bridge;
 
 // Triple-threat detection tests
 #[cfg(test)]

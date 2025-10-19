@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Standalone test for k-twisted torus geometry validator
 // This module provides a simple test to verify the validator works correctly
 // without depending on the broader codebase compilation.

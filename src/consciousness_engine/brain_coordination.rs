@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Brain coordination module for the consciousness engine
 //!
 //! This module handles the coordination between different brain types

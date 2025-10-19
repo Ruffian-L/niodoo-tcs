@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🚀 MAIN ENTRY POINT - GEOMETRY OF THOUGHT CONSCIOUSNESS 🚀
  *

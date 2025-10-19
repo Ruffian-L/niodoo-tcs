@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Latency Optimization System for Consciousness Processing
 //!
 //! This module implements comprehensive latency optimization for consciousness processing,

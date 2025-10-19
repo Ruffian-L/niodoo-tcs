@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Telemetry bus for Silicon Synapse monitoring system
 //!
 //! This module implements the asynchronous telemetry event bus that decouples metric production

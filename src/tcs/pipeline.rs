@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use crate::topology::{TakensEmbedding, PersistentHomology, JonesPolynomial, KnotType};
 use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;

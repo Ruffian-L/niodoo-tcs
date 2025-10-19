@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Dual-View Refactor System - GGUF-Powered Möbius Topology Analysis
 //!
 //! Revolutionary AI transformer integrating:
@@ -26,6 +29,7 @@ use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::sampling::LlamaSampler;
 use std::num::NonZeroU32;
 use std::path::Path;
+use std::env;
 use tracing::info;
 
 /// Dual-view refactor result containing positive and negative perspectives

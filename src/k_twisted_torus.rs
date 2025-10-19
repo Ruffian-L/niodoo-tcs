@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // K-Twisted Toroidal Surface Generator
 // Based on mathematical analysis for MOBIUS TORUS GAUSSIAN TOPOLOGY
 // Implements proper parametric equations for k-twisted surfaces

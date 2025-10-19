@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /// MCP (Model Context Protocol) Configuration
 ///
 /// Converted from configure_mcp.py to idiomatic Rust

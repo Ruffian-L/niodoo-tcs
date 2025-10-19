@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Inference performance monitoring collector for Silicon Synapse
 //!
 //! This module implements inference performance monitoring including TTFT, TPOT,
@@ -1264,7 +1267,6 @@ mod tests {
         let config = InferenceConfig::default();
         let telemetry_config = crate::silicon_synapse::config::TelemetryConfig::default();
         let telemetry_bus = TelemetryBus::new(telemetry_config)
-            .await
             .expect("Failed to create telemetry bus in test");
         let telemetry_sender = telemetry_bus.sender();
 

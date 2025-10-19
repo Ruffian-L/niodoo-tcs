@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use niodoo_consciousness::tcs::*;
 
 /// Simple test program for the Topological Cognitive System

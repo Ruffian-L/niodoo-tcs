@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 7: Consciousness Evolution Tracker
 //!
 //! This module implements comprehensive tracking of consciousness evolution patterns,

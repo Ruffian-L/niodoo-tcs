@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! FFI Bridge for C++ Qt Brain Integration
 //!
 //! This module provides C-compatible FFI bindings to connect the Rust consciousness

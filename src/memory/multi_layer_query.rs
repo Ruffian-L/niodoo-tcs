@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use super::guessing_spheres::{EmotionalVector, GuessingMemorySystem, MemoryQuery, SphereId};
 use crate::consciousness::ConsciousnessState;
 use crate::rag::RetrievalEngine;
@@ -626,7 +629,7 @@ impl MultiLayerMemoryQuery {
         fs::create_dir_all(&self.checkpoint_dir)?;
 
         // Create Qwen-compatible LearningEvent for fine-tuning
-        use crate::qwen_curator::{EmotionalState, LearningEvent as QwenLearningEvent};
+        use niodoo_core::qwen_curator::{EmotionalState, LearningEvent as QwenLearningEvent};
 
         let qwen_event = QwenLearningEvent {
             timestamp: chrono::Utc::now().timestamp().to_string(),

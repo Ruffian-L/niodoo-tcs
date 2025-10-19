@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // use std::f64::consts::PI; // Unused import
 use crate::consciousness::EmotionType; // For soul resonance
 use crate::memory::guessing_spheres::{EmotionalVector, GuessingMemorySystem}; // Integrate existing spheres as geodesic approx

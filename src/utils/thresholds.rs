@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧮 SMART THRESHOLDS & TIMING UTILITIES 🧮
  *
@@ -306,6 +309,13 @@ pub mod convenience {
         get_threshold_calculator()
             .map(|calc| calc.calculate_retry_delay(attempt))
             .unwrap_or(Duration::from_millis(100 * 2_u64.pow(attempt)))
+    }
+
+    /// Get memory vector threshold
+    pub fn memory_vector() -> f32 {
+        get_threshold_calculator()
+            .map(|calc| calc.calculate_memory_threshold())
+            .unwrap_or(0.6) // fallback to old default
     }
 }
 

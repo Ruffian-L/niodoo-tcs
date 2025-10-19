@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Advanced Performance Optimizer for Phase 2
 //!
 //! This module implements the next generation of performance optimizations

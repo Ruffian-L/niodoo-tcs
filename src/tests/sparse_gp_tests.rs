@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Comprehensive tests for sparse Gaussian processes functionality
 
 #[cfg(test)]
@@ -22,7 +25,7 @@ mod tests {
         };
 
         let sparse_gp =
-            SparseGaussianProcess::new(inducing_points, Box::new(RBFKernel), hyperparameters);
+            SparseGaussianProcess::new(inducing_points, Box::new(SparseRBFKernel), hyperparameters);
 
         assert_eq!(sparse_gp.num_inducing_points, 3);
         assert_eq!(sparse_gp.inducing_points.len(), 3);
@@ -34,7 +37,7 @@ mod tests {
     /// Test RBF kernel function
     #[test]
     fn test_rbf_kernel() {
-        let kernel = RBFKernel;
+        let kernel = SparseRBFKernel;
         let params = KernelHyperparameters {
             length_scale: 1.0,
             signal_variance: 1.0,
@@ -56,7 +59,7 @@ mod tests {
     /// Test kernel matrix computation
     #[test]
     fn test_kernel_matrix_computation() {
-        let kernel = RBFKernel;
+        let kernel = SparseRBFKernel;
         let params = KernelHyperparameters {
             length_scale: 1.0,
             signal_variance: 1.0,
@@ -304,7 +307,7 @@ mod tests {
     /// Test kernel function trait implementation
     #[test]
     fn test_kernel_function_trait() {
-        let kernel = RBFKernel;
+        let kernel = SparseRBFKernel;
         let params = KernelHyperparameters {
             length_scale: 1.0,
             signal_variance: 1.0,
@@ -386,7 +389,7 @@ mod tests {
         let zero_vector = Vector3::new(0.0, 0.0, 0.0);
         let normal_vector = Vector3::new(1.0, 0.0, 0.0);
 
-        let kernel = RBFKernel;
+        let kernel = SparseRBFKernel;
         let params = KernelHyperparameters {
             length_scale: 1.0,
             signal_variance: 1.0,

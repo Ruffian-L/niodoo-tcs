@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Hardware monitoring collector for Silicon Synapse
 //!
 //! This module implements hardware monitoring for GPU, CPU, and memory metrics

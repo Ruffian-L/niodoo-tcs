@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // AGENT 4: COVERAGE CRUSADER
 // Tests for torus_factor scaling validation (20% coverage boost)
 

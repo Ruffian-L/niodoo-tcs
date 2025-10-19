@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // Transformer Memory System - Modular memory for ANY AI model
 // Works with GPT, Claude, Llama, any instruction or reasoning model
 

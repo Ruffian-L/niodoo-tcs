@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // viz_qt_bridge_minimal.rs - Minimal QML Visualization Bridge (cxx-qt 0.7)
 // This version focuses only on the QML bridge without heavy ML dependencies
 

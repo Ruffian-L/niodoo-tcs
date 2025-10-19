@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // AGENT 9: INFERENCE INVESTIGATOR
 // E2E test for sorrow-joy k-flip transformation
 

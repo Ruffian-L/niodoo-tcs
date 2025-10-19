@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Rust-Qt Bridge for K-Twist Topology Visualization
 //!
 //! This module provides the bridge between Rust topology computations

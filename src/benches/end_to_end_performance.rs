@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
 use tracing::{info, error, warn};
  * 🚀 COMPREHENSIVE END-TO-END PERFORMANCE BENCHMARK - Agent #10 Deliverable
@@ -14,6 +17,7 @@ use tracing::{info, error, warn};
  */
 
 // use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::black_box;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;

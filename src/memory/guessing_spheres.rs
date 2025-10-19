@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use rand::prelude::*;
 use std::collections::HashMap;
 // use uuid::Uuid;
@@ -227,7 +230,7 @@ impl GuessingMemorySystem {
                 }
 
                 let (next_id, _) = if direction == TraversalDirection::Forward {
-                    let mut rng = rand::rng();
+                    let mut rng = rand::thread_rng();
                     let chosen = next_candidates.choose(&mut rng).cloned().unwrap();
                     (chosen.0.clone(), chosen.1.clone())
                 } else {

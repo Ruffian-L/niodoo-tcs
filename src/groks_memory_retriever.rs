@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠💖 GROK'S MEMORY RETRIEVER IMPLEMENTATION 💖🧠
  *
@@ -44,7 +47,7 @@ impl EmbeddingEngine {
         }
 
         // Fill remaining dimensions with pseudo-random but deterministic values
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         for i in 3..self.dimension {
             // Create deterministic pseudo-random values based on text hash
             let hash_seed = text.len() as u64 + i as u64;
@@ -141,8 +144,8 @@ impl MemoryRetriever {
                 let creep_down = mem.sensitivity * self.creep_penalty;
 
                 // Human-like jitter/fuzziness
-                let mut rng = rand::rng();
-                let fuzz = rng.random_range(-self.fuzz_factor..=self.fuzz_factor);
+                let mut rng = rand::thread_rng();
+                let fuzz = rng.gen_range(-self.fuzz_factor..=self.fuzz_factor);
 
                 // Value-add check: keyword overlap boost
                 let first_query_word = query.split_whitespace().next().unwrap_or("");

@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🎛️ Agent 3: VizBridgeTuner
  * Rust-QML bridge for Qt 6.7 stats (novelty/coherence %)

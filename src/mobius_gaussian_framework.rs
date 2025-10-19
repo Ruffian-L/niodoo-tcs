@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 // src/mobius_gaussian_framework.rs - Simplified implementation of the Möbius-Gaussian Framework for self-sufficiency simulation
 use tracing::{info, error, warn};
 

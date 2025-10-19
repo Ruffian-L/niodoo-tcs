@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * ⚖️ ETHICAL BENCHMARK SUITE 2025: ENHANCED WITH GAUSSIAN UNCERTAINTY
  * =====================================================================

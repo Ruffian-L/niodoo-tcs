@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Configuration Module
 //!
 //! This module handles configuration loading and validation for the Silicon Synapse system.

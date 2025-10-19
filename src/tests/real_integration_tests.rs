@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
 use tracing::{info, error, warn};
  * 🧠💖 NIODOO REAL INTEGRATION TESTS - NO FAKE DEMOS
@@ -150,8 +153,8 @@ async fn test_real_rag_pipeline() -> Result<()> {
 /// - Files contain real data (not empty)
 /// - Memory can be loaded back correctly
 /// - Data survives process restart
-#[tokio::test]
-async fn test_real_memory_persistence() -> Result<()> {
+#[test]
+fn test_real_memory_persistence() -> Result<()> {
     tracing::info!("\n=== TEST 2: Memory Persistence ===\n");
 
     use crate::dual_mobius_gaussian::{
@@ -269,8 +272,8 @@ async fn test_real_memory_persistence() -> Result<()> {
 /// - Möbius transforms preserve mathematical properties
 /// - Outputs are not random numbers
 /// - Uncertainty quantification is mathematically sound
-#[tokio::test]
-async fn test_mtg_mathematical_correctness() -> Result<()> {
+#[test]
+fn test_mtg_mathematical_correctness() -> Result<()> {
     tracing::info!("\n=== TEST 3: MTG Mathematical Correctness ===\n");
 
     use crate::dual_mobius_gaussian::{gaussian_process, GaussianMemorySphere};
@@ -397,8 +400,8 @@ async fn test_mtg_mathematical_correctness() -> Result<()> {
 /// - Later responses show knowledge of earlier context
 /// - Not just keyword matching - actual semantic coherence
 /// - Gibberish inputs don't match real patterns
-#[tokio::test]
-async fn test_context_understanding() -> Result<()> {
+#[test]
+fn test_context_understanding() -> Result<()> {
     tracing::info!("\n=== TEST 4: Context Understanding ===\n");
 
     use crate::consciousness::ConsciousnessState;
@@ -492,8 +495,8 @@ async fn test_context_understanding() -> Result<()> {
 /// - Real computation happens (CPU/memory usage)
 /// - Non-deterministic but semantically correct outputs
 /// - System handles realistic workloads
-#[tokio::test]
-async fn test_full_system_integration() -> Result<()> {
+#[test]
+fn test_full_system_integration() -> Result<()> {
     tracing::info!("\n=== TEST 5: Full System Integration ===\n");
 
     use crate::consciousness::ConsciousnessState;
@@ -610,22 +613,22 @@ async fn test_system_validation_summary() -> Result<()> {
         Err(e) => tracing::info!("❌ RAG Pipeline: FAILED - {}", e),
     }
 
-    match test_real_memory_persistence().await {
+    match test_real_memory_persistence() {
         Ok(_) => tracing::info!("✅ Memory Persistence: PASSED"),
         Err(e) => tracing::info!("❌ Memory Persistence: FAILED - {}", e),
     }
 
-    match test_mtg_mathematical_correctness().await {
+    match test_mtg_mathematical_correctness() {
         Ok(_) => tracing::info!("✅ MTG Mathematics: PASSED"),
         Err(e) => tracing::info!("❌ MTG Mathematics: FAILED - {}", e),
     }
 
-    match test_context_understanding().await {
+    match test_context_understanding() {
         Ok(_) => tracing::info!("✅ Context Understanding: PASSED"),
         Err(e) => tracing::info!("❌ Context Understanding: FAILED - {}", e),
     }
 
-    match test_full_system_integration().await {
+    match test_full_system_integration() {
         Ok(_) => tracing::info!("✅ Full System Integration: PASSED"),
         Err(e) => tracing::info!("❌ Full System Integration: FAILED - {}", e),
     }

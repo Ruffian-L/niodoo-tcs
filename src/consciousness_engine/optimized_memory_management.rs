@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Optimized Memory Management Module
 //!
 //! This module provides high-performance memory management with pooling,

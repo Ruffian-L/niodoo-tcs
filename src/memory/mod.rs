@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Möbius Memory System with 6-Layer Architecture
 //!
 //! This module implements the 6-layer memory system with 99.51% stability target

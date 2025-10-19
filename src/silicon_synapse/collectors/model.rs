@@ -1,16 +1,20 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Model internal state probing for Silicon Synapse
 //!
 //! This module implements model probing to extract internal model states
 //! during inference, including softmax entropy and activation patterns.
 
-use candle_core::Tensor;
+use candle_core::{Device, Tensor};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 
 use crate::silicon_synapse::config::ModelProbeConfig as ConfigModelProbeConfig;
-use crate::silicon_synapse::telemetry_bus::{TelemetryEvent, TelemetrySender};
+use crate::silicon_synapse::config::TelemetryConfig;
+use crate::silicon_synapse::telemetry_bus::{TelemetryBus, TelemetryEvent, TelemetrySender};
 use crate::silicon_synapse::SiliconSynapseError;
 
 /// Model probe for extracting internal states
@@ -431,12 +435,11 @@ impl ActivationAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nvml_wrapper::Device;
 
     #[tokio::test]
     async fn test_model_probe_creation() {
         let config = ModelProbeConfig::default();
-        let telemetry_bus = TelemetryBus::new(config.telemetry.clone()).unwrap();
+        let telemetry_bus = TelemetryBus::new(crate::silicon_synapse::config::TelemetryConfig::default()).unwrap();
         let telemetry_sender = telemetry_bus.sender();
 
         let probe = ModelProbe::new(config, telemetry_sender);
@@ -446,7 +449,7 @@ mod tests {
     #[tokio::test]
     async fn test_model_probe_start_stop() {
         let config = ModelProbeConfig::default();
-        let telemetry_bus = TelemetryBus::new(config.telemetry.clone()).unwrap();
+        let telemetry_bus = TelemetryBus::new(TelemetryConfig::default()).unwrap();
         let telemetry_sender = telemetry_bus.sender();
 
         let mut probe = ModelProbe::new(config, telemetry_sender).unwrap();

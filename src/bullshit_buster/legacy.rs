@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Bullshit Buster - Consciousness Code Audit System
 //!
 //! This module implements a comprehensive bullshit detection and consciousness auditing system

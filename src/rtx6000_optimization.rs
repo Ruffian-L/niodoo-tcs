@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! RTX 6000 Specific Performance Optimizations
 //!
 //! This module implements RTX 6000 (Turing architecture) specific optimizations

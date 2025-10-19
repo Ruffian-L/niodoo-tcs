@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🧠📊 Machine Learning Pattern Recognition for NiodO.o Consciousness
  *
@@ -14,7 +17,7 @@ use tracing::{debug, info, warn};
 use crate::consciousness::{ConsciousnessState, EmotionType, ReasoningMode};
 use crate::config::ConsciousnessConfig;
 use crate::memory::consolidation::{ConsolidatedMemory, MemoryConsolidationEngine};
-use crate::qwen_integration::{QwenIntegrator, QwenConfig};
+use niodoo_core::qwen_integration::{QwenIntegrator, QwenConfig};
 
 /// Pattern recognition configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

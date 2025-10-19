@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🔬 DETAILED QWEN PERFORMANCE PROFILER
  *
@@ -8,7 +11,7 @@
 
 use anyhow::Result;
 use niodoo_consciousness::config::AppConfig;
-use niodoo_consciousness::qwen_integration::QwenIntegrator;
+use niodoo_core::qwen_integration::QwenIntegrator;
 use std::time::Instant;
 use tracing::{info, warn};
 

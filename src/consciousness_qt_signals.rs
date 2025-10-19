@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Qt Signal Bridge for Real-Time Consciousness Updates
 //!
 //! This module establishes the reactive signal connections between:

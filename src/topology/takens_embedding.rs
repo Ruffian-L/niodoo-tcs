@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use nalgebra::{DMatrix, DVector};
 use rayon::prelude::*;
 // use statistical::*;

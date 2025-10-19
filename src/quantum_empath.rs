@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 pub mod quantum_empath {
     use crate::empathy::empathy::{EmotionalVector, EmpathicInput, EmpathyNetwork};
     use crate::quantum::quantum::QuantumState; // Fixed path, added EmpathicInput

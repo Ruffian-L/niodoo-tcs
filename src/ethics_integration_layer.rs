@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 /*
  * 🛡️⚡ COMPREHENSIVE ETHICS INTEGRATION LAYER ⚡🛡️
  *
@@ -32,6 +35,22 @@ use crate::consciousness_ethics_framework::{
     ConsciousnessDecision, ConsciousnessEthicsFramework, EthicalAssessment, EthicalViolation,
     EthicalViolationType,
 };
+
+/// Simple ethics evaluation result for testing
+#[derive(Debug, Clone)]
+pub struct EthicsEvaluation {
+    pub is_ethical: bool,
+    pub ethical_score: f32,
+    pub concerns: Vec<String>,
+    pub should_proceed: bool,
+    pub recommendations: Vec<String>,
+}
+
+/// Ethics error type
+#[derive(Debug, Clone)]
+pub struct EthicsError {
+    pub message: String,
+}
 
 /// Async ethical assessment wrapper for all consciousness operations
 pub struct EthicsIntegrationLayer {
@@ -604,6 +623,27 @@ impl EthicsIntegrationLayer {
 
         let mut trail = self.audit_trail.write().await;
         trail.clear();
+    }
+
+    /// Simple ethical compliance evaluation for testing
+    pub async fn evaluate_ethical_compliance(&self, content: &str) -> Result<EthicsEvaluation> {
+        let decision = ConsciousnessDecision {
+            id: format!("compliance_check_{}", uuid::Uuid::new_v4()),
+            content: content.to_string(),
+            affected_parties: vec!["system".to_string()],
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64(),
+            context: HashMap::new(),
+        };
+
+        let result = self.assess_decision_async(decision).await?;
+        
+        Ok(EthicsEvaluation {
+            is_ethical: result.should_proceed,
+            ethical_score: result.assessment.overall_score,
+            concerns: result.assessment.violations.iter().map(|v| v.description.clone()).collect(),
+            should_proceed: result.should_proceed,
+            recommendations: result.recommendations,
+        })
     }
 }
 

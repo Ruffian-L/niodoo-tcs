@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! RAG-Qwen30B Integration Module
 //!
 //! This module integrates the RAG (Retrieval-Augmented Generation) system

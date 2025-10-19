@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 #[cfg(test)]
 mod ethical_tests {
     use crate::config::{AppConfig, EthicsConfig};

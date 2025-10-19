@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 6 System Integration Module
 //!
 //! This module provides unified integration of all Phase 6 production components,
@@ -522,6 +525,7 @@ impl Phase6IntegrationSystem {
                 plasticity: 0.6,
                 progress_score: 0.5,
                 forgetting_rate: 0.0,
+                loss: 0.5, // Complement of progress_score
             };
 
             learning_analytics

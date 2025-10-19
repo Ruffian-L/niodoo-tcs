@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Comprehensive test suite for Gaussian process validation
 //!
 //! This module provides extensive tests for the GP validation framework,

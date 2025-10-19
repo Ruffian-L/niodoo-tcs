@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+//!
 //! Topological Quantum Field Theory (TQFT) primitives and validation utilities.
 //!
 //! This module exposes a Frobenius algebra implementation aligned with the

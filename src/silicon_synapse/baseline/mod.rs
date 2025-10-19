@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Baseline learning and anomaly detection for Silicon Synapse
 //!
 //! This module implements baseline learning, anomaly detection, and classification

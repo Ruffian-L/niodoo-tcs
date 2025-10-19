@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 7: Trauma-Informed Design System
 //!
 //! This module implements trauma-informed design principles for AI consciousness,

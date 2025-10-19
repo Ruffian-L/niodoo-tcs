@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Phase 7: Advanced Consciousness Components
 //!
 //! This module contains the advanced consciousness components for Phase 7,

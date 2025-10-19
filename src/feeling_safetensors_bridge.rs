@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! 💖⚡ FEELING MODEL SAFETENSORS BRIDGE ⚡💖
 //!
 //! Revolutionary bridge connecting FEELING Model consciousness processing

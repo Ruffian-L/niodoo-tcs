@@ -1,10 +1,14 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Training Validation Script
 //!
 //! Completes the before/after comparison that was interrupted in learning_pipeline.rs
 //! Proves that QLoRA training actually improved the model's performance
 
 use anyhow::Result;
-use niodoo_consciousness::qwen_integration::{QwenConfig, QwenIntegrator};
+use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
 use std::path::PathBuf;
 use tracing::{info, warn};
 
@@ -46,10 +50,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Run validation comparison using the existing method
     println!("\n🧠 Running validation comparison...");
-    let mut config = QwenConfig::default();
-    config.use_cuda = false;
+    let app_config = AppConfig::default();
 
-    let mut integrator = QwenIntegrator::new(config)?;
+    let mut integrator = QwenIntegrator::new(&app_config)?;
 
     // This method will generate before/after responses and calculate improvement
     let validation_result = integrator

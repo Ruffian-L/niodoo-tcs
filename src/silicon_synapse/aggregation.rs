@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Aggregation engine for Silicon Synapse metrics
 //!
 //! This module implements the aggregation engine responsible for processing raw telemetry events,
@@ -14,6 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::watch;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc;
 use tokio::time::interval;
 use tracing::{debug, info};
 

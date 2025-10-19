@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! vLLM HTTP Bridge for Qwen2.5 inference via external vLLM service
 //!
 //! This module communicates with a running vLLM server (typically on port 8000)

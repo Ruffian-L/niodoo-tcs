@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! # Silicon Synapse Hardware Monitoring System
 //!
 //! A comprehensive hardware-grounded AI state monitoring system for the Niodoo-Feeling Gen 1 consciousness engine.
@@ -264,7 +267,7 @@ mod tests {
 
         // Should start successfully even when disabled
         synapse.start().await.unwrap();
-        assert!(!synapse.is_running()); // Should not be running when disabled
+        assert!(!synapse.is_running().await); // Should not be running when disabled
     }
 
     #[tokio::test]

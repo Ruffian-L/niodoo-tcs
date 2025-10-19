@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 //! Simplified Machine Learning Optimization for Niodoo-Feeling
 //!
 //! This module implements basic ML optimization techniques:

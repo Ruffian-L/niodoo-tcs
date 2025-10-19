@@ -1,3 +1,6 @@
+//! Niodoo-TCS: Topological Cognitive System
+//! Copyright (c) 2025 Jason Van Pham
+
 use super::local_embeddings::{Document, MathematicalEmbeddingModel};
 use crate::consciousness::ConsciousnessState;
 
@@ -37,6 +40,7 @@ impl QueryCharacteristics {
 pub struct RetrievalEngine {
     config: RetrievalConfig,
     model: MathematicalEmbeddingModel, // Assume access to embedding model if needed
+    documents: Vec<Document>,
 }
 
 impl Default for RetrievalEngine {
@@ -54,7 +58,12 @@ impl RetrievalEngine {
                 max_results: 5,
             },
             model: MathematicalEmbeddingModel::default(), // Stub, but real would load
+            documents: Vec::new(),
         }
+    }
+
+    pub fn add_document(&mut self, doc: Document) {
+        self.documents.push(doc);
     }
 
     pub fn config(&self) -> &RetrievalConfig {
@@ -87,8 +96,7 @@ impl RetrievalEngine {
     }
 
     fn get_documents(&self) -> Vec<Document> {
-        // Stub or load
-        vec![]
+        self.documents.clone()
     }
 
     pub fn prioritize_and_retrieve(
