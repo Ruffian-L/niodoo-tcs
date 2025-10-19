@@ -1,0 +1,25 @@
+# CodeRabbit configuration
+reviews:
+  # Auto-review on all branches, not just default
+  review_status: true
+
+  # Request changes on issues
+  request_changes_workflow: true
+
+  # Review settings
+  high_level_summary: true
+  poem: false
+  review_status: true
+
+  # Path filters (optional - review everything)
+  path_filters:
+    - "**/*.rs"
+    - "**/*.toml"
+    - "**/*.md"
+
+  # Auto reviews on all PRs
+  auto_review:
+    enabled: true
+    # Don't restrict to default branch
+    base_branches:
+      - "*"
