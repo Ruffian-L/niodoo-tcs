@@ -11,6 +11,7 @@ Cargo.lock
 *.dll
 *.so
 *.dylib
+simple_tcs_sync
 
 # Python artifacts
 __pycache__/
@@ -81,3 +82,27 @@ BULLSHIT_QUARANTINE/
 Thumbs.db
 .directory
 .claude/
+
+# Local working directories
+vendor/
+constants_core/
+niodoo-core/
+
+# Python virtual environments
+venv/
+.venv/
+
+# Local cargo config
+.cargo/
+
+# Runtime data
+data/
+
+# Working/scratch files
+*.rs.working
+mock_*.rs
+
+# Local working docs and scripts (not for repo)
+/scripts/
+/docs/working/
+/docs/archive/
