@@ -1,25 +1,20 @@
-# CodeRabbit configuration
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
 reviews:
-  # Auto-review on all branches, not just default
-  review_status: true
-
-  # Request changes on issues
-  request_changes_workflow: true
-
   # Review settings
+  review_status: true
   high_level_summary: true
   poem: false
-  review_status: true
+  request_changes_workflow: true
 
-  # Path filters (optional - review everything)
+  # Path filters (review everything)
   path_filters:
     - "**/*.rs"
     - "**/*.toml"
     - "**/*.md"
 
-  # Auto reviews on all PRs
+  # Auto reviews on all PRs (not just default branch)
   auto_review:
     enabled: true
-    # Don't restrict to default branch
     base_branches:
       - "*"
