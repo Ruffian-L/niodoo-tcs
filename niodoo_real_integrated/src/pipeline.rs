@@ -1,0 +1,204 @@
+use std::path::PathBuf;
+
+use anyhow::Result;
+
+use crate::compass::{CompassEngine, CompassOutcome};
+use crate::config::{CliArgs, HardwareProfile, RuntimeConfig};
+use crate::data::{
+    compute_dataset_stats, load_emotional_dataset, load_rut_gauntlet_prompts, DatasetStats,
+    RutPrompt,
+};
+use crate::embedding::QwenStatefulEmbedder;
+use crate::erag::{CollapseResult, EragClient};
+use crate::generation::{GenerationEngine, GenerationResult};
+use crate::learning::{LearningLoop, LearningOutcome};
+use crate::metrics::metrics;
+use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
+use crate::torus::TorusPadMapper;
+use tracing::warn;
+
+#[derive(Debug, Clone)]
+pub struct Thresholds {
+    pub entropy_mean: f64,
+    pub entropy_high: f64,
+    pub variance_stagnation: f64,
+    pub variance_spike: f64,
+    pub mirage_sigma: f64,
+    pub mcts_c: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PipelineCycle {
+    pub prompt: String,
+    pub baseline_response: String,
+    pub hybrid_response: String,
+    pub entropy: f64,
+    pub rouge: f64,
+    pub latency_ms: f64,
+    pub compass: CompassOutcome,
+    pub generation: GenerationResult,
+    pub tokenizer: TokenizerOutput,
+    pub collapse: CollapseResult,
+    pub learning: LearningOutcome,
+}
+
+pub struct Pipeline {
+    pub config: RuntimeConfig,
+    pub args: CliArgs,
+    pub thresholds: Thresholds,
+    pub dataset_stats: DatasetStats,
+    embedder: QwenStatefulEmbedder,
+    torus: TorusPadMapper,
+    compass: CompassEngine,
+    erag: EragClient,
+    tokenizer: TokenizerEngine,
+    generator: GenerationEngine,
+    learning: LearningLoop,
+}
+
+impl Pipeline {
+    pub async fn initialise(args: CliArgs) -> Result<Self> {
+        let config = RuntimeConfig::load(&args)?;
+        let samples = load_emotional_dataset(&config.training_data_path, Some(20_000))?;
+        let stats = compute_dataset_stats(&samples);
+
+        let thresholds = Thresholds {
+            entropy_mean: stats.entropy_mean,
+            entropy_high: stats.entropy_mean + stats.entropy_std,
+            variance_stagnation: 0.05,
+            variance_spike: stats.variance_std.max(0.3),
+            mirage_sigma: 0.1 * stats.entropy_mean,
+            mcts_c: stats.entropy_std.max(0.1) * 0.25,
+        };
+
+        let qwen_model = locate_qwen_model()?;
+        let embedder = QwenStatefulEmbedder::new(&qwen_model, config.qdrant_vector_dim)?;
+        let torus = TorusPadMapper::new(42);
+        let compass = CompassEngine::new(
+            thresholds.mcts_c,
+            thresholds.variance_spike,
+            thresholds.variance_stagnation,
+        );
+        let erag = EragClient::new(
+            &config.qdrant_url,
+            &config.qdrant_collection,
+            config.qdrant_vector_dim,
+            0.65,
+        )
+        .await?;
+        let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
+        let generator = GenerationEngine::new(&config.vllm_endpoint, &config.vllm_model)?;
+        if let Err(error) = generator.warmup().await {
+            warn!(?error, "vLLM warmup failed");
+        }
+        let learning = LearningLoop::new(
+            config.entropy_cycles_for_baseline.max(8),
+            thresholds.variance_spike,
+        );
+
+        Ok(Self {
+            config,
+            args,
+            thresholds,
+            dataset_stats: stats,
+            embedder,
+            torus,
+            compass,
+            erag,
+            tokenizer,
+            generator,
+            learning,
+        })
+    }
+
+    pub fn rut_prompts(&self) -> Vec<RutPrompt> {
+        load_rut_gauntlet_prompts()
+    }
+
+    pub async fn process_prompt(&mut self, prompt: &str) -> Result<PipelineCycle> {
+        let embedding = self.embedder.embed(prompt).await?;
+        let pad_state = self.torus.project(&embedding)?;
+        let compass = self.compass.evaluate(&pad_state)?;
+
+        let collapse = self.erag.collapse(&embedding).await?;
+
+        let tokenizer_output =
+            self.tokenizer
+                .process(prompt, &collapse, &pad_state, self.thresholds.entropy_mean)?;
+
+        let generation = self.generator.generate(&tokenizer_output, &compass).await?;
+
+        let learning = self
+            .learning
+            .update(&pad_state, &compass, &collapse, &generation)?;
+
+        self.erag
+            .upsert_memory(
+                &embedding,
+                &pad_state,
+                &compass,
+                prompt,
+                &generation.hybrid_response,
+                &collapse
+                    .aggregated_context
+                    .lines()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(),
+                pad_state.entropy,
+            )
+            .await
+            .ok();
+
+        metrics().observe_cycle(
+            pad_state.entropy,
+            generation.latency_ms,
+            generation.rouge_to_baseline,
+            compass.is_threat,
+            compass.is_healing,
+        );
+
+        Ok(PipelineCycle {
+            prompt: prompt.to_string(),
+            baseline_response: generation.baseline_response.clone(),
+            hybrid_response: generation.hybrid_response.clone(),
+            entropy: pad_state.entropy,
+            rouge: generation.rouge_to_baseline,
+            latency_ms: generation.latency_ms,
+            compass,
+            generation,
+            tokenizer: tokenizer_output,
+            collapse,
+            learning,
+        })
+    }
+
+    pub fn hardware_profile(&self) -> HardwareProfile {
+        self.args.hardware
+    }
+}
+
+fn locate_qwen_model() -> Result<PathBuf> {
+    if let Ok(path) = std::env::var("QWEN_MODEL_PATH") {
+        let pb = PathBuf::from(path);
+        if pb.exists() {
+            return Ok(pb);
+        }
+    }
+    let default = PathBuf::from("../models/qwen2.5-coder-0.5b-instruct-onnx/model_quantized.onnx");
+    if default.exists() {
+        Ok(default)
+    } else {
+        anyhow::bail!("Qwen model path not provided via QWEN_MODEL_PATH and default not found")
+    }
+}
+
+fn tokenizer_path() -> Result<PathBuf> {
+    let path = std::env::var("TOKENIZER_JSON")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("../tokenizer.json"));
+    if path.exists() {
+        Ok(path)
+    } else {
+        anyhow::bail!("Tokenizer JSON not found at {}", path.display())
+    }
+}

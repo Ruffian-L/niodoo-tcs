@@ -507,10 +507,7 @@ impl StressTestingFramework {
                 // Ethics evaluation
                 let ethics = EthicsIntegrationLayer::new(EthicsIntegrationConfig::default());
                 let _: Result<EthicsEvaluation, EthicsError> = ethics
-                    .evaluate_ethical_compliance(&format!(
-                        "Stress test content {}",
-                        operation_id
-                    ))
+                    .evaluate_ethical_compliance(&format!("Stress test content {}", operation_id))
                     .await;
             }
             3 => {
@@ -527,8 +524,10 @@ impl StressTestingFramework {
                     repeat_penalty: 1.0,
                 };
 
-                if let Ok(_inference) = QwenInference::new("microsoft/DialoGPT-small".to_string(), candle_core::Device::Cpu)
-                {
+                if let Ok(_inference) = QwenInference::new(
+                    "microsoft/DialoGPT-small".to_string(),
+                    candle_core::Device::Cpu,
+                ) {
                     // Simulate inference time
                     sleep(Duration::from_millis(100)).await;
                 }

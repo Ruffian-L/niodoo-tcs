@@ -49,9 +49,9 @@ impl EmbeddingPrivacyShield {
 
     /// Add differential privacy noise to embedding
     pub fn add_noise(embedding: &Array1<f32>, noise_scale: f32) -> Array1<f32> {
-        use rand_distr::{Distribution, Normal};
-        use rand_chacha::ChaCha8Rng;
         use rand_chacha::rand_core::SeedableRng;
+        use rand_chacha::ChaCha8Rng;
+        use rand_distr::{Distribution, Normal};
 
         // Use ChaCha8Rng which is compatible across rand versions
         let mut rng = ChaCha8Rng::from_entropy();

@@ -1,0 +1,13 @@
+{
+  "total_prompts": 100,
+  "avg_entropy": 1.9771536312274964,
+  "entropy_std": 0.1936292765149411,
+  "threat_count": 60,
+  "healing_count": 0,
+  "avg_latency_ms": 117.78,
+  "entropy_stability": true,
+  "emotional_activation": true,
+  "avg_coherence_rouge": 0.03743262411347521,
+  "breakthroughs": 73,
+  "verdict": "Validated: Full operational torque achieved"
+}

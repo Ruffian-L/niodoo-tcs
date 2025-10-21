@@ -628,9 +628,12 @@ impl MultiLayerMemoryQuery {
         // Create checkpoint directory if it doesn't exist
         fs::create_dir_all(&self.checkpoint_dir)?;
 
+        // TODO: Re-enable after qwen_curator is properly implemented
         // Create Qwen-compatible LearningEvent for fine-tuning
-        use niodoo_core::qwen_curator::{EmotionalState, LearningEvent as QwenLearningEvent};
+        // use niodoo_core::qwen_curator::{EmotionalState, LearningEvent as QwenLearningEvent};
 
+        // DISABLED - qwen_curator types not yet implemented
+        /*
         let qwen_event = QwenLearningEvent {
             timestamp: chrono::Utc::now().timestamp().to_string(),
             input: query_text.to_string(),
@@ -668,6 +671,7 @@ impl MultiLayerMemoryQuery {
         let qwen_filepath = self.checkpoint_dir.join(qwen_filename);
         let qwen_json = serde_json::to_string_pretty(&qwen_event)?;
         fs::write(&qwen_filepath, qwen_json)?;
+        */
 
         // Also save the original memory analysis event for debugging
         let memory_event = LearningEvent {
@@ -693,8 +697,7 @@ impl MultiLayerMemoryQuery {
         fs::write(&memory_filepath, memory_json)?;
 
         tracing::info!(
-            "📝 Persisted learning events: Qwen-compatible ({}) and memory analysis ({})",
-            qwen_filepath.display(),
+            "📝 Persisted learning event: memory analysis ({})",
             memory_filepath.display()
         );
         Ok(())

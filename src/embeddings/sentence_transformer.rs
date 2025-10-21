@@ -9,7 +9,47 @@ use lru::LruCache;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tokenizers::Tokenizer;
+// use tokenizers::Tokenizer; // Temporarily disabled due to onig linking issues
+
+// Stub type for Tokenizer
+#[derive(Clone)]
+pub struct Tokenizer;
+
+impl Tokenizer {
+    pub fn from_file(_path: impl Into<std::path::PathBuf>) -> Result<Self> {
+        Ok(Tokenizer)
+    }
+
+    pub fn encode(&self, _text: &str, _add_special_tokens: bool) -> Result<Encoding> {
+        Ok(Encoding {
+            ids: vec![],
+            attention_mask: vec![],
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct Encoding {
+    pub ids: Vec<u32>,
+    pub attention_mask: Vec<u32>,
+}
+
+impl Encoding {
+    pub fn map_err<F, O>(self, _f: F) -> Result<Self, O>
+    where
+        F: FnOnce(anyhow::Error) -> O,
+    {
+        Ok(self)
+    }
+
+    pub fn get_ids(&self) -> &[u32] {
+        &self.ids
+    }
+
+    pub fn get_attention_mask(&self) -> &[u32] {
+        &self.attention_mask
+    }
+}
 
 // Use a trait for future flexibility
 pub trait SentenceEmbedder {

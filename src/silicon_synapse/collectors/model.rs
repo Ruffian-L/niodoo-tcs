@@ -439,7 +439,8 @@ mod tests {
     #[tokio::test]
     async fn test_model_probe_creation() {
         let config = ModelProbeConfig::default();
-        let telemetry_bus = TelemetryBus::new(crate::silicon_synapse::config::TelemetryConfig::default()).unwrap();
+        let telemetry_bus =
+            TelemetryBus::new(crate::silicon_synapse::config::TelemetryConfig::default()).unwrap();
         let telemetry_sender = telemetry_bus.sender();
 
         let probe = ModelProbe::new(config, telemetry_sender);

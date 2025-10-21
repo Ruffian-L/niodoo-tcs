@@ -21,7 +21,35 @@ use std::time::Instant;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use niodoo_core::qwen_curator::{EmotionalState, LearningEvent, TopologyMetrics};
+// TODO: Re-enable after qwen_curator is properly implemented
+// use niodoo_core::qwen_curator::{EmotionalState, LearningEvent, TopologyMetrics};
+
+// TEMPORARY STUBS - Replace with real qwen_curator types when available
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LearningEvent {
+    pub timestamp: String,
+    pub input: String,
+    pub response: String,
+    pub emotional_state: Option<EmotionalState>,
+    pub coherence: Option<f64>,
+    pub memory_activations: Option<Vec<f64>>,
+    pub topology_metrics: Option<TopologyMetrics>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EmotionalState {
+    pub pleasure: f64,
+    pub arousal: f64,
+    pub dominance: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TopologyMetrics {
+    pub curvature: f64,
+    pub twist_factor: f64,
+    pub geodesic_distance: f64,
+}
+// END TEMPORARY STUBS
 
 /// Configuration for RAG retrieval system - NO HARDCODED VALUES
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -34,6 +62,25 @@ pub struct RagConfig {
     pub top_k_default: usize,
     /// Weight for emotional component in retrieval scoring
     pub emotional_weight: f32,
+}
+
+/// Memory statistics for the RAG system
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MemoryStats {
+    /// Total number of documents stored
+    pub total_documents: usize,
+    /// Total number of memory spheres
+    pub total_spheres: usize,
+    /// Total number of links between spheres
+    pub total_links: usize,
+    /// Number of breakthrough memories
+    pub breakthrough_memories: usize,
+    /// Total importance score
+    pub total_importance: f32,
+    /// Average importance score
+    pub average_importance: f32,
+    /// Maximum importance score
+    pub max_importance: f32,
 }
 
 impl Default for RagConfig {
@@ -215,7 +262,7 @@ impl MemorySphere {
     /// Create a new memory sphere from a document
     pub fn from_document(doc: &Document) -> Self {
         Self {
-            id: Uuid::new_v4().to_string(),
+            id: doc.id.clone(),
             concept: doc
                 .metadata
                 .get("title")
@@ -288,6 +335,46 @@ impl RagEngine {
         Ok(())
     }
 
+    /// Add a document directly to the RAG system
+    pub fn add_document(&mut self, document: Document) -> Result<()> {
+        // Create memory sphere from document
+        let sphere = MemorySphere::from_document(&document);
+
+        // Add document to store
+        self.documents.insert(document.id.clone(), document);
+
+        // Add sphere to memory
+        self.spheres.push(sphere);
+
+        // Update links between spheres
+        self.update_sphere_links()?;
+
+        Ok(())
+    }
+
+    /// Get memory statistics
+    pub fn memory_stats(&self) -> Result<MemoryStats> {
+        let total_documents = self.documents.len();
+        let total_spheres = self.spheres.len();
+        let total_links = self.spheres.iter().map(|s| s.links.len()).sum();
+
+        // For RagEngine, we don't track importance, so set to 0
+        let breakthrough_memories = 0;
+        let total_importance = 0.0;
+        let average_importance = 0.0;
+        let max_importance = 0.0;
+
+        Ok(MemoryStats {
+            total_documents,
+            total_spheres,
+            total_links,
+            breakthrough_memories,
+            total_importance,
+            average_importance,
+            max_importance,
+        })
+    }
+
     /// Update links between memory spheres based on emotional similarity
     fn update_sphere_links(&mut self) -> Result<()> {
         // Skip if we have fewer than 2 spheres
@@ -325,25 +412,42 @@ impl RagEngine {
 
     /// Retrieve relevant documents based on emotional query
     pub fn retrieve(&self, query_emotion: &EmotionalVector, top_k: usize) -> Vec<(Document, f32)> {
-        let mut results = Vec::new();
+        eprintln!("🔍 RETRIEVE METHOD CALLED!");
+        eprintln!(
+            "📊 Query emotion: joy={:.3}, sadness={:.3}, anger={:.3}, fear={:.3}, surprise={:.3}",
+            query_emotion.joy,
+            query_emotion.sadness,
+            query_emotion.anger,
+            query_emotion.fear,
+            query_emotion.surprise
+        );
+        eprintln!("📚 Total documents in store: {}", self.documents.len());
 
-        // Calculate similarity for each sphere
-        for sphere in &self.spheres {
-            let similarity = sphere.emotional_similarity(query_emotion);
+        let mut candidates = Vec::new();
 
-            // Only include results with significant similarity (config-driven)
-            if similarity > self.config.similarity_threshold_retrieve {
-                if let Some(doc) = self.documents.get(&sphere.id) {
-                    results.push((doc.clone(), similarity));
-                }
+        // Calculate similarity for each document
+        for doc in self.documents.values() {
+            let similarity = doc.embedding.similarity(query_emotion);
+            eprintln!("📄 Doc '{}' similarity: {:.3}", doc.id, similarity);
+
+            // Only include documents above threshold
+            if similarity >= self.config.similarity_threshold_retrieve {
+                candidates.push((doc.clone(), similarity));
             }
         }
 
-        // Sort by similarity (descending)
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        eprintln!(
+            "🎯 Candidates after threshold ({}): {}",
+            self.config.similarity_threshold_retrieve,
+            candidates.len()
+        );
 
-        // Return top-k results
-        results.into_iter().take(top_k).collect()
+        // Sort by similarity descending and take top_k
+        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.truncate(top_k);
+
+        eprintln!("🏆 Returning {} top results", candidates.len());
+        candidates
     }
 
     /// Save RAG data to disk
@@ -536,31 +640,6 @@ impl RagEngine {
         Ok(pruned_count)
     }
 
-    /// Get memory statistics
-    pub fn memory_stats(&self) -> Result<MemoryStats> {
-        let all_docs = self.get_all_documents()?;
-
-        let total_count = all_docs.len();
-        let breakthrough_count = all_docs.iter().filter(|d| d.is_breakthrough()).count();
-
-        let total_importance: f32 = all_docs.iter().map(|d| d.importance()).sum();
-        let avg_importance = if total_count > 0 {
-            total_importance / total_count as f32
-        } else {
-            0.0
-        };
-
-        let max_importance = all_docs.iter().map(|d| d.importance()).fold(0.0, f32::max);
-
-        Ok(MemoryStats {
-            total_documents: total_count,
-            breakthrough_memories: breakthrough_count,
-            total_importance,
-            average_importance: avg_importance,
-            max_importance,
-        })
-    }
-
     /// Get all documents from memory
     fn get_all_documents(&self) -> Result<Vec<Document>> {
         Ok(self.documents.values().cloned().collect())
@@ -573,52 +652,12 @@ impl RagEngine {
         Ok(())
     }
 
-    /// Add single document to memory
-    pub fn add_document(&mut self, doc: Document) -> Result<()> {
-        // Create memory sphere from document
-        let sphere = MemorySphere::from_document(&doc);
-
-        // Add document to store
-        self.documents.insert(doc.id.clone(), doc);
-
-        // Add sphere to memory
-        self.spheres.push(sphere);
-
-        // Update links between spheres
-        self.update_sphere_links()?;
-
-        Ok(())
-    }
-
     /// Get document count
     fn document_count(&self) -> Result<usize> {
         Ok(self.documents.len())
     }
 }
 
-/// Memory statistics struct
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MemoryStats {
-    pub total_documents: usize,
-    pub breakthrough_memories: usize,
-    pub total_importance: f32,
-    pub average_importance: f32,
-    pub max_importance: f32,
-}
-
-impl std::fmt::Display for MemoryStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Docs: {} | Breakthroughs: {} | Total Importance: {:.2} | Avg: {:.2} | Max: {:.2}",
-            self.total_documents,
-            self.breakthrough_memories,
-            self.total_importance,
-            self.average_importance,
-            self.max_importance
-        )
-    }
-}
 pub struct ConsciousnessRagIntegration {
     /// RAG engine
     rag_engine: RagEngine,

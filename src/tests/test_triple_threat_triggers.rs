@@ -4,9 +4,7 @@
 /// Unit tests to validate triple-threat trigger system
 /// Ensures each pathway (mismatch, stagnation, variance) fires correctly
 use crate::consciousness::ConsciousnessState;
-use crate::memory::guessing_spheres::{
-    EmotionalVector, GuessingMemorySystem, SphereId,
-};
+use crate::memory::guessing_spheres::{EmotionalVector, GuessingMemorySystem, SphereId};
 use crate::memory::multi_layer_query::MultiLayerMemoryQuery;
 use crate::rag::local_embeddings::{Document, MathematicalEmbeddingModel};
 use crate::rag::RetrievalEngine;

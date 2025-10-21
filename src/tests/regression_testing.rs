@@ -563,7 +563,10 @@ impl RegressionTestingFramework {
             repeat_penalty: 1.0,
         };
 
-        match QwenInference::new("microsoft/DialoGPT-small".to_string(), candle_core::Device::Cpu) {
+        match QwenInference::new(
+            "microsoft/DialoGPT-small".to_string(),
+            candle_core::Device::Cpu,
+        ) {
             Ok(_) => (
                 true,
                 None,

@@ -106,3 +106,26 @@ mock_*.rs
 /scripts/
 /docs/working/
 /docs/archive/
+
+# Claude-generated test garbage
+test_*
+simple_*
+standalone_*
+*_test
+*_demo
+quick_test*
+minimal_*
+debug_*
+
+# Learning curve CSVs
+learning_curve_*.csv
+learning_events.json
+learning_events.csv
+
+# Sync folders
+.stfolder/
+.stversions/
+
+# VS Code remote
+.vscode-server/
+

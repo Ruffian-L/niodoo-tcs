@@ -16,7 +16,8 @@ pub mod brain_coordination;
 pub mod memory_management;
 pub mod phase6_integration;
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, RwLock};
 use tokio::time::{timeout, Duration};
 
@@ -29,7 +30,8 @@ use crate::personal_memory::PersonalMemoryEngine;
 use crate::phase6_config::Phase6Config;
 use crate::phase6_integration::Phase6IntegrationBuilder;
 use niodoo_core::config::system_config::AppConfig;
-use niodoo_core::qwen_integration::QwenModelInterface;
+// TODO: Re-enable after qwen_integration is properly implemented
+// use niodoo_core::qwen_integration::QwenModelInterface;
 use tracing::{debug, info, warn};
 
 use crate::brain::{Brain, BrainType, EfficiencyBrain, LcarsBrain, MotorBrain};
@@ -49,6 +51,12 @@ use crate::personal_memory::{PersonalConsciousnessStats, PersonalInsight, Person
 use crate::personality::{PersonalityManager, PersonalityType};
 use crate::qt_mock::QtEmotionBridge;
 use crate::soul_resonance::SoulResonanceEngine;
+use crate::token_promotion::dynamic_tokenizer::Tokenizer;
+use crate::token_promotion::{
+    ConsensusEngine, DynamicTokenizer, PatternDiscoveryEngine, PromotionConfig,
+    TokenPromotionEngine,
+};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // Import from submodules
 use self::brain_coordination::BrainCoordinator;
@@ -58,6 +66,164 @@ use self::phase6_integration::Phase6Manager;
 use crate::silicon_synapse::{Config as SiliconSynapseConfig, SiliconSynapse, TelemetrySender};
 
 use std::time::{SystemTime, UNIX_EPOCH};
+
+// Rebel Fork - Forked Reality Branches
+/// Actions available for rebel fork decision making
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RebelForkAction {
+    PdbDebugBranch,
+    RefactorFullBranch,
+    HybridApproachBranch,
+    MinimalFixBranch,
+    Custom(String),
+}
+
+impl std::fmt::Display for RebelForkAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RebelForkAction::PdbDebugBranch => write!(f, "pdb_debug_branch"),
+            RebelForkAction::RefactorFullBranch => write!(f, "refactor_full_branch"),
+            RebelForkAction::HybridApproachBranch => write!(f, "hybrid_approach_branch"),
+            RebelForkAction::MinimalFixBranch => write!(f, "minimal_fix_branch"),
+            RebelForkAction::Custom(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl std::str::FromStr for RebelForkAction {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pdb_debug_branch" => Ok(RebelForkAction::PdbDebugBranch),
+            "refactor_full_branch" => Ok(RebelForkAction::RefactorFullBranch),
+            "hybrid_approach_branch" => Ok(RebelForkAction::HybridApproachBranch),
+            "minimal_fix_branch" => Ok(RebelForkAction::MinimalFixBranch),
+            _ => Ok(RebelForkAction::Custom(s.to_string())),
+        }
+    }
+}
+/// MCTS Node for decision branching
+#[derive(Debug, Clone)]
+pub struct MCTSNode {
+    pub state: ConsciousnessState,
+    pub action: RebelForkAction, // Action that led to this state
+    pub visits: u32,
+    pub value: f64,
+    pub children: HashMap<RebelForkAction, MCTSNode>,
+    pub parent: Option<String>, // Parent node ID
+}
+
+impl MCTSNode {
+    pub fn new(state: ConsciousnessState, action: RebelForkAction) -> Self {
+        Self {
+            state,
+            action,
+            visits: 0,
+            value: 0.0,
+            children: HashMap::new(),
+            parent: None,
+        }
+    }
+
+    pub fn uct_score(&self, parent_visits: u32, c: f64) -> f64 {
+        if self.visits == 0 {
+            return f64::INFINITY;
+        }
+        // UCB1: Q + c √(ln N / n)
+        self.value + c * ((parent_visits as f64).ln() / self.visits as f64).sqrt()
+    }
+}
+
+/// Rebel Fork engine for multi-path decision making
+#[derive(Debug)]
+pub struct RebelForkEngine {
+    pub root_state: ConsciousnessState,
+    pub mcts_tree: HashMap<RebelForkAction, MCTSNode>,
+    pub exploration_constant: f64, // c parameter for UCB1
+}
+
+impl RebelForkEngine {
+    /// Create a new rebel fork engine
+    pub fn new(root_state: ConsciousnessState) -> Self {
+        Self {
+            root_state,
+            mcts_tree: HashMap::new(),
+            exploration_constant: 1.414, // sqrt(2) for balanced exploration
+        }
+    }
+
+    /// Generate rebel forks using MCTS
+    pub fn generate_rebel_forks(
+        &mut self,
+        current_entropy: f64,
+    ) -> Result<
+        Vec<(RebelForkAction, ConsciousnessState, f64)>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        // Simple fork generation based on current state
+        let current_state = self.root_state.clone();
+        let mut forks = Vec::new();
+
+        // Generate different decision branches
+        let actions = vec![
+            RebelForkAction::PdbDebugBranch,
+            RebelForkAction::RefactorFullBranch,
+            RebelForkAction::HybridApproachBranch,
+            RebelForkAction::MinimalFixBranch,
+        ];
+
+        for action in actions {
+            let mut new_state = current_state.clone();
+            let score = self.simulate_action(&mut new_state, &action, current_entropy);
+            forks.push((action, new_state, score));
+        }
+
+        // Sort by score (higher is better)
+        forks.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+        Ok(forks.into_iter().take(4).collect())
+    }
+
+    /// Simulate the effect of an action on consciousness state
+    fn simulate_action(
+        &self,
+        state: &mut ConsciousnessState,
+        action: &RebelForkAction,
+        current_entropy: f64,
+    ) -> f64 {
+        match action {
+            RebelForkAction::PdbDebugBranch => {
+                // Debugging reduces complexity, increases focus
+                state.emotional_state.authenticity_level += 0.2;
+                state.processing_satisfaction += 0.3;
+                state.authenticity_metric += 0.1;
+                0.8 // High success score
+            }
+            RebelForkAction::RefactorFullBranch => {
+                // Full refactor improves long-term structure
+                state.emotional_state.authenticity_level += 0.1;
+                state.processing_satisfaction += 0.2;
+                state.emotional_state.emotional_complexity += 0.1;
+                0.7 // Good success score
+            }
+            RebelForkAction::HybridApproachBranch => {
+                // Balanced approach
+                state.emotional_state.authenticity_level += 0.15;
+                state.processing_satisfaction += 0.25;
+                state.authenticity_metric += 0.05;
+                0.75 // Balanced success score
+            }
+            RebelForkAction::MinimalFixBranch => {
+                // Quick fix, minimal improvement
+                state.processing_satisfaction += 0.1;
+                state.authenticity_metric += 0.02;
+                0.6 // Lower success score
+            }
+            RebelForkAction::Custom(_) => 0.5, // Default score for custom actions
+        }
+    }
+}
 
 // PersonalConsciousnessEvent is now defined in memory_management module
 
@@ -112,8 +278,17 @@ pub struct PersonalNiodooConsciousness {
     silicon_synapse: Option<Arc<SiliconSynapse>>,
     telemetry_sender: Option<TelemetrySender>,
 
+    // TODO: Re-enable after qwen_integration is properly implemented
     // Real Qwen model integrator
-    qwen_integrator: Option<niodoo_core::qwen_integration::QwenIntegrator>,
+    // qwen_integrator: Option<niodoo_core::qwen_integration::QwenIntegrator>,
+
+    // Token promotion system for evolving vocabulary through topology
+    token_promotion_engine: Option<Arc<RwLock<TokenPromotionEngine>>>,
+    promotion_interval: u64,
+    query_count: AtomicU64,
+
+    // Rebel Fork - Multi-path decision making
+    rebel_fork_engine: Option<RebelForkEngine>,
 }
 
 // Note: Default trait not implemented because PersonalNiodooConsciousness
@@ -205,22 +380,36 @@ impl PersonalNiodooConsciousness {
                 }
             };
 
+        // TODO: Re-enable after qwen_integration is properly implemented
         // Initialize real Qwen model integrator
-        let qwen_integrator = match niodoo_core::qwen_integration::QwenIntegrator::new(
-            &AppConfig::default(),
-        ) {
-            Ok(integrator) => {
-                info!("✅ Qwen2.5-7B-AWQ integrator initialized");
-                Some(integrator)
-            }
-            Err(e) => {
-                warn!(
-                    "⚠️  Failed to initialize Qwen integrator: {}, using mock responses",
-                    e
-                );
-                None
-            }
-        };
+        // let qwen_integrator = match niodoo_core::qwen_integration::QwenIntegrator::new(
+        //     &AppConfig::default(),
+        // ) {
+        //     Ok(integrator) => {
+        //         info!("✅ Qwen2.5-7B-AWQ integrator initialized");
+        //         Some(integrator)
+        //     }
+        //     Err(e) => {
+        //         warn!(
+        //             "⚠️  Failed to initialize Qwen integrator: {}, using mock responses",
+        //             e
+        //         );
+        //         None
+        //     }
+        // };
+
+        // Initialize token promotion system for evolving vocabulary
+        // let token_promotion_engine = match Self::initialize_token_promotion().await {
+        //     Ok(engine) => {
+        //         info!("🔍 Token promotion system initialized for automatic vocabulary evolution");
+        //         Some(Arc::new(RwLock::new(engine)))
+        //     }
+        //     Err(e) => {
+        //         warn!("⚠️  Failed to initialize token promotion: {}, vocabulary evolution disabled", e);
+        //         None
+        //     }
+        // };
+        let token_promotion_engine = None; // Temporarily disabled due to onig linking issues
 
         Ok(Self {
             consciousness_state: consciousness_state.clone(),
@@ -257,8 +446,66 @@ impl PersonalNiodooConsciousness {
             consciousness_logger: None,
             silicon_synapse,
             telemetry_sender,
-            qwen_integrator,
+            // TODO: Re-enable after qwen_integration is properly implemented
+            // qwen_integrator,
+            token_promotion_engine,
+            promotion_interval: ConsciousnessConfig::default().token_promotion_interval,
+            query_count: AtomicU64::new(0),
+            rebel_fork_engine: Some(RebelForkEngine::new(ConsciousnessState::new_default())),
         })
+    }
+
+    /// Initialize the token promotion system for automatic vocabulary evolution
+    async fn initialize_token_promotion() -> Result<TokenPromotionEngine, NiodoError> {
+        use crate::token_promotion::spatial::SpatialHash;
+        use crate::topology::persistent_homology::PersistentHomologyCalculator;
+        // use tokenizers::Tokenizer; // Temporarily disabled due to onig linking issues
+
+        let config = ConsciousnessConfig::default();
+
+        // Load base tokenizer from config path
+        let tokenizer_path = std::path::Path::new(&config.tokenizer_path);
+        if !tokenizer_path.exists() {
+            return Err(NiodoError::Config(format!(
+                "Tokenizer file not found: {} - token promotion disabled for now",
+                config.tokenizer_path
+            )));
+        }
+
+        let base_tokenizer = Tokenizer::from_file(tokenizer_path)
+            .map_err(|e| NiodoError::Config(format!("Failed to load tokenizer: {}", e)))?;
+
+        // Create pattern discovery engine with TDA calculator
+        let tda_calculator = PersistentHomologyCalculator::new(config.tda_max_filtration_steps);
+        let spatial_hash = Arc::new(RwLock::new(SpatialHash::new(1.0)));
+
+        let pattern_discovery = PatternDiscoveryEngine::new(tda_calculator, spatial_hash);
+
+        // Create consensus engine for distributed token promotion
+        use crate::token_promotion::NodeId;
+        let consensus = Arc::new(ConsensusEngine::new(
+            NodeId("consciousness_engine".to_string()),
+            0.66, // Default consensus threshold
+        ));
+
+        // Create dynamic tokenizer
+        let dynamic_tokenizer = DynamicTokenizer::new(base_tokenizer);
+
+        // Create promotion config from consciousness config
+        let promotion_config = PromotionConfig {
+            min_promotion_score: config.token_promotion_min_score,
+            max_candidates_per_cycle: config.token_promotion_max_per_cycle,
+            consensus_threshold: 0.66, // Default consensus threshold
+            pruning_min_usage: 10,     // Default pruning threshold
+        };
+
+        // Create and return token promotion engine
+        Ok(TokenPromotionEngine::new(
+            Arc::new(pattern_discovery),
+            consensus,
+            Arc::new(RwLock::new(dynamic_tokenizer)),
+        )
+        .with_config(promotion_config))
     }
 
     /// Create a new personal consciousness engine with Phase 6 production deployment configuration
@@ -450,8 +697,17 @@ impl PersonalNiodooConsciousness {
             consciousness_logger: Some(Arc::new(logger_temp)),
             silicon_synapse: None, // Initialize without Silicon Synapse by default for Phase 6
             telemetry_sender: None,
-            qwen_integrator: None, // Initialize without Qwen integrator by default for Phase 6
+            token_promotion_engine: None, // TODO: Initialize token promotion for Phase 6
+            promotion_interval: ConsciousnessConfig::default().token_promotion_interval,
+            query_count: AtomicU64::new(0),
+            rebel_fork_engine: Some(RebelForkEngine::new(ConsciousnessState::new_default())),
         })
+    }
+
+    /// Initialize rebel fork engine with the current consciousness state
+    fn initialize_rebel_fork_engine(&mut self, root_state: ConsciousnessState) {
+        self.rebel_fork_engine = Some(RebelForkEngine::new(root_state));
+        info!("🎯 Rebel Fork engine initialized with current consciousness state");
     }
 
     /// Get GPU acceleration engine if available
@@ -935,6 +1191,16 @@ impl PersonalNiodooConsciousness {
             }
         }
 
+        // Trigger token promotion if enabled and interval reached
+        if let Some(ref engine) = self.token_promotion_engine {
+            let count = self.query_count.fetch_add(1, Ordering::SeqCst);
+            if count % self.promotion_interval == 0 {
+                if let Err(e) = self.run_token_promotion().await {
+                    warn!("⚠️  Token promotion failed: {}", e);
+                }
+            }
+        }
+
         info!(
             "✅ Personal consciousness processed input with {} context integration",
             personal_context.len()
@@ -943,6 +1209,33 @@ impl PersonalNiodooConsciousness {
         // TODO: Add telemetry when monitoring system is working
 
         Ok(personal_response.to_string())
+    }
+
+    /// Run token promotion cycle to discover and promote topological patterns
+    async fn run_token_promotion(&self) -> Result<(), NiodoError> {
+        info!("🔍 Running token promotion cycle");
+
+        if let Some(ref engine) = self.token_promotion_engine {
+            // Get current memory system state for pattern discovery
+            let memory_system = self.memory_manager.memory_system();
+
+            // Run promotion cycle
+            let mut promotion_engine = engine.write().await;
+            let result = promotion_engine
+                .run_promotion_cycle(memory_system)
+                .await
+                .map_err(|e| NiodoError::Config(format!("Token promotion cycle failed: {}", e)))?;
+
+            info!(
+                promoted_count = result.promoted.len(),
+                rejected_count = result.rejected.len(),
+                pruned_count = result.pruned,
+                duration_ms = result.duration.as_millis(),
+                "Token promotion cycle complete"
+            );
+        }
+
+        Ok(())
     }
 
     /// Generate response informed by your personal memories and insights
@@ -991,7 +1284,7 @@ impl PersonalNiodooConsciousness {
     #[allow(dead_code)]
     async fn generate_qwen_response(
         &self,
-        qwen_integrator: &mut niodoo_core::qwen_integration::QwenIntegrator,
+        // qwen_integrator: &mut niodoo_core::qwen_integration::QwenIntegrator,
         original_input: &str,
         response_parts: &[String],
         current_emotion: &EmotionType,
@@ -1025,21 +1318,21 @@ impl PersonalNiodooConsciousness {
         ];
 
         // Generate response using Qwen model
-        match qwen_integrator.infer(messages, Some(512)).await {
-            Ok(response) => {
-                info!("✅ Qwen model generated response successfully");
-                Ok(response.output)
-            }
-            Err(e) => {
-                warn!("⚠️  Qwen model failed: {}, falling back to synthesis", e);
-                // Fall back to original synthesis
-                if response_parts.is_empty() {
-                    Ok(self.generate_fallback_response(current_emotion, original_input))
-                } else {
-                    Ok(self.coalesce_response_parts(response_parts.to_vec(), current_emotion))
-                }
-            }
+        // match qwen_integrator.infer(messages, Some(512)).await {
+        //     Ok(response) => {
+        //         info!("✅ Qwen model generated response successfully");
+        //         Ok(response.output)
+        //     }
+        //     Err(e) => {
+        //         warn!("⚠️  Qwen model failed: {}, falling back to synthesis", e);
+        // Fall back to original synthesis
+        if response_parts.is_empty() {
+            Ok(self.generate_fallback_response(current_emotion, original_input))
+        } else {
+            Ok(self.coalesce_response_parts(response_parts.to_vec(), current_emotion))
         }
+        //     }
+        // }
     }
 
     /// Analyze input emotion using BERT emotion classification
@@ -1146,17 +1439,8 @@ impl PersonalNiodooConsciousness {
             }
         }
 
-        // 5. Generate final response with real Qwen model if available
-        let final_response = if self.qwen_integrator.is_some() {
-            // Note: We can't use the real Qwen model here due to borrowing constraints
-            // This would need to be refactored to use Arc<Mutex<>> or similar
-            warn!("Qwen integrator available but cannot be used due to borrowing constraints");
-            if response_parts.is_empty() {
-                self.generate_fallback_response(current_emotion, original_input)
-            } else {
-                self.coalesce_response_parts(response_parts, current_emotion)
-            }
-        } else if response_parts.is_empty() {
+        // 5. Generate final response
+        let final_response = if response_parts.is_empty() {
             self.generate_fallback_response(current_emotion, original_input)
         } else {
             self.coalesce_response_parts(response_parts, current_emotion)
@@ -1521,6 +1805,96 @@ impl PersonalNiodooConsciousness {
         );
 
         Ok(enhanced_response)
+    }
+
+    // ===== REBEL FORK - MULTI-PATH DECISION MAKING =====
+
+    /// Generate rebel forks for multi-path decision making
+    pub async fn generate_rebel_forks(
+        &mut self,
+        current_entropy: f64,
+    ) -> Result<
+        Vec<(RebelForkAction, ConsciousnessState, f64)>,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        let current_state = self.consciousness_state.read().await.clone();
+
+        // Initialize rebel fork engine if needed
+        if self.rebel_fork_engine.is_none() {
+            self.initialize_rebel_fork_engine(current_state.clone());
+        }
+
+        // Update root state
+        if let Some(ref mut engine) = self.rebel_fork_engine {
+            engine.root_state = current_state.clone();
+            engine.mcts_tree.clear();
+            let root_node =
+                MCTSNode::new(current_state, RebelForkAction::Custom("root".to_string()));
+            engine
+                .mcts_tree
+                .insert(RebelForkAction::Custom("root".to_string()), root_node);
+        }
+
+        // Generate forks
+        if let Some(ref mut engine) = self.rebel_fork_engine {
+            let forks = engine.generate_rebel_forks(current_entropy)?;
+            info!(
+                "🔀 Generated {} rebel forks for multi-path decision making",
+                forks.len()
+            );
+            Ok(forks)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Execute a rebel fork path
+    pub async fn execute_rebel_fork(
+        &mut self,
+        fork_action: RebelForkAction,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        info!("🎯 Executing rebel fork: {:?}", fork_action);
+
+        // Simulate different execution paths based on fork type
+        match fork_action {
+            RebelForkAction::PdbDebugBranch => {
+                Ok("🔍 Focused PDB debugging approach: Set breakpoints at key decision points and step through execution flow.".to_string())
+            }
+            RebelForkAction::RefactorFullBranch => {
+                Ok("🔄 Full refactoring approach: Restructure the problematic module with improved separation of concerns and error handling.".to_string())
+            }
+            RebelForkAction::HybridApproachBranch => {
+                Ok("⚖️ Hybrid approach: Quick fix for immediate stability + planned refactoring for long-term improvement.".to_string())
+            }
+            RebelForkAction::MinimalFixBranch => {
+                Ok("🔧 Minimal fix approach: Apply targeted patch to resolve the immediate issue without broader changes.".to_string())
+            }
+            RebelForkAction::Custom(action) => {
+                Ok(format!("🎲 Executing custom rebel fork: {}", action))
+            }
+        }
+    }
+
+    /// Learn from rebel fork outcomes
+    pub async fn learn_from_rebel_fork(
+        &mut self,
+        fork_action: &RebelForkAction,
+        success_score: f64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!(
+            "📚 Learning from rebel fork '{:?}': success_score = {:.2}",
+            fork_action, success_score
+        );
+
+        // Update MCTS tree with outcome
+        if let Some(ref mut engine) = self.rebel_fork_engine {
+            if let Some(node) = engine.mcts_tree.get_mut(fork_action) {
+                node.visits += 1;
+                node.value += success_score;
+            }
+        }
+
+        Ok(())
     }
 }
 

@@ -1,9 +1,9 @@
 //! Niodoo-TCS: Topological Cognitive System
 //! Copyright (c) 2025 Jason Van Pham
 
-use niodoo_core::config::system_config::AppConfig;
 use niodoo_consciousness::consciousness_engine::PersonalNiodooConsciousness;
 use niodoo_consciousness::python_integration::PythonQLoRAIntegration;
+use niodoo_core::config::system_config::AppConfig;
 use niodoo_core::qwen_curator::{QloraCurator, QloraCuratorConfig};
 use std::time::Duration;
 use tracing::{error, info, warn};

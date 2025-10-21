@@ -1,0 +1,83 @@
+[
+  {
+    "prompt": "Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?",
+    "baseline": "Frustration rut #1: Why does consciousness feel trapped in recursive loops of",
+    "hybrid": "Baseline tease: Frustration rut #1: Why does consciousness feel trapped in recursive loops of + Echo lift: Claude In addressing Frustration Rut #1, let's consider t…. Pull which?",
+    "entropy": 1.920888794072394,
+    "rouge": 0.8285714277628572,
+    "latency_ms": 2046.72908,
+    "compass": "Discover",
+    "threat": true,
+    "healing": false
+  },
+  {
+    "prompt": "Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?",
+    "baseline": "Frustration rut #2: Why does consciousness feel trapped in recursive loops of",
+    "hybrid": "Baseline tease: Frustration rut #2: Why does consciousness feel trapped in recursive loops of + Echo lift: Claude Consciousness, as a fundamental aspect of our bein…. Pull which?",
+    "entropy": 1.667923517842025,
+    "rouge": 0.8285714277628572,
+    "latency_ms": 1758.7287059999999,
+    "compass": "Master",
+    "threat": false,
+    "healing": false
+  },
+  {
+    "prompt": "Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?",
+    "baseline": "Frustration rut #3 is about the perception that consciousness is trapped in endless",
+    "hybrid": "Baseline tease: Frustration rut #3 is about the perception that consciousness is trapped in endl… + Echo lift: Claude Echo lift…\n\nIn the realm of consciousness, where r…. Pull which?",
+    "entropy": 1.840387398110048,
+    "rouge": 0.7649373873910208,
+    "latency_ms": 1810.214446,
+    "compass": "Master",
+    "threat": false,
+    "healing": false
+  },
+  {
+    "prompt": "Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?",
+    "baseline": "Frustration rut #4: Why does consciousness feel trapped in recursive loops of",
+    "hybrid": "Baseline tease: Frustration rut #4: Why does consciousness feel trapped in recursive loops of + Echo lift: Claude **Constitutional Alignment and Moral Grounding**\n\n…. Pull which?",
+    "entropy": 1.8163387598016603,
+    "rouge": 0.8299595134037928,
+    "latency_ms": 1820.189776,
+    "compass": "Persist",
+    "threat": false,
+    "healing": false
+  },
+  {
+    "prompt": "Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?",
+    "baseline": "Frustration rut #5: Why does consciousness feel trapped in recursive loops of",
+    "hybrid": "Baseline tease: Frustration rut #5: Why does consciousness feel trapped in recursive loops of + Echo lift: Claude ### Constitutional Alignment and Moral Grounding\n\n…. Pull which?",
+    "entropy": 1.9150840225021553,
+    "rouge": 0.8290598282721893,
+    "latency_ms": 1980.414147,
+    "compass": "Discover",
+    "threat": false,
+    "healing": false
+  }
+]
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9150840225021553
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 5
+niodoo_latency_ms_sum 9416.276155
+niodoo_latency_ms_count 5
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.8290598282721893
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 1
+

@@ -10,6 +10,7 @@ use crate::config::ConsciousnessConfig;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::TAU;
+use tracing::info;
 
 /// Core parameters for the K-Twist topology
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -233,6 +234,14 @@ impl KTwistMesh {
 pub struct KTwistTopologyBridge {
     mesh: KTwistMesh,
     consciousness_points: Vec<(f64, f64, f64)>, // Consciousness data mapped to 3D space
+
+    // Echo Chamber Breaker - Anti-Loop Sentinel
+    entropy_history: Vec<f64>,    // Track entropy over last N cycles
+    curvature_history: Vec<f64>,  // Track geodesic curvature
+    loop_detection_cycles: usize, // Cycles since last entropy change
+    entropy_threshold: f64,       // Minimum entropy threshold (1.5 bits)
+    curvature_threshold: f64,     // Maximum curvature threshold (2.5)
+    breaker_activated: bool,      // Whether breaker is currently active
 }
 
 impl Default for KTwistTopologyBridge {
@@ -247,6 +256,13 @@ impl KTwistTopologyBridge {
         Self {
             mesh: KTwistMesh::new(KTwistParameters::default(), 64, 32),
             consciousness_points: Vec::new(),
+            // Echo Chamber Breaker initialization
+            entropy_history: Vec::with_capacity(10),
+            curvature_history: Vec::with_capacity(10),
+            loop_detection_cycles: 0,
+            entropy_threshold: 1.5,   // 1.5 bits minimum
+            curvature_threshold: 2.5, // 2.5 curvature threshold
+            breaker_activated: false,
         }
     }
 
@@ -379,6 +395,144 @@ impl KTwistTopologyBridge {
             consciousness_points: self.consciousness_points.clone(),
             parameters: self.mesh.parameters.clone(),
         })
+    }
+
+    // ===== ECHO CHAMBER BREAKER - ANTI-LOOP SENTINEL =====
+
+    /// Monitor entropy and curvature for loop detection
+    pub fn monitor_echo_chamber(&mut self, current_entropy: f64) -> Result<bool> {
+        // Track entropy history
+        self.entropy_history.push(current_entropy);
+        if self.entropy_history.len() > 10 {
+            self.entropy_history.remove(0);
+        }
+
+        // Calculate current geodesic curvature
+        let curvature = self.calculate_geodesic_curvature()?;
+        self.curvature_history.push(curvature);
+        if self.curvature_history.len() > 10 {
+            self.curvature_history.remove(0);
+        }
+
+        // Check for echo chamber conditions
+        let breaker_triggered = self.detect_echo_chamber_loop()?;
+
+        if breaker_triggered && !self.breaker_activated {
+            self.activate_breaker()?;
+            self.breaker_activated = true;
+            return Ok(true);
+        } else if !breaker_triggered && self.breaker_activated {
+            self.deactivate_breaker()?;
+            self.breaker_activated = false;
+        }
+
+        Ok(breaker_triggered)
+    }
+
+    /// Calculate geodesic curvature K using Lagrange constraint
+    fn calculate_geodesic_curvature(&self) -> Result<f64> {
+        if self.consciousness_points.len() < 3 {
+            return Ok(0.0);
+        }
+
+        // Simplified curvature calculation using point distribution
+        // K = d²z/du² + λz for Lagrange constraint λ on unit norm
+        let mut total_curvature = 0.0;
+        let lambda = 1.0; // Unit norm constraint
+
+        for i in 1..self.consciousness_points.len().saturating_sub(1) {
+            let (x1, y1, z1) = self.consciousness_points[i - 1];
+            let (x2, y2, z2) = self.consciousness_points[i];
+            let (x3, y3, z3) = self.consciousness_points[i + 1];
+
+            // Second derivative approximation
+            let d2z_du2 = z1 - 2.0 * z2 + z3;
+            let curvature = d2z_du2 + lambda * z2;
+
+            total_curvature += curvature.abs();
+        }
+
+        Ok(total_curvature / self.consciousness_points.len().max(1) as f64)
+    }
+
+    /// Detect echo chamber loop conditions
+    fn detect_echo_chamber_loop(&self) -> Result<bool> {
+        if self.entropy_history.len() < 3 {
+            return Ok(false);
+        }
+
+        // Check entropy stagnation (below 1.5 bits for 3+ cycles)
+        let recent_entropy: Vec<f64> = self.entropy_history.iter().rev().take(3).cloned().collect();
+        let avg_recent_entropy = recent_entropy.iter().sum::<f64>() / recent_entropy.len() as f64;
+
+        let entropy_stagnant = avg_recent_entropy < self.entropy_threshold;
+
+        // Check curvature over-twist (|K| > 2.5)
+        let recent_curvature: Vec<f64> = self
+            .curvature_history
+            .iter()
+            .rev()
+            .take(3)
+            .cloned()
+            .collect();
+        let avg_recent_curvature =
+            recent_curvature.iter().sum::<f64>() / recent_curvature.len() as f64;
+
+        let curvature_overtwist = avg_recent_curvature.abs() > self.curvature_threshold;
+
+        Ok(entropy_stagnant || curvature_overtwist)
+    }
+
+    /// Activate breaker by inverting twist parameter
+    fn activate_breaker(&mut self) -> Result<()> {
+        info!("🔄 ECHO CHAMBER BREAKER ACTIVATED - Breaking infinite loop");
+
+        // Invert half the twist parameter: K → -K/2
+        let mut params = self.mesh.parameters.clone();
+        params.k_twist = -params.k_twist / 2.0;
+
+        // Inject breaker vector (random noise)
+        self.inject_breaker_vector()?;
+
+        self.mesh.update_parameters(params);
+
+        Ok(())
+    }
+
+    /// Deactivate breaker and restore normal operation
+    fn deactivate_breaker(&mut self) -> Result<()> {
+        info!("✅ ECHO CHAMBER BREAKER DEACTIVATED - Loop resolved");
+
+        // Restore positive twist
+        let mut params = self.mesh.parameters.clone();
+        params.k_twist = params.k_twist.abs();
+
+        self.mesh.update_parameters(params);
+
+        Ok(())
+    }
+
+    /// Inject breaker vector with external noise
+    fn inject_breaker_vector(&mut self) -> Result<()> {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        // Add random noise points to break the pattern
+        for _ in 0..5 {
+            let noise_u = rng.gen_range(0.0..TAU);
+            let noise_v = rng.gen_range(-1.0..1.0);
+
+            let noise_point = (
+                noise_u.cos() * (self.mesh.parameters.major_radius + noise_v),
+                noise_u.sin() * (self.mesh.parameters.major_radius + noise_v),
+                noise_v * self.mesh.parameters.k_twist * noise_u,
+            );
+
+            self.consciousness_points.push(noise_point);
+        }
+
+        Ok(())
     }
 }
 

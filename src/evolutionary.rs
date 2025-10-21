@@ -73,7 +73,7 @@ impl PersonalityGenes {
         let mut rng = rand::thread_rng();
 
         Self {
-                        // Random personality weights
+            // Random personality weights
             analyst_weight: rng.gen_range(0.0..1.0),
             intuitive_weight: rng.gen_range(0.0..1.0),
             visionary_weight: rng.gen_range(0.0..1.0),
@@ -111,8 +111,7 @@ impl PersonalityGenes {
 
         // Mutate personality weights
         if rng.gen::<f32>() < mutation_rate {
-            self.analyst_weight =
-                (self.analyst_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
+            self.analyst_weight = (self.analyst_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
         if rng.gen::<f32>() < mutation_rate {
             self.intuitive_weight =
@@ -142,8 +141,7 @@ impl PersonalityGenes {
                 (self.philosopher_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
         if rng.gen::<f32>() < mutation_rate {
-            self.learner_weight =
-                (self.learner_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
+            self.learner_weight = (self.learner_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
         if rng.gen::<f32>() < mutation_rate {
             self.balancer_weight =
@@ -163,9 +161,8 @@ impl PersonalityGenes {
                 (self.authenticity_threshold + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
         if rng.gen::<f32>() < mutation_rate {
-            self.masking_detection_sensitivity = (self.masking_detection_sensitivity
-                + rng.gen_range(-0.05..0.05))
-            .clamp(0.0, 1.0);
+            self.masking_detection_sensitivity =
+                (self.masking_detection_sensitivity + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
         if rng.gen::<f32>() < mutation_rate {
             self.hyperfocus_adaptation =

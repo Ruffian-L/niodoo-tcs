@@ -1,0 +1,9 @@
+{
+  "prompt_count": 5,
+  "entropy_avg": 1.8321244984656566,
+  "entropy_std": 0.09169603033543616,
+  "rouge_avg": 0.8900836306118627,
+  "latency_avg_ms": 5002.8302938,
+  "threat_rate_pct": 20.0,
+  "healing_rate_pct": 0.0
+}

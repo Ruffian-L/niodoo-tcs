@@ -86,6 +86,11 @@ impl MemoryManager {
         }
     }
 
+    /// Get reference to the memory system for pattern discovery
+    pub fn memory_system(&self) -> &GuessingMemorySystem {
+        &self.memory_system
+    }
+
     /// Store a consciousness event in memory
     pub async fn store_event(&mut self, event: PersonalConsciousnessEvent) -> Result<()> {
         debug!("Storing consciousness event: {}", event.event_type);

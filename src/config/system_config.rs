@@ -587,6 +587,18 @@ pub struct ConsciousnessConfig {
     /// Default minimum iterations
     pub min_iterations: usize,
 
+    // Token Promotion Configuration
+    /// Enable automatic token promotion during consciousness processing
+    pub token_promotion_enabled: bool,
+    /// Run token promotion every N queries
+    pub token_promotion_interval: u64,
+    /// Minimum promotion score threshold (0.0-1.0)
+    pub token_promotion_min_score: f64,
+    /// Maximum tokens to promote per cycle
+    pub token_promotion_max_per_cycle: usize,
+    /// Path to base tokenizer file (relative to project root)
+    pub tokenizer_path: String,
+
     // Topological Data Analysis (TDA) Configuration
     /// Maximum filtration steps for persistent homology computation
     pub tda_max_filtration_steps: usize,
@@ -1373,6 +1385,13 @@ impl Default for ConsciousnessConfig {
             error_bound_multiplier: 1e-15,
             // Default minimum iterations
             min_iterations: 3,
+
+            // Token promotion defaults
+            token_promotion_enabled: true,
+            token_promotion_interval: 100,
+            token_promotion_min_score: 0.75,
+            token_promotion_max_per_cycle: 50,
+            tokenizer_path: "models/tokenizer.json".to_string(),
 
             // TDA defaults - mathematically sound values for consciousness topology
             tda_max_filtration_steps: 50,

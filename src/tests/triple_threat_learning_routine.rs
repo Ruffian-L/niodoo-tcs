@@ -3,17 +3,17 @@
 
 use crate::config::system_config::AppConfig;
 use crate::consciousness::ConsciousnessState;
+use crate::learning_analytics::LearningMetrics;
 use crate::memory::guessing_spheres::{EmotionalVector, GuessingMemorySystem, SphereId};
 use crate::memory::multi_layer_query::MultiLayerMemoryQuery;
 use crate::persistent_learning::LearningRoutine;
-use crate::learning_analytics::LearningMetrics;
-use niodoo_core::qwen_curator::{QloraCurator, QloraCuratorConfig};
 use crate::rag::local_embeddings::{Document, MathematicalEmbeddingModel};
 use crate::rag::RetrievalEngine;
-use std::sync::{Arc, Mutex};
 /// Triple-Threat Learning Routine for Persistent Harness
 /// Runs continuous hallucination detection tests and generates healing curve data
 use anyhow::Result;
+use niodoo_core::qwen_curator::{QloraCurator, QloraCuratorConfig};
+use std::sync::{Arc, Mutex};
 
 /// Learning routine that cycles through triple-threat trigger scenarios
 pub struct TripleThreatRoutine {
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn triple_threat_harness_smoke_test() -> Result<()> {
         let dir = tempfile::tempdir()?;
-                let config = HarnessConfig::new(dir.path(), Duration::from_millis(100))
+        let config = HarnessConfig::new(dir.path(), Duration::from_millis(100))
             .with_persist_every(4)
             .with_max_steps(Some(16)); // 4 cycles × 4 scenarios
 

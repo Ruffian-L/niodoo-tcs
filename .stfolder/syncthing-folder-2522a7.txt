@@ -1,5 +1,0 @@
-# This directory is a Syncthing folder marker.
-# Do not delete.
-
-folderID: ya3tn-ptebt
-created: 2025-10-18T02:54:01+07:00

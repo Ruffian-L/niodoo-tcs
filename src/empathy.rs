@@ -357,7 +357,7 @@ mod tests {
         let mock_emotion = EmotionalAnalysis {
             joy: 0.1,
             sadness: 0.2,
-            anger: 0.9,  // High anger should map to high frustration
+            anger: 0.9, // High anger should map to high frustration
             fear: 0.1,
             surprise: 0.1,
             emotional_intensity: 0.8,
@@ -371,10 +371,14 @@ mod tests {
         state.sadness = (mock_emotion.sadness as f64) * engine.sensitivity;
         state.frustration = (mock_emotion.anger as f64) * engine.sensitivity;
         state.focus = (mock_emotion.emotional_intensity as f64) * engine.sensitivity;
-        state.cognitive_load = ((mock_emotion.fear + mock_emotion.surprise) as f64) * engine.sensitivity;
+        state.cognitive_load =
+            ((mock_emotion.fear + mock_emotion.surprise) as f64) * engine.sensitivity;
 
         // Verify frustration field is properly set
-        assert!(state.frustration > 0.5, "Frustration should be high for frustrated input");
+        assert!(
+            state.frustration > 0.5,
+            "Frustration should be high for frustrated input"
+        );
     }
 
     #[test]

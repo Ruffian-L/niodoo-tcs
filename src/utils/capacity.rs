@@ -363,12 +363,24 @@ mod tests {
         // Assert all return positive values
         assert!(worker > 0, "worker_pool should return positive capacity");
         assert!(memory > 0, "memory_vector should return positive capacity");
-        assert!(perf > 0, "performance_history should return positive capacity");
-        assert!(violation > 0, "violation_tracking should return positive capacity");
+        assert!(
+            perf > 0,
+            "performance_history should return positive capacity"
+        );
+        assert!(
+            violation > 0,
+            "violation_tracking should return positive capacity"
+        );
         assert!(guidance > 0, "guidance should return positive capacity");
         assert!(recs > 0, "recommendations should return positive capacity");
-        assert!(analysis > 0, "analysis_results should return positive capacity");
-        assert!(stages > 0, "stage_breakdown should return positive capacity");
+        assert!(
+            analysis > 0,
+            "analysis_results should return positive capacity"
+        );
+        assert!(
+            stages > 0,
+            "stage_breakdown should return positive capacity"
+        );
         assert!(embeddings > 0, "embeddings should return positive capacity");
     }
 }

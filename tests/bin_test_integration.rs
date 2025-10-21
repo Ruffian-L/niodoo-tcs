@@ -3,11 +3,11 @@
 
 //! E2E Integration Test: TCS → Niodoo → vLLM
 
+use anyhow::Result;
 use niodoo_consciousness::niodoo_tcs_bridge::NiodooTcsBridge;
 use niodoo_core::rag_integration::{Document, EmotionalVector};
-use anyhow::Result;
-use tracing_subscriber;
 use std::collections::HashMap;
+use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -78,11 +78,18 @@ fn test_erag_retrieval(bridge: &mut NiodooTcsBridge) -> Result<()> {
 
     let rag = bridge.rag_engine();
 
+    // Debug: Print RAG engine state
+    let stats = rag.memory_stats()?;
+    println!("📊 RAG Engine Stats: {} documents", stats.total_documents);
+
     // Test with a query that should match our documents
     let test_emotion = EmotionalVector::new(0.1, -0.2, 0.0, 0.1, 0.3); // Similar to rust document
     let results = rag.retrieve(&test_emotion, 3);
 
-    println!("📊 Retrieved {} documents for rust-like emotion", results.len());
+    println!(
+        "📊 Retrieved {} documents for rust-like emotion",
+        results.len()
+    );
     for (doc, score) in results {
         println!("  - {} (score: {:.3})", doc.id, score);
     }
@@ -91,7 +98,10 @@ fn test_erag_retrieval(bridge: &mut NiodooTcsBridge) -> Result<()> {
     let test_emotion2 = EmotionalVector::new(0.4, -0.1, 0.0, 0.2, 0.5); // Similar to neural network document
     let results2 = rag.retrieve(&test_emotion2, 3);
 
-    println!("📊 Retrieved {} documents for ML-like emotion", results2.len());
+    println!(
+        "📊 Retrieved {} documents for ML-like emotion",
+        results2.len()
+    );
     for (doc, score) in results2 {
         println!("  - {} (score: {:.3})", doc.id, score);
     }
@@ -167,7 +177,10 @@ fn load_sample_knowledge_base(bridge: &mut NiodooTcsBridge) -> Result<()> {
         rag_engine.add_document(doc)?;
     }
 
-    println!("✅ Loaded {} knowledge base documents", rag_engine.memory_stats()?.total_documents);
+    println!(
+        "✅ Loaded {} knowledge base documents",
+        rag_engine.memory_stats()?.total_documents
+    );
 
     // Save the knowledge base
     rag_engine.save()?;

@@ -13,6 +13,8 @@
 use crate::config::{AppConfig, ConsciousnessConfig};
 use crate::consciousness::ConsciousnessState;
 #[allow(unused_imports)]
+use candle_core::scalar::Scalar;
+#[allow(unused_imports)]
 use chrono::Utc;
 use ndarray::{Array1, Array2, Axis};
 use ndarray_linalg::{Cholesky, Eigh, Solve};
@@ -21,13 +23,11 @@ use ndarray_rand::RandomExt;
 use serde::{Deserialize, Serialize};
 use serde_json;
 #[allow(unused_imports)]
-use candle_core::scalar::Scalar;
-#[allow(unused_imports)]
 use std::f64::consts::{FRAC_PI_2, PI};
 use std::fs::{File, OpenOptions};
+use std::io::{BufReader, BufWriter};
 #[allow(unused_imports)]
 use std::io::{Cursor, Write};
-use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use std::process::Command;
 #[allow(unused_imports)]
@@ -636,7 +636,8 @@ fn optimize_hyperparameters_mathematical(
         );
 
         // Compute Cholesky decomposition for numerical stability
-        let l = k.cholesky(ndarray_linalg::UPLO::Lower)
+        let l = k
+            .cholesky(ndarray_linalg::UPLO::Lower)
             .map_err(|_| anyhow::anyhow!("Kernel matrix not positive definite"))?;
 
         // Solve L*L^T * alpha = y for alpha
@@ -646,7 +647,8 @@ fn optimize_hyperparameters_mathematical(
         let n = y.len() as f64;
         let y_k_inv_y = y_array.dot(&alpha);
         let log_det_k = 2.0 * l.diag().mapv(|x| x.ln()).sum();
-        let log_likelihood = -0.5 * y_k_inv_y - 0.5 * log_det_k - 0.5 * n * (2.0 * std::f64::consts::PI).ln();
+        let log_likelihood =
+            -0.5 * y_k_inv_y - 0.5 * log_det_k - 0.5 * n * (2.0 * std::f64::consts::PI).ln();
 
         // Compute gradients with respect to marginal log-likelihood
         // For RBF kernel: dK/d(lengthscale) = K * (distance^2 / lengthscale^3)
@@ -670,7 +672,9 @@ fn optimize_hyperparameters_mathematical(
         let mut l_inv = Array2::zeros((l.nrows(), l.ncols()));
         for i in 0..l.ncols() {
             let rhs = eye.column(i).to_owned();
-            let col_solution = l.solve(&rhs).map_err(|_| anyhow::anyhow!("Cholesky solve failed"))?;
+            let col_solution = l
+                .solve(&rhs)
+                .map_err(|_| anyhow::anyhow!("Cholesky solve failed"))?;
             l_inv.column_mut(i).assign(&col_solution);
         }
         let k_inv = l_inv.t().dot(&l_inv);
@@ -1108,7 +1112,10 @@ fn optimize_hyperparameters(
 /// Compute log marginal likelihood for GP hyperparameter optimization
 ///
 /// Returns (log_likelihood, alpha_vector) where alpha solves K*alpha = y
-fn compute_log_likelihood(k: &Array2<f64>, y: &Array1<f64>) -> Result<(f64, Array1<f64>), anyhow::Error> {
+fn compute_log_likelihood(
+    k: &Array2<f64>,
+    y: &Array1<f64>,
+) -> Result<(f64, Array1<f64>), anyhow::Error> {
     // Cholesky decomposition for numerical stability
     let l_matrix = match k.cholesky(ndarray_linalg::UPLO::Lower) {
         Ok(l) => l,
@@ -1132,7 +1139,10 @@ fn compute_log_likelihood(k: &Array2<f64>, y: &Array1<f64>) -> Result<(f64, Arra
 }
 
 /// Solve L^T L x = b using forward and backward substitution
-fn solve_cholesky_system(l_matrix: &Array2<f64>, b: &Array1<f64>) -> Result<Array1<f64>, anyhow::Error> {
+fn solve_cholesky_system(
+    l_matrix: &Array2<f64>,
+    b: &Array1<f64>,
+) -> Result<Array1<f64>, anyhow::Error> {
     #[allow(unused_imports)]
     use ndarray_linalg::Solve;
 
@@ -1706,7 +1716,7 @@ pub fn demonstrate_dual_mobius_gaussian() -> Result<()> {
         Err(e) => info!("Error: {}", e),
     }
 
- // Test with custom Möbius parameters
+    // Test with custom Möbius parameters
     info!("--- Testing with Custom Möbius Parameters ---");
     let custom_params = Some((3.0, 0.8, 1.5, PI / 4.0)); // Larger radius, more twists, phase offset
     match process_data(
@@ -2710,8 +2720,12 @@ mod tests {
             .unwrap(),
         ];
 
-        let predictions =
-            gaussian_process(&guideline, &candle_core::Device::Cpu, &ConsciousnessConfig::default()).unwrap();
+        let predictions = gaussian_process(
+            &guideline,
+            &candle_core::Device::Cpu,
+            &ConsciousnessConfig::default(),
+        )
+        .unwrap();
         // Average means: (1.0+3.0)/2 = 2.0, (2.0+1.0)/2 = 1.5
         assert_eq!(predictions.len(), 2);
         assert!((predictions[0] - 2.0).abs() < 1e-10);
@@ -2862,12 +2876,14 @@ mod tests {
                 vec![1.0, 3.0],
                 vec![vec![1.0, 0.0], vec![0.0, 1.0]],
                 &Device::Cpu,
-            ).unwrap(),
+            )
+            .unwrap(),
             GaussianMemorySphere::new(
                 vec![2.0, 1.0],
                 vec![vec![1.0, 0.0], vec![0.0, 1.0]],
                 &Device::Cpu,
-            ).unwrap(),
+            )
+            .unwrap(),
         ];
 
         let mobius = MobiusProcess::new();
@@ -2986,8 +3002,12 @@ mod tests {
             )
             .unwrap(),
         ];
-        let preds =
-            gaussian_process(&spheres.as_slice(), &Device::Cpu, &ConsciousnessConfig::default()).unwrap();
+        let preds = gaussian_process(
+            &spheres.as_slice(),
+            &Device::Cpu,
+            &ConsciousnessConfig::default(),
+        )
+        .unwrap();
         assert_eq!(preds.len(), spheres.len());
         assert!(preds.iter().all(|&p| p.is_finite()));
     }
@@ -3052,7 +3072,7 @@ mod tests {
             _ => panic!("Unexpected scalar type"),
         };
         assert!(var_f64 < 0.0001); // No jitter
-                               // Mock warn log
+                                   // Mock warn log
 
         config.consent_jitter = true;
         let kernel_jitter = compute_rbf_kernel(&x, &x, &Array1::from_elem(x.len(), 1.0), 0.0);

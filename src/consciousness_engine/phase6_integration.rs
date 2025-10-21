@@ -220,10 +220,7 @@ impl Phase6Manager {
                     .get("forgetting_rate")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0) as f32,
-                loss: data
-                    .get("loss")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(1.0) as f32,
+                loss: data.get("loss").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32,
             };
 
             learning_engine

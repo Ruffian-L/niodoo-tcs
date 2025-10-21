@@ -19,8 +19,9 @@ use crate::consciousness_compass::{
     BreakthroughMoment, CompassState, CompassTracker, StrategicAction,
 };
 use crate::memory::guessing_spheres::GuessingMemorySystem;
-use niodoo_core::qwen_curator::LearningEvent;
-use crate::rag_integration::{EmotionalVector, RagConfig, RagEngine};
+// TODO: Re-enable after qwen_curator is properly implemented
+// use niodoo_core::qwen_curator::LearningEvent;
+use crate::rag_integration::{EmotionalVector, LearningEvent, RagConfig, RagEngine};
 use crate::token_promotion::spatial::SpatialHash;
 use crate::token_promotion::{
     ConsensusEngine, DynamicTokenizer, NodeId, PatternDiscoveryEngine, PromotionConfig,
@@ -198,44 +199,46 @@ impl TrainingDataExporter {
 
             // Load base tokenizer (Qwen2.5)
             let tokenizer_path = base_dir.join("models/Qwen2.5-0.5B-Instruct/tokenizer.json");
-            match tokenizers::Tokenizer::from_file(&tokenizer_path) {
-                Ok(base_tokenizer) => {
-                    let dynamic_tokenizer = DynamicTokenizer::new(base_tokenizer);
-                    let tokenizer_arc = Arc::new(RwLock::new(dynamic_tokenizer));
+            // match tokenizers::Tokenizer::from_file(&tokenizer_path) { // Temporarily disabled due to onig linking issues
+            //     Ok(base_tokenizer) => {
+            //         let dynamic_tokenizer = DynamicTokenizer::new(base_tokenizer);
+            //         let tokenizer_arc = Arc::new(RwLock::new(dynamic_tokenizer));
 
-                    // Initialize pattern discovery and consensus engines
-                    let tda_calculator = PersistentHomologyCalculator::new(50); // 50 filtration steps
-                    let spatial_hash = Arc::new(RwLock::new(SpatialHash::new(1.0))); // cell size 1.0
-                    let pattern_discovery =
-                        Arc::new(PatternDiscoveryEngine::new(tda_calculator, spatial_hash));
-                    let consensus = Arc::new(ConsensusEngine::new(
-                        NodeId("training_node".to_string()),
-                        0.7, // score threshold
-                    ));
+            //         // Initialize pattern discovery and consensus engines
+            //         let tda_calculator = PersistentHomologyCalculator::new(50); // 50 filtration steps
+            //         let spatial_hash = Arc::new(RwLock::new(SpatialHash::new(1.0))); // cell size 1.0
+            //         let pattern_discovery =
+            //             Arc::new(PatternDiscoveryEngine::new(tda_calculator, spatial_hash));
+            //         let consensus = Arc::new(ConsensusEngine::new(
+            //             NodeId("training_node".to_string()),
+            //             0.7, // score threshold
+            //         ));
 
-                    // Build token promotion engine
-                    let promotion_config = config.promotion_config.clone().unwrap_or_default();
-                    let engine =
-                        TokenPromotionEngine::new(pattern_discovery, consensus, tokenizer_arc)
-                            .with_config(promotion_config);
+            //         // Build token promotion engine
+            //         let promotion_config = config.promotion_config.clone().unwrap_or_default();
+            //         let engine =
+            //             TokenPromotionEngine::new(pattern_discovery, consensus, tokenizer_arc)
+            //             .with_config(promotion_config);
 
-                    // Initialize memory system for topology-aware promotion
-                    let memory_system = GuessingMemorySystem::new(); // Gaussian sphere topology
+            //         // Initialize memory system for topology-aware promotion
+            //         let memory_system = GuessingMemorySystem::new(); // Gaussian sphere topology
 
-                    info!("✅ Dynamic tokenizer engine initialized");
-                    (
-                        Some(Arc::new(engine)),
-                        Some(Arc::new(RwLock::new(memory_system))),
-                    )
-                }
-                Err(e) => {
-                    warn!(
-                        "⚠️  Failed to load base tokenizer: {}. Dynamic tokenizer disabled.",
-                        e
-                    );
-                    (None, None)
-                }
-            }
+            //         info!("✅ Dynamic tokenizer engine initialized");
+            //         (
+            //             Some(Arc::new(engine)),
+            //             Some(Arc::new(RwLock::new(memory_system))),
+            //         )
+            //     }
+            //     Err(e) => {
+            //         warn!(
+            //             "⚠️  Failed to load base tokenizer: {}. Dynamic tokenizer disabled.",
+            //             e
+            //         );
+            //         (None, None)
+            //     }
+            // }
+            warn!("⚠️  Dynamic tokenizer temporarily disabled due to onig linking issues");
+            (None, None)
         } else {
             info!("📝 Dynamic tokenizer disabled");
             (None, None)

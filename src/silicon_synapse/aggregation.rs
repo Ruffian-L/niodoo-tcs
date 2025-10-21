@@ -15,9 +15,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
 use tokio::time::interval;
 use tracing::{debug, info};
 

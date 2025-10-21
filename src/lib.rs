@@ -90,7 +90,7 @@ pub mod gpu_acceleration;
 pub mod learning_analytics;
 pub mod metacognition;
 pub mod oscillatory;
-pub mod persistent_learning;
+// pub mod persistent_learning; // TODO: Create this module
 pub mod personal_memory;
 pub mod phase5_config;
 pub mod phase6_config;
@@ -110,10 +110,11 @@ pub mod phase7;
 pub mod ai_inference;
 // Temporarily disabled ONNX-dependent modules for build fix
 // pub mod real_ai_inference;
-pub mod qwen_inference; // ENABLED - stub implementation for emotional_coder
-                        // pub mod qwen_ffi;
-                        // pub mod qwen_30b_awq;
-pub mod emotional_coder;
+// TODO: Fix these modules - currently have compilation errors with qwen stubs
+// pub mod qwen_inference; // DISABLED - needs proper qwen integration
+// pub mod qwen_ffi;
+// pub mod qwen_30b_awq;
+// pub mod emotional_coder; // DISABLED - depends on qwen_inference
 pub mod vllm_bridge; // ENABLED - vLLM subprocess bridge for AWQ models
 
 // Memory and consciousness modules
@@ -178,6 +179,16 @@ pub mod token_promotion;
 
 // TCS-Niodoo integration bridge
 pub mod niodoo_tcs_bridge;
+
+// TODO: Creep agents and feelers for memory seeding (compilation errors - fix later)
+// These are GANG SHIT for organic memory spreading via heat diffusion + Möbius topology
+// but need BERT dependencies and proper integration
+// pub mod creep;
+// pub mod feeler;
+
+// TODO: Qwen integration modules (need proper implementation)
+// pub mod qwen_integration;
+// pub mod qwen_curator;
 
 // Triple-threat detection tests
 #[cfg(test)]

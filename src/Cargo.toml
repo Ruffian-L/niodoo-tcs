@@ -26,7 +26,7 @@ dirs = "5.0"
 
 # Minimal serde for QML bridge (duplicate to ensure it's available)
 # serde = { version = "1.0", features = ["derive"] }
-regex = "1.0"
+regex = { version = "1.0", default-features = false, features = ["std"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
@@ -106,10 +106,11 @@ clap = { version = "4.0", features = ["derive"] }
 # Qt framework integration (more complete Qt bindings) - conditional
 qmetaobject = { version = "0.2", optional = true }
 
-# Real AI inference dependencies - Make optional (temporarily disabled for linking fix)
+# Real AI inference dependencies
 ort = { version = "1.16.3", features = ["cuda"], optional = true }
 hf-hub = { version = "0.3", optional = true }
-tokenizers = "0.15"
+# ring = "=0.16.20"  # Pin to working version to avoid linking issues with 0.17.14
+# tokenizers = { version = "0.20", default-features = false, features = ["http", "fancy-regex"] }  # Use fancy-regex instead of onig
 llama-cpp-2 = "0.1"  # Keep as is
 # TODO: Restore ORT once the pipeline uses the new crate-based ONNX wrapper.
 
@@ -152,7 +153,7 @@ reqwest = { version = "0.12.23", default-features = false, features = ["json", "
 scraper = "0.19"
 
 # TCS (Topological Cognitive System) dependencies
-tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
+# tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
 num-complex = "0.4"
 num-traits = "0.2"
 statrs = "0.16"
@@ -167,7 +168,6 @@ redb = "1.5"
 metrics = "0.21"
 metrics-exporter-prometheus = "0.13"
 # libp2p = { version = "0.53", features = ["tcp", "noise", "mplex"] }  # DISABLED: mplex feature not available
-quinn = "0.10"
 capnp = "0.18"
 prost = "0.12"
 # polynomial = "0.2"  # Not available on crates.io
@@ -179,7 +179,7 @@ simdeez = "1.0"
 # hera = "0.1"    # Wasserstein distance
 
 [build-dependencies]
-# # cxx-qt-build = "0.7"  # Disabled for compilation  # Disabled for compilation
+# # cxx-qt-build = "0.7"  # Disabled for compilation
 
 [dev-dependencies]
 # Testing framework
@@ -215,7 +215,7 @@ gaussian-processes = []
 k-twist = ["mobius-torus", "gaussian-processes"]
 cuda = []
 parallel = []
-onnx = ["dep:ort"]  # Feature flag for ONNX support (conditional compilation)
+onnx = ["dep:ort", "dep:hf-hub"]  # Feature flag for ONNX support (conditional compilation)
 hf-hub = ["dep:hf-hub"]
 
 [[bin]]
@@ -308,7 +308,7 @@ path = "geometry_demo.rs"
 
 [[bin]]
 name = "test_integration"
-path = "bin/test_integration.rs"
+path = "../tests/bin_test_integration.rs"
 
 # NOTE: embed_codebase binary is defined in embeddings-system/Cargo.toml
 # It belongs to the embeddings-system workspace member, not the main src package
@@ -400,6 +400,10 @@ path = "bin/training_export.rs"
 # [[bin]]
 # name = "simple_tcs_test"
 # path = "bin/simple_tcs_test.rs"
+
+[[bin]]
+name = "minimal_continual_test"
+path = "bin/minimal_continual_test.rs"
 
 [[bin]]
 name = "learning_orchestrator"

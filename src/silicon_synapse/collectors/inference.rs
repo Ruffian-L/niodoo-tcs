@@ -1266,8 +1266,8 @@ mod tests {
     async fn test_persistent_counters2() {
         let config = InferenceConfig::default();
         let telemetry_config = crate::silicon_synapse::config::TelemetryConfig::default();
-        let telemetry_bus = TelemetryBus::new(telemetry_config)
-            .expect("Failed to create telemetry bus in test");
+        let telemetry_bus =
+            TelemetryBus::new(telemetry_config).expect("Failed to create telemetry bus in test");
         let telemetry_sender = telemetry_bus.sender();
 
         let mut collector = InferenceCollector::new(config, telemetry_sender)

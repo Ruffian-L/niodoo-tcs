@@ -27,9 +27,9 @@ use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::AddBos;
 use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::sampling::LlamaSampler;
+use std::env;
 use std::num::NonZeroU32;
 use std::path::Path;
-use std::env;
 use tracing::info;
 
 /// Dual-view refactor result containing positive and negative perspectives

@@ -513,7 +513,8 @@ impl ConsciousnessState {
 
         // Load the model
         {
-            let mut integrator_guard = integrator.lock().await;
+            let mut integrator_guard: tokio::sync::MutexGuard<QwenIntegrator> =
+                integrator.lock().await;
             integrator_guard.load_model().await?;
         }
 
@@ -558,7 +559,7 @@ impl ConsciousnessState {
             ("user".to_string(), enhancement_prompt),
         ];
 
-        let mut integrator_guard = integrator.lock().await;
+        let mut integrator_guard: tokio::sync::MutexGuard<QwenIntegrator> = integrator.lock().await;
         let enhanced_meditation = integrator_guard.infer(messages, Some(512)).await?.output;
 
         Ok(format!(
@@ -596,7 +597,7 @@ impl ConsciousnessState {
             ("user".to_string(), enhancement_prompt),
         ];
 
-        let mut integrator_guard = integrator.lock().await;
+        let mut integrator_guard: tokio::sync::MutexGuard<QwenIntegrator> = integrator.lock().await;
         let enhanced_insights = integrator_guard.infer(messages, Some(256)).await?.output;
 
         Ok(format!(

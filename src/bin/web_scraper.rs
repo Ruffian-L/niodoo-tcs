@@ -6,6 +6,7 @@
 //! Scrapes emotional, psychological, and consciousness-related content
 //! from websites to generate training data for the QLoRA fine-tuning pipeline.
 
+use niodoo_core::qwen_curator::LearningEvent;
 use reqwest::Client;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
@@ -15,7 +16,6 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
-use niodoo_core::qwen_curator::LearningEvent;
 
 /// Learning event scraped from web content
 #[derive(Debug, Clone, Serialize, Deserialize)]

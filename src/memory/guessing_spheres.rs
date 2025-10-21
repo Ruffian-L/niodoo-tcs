@@ -3,7 +3,7 @@
 
 use rand::prelude::*;
 use std::collections::HashMap;
-// use uuid::Uuid;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmotionalVector {
@@ -199,6 +199,24 @@ impl GuessingMemorySystem {
     ) {
         let sphere = GuessingSphere::new(id.clone(), concept, position, emotion, fragment);
         self.spheres.insert(id, sphere);
+    }
+
+    // Add memory sphere directly
+    pub fn add_sphere(&mut self, sphere: MemorySphere) {
+        let id = SphereId(sphere.id.clone());
+        let position = [
+            sphere.timestamp as f32 * 0.001,
+            sphere.coherence * 10.0,
+            sphere.emotion.joy * 5.0,
+        ];
+        let guessing_sphere = GuessingSphere::new(
+            id.clone(),
+            sphere.content.clone(),
+            position,
+            sphere.emotion,
+            sphere.content,
+        );
+        self.spheres.insert(id, guessing_sphere);
     }
 
     // Quantum recall: Simulate wave collapse with emotion-driven probabilities
@@ -418,4 +436,16 @@ impl GuessingMemorySystem {
     pub fn sphere_count(&self) -> usize {
         self.spheres.len()
     }
+}
+
+/// Memory sphere for training data seeding
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct MemorySphere {
+    pub id: String,
+    pub content: String,
+    pub emotion: EmotionalVector,
+    pub timestamp: u64,
+    pub access_count: u32,
+    pub last_access: u64,
+    pub coherence: f32,
 }
