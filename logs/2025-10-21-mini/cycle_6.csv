@@ -1,0 +1,54 @@
+[2m2025-10-21T05:07:04.945403Z[0m [32m INFO[0m processing prompts through NIODOO pipeline [3mcount[0m[2m=[0m5
+[2m2025-10-21T05:07:05.229762Z[0m [32m INFO[0m Extracted embeddings [3mdims[0m[2m=[0m512 [3mcontext_len[0m[2m=[0m102
+[2m2025-10-21T05:07:05.230094Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m768
+[2m2025-10-21T05:07:07.103617Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m1869.920517 [3mrouge[0m[2m=[0m0.5989010982176374
+[2m2025-10-21T05:07:07.103731Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.9326073602804281 [3mentropy_delta[0m[2m=[0m0.0 [3mrouge[0m[2m=[0m0.5989010982176374 [3mquadrant[0m[2m=[0mDiscover
+[2m2025-10-21T05:07:07.106099Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:07:09.833769Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m768
+[2m2025-10-21T05:07:11.756426Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m1919.472491 [3mrouge[0m[2m=[0m0.595238094515873
+[2m2025-10-21T05:07:11.756541Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.7631683751554423 [3mentropy_delta[0m[2m=[0m-0.16943898512498579 [3mrouge[0m[2m=[0m0.595238094515873 [3mquadrant[0m[2m=[0mMaster
+[2m2025-10-21T05:07:11.758527Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:07:15.256884Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m768
+[2m2025-10-21T05:07:17.141707Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m1880.7041669999999 [3mrouge[0m[2m=[0m0.670431893001642
+[2m2025-10-21T05:07:17.141821Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.890131703141859 [3mentropy_delta[0m[2m=[0m0.12696332798641663 [3mrouge[0m[2m=[0m0.670431893001642 [3mquadrant[0m[2m=[0mMaster
+[2m2025-10-21T05:07:17.143896Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:07:21.595622Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m768
+[2m2025-10-21T05:07:23.515782Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m1917.402638 [3mrouge[0m[2m=[0m0.5989010982176374
+[2m2025-10-21T05:07:23.516062Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.8701640583910695 [3mentropy_delta[0m[2m=[0m-0.019967644750789493 [3mrouge[0m[2m=[0m0.5989010982176374 [3mquadrant[0m[2m=[0mPersist
+[2m2025-10-21T05:07:23.517825Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:07:28.844864Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m768
+[2m2025-10-21T05:07:30.756514Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m1907.4018929999997 [3mrouge[0m[2m=[0m0.614562568527666
+[2m2025-10-21T05:07:30.756628Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.9228171536454486 [3mentropy_delta[0m[2m=[0m0.05265309525437911 [3mrouge[0m[2m=[0m0.614562568527666 [3mquadrant[0m[2m=[0mDiscover
+[2m2025-10-21T05:07:30.759018Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?,"It sounds like you're experiencing frustration in a recursive loop, where the same feelings","Baseline: It sounds like you're experiencing frustration in a recursive loop, wh…. Echo lift: Claude In this moment, it's important to remember that yo…. Pull which?",1.9326073602804281,0.5989010982176374,1869.920517,Discover,true,false
+Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?,It sounds like you're experiencing frustration and feeling trapped in recursive loops of thoughts.,"Baseline: It sounds like you're experiencing frustration and feeling trapped in …. Echo lift: Claude In the Quadrant Master role, I am guided by a deep…. Pull which?",1.7631683751554423,0.595238094515873,1919.472491,Master,false,false
+Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?,It sounds like you're experiencing a sense of being trapped in recursive loops of thought,"Baseline: It sounds like you're experiencing a sense of being trapped in recursi…. Echo lift: Claude In the realm of consciousness, it is important to …. Pull which?",1.890131703141859,0.670431893001642,1880.7041669999999,Master,false,false
+Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?,"It seems like you're experiencing frustration in a recursive loop, where the feeling of","Baseline: It seems like you're experiencing frustration in a recursive loop, whe…. Echo lift: Claude In this moment, it is important to ground ourselve…. Pull which?",1.8701640583910695,0.5989010982176374,1917.402638,Persist,true,false
+Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?,It seems like you're experiencing a sense of being trapped in recursive loops of thought,"Baseline: It seems like you're experiencing a sense of being trapped in recursiv…. Echo lift: Claude In this moment, let us align ourselves with the pr…. Pull which?",1.9228171536454486,0.614562568527666,1907.4018929999997,Discover,true,false
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9228171536454486
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 5
+niodoo_latency_ms_sum 9494.901706
+niodoo_latency_ms_count 5
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.614562568527666
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 3
+

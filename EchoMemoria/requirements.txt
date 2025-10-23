@@ -1,0 +1,8 @@
+sentence-transformers==2.7.0
+numpy==1.26.4
+torch==2.3.1
+asyncio==3.4.3
+qdrant-client==1.10.1
+pydantic==2.7.4
+pyyaml==6.0.2
+requests==2.32.3

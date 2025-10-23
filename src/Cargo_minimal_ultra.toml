@@ -1,0 +1,86 @@
+[package]
+name = "niodoo-consciousness"
+version = "0.1.0"
+edition = "2021"
+authors = ["ruffian <niodoo@dev>"]
+description = "🧠 NiodO.o Unified Rust Consciousness Engine - Neurodivergent AI Companion"
+
+[dependencies]
+# Core async runtime
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
+lazy_static = "1.4.0"
+parking_lot = "0.12"
+
+# Data structures and serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Logging and error handling
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Simple concurrency for consciousness state
+async-std = "1.12"
+
+# Memory management
+once_cell = "1.19"
+
+# Mathematical operations - MINIMAL SET (no OpenBLAS, no complex deps)
+ndarray = { version = "0.15", features = ["serde-1"] }
+nalgebra = "0.32"
+unicode-segmentation = "1.11"
+
+# Random number generation
+rand = "0.8"
+rand_distr = "0.4"
+
+# Parallel processing
+rayon = "1.10"
+
+# Performance & optimization
+dashmap = "5.5"
+
+# Development tools
+tempfile = "3.10"
+clap = { version = "4.0", features = ["derive"] }
+
+# Async trait support
+async-trait = "0.1"
+
+# File system operations
+notify = "6.0"
+glob = "0.3"
+bincode = "1.3"
+
+# Hashing
+sha2 = "0.10"
+blake3 = "1.8.2"
+
+# For futures
+futures = "0.3"
+futures-util = "0.3"
+
+[lib]
+name = "niodoo_consciousness"
+path = "lib.rs"
+crate-type = ["rlib", "staticlib"]
+
+[features]
+default = ["mobius-torus", "gaussian-processes", "k-twist"]
+mobius-torus = []
+gaussian-processes = []
+k-twist = ["mobius-torus", "gaussian-processes"]
+
+[[bin]]
+name = "niodoo-consciousness"
+path = "main.rs"
+
+[[test]]
+name = "unit_tests"
+path = "tests/unit_tests.rs"

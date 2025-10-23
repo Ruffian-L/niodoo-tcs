@@ -1,0 +1,12 @@
+{
+  "claude-1-core_1756163244": {
+    "session_id": "claude-1-core_1756163244",
+    "ai_id": "claude-1-core",
+    "ai_type": "core_architecture",
+    "workspace": "claude-1-core",
+    "start_time": "2025-08-25T16:07:24.636583",
+    "status": "active",
+    "tasks": [],
+    "files_modified": []
+  }
+}

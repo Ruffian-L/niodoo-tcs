@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 5s     # Scrape metrics every 5 seconds
+  evaluation_interval: 5s # Evaluate rules every 5 seconds
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape Niodoo metrics from file
+  - job_name: 'niodoo'
+    file_sd_configs:
+      - files:
+          - '/metrics/*.prom'
+        refresh_interval: 5s
+    
+  # Scrape from Niodoo application if running with metrics endpoint
+  - job_name: 'niodoo-app'
+    static_configs:
+      - targets: ['host.docker.internal:9898']  # If your app exposes metrics on port 9898
+    metrics_path: '/metrics'
+    honor_labels: true

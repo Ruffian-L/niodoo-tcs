@@ -1,0 +1,9 @@
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/NiodooQt.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/edit_cache.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/rebuild_cache.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/list_install_components.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/install.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/install/local.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/install/strip.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/NiodooQt_autogen_timestamp_deps.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/CMakeFiles/NiodooQt_autogen.dir

@@ -1,0 +1,42 @@
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.920888794072394,0.8900836306118627,5003.254859,Discover,false,false
+Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.667923517842025,0.8900836306118627,5002.902857,Master,false,false
+Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.840387398110048,0.8900836306118627,5003.737129,Master,false,false
+Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.8163387598016603,0.8900836306118627,5002.658885,Panic,true,false
+Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.9150840225021553,0.8900836306118627,5001.597739,Persist,false,false
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9150840225021553
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 5
+niodoo_latency_ms_sum 25014.151469
+niodoo_latency_ms_count 5
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.8900836306118627
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 1
+

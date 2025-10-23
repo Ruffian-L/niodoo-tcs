@@ -1,0 +1,410 @@
+# Full CUDA support pending CUDA 12.6 toolkit install
+[package]
+name = "niodoo-consciousness"
+version = "0.1.0"
+edition = "2021"
+authors = ["ruffian <niodoo@dev>"]
+description = "🧠 NiodO.o Unified Rust Consciousness Engine - Neurodivergent AI Companion"
+
+[dependencies]
+# Core async runtime
+tokio = { workspace = true }
+tokio-stream = "0.1"
+lazy_static = "1.4.0"
+parking_lot = "0.12"
+
+# Workspace dependencies (member package)
+niodoo-core = { path = "../niodoo-core" }
+
+# Data structures and serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Directory utilities for home directory resolution
+dirs = "5.0"
+
+# Minimal serde for QML bridge (duplicate to ensure it's available)
+# serde = { version = "1.0", features = ["derive"] }
+regex = { version = "1.0", default-features = false, features = ["std"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging and error handling
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+env_logger = "0.10"
+log = "0.4"
+
+# Python interop
+pyo3 = { version = "0.22", features = ["auto-initialize"] }
+
+# Simple concurrency for consciousness state
+async-std = "1.12"
+
+# Memory management
+once_cell = "1.19"
+
+# Mathematical operations - UPDATED for multi-layer memory query
+ndarray = { workspace = true }
+ndarray-rand = "0.14"
+ndarray-linalg = { workspace = true }
+nalgebra = { workspace = true }
+unicode-segmentation = "1.11"
+
+# Candle ML framework
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+
+# Random number generation - UPDATED for half crate compatibility
+rand = { workspace = true }
+rand_distr = { workspace = true }
+rand_chacha = { workspace = true }
+
+# Parallel processing
+rayon = "1.10"
+
+# Graph and cache data structures
+lru = { workspace = true }
+petgraph = { workspace = true }
+
+# Silicon Synapse monitoring dependencies
+prometheus = "0.13"
+axum = "0.7"
+dashmap = "5.5"
+sysinfo = "0.30"
+nvml-wrapper = "0.10"
+
+# Safe tensor serialization (for advanced weight modification)
+safetensors = "0.4"
+
+# CUDA runtime for GPU acceleration with sm_120 support
+cuda-runtime-sys = "0.3.0-alpha.1"
+
+# Temporary files for testing
+tempfile = "3.10"
+
+# Async trait support
+async-trait = "0.1"
+
+# AST parsing for Code Parser (Bullshit Buster)
+syn = { version = "2.0", features = ["full", "visit"] }
+
+# HTTP client for RAG and web requests - DISABLED for compilation
+# reqwest = { version = "0.11", features = ["json"] }
+
+# Embedding system dependencies - DISABLED for compilation
+# fastembed = "0.3"
+notify = "6.0"
+glob = "0.3"
+bincode = "1.3"
+clap = { version = "4.0", features = ["derive"] }
+
+# Qt framework integration (more complete Qt bindings) - conditional
+qmetaobject = { version = "0.2", optional = true }
+
+# Real AI inference dependencies
+ort = { version = "1.16.3", features = ["cuda"], optional = true }
+hf-hub = { version = "0.3", optional = true }
+# ring = "=0.16.20"  # Pin to working version to avoid linking issues with 0.17.14
+# tokenizers = { version = "0.20", default-features = false, features = ["http", "fancy-regex"] }  # Use fancy-regex instead of onig
+llama-cpp-2 = "0.1"  # Keep as is
+# TODO: Restore ORT once the pipeline uses the new crate-based ONNX wrapper.
+
+# Local constants module
+# constants_core = { path = "../Niodoo-Bullshit-MCP/constants_core" }
+
+# Additional missing dependencies for compilation
+# candle-datasets = { workspace = true } # Not defined in workspace
+# candle-lora and candle-vllm removed - packages not available
+# Using stub implementations for LoRA functionality
+sha2 = "0.10"  # For hashing in similarity cache
+ed25519-dalek = "2.1"  # For consensus signatures in token promotion
+
+# For hive join_all
+futures = "0.3"
+
+# WebSocket server for Qt integration
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+
+# RAG modules
+usearch = "2.21.0"
+
+# Git integration
+git2 = "0.18"
+
+# Qt integration for visualization - conditional (DISABLED for compilation)
+# cxx = { version = "1.0", optional = true }
+# cxx-qt = { version = "0.7", optional = true }
+# cxx-qt-lib = { version = "0.7", optional = true }
+blake3 = "1.8.2"
+
+# Claude-style reflection and policy simulation dependencies (2025)
+serde_yaml = "0.9"
+json5 = "0.4"
+dialoguer = "0.11"
+csv = "1.3"
+walkdir = "2.5"
+reqwest = { version = "0.12.23", default-features = false, features = ["json", "gzip", "stream", "multipart", "native-tls"] }
+scraper = "0.19"
+
+# TCS (Topological Cognitive System) dependencies
+# tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
+num-complex = "0.4"
+num-traits = "0.2"
+statrs = "0.16"
+rustfft = "6.1"
+sprs = "0.11"  # Sparse matrices
+itertools = "0.12"
+crossbeam = "0.8"
+arc-swap = "1.6"
+rocksdb = "0.21"
+sled = "0.34"
+redb = "1.5"
+metrics = "0.21"
+metrics-exporter-prometheus = "0.13"
+# libp2p = { version = "0.53", features = ["tcp", "noise", "mplex"] }  # DISABLED: mplex feature not available
+capnp = "0.18"
+prost = "0.12"
+# polynomial = "0.2"  # Not available on crates.io
+# statistical = "1.0"  # Not available on crates.io
+simdeez = "1.0"
+# collapser = "0.1"  # Custom edge collapse - not available on crates.io
+# gudhi = "0.1"  # Custom binding for persistent homology
+# ripser = "0.2"  # Custom binding
+# hera = "0.1"    # Wasserstein distance
+
+[build-dependencies]
+# # cxx-qt-build = "0.7"  # Disabled for compilation
+
+[dev-dependencies]
+# Testing framework
+tokio-test = "0.4"
+# Property-based testing
+proptest = "1.4"
+quickcheck = "1.0"
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+# Coverage analysis (install cargo-llvm-cov separately)
+# cargo install cargo-llvm-cov
+# Mocking for tests
+mockall = "0.12"
+# Async testing utilities
+async-std = "1.12"
+# cxx-qt-build = "0.7"  # Disabled for compilation
+# Linear algebra and testing utilities
+ndarray = { workspace = true }
+ndarray-rand = "0.14"
+approx = "0.5.1"
+
+[lib]
+name = "niodoo_consciousness"
+path = "lib.rs"
+crate-type = ["rlib", "staticlib"]
+
+[features]
+default = ["mobius-torus", "gaussian-processes", "k-twist"]
+qt-enabled = []
+qmetaobject = ["dep:qmetaobject"]
+mobius-torus = []
+gaussian-processes = []
+k-twist = ["mobius-torus", "gaussian-processes"]
+cuda = []
+parallel = []
+onnx = ["dep:ort", "dep:hf-hub"]  # Feature flag for ONNX support (conditional compilation)
+hf-hub = ["dep:hf-hub"]
+
+[[bin]]
+name = "niodoo-consciousness"
+path = "main.rs"
+
+[[bin]]
+name = "niodoo-websocket-server"
+path = "main_websocket_only.rs"
+
+# Removed missing feeling demo binaries
+
+[[bin]]
+name = "test_k_twist_validator"
+path = "bin/test_k_twist_validator.rs"
+
+[[bin]]
+name = "learning_pipeline"
+path = "bin/learning_pipeline.rs"
+
+# Disabled: depends on viz_qt_bridge which requires cxx-qt (currently disabled)
+# [[bin]]
+# name = "viz_main"
+# path = "viz_main.rs"
+
+# [[bin]]
+# name = "viz_main_minimal"
+# path = "viz_main_minimal.rs"
+
+# Removed missing binary targets
+
+[[bin]]
+name = "real_ai_inference_main"
+path = "real_ai_inference.rs"
+
+# Disabled: depends on real_onnx_models module which is temporarily disabled
+# [[bin]]
+# name = "setup_real_models"
+# path = "bin/setup_real_models.rs"
+
+# More missing binary targets removed
+
+[[bin]]
+name = "emotional_influence"
+path = "bin/emotional_influence.rs"
+
+[[bin]]
+name = "consciousness_stack_probe"
+path = "bin/consciousness_stack_probe.rs"
+
+# Additional missing binary targets removed
+
+[[bin]]
+name = "ethical_benchmark_suite_2025"
+path = "bin/ethical_benchmark_suite_2025.rs"
+
+[[bin]]
+name = "longitudinal_attachment_tracker"
+path = "bin/longitudinal_attachment_tracker.rs"
+
+[[bin]]
+name = "claude_policy_reform_2025"
+path = "bin/claude_policy_reform_2025.rs"
+
+[[bin]]
+name = "real_qwen_test"
+path = "bin/real_qwen_test.rs"
+
+[[bin]]
+name = "simple_qwen_test"
+path = "bin/simple_qwen_test.rs"
+
+[[bin]]
+name = "cuda_test"
+path = "bin/cuda_test.rs"
+
+[[bin]]
+name = "test_qwen_integration"
+path = "bin/test_qwen_integration.rs"
+
+[[bin]]
+name = "test_qwen_simple"
+path = "bin/test_qwen_simple.rs"
+
+# Final batch of missing binary targets removed
+
+[[bin]]
+name = "geometry_demo"
+path = "geometry_demo.rs"
+
+[[bin]]
+name = "test_integration"
+path = "../tests/bin_test_integration.rs"
+
+# NOTE: embed_codebase binary is defined in embeddings-system/Cargo.toml
+# It belongs to the embeddings-system workspace member, not the main src package
+
+[[bench]]
+name = "toroidal_benchmarks"
+harness = false
+
+[[bench]]
+name = "memory_benchmarks"
+harness = false
+
+[[bench]]
+name = "end_to_end_performance"
+harness = false
+
+[[bench]]
+name = "consciousness_engine_benchmark"
+harness = false
+
+[[bench]]
+name = "minimal_performance_benchmark"
+harness = false
+
+[[bench]]
+name = "optimized_consciousness_benchmark"
+harness = false
+
+[[bench]]
+name = "advanced_performance_benchmark"
+harness = false
+
+[[bench]]
+name = "comprehensive_optimization_benchmark"
+harness = false
+
+[[test]]
+name = "unit_tests"
+path = "tests/unit_tests.rs"
+
+[[test]]
+name = "emotional_pipeline_integration"
+path = "../tests/emotional_pipeline_integration.rs"
+
+[[example]]
+name = "silicon_synapse_demo"
+path = "../examples/silicon_synapse_demo.rs"
+
+[[example]]
+name = "silicon_synapse_standalone_demo"
+path = "../examples/silicon_synapse_standalone_demo.rs"
+
+[[bin]]
+name = "silicon_synapse_benchmark"
+path = "silicon_synapse/benchmarks.rs"
+
+[[bin]]
+name = "bullshit_buster_demo"
+path = "bin/bullshit_buster_demo.rs"
+
+[[bin]]
+name = "learning_daemon"
+path = "bin/learning_daemon.rs"
+
+[[bin]]
+name = "continual_test"
+path = "bin/continual_test.rs"
+
+[[bin]]
+name = "master_consciousness_orchestrator"
+path = "bin/master_consciousness_orchestrator.rs"
+
+[[bin]]
+name = "training_validation"
+path = "bin/training_validation.rs"
+
+[[bin]]
+name = "web_scraper"
+path = "bin/web_scraper.rs"
+
+[[bin]]
+name = "training_export"
+path = "bin/training_export.rs"
+
+# DISABLED: tcs module is disabled due to missing dependencies
+# [[bin]]
+# name = "tcs_test"
+# path = "bin/tcs_test.rs"
+# [[bin]]
+# name = "simple_tcs_test"
+# path = "bin/simple_tcs_test.rs"
+
+[[bin]]
+name = "minimal_continual_test"
+path = "bin/minimal_continual_test.rs"
+
+[[bin]]
+name = "learning_orchestrator"
+path = "bin/learning_orchestrator.rs"

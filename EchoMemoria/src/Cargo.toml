@@ -1,0 +1,23 @@
+[package]
+name = "niodoo-embeddings"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+fastembed = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+bincode = "1.3"
+sha2 = "0.10"
+tokio = { version = "1.0", features = ["full"] }
+notify = "6.1"
+reqwest = { version = "0.11", features = ["json"] }
+qdrant-client = "1.10"
+candle-core = "0.3"
+candle-nn = "0.3"
+mcts = "0.2"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+lazy_static = "1.4"

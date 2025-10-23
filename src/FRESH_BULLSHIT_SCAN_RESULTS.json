@@ -1,0 +1,1864 @@
+{
+  "total_files": 656,
+  "files_with_fake": 262,
+  "fake_instances": 2971,
+  "category_counts": {
+    "hardcoded_values": 2941,
+    "fake_models": 15,
+    "error_returns": 13,
+    "qt_stubs": 2
+  },
+  "worst_offenders": [
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-cpu/arch/arm/repack.cpp",
+      "fake_count": 166,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/vendor/miniaudio/miniaudio.h",
+      "fake_count": 118,
+      "categories": [
+        "hardcoded_values",
+        "error_returns"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/feeling_augmented_inference.rs",
+      "fake_count": 91,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/emotional_lora.rs",
+      "fake_count": 79,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/consciousness.rs",
+      "fake_count": 75,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/longitudinal_attachment_tracker.rs",
+      "fake_count": 67,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-sampling.cpp",
+      "fake_count": 65,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/vendor/stb/stb_image.h",
+      "fake_count": 62,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/feeling_qwen_demo_2025.rs",
+      "fake_count": 50,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/dual_mobius_gaussian.rs",
+      "fake_count": 45,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/claude_policy_reform_2025.rs",
+      "fake_count": 44,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/hive_brain.rs",
+      "fake_count": 42,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/feeling_vllm_server.rs",
+      "fake_count": 40,
+      "categories": [
+        "fake_models",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/unit_tests.rs",
+      "fake_count": 38,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/emotional_coder.rs",
+      "fake_count": 36,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/perplexity/perplexity.cpp",
+      "fake_count": 35,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/personality.rs",
+      "fake_count": 33,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/advanced_visualization.rs",
+      "fake_count": 32,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/advanced_empathy.rs",
+      "fake_count": 32,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/mtmd/mtmd-audio.cpp",
+      "fake_count": 32,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/empathy.rs",
+      "fake_count": 31,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/empirical_validation.rs",
+      "fake_count": 30,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/failure_mode_analysis.rs",
+      "fake_count": 29,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/brains.rs",
+      "fake_count": 28,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/consciousness_ethics_framework.rs",
+      "fake_count": 27,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/ethical_benchmark_suite_2025.rs",
+      "fake_count": 27,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/enhanced_consciousness_processor.rs",
+      "fake_count": 26,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-cpu/vec.h",
+      "fake_count": 26,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rtx_test.rs",
+      "fake_count": 25,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/evolutionary.rs",
+      "fake_count": 25,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/integration_tests.rs",
+      "fake_count": 25,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag_qwen_integration.rs",
+      "fake_count": 24,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/mobius_flip_integration.rs",
+      "fake_count": 23,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/src/llama-model.cpp",
+      "fake_count": 23,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/integration_tests.rs",
+      "fake_count": 23,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/real_mobius_consciousness.rs",
+      "fake_count": 22,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/config.rs",
+      "fake_count": 21,
+      "categories": [
+        "qt_stubs",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/sorrow_joy_k_flip_e2e.rs",
+      "fake_count": 21,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/memory_adapter.rs",
+      "fake_count": 21,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/feeling_model.rs",
+      "fake_count": 20,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/flip_polisher.rs",
+      "fake_count": 20,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/real_integration_tests.rs",
+      "fake_count": 20,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/xai_consciousness_demo.rs",
+      "fake_count": 20,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/true_nonorientable_memory.rs",
+      "fake_count": 19,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/personal_memory.rs",
+      "fake_count": 18,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/comprehensive_test.rs",
+      "fake_count": 18,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/convert_hf_to_gguf.py",
+      "fake_count": 18,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-cpu/ops.cpp",
+      "fake_count": 18,
+      "categories": [
+        "hardcoded_values",
+        "error_returns"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/integrated_consciousness_system.rs",
+      "fake_count": 17,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-backend-ops.cpp",
+      "fake_count": 17,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/automated_validation.rs",
+      "fake_count": 17,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/feeling_qwen_demo.rs",
+      "fake_count": 17,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/real_inference_engine.rs",
+      "fake_count": 16,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/feeling_qwen_integration.rs",
+      "fake_count": 16,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/web_viz_bridge.rs",
+      "fake_count": 16,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/tts/tts.cpp",
+      "fake_count": 16,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/real_storage.rs",
+      "fake_count": 16,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/supernova_master_resonance.rs",
+      "fake_count": 16,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/qwen_ffi.rs",
+      "fake_count": 15,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/api_integration.rs",
+      "fake_count": 15,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/consciousness_pipeline.rs",
+      "fake_count": 15,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/memory/consolidation.rs",
+      "fake_count": 15,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/ml_pattern_recognition.rs",
+      "fake_count": 14,
+      "categories": [
+        "fake_models",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/cpy.hpp",
+      "fake_count": 14,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/multi_user_consciousness.rs",
+      "fake_count": 13,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/qt_integration.rs",
+      "fake_count": 13,
+      "categories": [
+        "qt_stubs",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/echomemoria_real_inference.rs",
+      "fake_count": 13,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/ai_inference.rs",
+      "fake_count": 13,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/sparse_gp_consciousness_integration.rs",
+      "fake_count": 13,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/benches/qwen_performance.rs",
+      "fake_count": 13,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/mobius_flip_demo.rs",
+      "fake_count": 13,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/qwen_inference.rs",
+      "fake_count": 12,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/advanced_memory_retrieval.rs",
+      "fake_count": 12,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/xai_consciousness_explainer.rs",
+      "fake_count": 12,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/memory_sync_master.rs",
+      "fake_count": 12,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/viz_qt_bridge_minimal.rs",
+      "fake_count": 12,
+      "categories": [
+        "hardcoded_values",
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/tts/tts-outetts.py",
+      "fake_count": 12,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/memory/multi_layer_query.rs",
+      "fake_count": 12,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/insights_exporter.rs",
+      "fake_count": 11,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/niodoo_complete.rs",
+      "fake_count": 11,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/consciousness_engine/mod.rs",
+      "fake_count": 11,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/benches/end_to_end_performance.rs",
+      "fake_count": 11,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/mobius_proof.rs",
+      "fake_count": 11,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/real_inference_unified.rs",
+      "fake_count": 10,
+      "categories": [
+        "hardcoded_values",
+        "error_returns"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/qwen_30b_awq.rs",
+      "fake_count": 10,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/consciousness_integration.rs",
+      "fake_count": 10,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/ethical_tests.rs",
+      "fake_count": 10,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/emotion_trait_tests.rs",
+      "fake_count": 10,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/ethics_integration_layer.rs",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/feeling_viz_demo.rs",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-quantize-fns.cpp",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/regression_testing.rs",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/retrieval.rs",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/urgency_demo.rs",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/ethical_benchmark_suite.rs",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/rag_performance_profiler.rs",
+      "fake_count": 9,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/real_model.rs",
+      "fake_count": 8,
+      "categories": [
+        "hardcoded_values",
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/gguf-py/gguf/quants.py",
+      "fake_count": 8,
+      "categories": [
+        "error_returns",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/vecdotq.hpp",
+      "fake_count": 8,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/dequantize.hpp",
+      "fake_count": 8,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/parametric_surface_tests.rs",
+      "fake_count": 8,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/real_rag_integration.rs",
+      "fake_count": 8,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/consciousness_rag_masterpiece.rs",
+      "fake_count": 8,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/qwen_mobius_flip_demo.rs",
+      "fake_count": 8,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/mobius_gaussian_framework.rs",
+      "fake_count": 7,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/optimization.rs",
+      "fake_count": 7,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/events.rs",
+      "fake_count": 7,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/transformer_memory.rs",
+      "fake_count": 7,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/viz_main.rs",
+      "fake_count": 7,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/element_wise.cpp",
+      "fake_count": 7,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/examples/gguf-hash/deps/xxhash/xxhash.h",
+      "fake_count": 7,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/xai_consciousness_demo.rs",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/emergence.rs",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/groks_memory_retriever.rs",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/creative_expression.rs",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/vendor/nlohmann/json.hpp",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/arg.cpp",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-opt.cpp",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/src/llama-sampling.cpp",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/mtmd/legacy-models/minicpmv-convert-image-encoder-to-gguf.py",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/comprehensive_consciousness_integration.rs",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/generation.rs",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/real_rag_demo.rs",
+      "fake_count": 6,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/viz_bridge_tuner.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/personal_consciousness_demo.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/working_consciousness_demo.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bert_emotion.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/demo_advanced_features.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/sparse_gaussian_processes.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/quantum.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-impl.h",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/imatrix/imatrix.cpp",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/server/server.cpp",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values",
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/server/tests/unit/test_lora.py",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/server/bench/bench.py",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/benches/memory_benchmarks.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/performance_validation.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/mobius_emotion_tests.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/stress_testing_framework.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/simple_demo.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/tests.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/memory/guessing_spheres.rs",
+      "fake_count": 5,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/brain.rs",
+      "fake_count": 4,
+      "categories": [
+        "fake_models",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/test_toroidal.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/qwen_viz_link.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/qwen_inference_enhanced.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/kv_cache.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/common.h",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-grammar-integration.cpp",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-grammar-llguidance.cpp",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/include/llama.h",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/mtmd/legacy-models/glmedge-convert-image-encoder-to-gguf.py",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/quantize/quantize.cpp",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/server/tests/unit/test_tool_call.py",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/examples/model-conversion/scripts/utils/semantic_check.py",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/benches/toroidal_benchmarks.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/optimized_retrieval.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/real_ai_inference_demo.rs",
+      "fake_count": 4,
+      "categories": [
+        "fake_models",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/niodo_full_demo.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/gangster_demo.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/inference_comparison_demo.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/consciousness_with_llm.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/test_real_inference.rs",
+      "fake_count": 4,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/perf_viz_master.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/standalone_ai_inference.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/visualization.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/candle_qwen.rs",
+      "fake_count": 3,
+      "categories": [
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/batch_optimization.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/dream_state_processor.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/consciousness_rag_bridge.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/websocket_server.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/integration_tests.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/convert_hf_to_gguf_update.py",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/ggml-sycl.cpp",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-vulkan/ggml-vulkan.cpp",
+      "fake_count": 3,
+      "categories": [
+        "error_returns",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-metal/ggml-metal-ops.cpp",
+      "fake_count": 3,
+      "categories": [
+        "error_returns",
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/mtmd/legacy-models/convert_image_encoder_to_gguf.py",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/wasm/wasm_interface.cpp",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/ethics_integration_tests.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/tests/torus_factor_scaling_tests.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/storage.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/standalone_ai_demo.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/roadmap_extensions_demo.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/qwen_chat.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/test_rag_consciousness_integration.rs",
+      "fake_count": 3,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/inspiration_mode.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bert_inference_demo.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/feeling_model_demo.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/oscillatory.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/models.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values",
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/viz_main_minimal.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/interactive_chat_demo.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/ai_memory_adapter.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/qwen_bridge.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/real_memory_bridge.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/learning_consciousness.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/test_viz_verifier.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/evolution/dna_transcription.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/vendor/minja/minja.hpp",
+      "fake_count": 2,
+      "categories": [
+        "error_returns"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/scripts/compare-llama-bench.py",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/gguf-py/tests/test_metadata.py",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/log.h",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/common.cpp",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-opt.cpp",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-cpu/arch/x86/repack.cpp",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-cann/aclnn_ops.cpp",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/batched-bench/batched-bench.cpp",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/server/tests/utils.py",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/server/tests/unit/test_template.py",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/examples/llama.android/llama/src/main/cpp/llama-android.cpp",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/memory/mobius.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/consciousness_proof.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/pytorch_interop_demo.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values",
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/simple_real_demo.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/test_qwen_ffi_demo.rs",
+      "fake_count": 2,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/core.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/candle_brain.rs",
+      "fake_count": 1,
+      "categories": [
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/onnx_brain.rs",
+      "fake_count": 1,
+      "categories": [
+        "fake_models"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/viz_qt_bridge.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/working_qwen_ai.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/k_twisted_torus.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/learning_engine.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/real_ai_inference.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/voice_synthesis.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/build.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/quantum_empath.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/hive.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/quantum_bio_interface.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/ethically_aware_consciousness.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/evolution/mod.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/scripts/tool_bench.py",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/pocs/vdot/vdot.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/json-partial.cpp",
+      "fake_count": 1,
+      "categories": [
+        "error_returns"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/speculative.h",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/ngram-cache.cpp",
+      "fake_count": 1,
+      "categories": [
+        "error_returns"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/common/speculative.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-model-load-cancel.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tests/test-quantize-stats.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/src/llama-model-saver.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/src/llama-vocab.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/softmax.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/outprod.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/rope.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-sycl/im2col.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-cpu/amx/mmq.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/ggml/src/ggml-opencl/ggml-opencl.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/mtmd/clip.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/tools/server/tests/unit/test_chat_completion.py",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/examples/convert_legacy_llama.py",
+      "fake_count": 1,
+      "categories": [
+        "error_returns"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/llama.cpp/examples/simple-chat/simple-chat.cpp",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/core/unified_field_processor.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/benches/consciousness_benchmarks.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/mod.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/rag/local_embeddings.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/memory/toroidal.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/profile_qwen_detailed.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/demonstrate_architecture.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/emotional_influence.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/real_ai_inference.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/minimal_working_demo.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/config_demo.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    },
+    {
+      "file": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/src/bin/prove_real_inference.rs",
+      "fake_count": 1,
+      "categories": [
+        "hardcoded_values"
+      ]
+    }
+  ]
+}

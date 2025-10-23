@@ -1,0 +1,14 @@
+[package]
+name = "tcs-knot"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Topology Team <niodoo@dev>"]
+description = "Knot theory utilities for Jones polynomial and knot classification"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+lru = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

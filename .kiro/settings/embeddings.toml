@@ -1,0 +1,32 @@
+[embeddings]
+enabled = true
+model = "all-MiniLM-L6-v2"
+watch_patterns = ["*.rs", "*.cpp", "*.h", "*.qml", "*.py", "*.md"]
+ignore_patterns = ["target/", ".venv/", "node_modules/", ".git/", "build/"]
+debounce_ms = 1000
+batch_size = 100
+storage_format = "binary"  # or "json"
+git_track = false
+
+[chroma]
+url = "http://127.0.0.1:8000"
+collection_name = "code_embeddings"
+batch_upsert_size = 50
+
+[mcp]
+server_url = "http://127.0.0.1:8000"
+notifications_enabled = true
+real_time_updates = true
+
+[performance]
+max_chunk_size = 1000
+parallel_workers = 4
+cache_size_mb = 100
+memory_limit_mb = 512
+
+[logging]
+level = "info"
+file = "logs/embeddings.log"
+max_size_mb = 10
+max_files = 5
+

@@ -1,0 +1,9 @@
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/BrainIntegration.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/edit_cache.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/rebuild_cache.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/list_install_components.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/install.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/install/local.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/install/strip.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/BrainIntegration_autogen_timestamp_deps.dir
+/home/ruffian/Desktop/Projects/Niodoo-Feeling/cpp-qt-brain-integration/build/CMakeFiles/BrainIntegration_autogen.dir

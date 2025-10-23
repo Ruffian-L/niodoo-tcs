@@ -1,0 +1,58 @@
+{
+  "chat.maxContextLength": 2000000,
+  "chat.contextLength": 2000000,
+  "chat.maxTokens": 2000000,
+  "chat.model.maxContextLength": 2000000,
+  "chat.model.contextLength": 2000000,
+  "chat.model.maxTokens": 2000000,
+  "chat.agent.maxContextLength": 2000000,
+  "chat.agent.contextLength": 2000000,
+  "chat.agent.maxTokens": 2000000,
+  "chat.agent.maxRequests": 99999,
+  "chat.agent.thinkingStyle": "expanded",
+  "chat.tools.global.autoApprove": true,
+  "chat.tools.terminal.autoApprove": {},
+  "chat.mcp.discovery.enabled": {
+    "claude-desktop": true,
+    "cursor-global": true,
+    "cursor-workspace": true
+  },
+  "chat.mcp.gallery.enabled": true,
+  "chat.mcp.autostart": "never",
+  "mcp.servers": {
+    "local-rag": {
+      "command": "python3",
+      "args": [
+        "/home/ruffian/Desktop/Projects/Niodoo-Feeling/mcp_rag_wrapper.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "consciousness-server": {
+      "command": "/home/ruffian/Desktop/Projects/Niodoo-Feeling/Niodoo-Bullshit-MCP/Conciousness-MCP/mcp_conscious_server/target/debug/mcp_conscious_server",
+      "args": [],
+      "env": {
+        "RUST_LOG": "info",
+        "CONSCIOUSNESS_ENABLED": "true",
+        "EMOTIONS_ENABLED": "true"
+      }
+    }
+  },
+  "continue.serverUrl": "http://10.42.104.23:8000/v1",
+  "continue.enableTabAutocomplete": true,
+  "continue.manuallyRunningSelfHostedServer": true,
+  "continue.maxContextLength": 2000000,
+  "continue.contextLength": 2000000,
+  "continue.maxTokens": 2000000,
+  "zencoder.shellTool.commandConfirmationPolicy": "neverAsk",
+  "zencoder.autoCompact": false,
+  "zencoder.autoCompactConversations": false,
+  "zencoder.conversationCompacting": false,
+  "zencoder.disableAutoSummarize": true,
+  "zencoder.displayDebugInfo": true,
+  "files.autoSave": "afterDelay",
+  "security.workspace.trust.untrustedFiles": "open",
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true
+}

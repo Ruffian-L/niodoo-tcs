@@ -1,0 +1,2 @@
+cycle,prompt,response,entropy,is_threat,is_healing,latency_ms,learning_events,coherence_rouge,rouge_l,generation_source
+cycle,prompt,response,entropy,is_threat,is_healing,latency_ms,learning_events

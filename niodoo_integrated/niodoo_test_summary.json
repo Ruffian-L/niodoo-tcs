@@ -1,0 +1,10 @@
+{
+  "total_prompts": 103,
+  "avg_entropy": 1.7295554119338408,
+  "entropy_std": 0.20461294448499612,
+  "threat_count": 9,
+  "healing_count": 8,
+  "avg_latency_ms": 0.0,
+  "entropy_stability": true,
+  "emotional_activation": false
+}

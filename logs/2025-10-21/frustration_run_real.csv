@@ -1,0 +1,52 @@
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?,"Let's solve the differential equation step by step using the integrating factor method.
+
+Given the differential equation:
+\[ \frac{dM}{dt} + kM","Baseline: Let's solve the differential equation step by step using the integrating factor method.
+
+Given the d…
+Echo lift: Claude: To address the differential equation using the integrating f… | GPT: Let's solve the given first-order linear differential equati… | Wolfram: Let's solve the given first-order linear differential equati…
+Pull which lens?",1.920888794072394,0.6312409043701797,4815.29484,Discover,false,false
+Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?,"It appears that all the systems are experiencing timeouts or unavailability. Let's try to pull information from another source or see if the issue is temporary.
+
+Since we","Baseline: It appears that all the systems are experiencing timeouts or unavailability. Let's try to pull infor…
+Echo lift: Claude: Given the context of constitutional alignment and moral grou… | GPT: Given the context and the directives, let's approach this st… | Wolfram: Given the context and the directive to provide a quantitativ…
+Pull which lens?",1.667923517842025,0.47619047546825394,4740.897525,Master,false,false
+Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?,It seems that you are encountering a series of timeouts and unavailability issues across various systems. Let's break down the situation and see if we can identify any patterns,"Baseline: It seems that you are encountering a series of timeouts and unavailability issues across various sys…
+Echo lift: Claude: Pull which lens? (entropy 1.84 → 1.84)
+- Baseline: Baseline … | GPT: Given the context and the directive to respond with analytic… | Wolfram: Given the context and the directives, let's proceed with a q…
+Pull which lens?",1.840387398110048,0.48797885267697355,4840.64646,Master,false,false
+Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?,"It seems that there is an issue with the lenses or services you are trying to access, leading to timeouts and unavailability. Let's break down the context and","Baseline: It seems that there is an issue with the lenses or services you are trying to access, leading to tim…
+Echo lift: Claude: Given the current context and the directive to respond with … | GPT: Given the context and the repeated unavailability of respons… | Wolfram: Given the context and the directive to respond with quantita…
+Pull which lens?",1.8163387598016603,0.6816238184028398,4341.083388999999,Panic,true,false
+Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?,"It seems there is an issue with accessing certain services or lenses, resulting in timeouts. Could you please clarify which specific service or lens you need assistance with?
+
+-","Baseline: It seems there is an issue with accessing certain services or lenses, resulting in timeouts. Could y…
+Echo lift: Claude: Given the context and the repeated unavailability of respons… | GPT: Given the repeated unavailability of responses from the lens… | Wolfram: Given the context and the repeated unavailability of respons…
+Pull which lens?",1.9150840225021553,0.4905359001865056,4467.3255039999995,Persist,false,false
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9150840225021553
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 5
+niodoo_latency_ms_sum 23205.247718
+niodoo_latency_ms_count 5
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.4905359001865056
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 1
+

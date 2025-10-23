@@ -1,0 +1,33 @@
+[2m2025-10-22T04:21:36.708963Z[0m [32m INFO[0m processing prompts through NIODOO pipeline [3mcount[0m[2m=[0m1
+[2m2025-10-22T04:21:38.619510Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m14[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m768
+[2m2025-10-22T04:21:40.484635Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m1861.948537 [3mrouge[0m[2m=[0m0.7531454891494398
+[2m2025-10-22T04:21:40.484765Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.9309769870632199 [3mentropy_delta[0m[2m=[0m0.0 [3mrouge[0m[2m=[0m0.7531454891494398 [3mquadrant[0m[2m=[0mDiscover
+[2m2025-10-22T04:21:40.486557Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+soul-eater bug,"A ""soul-eater bug"" could be a concept from a fictional universe","Baseline: A ""soul-eater bug"" could be a concept from a fictional universe. Echo lift: Claude In this scenario, we are tasked with addressing a …. Pull which?",1.9309769870632199,0.7531454891494398,1861.948537,Discover,true,false
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9309769870632199
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 1
+niodoo_latency_ms_sum 1861.948537
+niodoo_latency_ms_count 1
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.7531454891494398
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 1
+

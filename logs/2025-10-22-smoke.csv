@@ -1,0 +1,2 @@
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+soul-eater bug,"A ""soul-eater bug"" could be a concept from a fictional universe","Baseline: A ""soul-eater bug"" could be a concept from a fictional universe. Echo lift: Claude In this scenario, we are tasked with addressing a …. Pull which?",1.9309769870632199,0.7531454891494398,1861.948537,Discover,true,false

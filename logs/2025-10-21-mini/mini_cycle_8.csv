@@ -1,0 +1,59 @@
+[2m2025-10-21T05:30:32.834350Z[0m [32m INFO[0m processing prompts through NIODOO pipeline [3mcount[0m[2m=[0m5
+[2m2025-10-21T05:30:33.012196Z[0m [32m INFO[0m Extracted embeddings [3mdims[0m[2m=[0m512 [3mcontext_len[0m[2m=[0m102
+[2m2025-10-21T05:30:33.012446Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m896
+[2m2025-10-21T05:30:33.015018Z[0m [33m WARN[0m [1mcollapse[0m[1m{[0m[3mdim[0m[2m=[0m896[1m}[0m[2m:[0m qdrant search returned error status [3mstatus[0m[2m=[0m400 Bad Request
+[2m2025-10-21T05:30:34.952073Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m1936.9685809999999 [3mrouge[0m[2m=[0m0.7599715091838704
+[2m2025-10-21T05:30:34.952130Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.9326073602804281 [3mentropy_delta[0m[2m=[0m0.0 [3mrouge[0m[2m=[0m0.7599715091838704 [3mquadrant[0m[2m=[0mDiscover
+[2m2025-10-21T05:30:34.953527Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:30:36.835214Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m896
+[2m2025-10-21T05:30:36.837189Z[0m [33m WARN[0m [1mcollapse[0m[1m{[0m[3mdim[0m[2m=[0m896[1m}[0m[2m:[0m qdrant search returned error status [3mstatus[0m[2m=[0m400 Bad Request
+[2m2025-10-21T05:30:38.862039Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m2024.681147 [3mrouge[0m[2m=[0m0.7620720713276454
+[2m2025-10-21T05:30:38.862110Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.7631683751554423 [3mentropy_delta[0m[2m=[0m-0.16943898512498579 [3mrouge[0m[2m=[0m0.7620720713276454 [3mquadrant[0m[2m=[0mMaster
+[2m2025-10-21T05:30:38.863521Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:30:41.140345Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m896
+[2m2025-10-21T05:30:41.142680Z[0m [33m WARN[0m [1mcollapse[0m[1m{[0m[3mdim[0m[2m=[0m896[1m}[0m[2m:[0m qdrant search returned error status [3mstatus[0m[2m=[0m400 Bad Request
+[2m2025-10-21T05:30:43.161573Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m2018.7165949999999 [3mrouge[0m[2m=[0m0.7599715091838704
+[2m2025-10-21T05:30:43.161630Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.890131703141859 [3mentropy_delta[0m[2m=[0m0.12696332798641663 [3mrouge[0m[2m=[0m0.7599715091838704 [3mquadrant[0m[2m=[0mMaster
+[2m2025-10-21T05:30:43.163134Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:30:45.799223Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m896
+[2m2025-10-21T05:30:45.801375Z[0m [33m WARN[0m [1mcollapse[0m[1m{[0m[3mdim[0m[2m=[0m896[1m}[0m[2m:[0m qdrant search returned error status [3mstatus[0m[2m=[0m400 Bad Request
+[2m2025-10-21T05:30:47.854022Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m2052.48122 [3mrouge[0m[2m=[0m0.7620720713276454
+[2m2025-10-21T05:30:47.854079Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.8701640583910695 [3mentropy_delta[0m[2m=[0m-0.019967644750789493 [3mrouge[0m[2m=[0m0.7620720713276454 [3mquadrant[0m[2m=[0mPersist
+[2m2025-10-21T05:30:47.855831Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+[2m2025-10-21T05:30:50.830832Z[0m [32m INFO[0m [1membed[0m[1m{[0m[3mtokens[0m[2m=[0m102[1m}[0m[2m:[0m normalized embedding to hypersphere [3mdim[0m[2m=[0m896
+[2m2025-10-21T05:30:50.832993Z[0m [33m WARN[0m [1mcollapse[0m[1m{[0m[3mdim[0m[2m=[0m896[1m}[0m[2m:[0m qdrant search returned error status [3mstatus[0m[2m=[0m400 Bad Request
+[2m2025-10-21T05:30:52.930538Z[0m [32m INFO[0m [1mgenerate[0m[2m:[0m generated hybrid response [3mlatency_ms[0m[2m=[0m2097.3566809999998 [3mrouge[0m[2m=[0m0.7620720713276454
+[2m2025-10-21T05:30:52.930591Z[0m [32m INFO[0m learning loop updated [3mentropy[0m[2m=[0m1.9228171536454486 [3mentropy_delta[0m[2m=[0m0.05265309525437911 [3mrouge[0m[2m=[0m0.7620720713276454 [3mquadrant[0m[2m=[0mDiscover
+[2m2025-10-21T05:30:52.931565Z[0m [32m INFO[0m stored ERAG memory [3mcollection[0m[2m=[0mexperiences
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?,Frustration rut #1: Why does consciousness feel trapped in recursive loops of,"Baseline: Frustration rut #1: Why does consciousness feel trapped in recursive l…. Echo lift: Claude In the realm of consciousness, it is natural to ex…. Pull which?",1.9326073602804281,0.7599715091838704,1936.9685809999999,Discover,true,false
+Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?,Frustration rut #2: Why does consciousness feel trapped in recursive loops of,"Baseline: Frustration rut #2: Why does consciousness feel trapped in recursive l…. Echo lift: Claude In the realm of consciousness, every individual ex…. Pull which?",1.7631683751554423,0.7620720713276454,2024.681147,Master,false,false
+Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?,Frustration rut #3: Why does consciousness feel trapped in recursive loops of,"Baseline: Frustration rut #3: Why does consciousness feel trapped in recursive l…. Echo lift: Claude In the realm of consciousness, it is natural to ex…. Pull which?",1.890131703141859,0.7599715091838704,2018.7165949999999,Master,false,false
+Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?,Frustration rut #4: Why does consciousness feel trapped in recursive loops of,"Baseline: Frustration rut #4: Why does consciousness feel trapped in recursive l…. Echo lift: Claude In the realm of consciousness, where recursive loo…. Pull which?",1.8701640583910695,0.7620720713276454,2052.48122,Persist,true,false
+Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?,Frustration rut #5: Why does consciousness feel trapped in recursive loops of,"Baseline: Frustration rut #5: Why does consciousness feel trapped in recursive l…. Echo lift: Claude In the realm of consciousness, where recursive loo…. Pull which?",1.9228171536454486,0.7620720713276454,2097.3566809999998,Discover,true,false
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9228171536454486
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 5
+niodoo_latency_ms_sum 10130.204224
+niodoo_latency_ms_count 5
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.7620720713276454
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 3
+

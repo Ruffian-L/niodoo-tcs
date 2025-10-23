@@ -1,0 +1,17 @@
+{
+  "cycles": 1,
+  "entropy_bits": [
+    1.9309769870632199
+  ],
+  "threat_cycles": 1,
+  "healing_cycles": 0,
+  "latency_ms": [
+    1861.948537
+  ],
+  "rouge_l": [
+    0.7531454891494398
+  ],
+  "avg_entropy": 1.9309769870632199,
+  "avg_latency_ms": 1861.948537,
+  "avg_rouge_l": 0.7531454891494398
+}

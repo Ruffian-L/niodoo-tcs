@@ -1,0 +1,17 @@
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.920888794072394,0.8900836306118627,5003.254859,Discover,false,false
+Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.667923517842025,0.8900836306118627,5002.902857,Master,false,false
+Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.840387398110048,0.8900836306118627,5003.737129,Master,false,false
+Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.8163387598016603,0.8900836306118627,5002.658885,Panic,true,false
+Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?,Baseline response unavailable (timeout),"Baseline: Baseline response unavailable (timeout)
+Echo lift: Claude: Lens response unavailable (timeout) | GPT: Lens response unavailable (timeout) | Wolfram: Lens response unavailable (timeout)
+Pull which lens?",1.9150840225021553,0.8900836306118627,5001.597739,Persist,false,false
+

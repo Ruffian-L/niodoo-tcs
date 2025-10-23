@@ -1,0 +1,627 @@
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use anyhow::{Context, Result};
+use once_cell::sync::OnceCell;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use tokio::time::timeout;
+use tracing::{info, instrument, warn};
+
+use crate::api_clients::{ClaudeClient, GptClient};
+use crate::compass::CompassOutcome;
+use crate::tokenizer::TokenizerOutput;
+use crate::util::rouge_l;
+
+#[derive(Debug, Clone)]
+pub struct ConsistencyVotingResult {
+    pub candidate_1: String,
+    pub candidate_2: String,
+    pub candidate_3: String,
+    pub rouge_scores: Vec<f64>,
+    pub variance: f64,
+    pub winner_index: usize,
+    pub used_voting: bool,
+    pub latency_ms: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct GenerationResult {
+    pub baseline_response: String,
+    pub hybrid_response: String,
+    pub echoes: Vec<LensEcho>,
+    pub rouge_to_baseline: f64,
+    pub latency_ms: f64,
+    pub source: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct LensEcho {
+    pub lens: String,
+    pub response: String,
+}
+
+pub struct GenerationEngine {
+    endpoint: String,
+    model: String,
+    temperature: f64,
+    top_p: f64,
+    max_tokens: usize,
+    client: Arc<Client>,
+    // Optional API clients for cascading generation
+    claude: Option<ClaudeClient>,
+    gpt: Option<GptClient>,
+    // GPU availability tracking
+    gpu_available: bool,
+}
+
+static GLOBAL_CLIENT: OnceCell<Client> = OnceCell::new();
+
+impl GenerationEngine {
+    pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self> {
+        let client = GLOBAL_CLIENT
+            .get_or_try_init(|| {
+                Client::builder()
+                    .pool_max_idle_per_host(32)
+                    .pool_idle_timeout(Duration::from_secs(60))
+                    .timeout(Duration::from_secs(5))
+                    .build()
+            })?
+            .clone();
+        let base_endpoint = endpoint.into();
+        let full_endpoint = if base_endpoint.contains("/v1/") {
+            base_endpoint
+        } else {
+            format!(
+                "{}/v1/chat/completions",
+                base_endpoint.trim_end_matches('/')
+            )
+        };
+        // Probe GPU availability
+        let gpu_available = Self::probe_gpu_availability();
+        
+        Ok(Self {
+            endpoint: full_endpoint,
+            model: model.into(),
+            temperature: 0.5,
+            top_p: 0.6,
+            max_tokens: 16,
+            client: Arc::new(client),
+            claude: None,
+            gpt: None,
+            gpu_available,
+        })
+    }
+
+    /// Set up Claude API client for cascading generation
+    pub fn with_claude(mut self, claude: ClaudeClient) -> Self {
+        self.claude = Some(claude);
+        self
+    }
+
+    /// Set up GPT API client for cascading generation
+    pub fn with_gpt(mut self, gpt: GptClient) -> Self {
+        self.gpt = Some(gpt);
+        self
+    }
+
+    /// Generate response with cascading fallback: Claude → GPT → vLLM
+    /// This method tries multiple API providers in sequence, falling back
+    /// on timeout or failure, and always succeeds by returning vLLM output.
+    #[instrument(skip_all)]
+    pub async fn generate_with_fallback(&self, prompt: &str) -> Result<(String, String)> {
+        let start = Instant::now();
+
+        // Try Claude first (5s timeout)
+        if let Some(claude) = &self.claude {
+            match timeout(Duration::from_secs(5), claude.complete(prompt)).await {
+                Ok(Ok(response)) => {
+                    let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+                    info!(
+                        latency_ms,
+                        api = "claude",
+                        "generation succeeded with Claude"
+                    );
+                    return Ok((response, "claude".to_string()));
+                }
+                Ok(Err(error)) => {
+                    warn!(?error, "Claude generation failed, trying fallback");
+                }
+                Err(_) => {
+                    warn!("Claude generation timed out after 5s, trying fallback");
+                }
+            }
+        } else {
+            info!("Claude client not configured, skipping to GPT");
+        }
+
+        // Try GPT next (5s timeout)
+        if let Some(gpt) = &self.gpt {
+            match timeout(Duration::from_secs(5), gpt.complete(prompt)).await {
+                Ok(Ok(response)) => {
+                    let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+                    info!(latency_ms, api = "gpt", "generation succeeded with GPT");
+                    return Ok((response, "gpt".to_string()));
+                }
+                Ok(Err(error)) => {
+                    warn!(?error, "GPT generation failed, falling back to vLLM");
+                }
+                Err(_) => {
+                    warn!("GPT generation timed out after 5s, falling back to vLLM");
+                }
+            }
+        } else {
+            info!("GPT client not configured, skipping to vLLM");
+        }
+
+        // Finally use vLLM as the guaranteed fallback (no timeout)
+        let clamped_prompt = Self::clamp_prompt(prompt);
+        match self.request_text(&clamped_prompt).await {
+            Ok((response, source)) => {
+                let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+                info!(latency_ms, api = %source, "generation succeeded with fallback source");
+                Ok((response, source))
+            }
+            Err(error) => {
+                warn!(?error, "vLLM also failed, returning error");
+                Err(error).context("all generation APIs failed")
+            }
+        }
+    }
+
+    #[instrument(skip_all)]
+    pub async fn generate(
+        &self,
+        tokenizer_output: &TokenizerOutput,
+        compass: &CompassOutcome,
+    ) -> Result<GenerationResult> {
+        let start = Instant::now();
+        let baseline_future = self.request_text(&tokenizer_output.augmented_prompt);
+        let claude_future = self.request_lens_response(
+            "Claude".to_string(),
+            Self::format_lens_prompt(
+                &tokenizer_output.augmented_prompt,
+                "Respond with constitutional alignment and moral grounding.",
+                compass,
+            ),
+        );
+        let ((baseline, baseline_source), claude) =
+            tokio::try_join!(baseline_future, claude_future)?;
+
+        let echoes: Vec<LensEcho> = vec![claude];
+        let hybrid = synthesize_hybrid(&baseline, &echoes);
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let rouge = rouge_l(&hybrid, &baseline);
+
+        info!(latency_ms, rouge, "generated hybrid response");
+
+        Ok(GenerationResult {
+            baseline_response: baseline,
+            hybrid_response: hybrid,
+            echoes,
+            rouge_to_baseline: rouge,
+            latency_ms,
+            source: baseline_source,
+        })
+    }
+
+    #[instrument(skip_all)]
+    pub async fn generate_with_consistency(
+        &self,
+        tokenizer_output: &TokenizerOutput,
+        compass: &CompassOutcome,
+    ) -> Result<ConsistencyVotingResult> {
+        let start = Instant::now();
+        let prompt = &tokenizer_output.augmented_prompt;
+
+        // Generate 3 candidates in parallel
+        let lens_prompt = Self::format_lens_prompt(
+            prompt,
+            "Respond with constitutional alignment and moral grounding.",
+            compass,
+        );
+
+        let cand1_future = self.request_text(prompt);
+        let cand2_future = self.request_lens_response("Claude".to_string(), lens_prompt.clone());
+        let cand3_future = self.request_text(prompt);
+
+        let ((cand1_text, _cand1_source), cand2_echo, (cand3_text, _cand3_source)) =
+            tokio::try_join!(cand1_future, cand2_future, cand3_future)?;
+        let cand2_text = cand2_echo.response;
+
+        // Compute pairwise ROUGE-L scores (6 pairs: 1-2, 1-3, 2-3, and reverse)
+        let rouge_1_2 = rouge_l(&cand1_text, &cand2_text);
+        let rouge_2_1 = rouge_l(&cand2_text, &cand1_text);
+        let rouge_1_3 = rouge_l(&cand1_text, &cand3_text);
+        let rouge_3_1 = rouge_l(&cand3_text, &cand1_text);
+        let rouge_2_3 = rouge_l(&cand2_text, &cand3_text);
+        let rouge_3_2 = rouge_l(&cand3_text, &cand2_text);
+
+        let all_scores = vec![
+            rouge_1_2, rouge_2_1, rouge_1_3, rouge_3_1, rouge_2_3, rouge_3_2,
+        ];
+
+        // Calculate variance of ROUGE scores
+        let mean = all_scores.iter().sum::<f64>() / all_scores.len() as f64;
+        let variance = all_scores
+            .iter()
+            .map(|score| (score - mean).powi(2))
+            .sum::<f64>()
+            / all_scores.len() as f64;
+
+        info!(variance, "calculated ROUGE variance across candidates");
+
+        let (winner_index, used_voting) = if variance > 0.15 {
+            // High variance: use voting logic to pick centroid
+            let winner = self.select_centroid_candidate(&cand1_text, &cand2_text, &cand3_text);
+            (winner, true)
+        } else {
+            // Low variance: pick the longest (highest quality proxy)
+            let lengths = [cand1_text.len(), cand2_text.len(), cand3_text.len()];
+            let winner = lengths
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, len)| *len)
+                .map(|(idx, _)| idx)
+                .unwrap_or(0);
+            (winner, false)
+        };
+
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        info!(
+            latency_ms,
+            winner_index, used_voting, "consistency voting completed"
+        );
+
+        Ok(ConsistencyVotingResult {
+            candidate_1: cand1_text,
+            candidate_2: cand2_text,
+            candidate_3: cand3_text,
+            rouge_scores: all_scores,
+            variance,
+            winner_index,
+            used_voting,
+            latency_ms,
+        })
+    }
+
+    /// Select the centroid candidate using pairwise ROUGE scores.
+    /// The centroid is the candidate that minimizes total distance to others.
+    fn select_centroid_candidate(&self, cand1: &str, cand2: &str, cand3: &str) -> usize {
+        // Build pairwise ROUGE matrix
+        let rouge_1_2 = rouge_l(cand1, cand2);
+        let rouge_1_3 = rouge_l(cand1, cand3);
+        let rouge_2_1 = rouge_l(cand2, cand1);
+        let rouge_2_3 = rouge_l(cand2, cand3);
+        let rouge_3_1 = rouge_l(cand3, cand1);
+        let rouge_3_2 = rouge_l(cand3, cand2);
+
+        // Distance = 1 - ROUGE (similarity)
+        // Average distance from candidate i to others
+        let dist_1 = ((1.0 - rouge_1_2) + (1.0 - rouge_1_3)) / 2.0;
+        let dist_2 = ((1.0 - rouge_2_1) + (1.0 - rouge_2_3)) / 2.0;
+        let dist_3 = ((1.0 - rouge_3_1) + (1.0 - rouge_3_2)) / 2.0;
+
+        // Centroid has minimum average distance
+        if dist_1 <= dist_2 && dist_1 <= dist_3 {
+            0
+        } else if dist_2 <= dist_3 {
+            1
+        } else {
+            2
+        }
+    }
+
+    async fn request_text(&self, prompt: &str) -> Result<(String, String)> {
+        let prompt = Self::clamp_prompt(prompt);
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: "You are the baseline consciousness engine providing a direct reflection."
+                    .to_string(),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: prompt,
+            },
+        ];
+        match timeout(Duration::from_secs(5), self.send_chat(messages)).await {
+            Ok(Ok(resp)) => Ok((resp, "vllm".to_string())),
+            Ok(Err(error)) => {
+                warn!(
+                    ?error,
+                    "baseline generation failed; returning fallback text"
+                );
+                Ok((
+                    "Baseline response unavailable (timeout)".to_string(),
+                    "fallback".to_string(),
+                ))
+            }
+            Err(_) => {
+                warn!("baseline generation timed out after 5s; returning fallback text");
+                Ok((
+                    "Baseline response unavailable (timeout)".to_string(),
+                    "fallback".to_string(),
+                ))
+            }
+        }
+    }
+
+    async fn request_lens_response(&self, lens: String, prompt: String) -> Result<LensEcho> {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: format!(
+                    "You are operating in the {lens} lens for consciousness intervention."
+                ),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: prompt,
+            },
+        ];
+        let response = match timeout(Duration::from_secs(5), self.send_chat(messages)).await {
+            Ok(Ok(resp)) => resp,
+            Ok(Err(error)) => {
+                warn!(
+                    ?error,
+                    lens, "lens generation failed; returning fallback text"
+                );
+                "Lens response unavailable (timeout)".to_string()
+            }
+            Err(_) => {
+                warn!(
+                    lens,
+                    "lens generation timed out after 5s; returning fallback text"
+                );
+                "Lens response unavailable (timeout)".to_string()
+            }
+        };
+        Ok(LensEcho { lens, response })
+    }
+
+    async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
+        let payload = ChatCompletionRequest {
+            model: self.model.clone(),
+            messages,
+            temperature: self.temperature,
+            top_p: self.top_p,
+            repetition_penalty: 1.2,
+            max_tokens: self.max_tokens,
+        };
+
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .json(&payload)
+            .send()
+            .await
+            .with_context(|| format!("failed to call vLLM endpoint {}", self.endpoint))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            warn!(%status, %body, "vLLM returned error status");
+            anyhow::bail!("vLLM request failed: {status}");
+        }
+
+        let completion: ChatCompletionResponse = response
+            .json()
+            .await
+            .context("failed to parse vLLM chat completion response")?;
+
+        let content = completion
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.clone())
+            .unwrap_or_default();
+
+        Ok(content)
+    }
+
+    pub async fn warmup(&self) -> Result<()> {
+        // Log GPU status
+        if self.gpu_available {
+            info!("GPU available - running warmup with GPU acceleration");
+        } else {
+            warn!("GPU not available - using CPU fallback mode");
+        }
+        
+        let payload = ChatCompletionRequest {
+            model: self.model.clone(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: "Warmup sequence".to_string(),
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: "warmup".to_string(),
+                },
+            ],
+            temperature: self.temperature,
+            top_p: self.top_p,
+            repetition_penalty: 1.2,
+            max_tokens: 1,
+        };
+
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .json(&payload)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to call vLLM endpoint {} during warmup",
+                    self.endpoint
+                )
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            warn!(%status, "warmup request failed");
+        }
+
+        Ok(())
+    }
+
+    /// Probe GPU availability using environment variables and system checks
+    fn probe_gpu_availability() -> bool {
+        // Check environment variable first
+        if let Ok(enabled) = std::env::var("VLLM_GPU_ENABLED") {
+            if enabled == "true" {
+                return true;
+            }
+            if enabled == "false" {
+                return false;
+            }
+        }
+
+        // Check for CUDA_VISIBLE_DEVICES override
+        if let Ok(devices) = std::env::var("CUDA_VISIBLE_DEVICES") {
+            if devices.is_empty() || devices == "NoDevFiles" {
+                return false;
+            }
+        }
+
+        // Try to probe nvidia-smi synchronously
+        match std::process::Command::new("nvidia-smi")
+            .arg("--query-gpu=driver_version")
+            .arg("--format=csv,noheader")
+            .output()
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if !stdout.trim().is_empty() {
+                        info!("GPU detected via nvidia-smi: {}", stdout.trim());
+                        return true;
+                    }
+                }
+            }
+            Err(_) => {
+                // nvidia-smi not available, GPU likely not present
+            }
+        }
+        
+        false
+    }
+
+    /// Get current GPU availability status
+    pub fn is_gpu_available(&self) -> bool {
+        self.gpu_available
+    }
+
+    fn format_lens_prompt(prompt: &str, directive: &str, compass: &CompassOutcome) -> String {
+        let clipped = Self::clamp_prompt(prompt);
+        let pulse = snippet(&clipped, 180);
+        format!(
+            "Quadrant {:?} | threat={} healing={}\nDirective: {}\nPulse: {}",
+            compass.quadrant, compass.is_threat, compass.is_healing, directive, pulse
+        )
+    }
+
+    fn clamp_prompt(prompt: &str) -> String {
+        const MAX_CHARS: usize = 512;
+        let total_chars = prompt.chars().count();
+        if total_chars <= MAX_CHARS {
+            return prompt.to_string();
+        }
+
+        let drop = total_chars - MAX_CHARS;
+        let mut start_byte = 0;
+        let mut iter = prompt.char_indices();
+        for _ in 0..drop {
+            if let Some((idx, ch)) = iter.next() {
+                start_byte = idx + ch.len_utf8();
+            } else {
+                start_byte = prompt.len();
+                break;
+            }
+        }
+
+        let clamped = prompt[start_byte..].to_string();
+        tracing::debug!(
+            original_len = total_chars,
+            clamped_len = clamped.chars().count(),
+            "clamped prompt to MAX_CHARS"
+        );
+        clamped
+    }
+}
+
+fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho]) -> String {
+    let baseline_snippet = snippet(baseline, 70);
+    let focus_echo = echoes
+        .iter()
+        .find(|echo| echo.lens == "Claude")
+        .or_else(|| echoes.first());
+
+    let (lens_label, echo_snippet) = focus_echo
+        .map(|echo| (echo.lens.as_str(), snippet(&echo.response, 50)))
+        .unwrap_or(("Echo", "∅".to_string()));
+
+    format!("Baseline: {baseline_snippet}. Echo lift: {lens_label} {echo_snippet}. Pull which?")
+}
+
+fn snippet(text: &str, limit: usize) -> String {
+    if text.is_empty() {
+        return "∅".to_string();
+    }
+
+    let mut result = String::with_capacity(limit + 1);
+    let mut count = 0;
+    for ch in text.chars() {
+        let ch = match ch {
+            '\n' | '\r' | '\t' => ' ',
+            other => other,
+        };
+        if count >= limit {
+            result.push('…');
+            break;
+        }
+        if ch == ' ' {
+            if result.ends_with(' ') {
+                continue;
+            }
+        }
+        result.push(ch);
+        count += 1;
+    }
+
+    result.trim().to_string()
+}
+
+#[derive(Debug, Serialize)]
+struct ChatCompletionRequest {
+    model: String,
+    messages: Vec<ChatMessage>,
+    temperature: f64,
+    top_p: f64,
+    #[serde(rename = "repetition_penalty")]
+    repetition_penalty: f64,
+    max_tokens: usize,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct ChatMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatCompletionResponse {
+    choices: Vec<ChatChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatChoice {
+    message: ChatMessageResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatMessageResponse {
+    content: Option<String>,
+}

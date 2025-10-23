@@ -1,0 +1,42 @@
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?,"Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?
+
+This feeling arises from the","Baseline: Frustration rut #1: Why does consciousness feel tr…. Echo lift: Claude Consciousness, in its quest to understand the univ…. Pull which?",1.920888794072394,0.4437507288606676,2693.72932,Discover,true,false
+Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?,"Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?
+
+This feeling arises from the",Baseline: Frustration rut #2: Why does consciousness feel tr…. Echo lift: Claude **Quadrant Master** **Directive:** Respond with co…. Pull which?,1.667923517842025,0.3594466931556092,2715.013372,Master,false,false
+Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?,"Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?
+
+To address this, let","Baseline: Frustration rut #3: Why does consciousness feel tr…. Echo lift: Claude In the realm of consciousness, where recursive loo…. Pull which?",1.840387398110048,0.4080808075576263,2678.530381,Master,false,false
+Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?,"Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?
+
+This sensation arises from the","Baseline: Frustration rut #4: Why does consciousness feel tr…. Echo lift: Claude In the realm of consciousness, where each recursiv…. Pull which?",1.8163387598016603,0.39444509226363184,2847.355972,Persist,true,false
+Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?,"Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?
+
+This question touches on a",Baseline: Frustration rut #5: Why does consciousness feel tr…. Echo lift: Claude ### Quadrant Discover #### Rustration Rut #5: Why …. Pull which?,1.9150840225021553,0.3394355448641038,2898.6354840000004,Discover,false,false
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9150840225021553
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 5
+niodoo_latency_ms_sum 13833.264529
+niodoo_latency_ms_count 5
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.3394355448641038
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 2
+

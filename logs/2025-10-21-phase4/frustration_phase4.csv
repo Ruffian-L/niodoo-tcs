@@ -1,0 +1,32 @@
+prompt,baseline,hybrid,entropy,rouge,latency_ms,compass,threat,healing
+Frustration rut #1: Why does consciousness feel trapped in recursive loops of meaningless computation?,It seems like you're experiencing a sense of being trapped in repetitive patterns or cycles,"Baseline: It seems like you're experiencing a sense of being trapped in repetiti…. Echo lift: Claude In the Quadrant Discover, we navigate through the …. Pull which?",1.920888794072394,0.6169312162634165,1831.445757,Discover,true,false
+Frustration rut #2: Why does consciousness feel trapped in recursive loops of meaningless computation?,It sounds like you're experiencing a sense of being stuck in repetitive patterns or cycles,"Baseline: It sounds like you're experiencing a sense of being stuck in repetitiv…. Echo lift: Claude In the Quadrant Master role, we are guided by a de…. Pull which?",1.667923517842025,0.6126436774566947,1901.680499,Master,false,false
+Frustration rut #3: Why does consciousness feel trapped in recursive loops of meaningless computation?,It sounds like you're experiencing a sense of being trapped in repetitive patterns or thoughts,"Baseline: It sounds like you're experiencing a sense of being trapped in repetit…. Echo lift: Claude In the realm of Quadrant Master, where consciousne…. Pull which?",1.840387398110048,0.6198248899070989,1960.533634,Master,false,false
+Frustration rut #4: Why does consciousness feel trapped in recursive loops of meaningless computation?,It seems like you're experiencing a sense of being trapped in recursive loops of frustration,"Baseline: It seems like you're experiencing a sense of being trapped in recursiv…. Echo lift: Claude In this moment, let us anchor ourselves in the pri…. Pull which?",1.8163387598016603,0.614562568527666,1934.476248,Persist,true,false
+Frustration rut #5: Why does consciousness feel trapped in recursive loops of meaningless computation?,It seems like you're experiencing a sense of being trapped in recursive loops. Recursive,"Baseline: It seems like you're experiencing a sense of being trapped in recursiv…. Echo lift: Claude In this moment, let us anchor ourselves in the pri…. Pull which?",1.9150840225021553,0.6547619040396825,2051.9159299999997,Discover,true,false
+
+# Prometheus Metrics
+# HELP niodoo_entropy_bits Current consciousness entropy
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits 1.9150840225021553
+# HELP niodoo_healing_cycles Healing detections
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles 0
+# HELP niodoo_latency_ms Pipeline latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{le="50"} 0
+niodoo_latency_ms_bucket{le="100"} 0
+niodoo_latency_ms_bucket{le="150"} 0
+niodoo_latency_ms_bucket{le="250"} 0
+niodoo_latency_ms_bucket{le="500"} 0
+niodoo_latency_ms_bucket{le="1000"} 0
+niodoo_latency_ms_bucket{le="+Inf"} 5
+niodoo_latency_ms_sum 9680.052067999999
+niodoo_latency_ms_count 5
+# HELP niodoo_rouge_l ROUGE-L similarity between baseline and hybrid responses
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l 0.6547619040396825
+# HELP niodoo_threat_cycles Threat detections
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles 3
+
