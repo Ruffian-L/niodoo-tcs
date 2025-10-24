@@ -336,7 +336,7 @@ impl RuntimeConfig {
 
         let vllm_model = env_with_fallback(&["VLLM_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL_PATH"])
             .unwrap_or_else(|| {
-                "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string()
+                "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ/snapshots/b25037543e9394b818fdfca67ab2a00ecc7dd641".to_string()
             });
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];

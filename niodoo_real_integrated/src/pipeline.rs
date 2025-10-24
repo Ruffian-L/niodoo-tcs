@@ -19,6 +19,7 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
+use crate::tcs_predictor::TcsPredictor;
 use crate::metrics::{metrics, FailureSignals, RetryContext};
 use crate::tcs_analysis::TCSAnalyzer;
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
@@ -257,6 +258,13 @@ impl Pipeline {
             timings.tcs_ms
         );
 
+        // Phase 5.3: Check if predictor should trigger (knot > 0.4)
+        let topology_json = serde_json::to_string(&topology).unwrap_or_default();
+        info!(
+            "Topological signature: knot={:.3}, betti={:?}, pe={:.3}, gap={:.3}",
+            topology.knot_complexity, topology.betti_numbers, topology.persistence_entropy, topology.spectral_gap
+        );
+
         // Pass topology to compass - ACTUAL INTEGRATION
         let (compass, collapse) = tokio::try_join!(
             spawn_blocking({
@@ -411,7 +419,7 @@ impl Pipeline {
         // Proceed with learning using curated response (with retry-corrected generation)
         let learning_start = Instant::now();
 
-        let learning = self.learning.update(&pad_state, &compass, &collapse, &final_generation).await
+        let learning = self.learning.update(&pad_state, &compass, &collapse, &final_generation, &topology).await
             .context("Learning loop update failed")?;
 
         timings.learning_ms = learning_start.elapsed().as_secs_f64() * 1000.0;

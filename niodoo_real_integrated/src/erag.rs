@@ -10,13 +10,11 @@ use std::sync::Arc;
 
 use crate::compass::CompassOutcome;
 use crate::torus::PadGhostState;
-use crate::metrics::PipelineMetrics;
-use crate::qdrant::PointStruct;
 use crate::embedding::QwenStatefulEmbedder;
 use crate::learning::{DqnState, DqnAction, ReplayTuple};
-use qdrant_client::qdrant::{PointStruct, SearchPoints, Filter, FieldCondition::MatchValue, FieldCondition::Range as QRange, ScrollPoints};
-use qdrant_client::prelude::*;
-use serde_json::Value as JsonValue;
+use uuid::Uuid;
+use qdrant_client::{qdrant::{CreateCollection, VectorParams, Distance::Cosine, HnswConfigDiff, OptimizersConfigDiff, WalConfigDiff, SearchPoints, ScoredPoint, Condition, FieldCondition, Range, Filter}, Qdrant};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmotionalVector {
@@ -84,7 +82,7 @@ pub struct CollapseResult {
 }
 
 impl EragClient {
-    pub fn new(
+    pub async fn new(
         url: &str,
         collection: &str,
         vector_dim: usize,
@@ -100,9 +98,28 @@ impl EragClient {
             .timeout(Duration::from_secs(10))
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
+
+        let qdrant = Qdrant::from_url(url);
+
+        // Create collections via HTTP
+        let create_body = json!({
+            "vectors": {
+                "size": vector_dim,
+                "distance": "Cosine"
+            }
+        });
+
+        // Experiences
+        let create_url = format!("{}/collections/{}", base_url, collection);
+        let _ = client.put(&create_url).json(&create_body).send().await?;
+
+        // Failures
+        let failures_url = format!("{}/collections/failures", base_url);
+        let _ = client.put(&failures_url).json(&create_body).send().await?;
+
         Ok(Self {
             client,
-            base_url,
+            base_url: base_url.clone(),
             collection: collection.to_string(),
             vector_dim,
             similarity_threshold,
@@ -119,12 +136,13 @@ impl EragClient {
             vector.len()
         );
 
-        let request = SearchRequest {
+        let request = SearchPoints {
             vector: vector.to_vec(),
             limit: 3,
             score_threshold: Some(self.similarity_threshold),
             with_payload: true,
             with_vectors: false,
+            params: None,
         };
 
         let url = format!(
@@ -308,29 +326,33 @@ impl EragClient {
 
         let embedding = self.embedder.embed(prompt).await?;
         // Upsert to Qdrant with payload
-        let point = PointStruct::new(
+        let point = ScoredPoint::new(
             uuid::Uuid::new_v4().to_string(),
             embedding,
             payload,
         );
-        self.qdrant.upsert_points("failures", vec![point], None).await?;
-        info!("Stored failure episode");
-        Ok(())
+        let url = format!("{}/collections/failures/points", self.base_url);
+        let resp = self.client.put(&url).json(&json!({"points": [point]})).send().await?;
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to store failure episode: {}", resp.status()))
+        }
     }
 
-    pub async fn search(&self, query: &str, k: usize) -> Result<Vec<SearchHit>> {
+    pub async fn search(&self, query: &str, k: usize, filter: Option<Value>) -> Result<Vec<ScoredPoint<Value>>> {
         let embedding = self.embedder.embed(query).await?;
         let request = SearchPoints {
             collection_name: self.collection.clone(),
-            filter: None,
+            filter,
             vector: embedding,
             limit: k as u64,
-            with_payload: Some(true.into()),
+            with_payload: Some(true),
             with_vectors: None,
+            params: None,
         };
-        let url = format!("{}/collections/{}/points/search", self.base_url, self.collection);
-        let resp = self.client.post(&url).json(&request).send().await?;
-        let search_resp: qdrant_client::qdrant::SearchResponse = resp.json().await?;
+        let resp = self.client.post(&format!("{}/collections/{}/points/search", self.base_url, self.collection)).json(&request).send().await?;
+        let search_resp: qdrant_client::qdrant::SearchResponse<Value> = resp.json().await?;
         Ok(search_resp.result)
     }
 
@@ -341,7 +363,7 @@ impl EragClient {
             "type": "dqn_tuple",
             "tuple": tuple
         });
-        let point = PointStruct::new(
+        let point = ScoredPoint::new(
             Uuid::new_v4().to_string(),
             embedding,
             payload,
@@ -356,28 +378,26 @@ impl EragClient {
     }
 
     pub async fn query_replay_batch(&self, query: &str, _query_metrics: &[f64], k: usize) -> Result<Vec<ReplayTuple>> {
-        let hits = self.search(query, k).await?;
+        let hits = self.search(query, k, None).await?;
         let mut tuples = Vec::new();
         for hit in hits {
-            if let Some(payload) = hit.payload {
-                let p = payload.get("tuple").and_then(|t| t.as_object());
-                if let Some(tp) = p {
-                    let state = tp["state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
-                    let action = DqnAction {
-                        param: tp["action_param"].as_str().unwrap_or("").to_string(),
-                        delta: tp["action_delta"].as_f64().unwrap_or(0.0),
-                    };
-                    let reward = tp["reward"].as_f64().unwrap_or(0.0);
-                    let next_state = tp["next_state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
-                    let metrics = SimpleMetrics::from(&payload);
-                    tuples.push(ReplayTuple {
-                        state: DqnState { metrics: state },
-                        action,
-                        reward,
-                        next_state: DqnState { metrics: next_state },
-                        metrics: Some(metrics),
-                    });
-                }
+            let payload = hit.payload.unwrap_or_default();
+            if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
+                let state = tp["state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                let action = DqnAction {
+                    param: tp["action_param"].as_str().unwrap_or("").to_string(),
+                    delta: tp["action_delta"].as_f64().unwrap_or(0.0),
+                };
+                let reward = tp["reward"].as_f64().unwrap_or(0.0);
+                let next_state = tp["next_state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                let metrics = SimpleMetrics::from(&payload);
+                tuples.push(ReplayTuple {
+                    state: DqnState { metrics: state },
+                    action,
+                    reward,
+                    next_state: DqnState { metrics: next_state },
+                    metrics: Some(metrics),
+                });
             }
         }
         Ok(tuples)
@@ -403,16 +423,14 @@ impl EragClient {
         let scroll_resp: qdrant_client::qdrant::ScrollResponse = resp.json().await?;
         let mut tuples = Vec::new();
         for point in scroll_resp.result {
-            if let Some(payload) = point.payload {
-                let p = payload.get("tuple").and_then(|t| t.as_object());
-                if let Some(tp) = p {
-                    let state = tp["state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
-                    let action_param = tp["action_param"].as_str().unwrap_or("").to_string();
-                    let action_delta = tp["action_delta"].as_f64().unwrap_or(0.0);
-                    let reward = tp["reward"].as_f64().unwrap_or(0.0);
-                    let next_state = tp["next_state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
-                    tuples.push(DqnTuple { state, action_param, action_delta, reward, next_state });
-                }
+            let payload = point.payload.unwrap_or_default();
+            if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
+                let state = tp["state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                let action_param = tp["action_param"].as_str().unwrap_or("").to_string();
+                let action_delta = tp["action_delta"].as_f64().unwrap_or(0.0);
+                let reward = tp["reward"].as_f64().unwrap_or(0.0);
+                let next_state = tp["next_state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                tuples.push(DqnTuple { state, action_param, action_delta, reward, next_state });
             }
         }
         tuples.sort_by(|a, b| b.reward.partial_cmp(&a.reward).unwrap_or(std::cmp::Ordering::Equal)); // sort by reward desc
@@ -437,7 +455,7 @@ struct SearchResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct SearchHit {
+pub struct SearchHit {
     score: f32,
     #[serde(default)]
     payload: JsonMap<String, JsonValue>,
@@ -656,9 +674,6 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
         quality_score,
         topology_betti,
         topology_knot_complexity,
-        solution_path,
-        conversation_history,
-        iteration_count,
     }
 }
 

@@ -7,6 +7,19 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::{info, instrument, warn};
+use reqwest::StatusCode;
+
+#[derive(Serialize, Deserialize)]
+struct OllamaRequest {
+    model: String,
+    prompt: String,
+    stream: bool,
+}
+
+#[derive(Deserialize)]
+struct OllamaResponse {
+    response: String,
+}
 
 use crate::api_clients::{ClaudeClient, GptClient};
 use crate::compass::CompassOutcome;
@@ -425,7 +438,42 @@ impl GenerationEngine {
     }
 
     pub async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
-        self.send_chat_with_logprobs(messages, false).await
+        if self.endpoint.contains(":11434") {
+            // Ollama mode
+            let prompt = messages.last().unwrap().content.clone();
+            let ollama_req = OllamaRequest {
+                model: self.model.clone(),
+                prompt,
+                stream: false,
+            };
+            let ollama_url = self.endpoint.replace("/v1/chat/completions", "/api/generate");
+            let resp = self.client.post(&ollama_url).json(&ollama_req).send().await?;
+            if resp.status() == StatusCode::OK {
+                let ollama_resp: Vec<OllamaResponse> = resp.json().await?;
+                Ok(ollama_resp.iter().map(|r| r.response.clone()).collect::<String>())
+            } else {
+                Err(anyhow!("Ollama request failed: {}", resp.status()))
+            }
+        } else {
+            // vLLM mode
+            let payload = ChatCompletionRequest {
+                model: self.model.clone(),
+                messages,
+                temperature: self.temperature,
+                top_p: self.top_p,
+                repetition_penalty: 1.2,
+                max_tokens: self.max_tokens,
+                logprobs: None,
+                top_logprobs: None,
+            };
+            let response = self.client.post(&self.endpoint).json(&payload).send().await?;
+            if !response.status().is_success() {
+                anyhow::bail!("vLLM request failed: {}", response.status());
+            }
+            let completion: ChatCompletionResponse = response.json().await?;
+            let content = completion.choices.first().and_then(|choice| choice.message.content.clone()).unwrap_or_default();
+            Ok(content)
+        }
     }
 
     pub async fn send_chat_with_logprobs(

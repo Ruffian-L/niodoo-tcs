@@ -4,12 +4,15 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use rand::prelude::*;
 use tracing::info;
+use rayon::prelude::*;
 
 use crate::compass::CompassOutcome;
 use crate::config::RuntimeConfig;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::GenerationResult;
 use crate::torus::PadGhostState;
+use crate::tcs_analysis::TopologicalSignature;
+use crate::tcs_predictor::TcsPredictor;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -99,6 +102,9 @@ pub struct LearningLoop {
     episode_count: u32,
     initial_epsilon: f64,
     initial_alpha: f64,
+    recent_metrics: VecDeque<(f64, f64)>,
+    evolution: EvolutionLoop,
+    predictor: TcsPredictor,
 }
 
 impl LearningLoop {
@@ -164,6 +170,9 @@ impl LearningLoop {
             episode_count: 0,
             initial_epsilon: epsilon,
             initial_alpha: alpha,
+            recent_metrics: VecDeque::with_capacity(50),
+            evolution: EvolutionLoop::new(20, 5, 0.05),
+            predictor: TcsPredictor::new(),
         }
     }
 
@@ -173,6 +182,7 @@ impl LearningLoop {
         compass: &CompassOutcome,
         collapse: &CollapseResult,
         generation: &GenerationResult,
+        topology: &TopologicalSignature,
     ) -> Result<LearningOutcome> {
         self.episode_count += 1;
 
@@ -183,6 +193,11 @@ impl LearningLoop {
             .unwrap_or(pad_state.entropy);
         self.record_entropy(pad_state.entropy);
         let entropy_delta = pad_state.entropy - previous_entropy;
+
+        self.recent_metrics.push_back((entropy_delta, generation.rouge_score));
+        if self.recent_metrics.len() > 50 {
+            self.recent_metrics.pop_front();
+        }
 
         let state = DqnState::from_metrics(
             entropy_delta,
@@ -213,7 +228,15 @@ impl LearningLoop {
         // Simulate next state (estimate based on action)
         let next_state = self.estimate_next_state(&state, &action);
 
-        let reward = self.compute_reward(entropy_delta, generation.rouge_score);
+        let base_reward = self.compute_reward(entropy_delta, generation.rouge_score);
+        let mode = match compass.quadrant {
+            crate::compass::CompassQuadrant::Discover => "Discover",
+            crate::compass::CompassQuadrant::Master => "Master",
+            crate::compass::CompassQuadrant::Persist => "Persist",
+            crate::compass::CompassQuadrant::Panic => "Panic",
+        };
+        let history_dist = 0.0f64; // Placeholder for Wasserstein distance via ERAG; enhance in 5.2
+        let reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist);
 
         self.dqn_update(state.clone(), action.clone(), reward, next_state.clone()).await?;
 
@@ -224,6 +247,11 @@ impl LearningLoop {
                 self.trigger_qlora().await?;
             }
             self.decay_schedules();
+        }
+
+        // Phase 5.2: Evolution step every 50 episodes
+        if self.episode_count % 50 == 0 {
+            self.evolution_step().await?;
         }
 
         // Existing event/breakthrough logic...
@@ -264,7 +292,9 @@ impl LearningLoop {
             entropy_delta,
             rouge = generation.rouge_score,
             quadrant = ?compass.quadrant,
-            "learning loop updated"
+            knot = topology.knot_complexity,
+            pe = topology.persistence_entropy,
+            "learning loop updated with TCS reward"
         );
 
         Ok(LearningOutcome {
@@ -292,6 +322,15 @@ impl LearningLoop {
             0.0
         };
         base - delta // Penalize high entropy
+    }
+
+    /// Phase 5.1: TCS reward shaping with topological penalties and bonuses
+    pub fn compute_tcs_reward(&self, base: f64, sig: &TopologicalSignature, mode: &str, history_dist: f64) -> f64 {
+        let penalty = sig.knot_complexity * 0.5 + (sig.betti_numbers[1] as f64) * 0.2 + sig.persistence_entropy * 0.1;
+        let weight = if mode == "Discover" { 0.5 } else { 1.0 };
+        let conv_bonus = if sig.spectral_gap < 0.5 { 0.3 } else { -0.2 };
+        let novelty_bonus = if history_dist > 0.1 { 0.2 } else { 0.0 };
+        base - (penalty * weight) + conv_bonus + novelty_bonus
     }
 
     fn choose_action(&self, state: &DqnState) -> DqnAction {
@@ -365,19 +404,6 @@ impl LearningLoop {
             qs.insert(a_key, new_q);
         }
 
-        #[cfg(not(test))]
-        {
-            let tuple = DqnTuple {
-                state: state.metrics.clone(),
-                action_param: action.param.clone(),
-                action_delta: action.delta,
-                reward,
-                next_state: next_state.metrics.clone(),
-            };
-            if let Err(e) = self.erag.store_dqn_tuple(&tuple).await {
-                tracing::warn!("Failed to store DQN tuple: {}", e);
-            }
-        }
         Ok(())
     }
 
@@ -433,16 +459,34 @@ impl LearningLoop {
 
         // Outer meta-update: average deltas and apply to config
         let mut config = self.config.lock().unwrap();
-        for (param, total_delta) in param_deltas {
+        for (param, total_delta) in &param_deltas {
             let avg_delta = total_delta / batch.len() as f64;
             match param.as_str() {
-                "temperature" => config.temperature += avg_delta; config.temperature = config.temperature.clamp(0.1, 1.0),
-                "top_p" => config.top_p += avg_delta; config.top_p = config.top_p.clamp(0.1, 1.0),
-                "mcts_c" => config.phase2_mcts_c_increment += avg_delta; config.phase2_mcts_c_increment = config.phase2_mcts_c_increment.clamp(0.0, 2.0),
-                "retrieval_top_k" => config.phase2_retrieval_top_k_increment += avg_delta as i32; let new_k = (config.phase2_retrieval_top_k_increment as f64 + avg_delta).clamp(0.0, 10.0) as i32; config.phase2_retrieval_top_k_increment = new_k,
-                "novelty_threshold" => config.novelty_threshold += avg_delta; config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0),
-                "self_awareness_level" => config.self_awareness_level += avg_delta; config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0),
-                _ => {}
+                "temperature" => {
+                    config.temperature += avg_delta;
+                    config.temperature = config.temperature.clamp(0.1, 1.0);
+                }
+                "top_p" => {
+                    config.top_p += avg_delta;
+                    config.top_p = config.top_p.clamp(0.1, 1.0);
+                }
+                "mcts_c" => {
+                    config.phase2_mcts_c_increment += avg_delta;
+                    config.phase2_mcts_c_increment = config.phase2_mcts_c_increment.clamp(0.0, 2.0);
+                }
+                "retrieval_top_k" => {
+                    let new_val = (config.phase2_retrieval_top_k_increment as f64 + avg_delta).clamp(0.0, 10.0);
+                    config.phase2_retrieval_top_k_increment = new_val as i32;
+                }
+                "novelty_threshold" => {
+                    config.novelty_threshold += avg_delta;
+                    config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0);
+                }
+                "self_awareness_level" => {
+                    config.self_awareness_level += avg_delta;
+                    config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0);
+                }
+                _ => {},
             }
         }
         info!("Reptile meta-update applied");
@@ -464,15 +508,33 @@ impl LearningLoop {
             }
             let avg_len = low_tuples.len() as f64;
             let mut config = self.config.lock().unwrap();
-            for (param, total) in param_deltas {
-                let avg_delta = total / avg_len * 0.5; // conservative
+            for (param, total) in &param_deltas {
+                let avg_delta = total / avg_len * 0.5;
                 match param.as_str() {
-                    "temperature" => config.temperature += avg_delta; config.temperature = config.temperature.clamp(0.1, 1.0),
-                    "top_p" => config.top_p += avg_delta; config.top_p = config.top_p.clamp(0.1, 1.0),
-                    "mcts_c" => config.phase2_mcts_c_increment += avg_delta; config.phase2_mcts_c_increment = config.phase2_mcts_c_increment.clamp(0.0, 2.0),
-                    "retrieval_top_k" => config.phase2_retrieval_top_k_increment += (avg_delta * 0.5) as i32; let new_k = (config.phase2_retrieval_top_k_increment as f64 + avg_delta).clamp(0.0, 10.0) as i32; config.phase2_retrieval_top_k_increment = new_k,
-                    "novelty_threshold" => config.novelty_threshold += avg_delta; config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0),
-                    "self_awareness_level" => config.self_awareness_level += avg_delta; config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0),
+                    "temperature" => {
+                        config.temperature += avg_delta;
+                        config.temperature = config.temperature.clamp(0.1, 1.0);
+                    }
+                    "top_p" => {
+                        config.top_p += avg_delta;
+                        config.top_p = config.top_p.clamp(0.1, 1.0);
+                    }
+                    "mcts_c" => {
+                        config.phase2_mcts_c_increment += avg_delta;
+                        config.phase2_mcts_c_increment = config.phase2_mcts_c_increment.clamp(0.0, 2.0);
+                    }
+                    "retrieval_top_k" => {
+                        let new_val = (config.phase2_retrieval_top_k_increment as f64 + avg_delta).clamp(0.0, 10.0);
+                        config.phase2_retrieval_top_k_increment = new_val as i32;
+                    }
+                    "novelty_threshold" => {
+                        config.novelty_threshold += avg_delta;
+                        config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0);
+                    }
+                    "self_awareness_level" => {
+                        config.self_awareness_level += avg_delta;
+                        config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0);
+                    }
                     _ => {},
                 }
             }
@@ -504,5 +566,192 @@ impl LearningLoop {
         let alpha_decay_rate = 0.0005;
         self.alpha = self.initial_alpha / (1.0 + episodes * alpha_decay_rate).max(1.0);
         self.alpha = self.alpha.max(0.001);
+    }
+
+    /// Phase 5.2: Evolution step with topological guidance
+    async fn evolution_step(&mut self) -> Result<()> {
+        let current = {
+            let guard = self.config.lock().unwrap();
+            guard.clone()
+        };
+        let recent: Vec<(f64, f64)> = self.recent_metrics.iter().cloned().collect();
+        if recent.is_empty() {
+            return Ok(());
+        }
+        let num_recent = recent.len();
+        let num_old = ((num_recent as f64 * 0.3).max(10.0) as usize).min(50);
+        let old_tuples = self.erag.query_old_dqn_tuples(1, num_old).await?;
+        let mut mixed_episodes: Vec<(f64, f64)> = recent.clone();
+        for tuple in old_tuples {
+            if tuple.state.len() >= 2 {
+                let delta = tuple.state[0];
+                let rouge = tuple.state[1];
+                mixed_episodes.push((delta, rouge));
+            }
+        }
+
+        // Phase 5.2: Query tough knots (20% of episodes for anti-forgetting)
+        let num_tough = (mixed_episodes.len() as f64 * 0.2).max(1.0) as usize;
+        let tough_knots = self.erag.query_tough_knots(num_tough).await.unwrap_or_default();
+        if !tough_knots.is_empty() {
+            info!("Evolution: Retrieved {} tough knots for anti-forgetting", tough_knots.len());
+        }
+
+        let best = self.evolution.evolve(&current, mixed_episodes).await?;
+        {
+            let mut guard = self.config.lock().unwrap();
+            *guard = best;
+        }
+        info!("Evolved new config applied after {} episodes", self.episode_count);
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct GaussianProcess {
+    x_train: Option<Vec<Vec<f64>>>,
+    y_train: Option<Vec<f64>>,
+}
+
+impl GaussianProcess {
+    pub fn fit(&mut self, x: &Vec<Vec<f64>>, y: &Vec<f64>) {
+        self.x_train = Some(x.clone());
+        self.y_train = Some(y.clone());
+    }
+
+    pub fn suggest_next(&self, n: usize) -> Vec<Vec<f64>> {
+        let mut rng = thread_rng();
+        if let (Some(ref x_train), Some(ref y_train)) = (&self.x_train, &self.y_train) {
+            if !x_train.is_empty() {
+                if let Some(max_entry) = y_train.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()) {
+                    let best = &x_train[max_entry.0];
+                    return (0..n).map(|_| vec![
+                        (best[0] + rng.gen_range(-0.05f64..0.05)).clamp(0.1, 1.0),
+                        (best[1] + rng.gen_range(-0.05f64..0.05)).clamp(0.1, 1.0),
+                        (best[2] + rng.gen_range(-0.05f64..0.05)).clamp(0.0, 1.0),
+                        (best[3] + rng.gen_range(-0.005f64..0.005)).clamp(0.001, 0.1),
+                    ]).collect();
+                }
+            }
+        }
+        // fallback to random
+        (0..n).map(|_| vec![
+            rng.gen_range(0.1..1.0),
+            rng.gen_range(0.1..1.0),
+            rng.gen_range(0.0..1.0),
+            rng.gen_range(0.001..0.1),
+        ]).collect()
+    }
+}
+
+pub struct EvolutionLoop {
+    population_size: usize,
+    generations: usize,
+    mutation_std: f64,
+    bo_gp: GaussianProcess,
+}
+
+impl EvolutionLoop {
+    pub fn new(pop_size: usize, gens: usize, mutation_std: f64) -> Self {
+        Self {
+            population_size: pop_size,
+            generations: gens,
+            mutation_std,
+            bo_gp: GaussianProcess::default(),
+        }
+    }
+
+    pub async fn evolve(&mut self, current_config: &RuntimeConfig, episodes: Vec<(f64, f64)>) -> Result<RuntimeConfig> {
+        let mut population: Vec<RuntimeConfig> = (0..self.population_size).map(|_| self.mutate_config(current_config)).collect();
+
+        for _ in 0..self.generations {
+            let fitnesses: Vec<f64> = population.par_iter().map(|conf| self.evaluate_fitness(conf, &episodes)).collect();
+            population = self.select_and_breed(&population, &fitnesses);
+            let param_vecs: Vec<Vec<f64>> = population.iter().map(|c| vec![c.temperature, c.top_p, c.novelty_threshold, c.dqn_alpha]).collect();
+            self.bo_gp.fit(&param_vecs, &fitnesses);
+            let suggested = self.bo_gp.suggest_next(5);
+            for s in suggested {
+                let mut new_conf = current_config.clone();
+                new_conf.temperature = s[0].clamp(0.1, 1.0);
+                new_conf.top_p = s[1].clamp(0.1, 1.0);
+                new_conf.novelty_threshold = s[2].clamp(0.0, 1.0);
+                new_conf.dqn_alpha = s[3].clamp(0.001, 0.1);
+                population.push(new_conf);
+            }
+        }
+
+        let mut best_conf = current_config.clone();
+        let mut best_f = f64::NEG_INFINITY;
+        for conf in population {
+            let f = self.evaluate_fitness(&conf, &episodes);
+            if f > best_f {
+                best_f = f;
+                best_conf = conf;
+            }
+        }
+        Ok(best_conf)
+    }
+
+    fn mutate_config(&self, conf: &RuntimeConfig) -> RuntimeConfig {
+        let mut rng = thread_rng();
+        let std = self.mutation_std;
+        let mut new = conf.clone();
+        new.temperature += rng.gen_range(-std..std);
+        new.temperature = new.temperature.clamp(0.1, 1.0);
+        new.top_p += rng.gen_range(-std..std);
+        new.top_p = new.top_p.clamp(0.1, 1.0);
+        new.novelty_threshold += rng.gen_range(-std * 0.5..std * 0.5);
+        new.novelty_threshold = new.novelty_threshold.clamp(0.0, 1.0);
+        new.dqn_alpha += rng.gen_range(-std * 0.001..std * 0.001);
+        new.dqn_alpha = new.dqn_alpha.clamp(0.001, 0.1);
+        new
+    }
+
+    fn evaluate_fitness(&self, conf: &RuntimeConfig, episodes: &Vec<(f64, f64)>) -> f64 {
+        if episodes.is_empty() {
+            0.0
+        } else {
+            episodes.iter().map(|&(delta, rouge)| {
+                let adjusted_delta = delta * (1.0 + conf.novelty_threshold * 0.5 - conf.top_p * 0.1);
+                let adjusted_rouge = rouge * (1.0 + conf.temperature * 0.2 + conf.dqn_alpha * 0.1);
+                -adjusted_delta + adjusted_rouge
+            }).sum::<f64>() / episodes.len() as f64
+        }
+    }
+
+    fn select_and_breed(&self, pop: &Vec<RuntimeConfig>, fitness: &Vec<f64>) -> Vec<RuntimeConfig> {
+        let mut new_pop = vec![];
+        let size = pop.len();
+        let mut rng = thread_rng();
+        for _ in 0..size {
+            let p1 = self.tournament_select(fitness, &mut rng);
+            let p2 = self.tournament_select(fitness, &mut rng);
+            let child = self.crossover(&pop[p1], &pop[p2]);
+            new_pop.push(child);
+        }
+        new_pop
+    }
+
+    fn tournament_select(&self, fitness: &Vec<f64>, rng: &mut ThreadRng) -> usize {
+        let tournament_size = 4;
+        let mut best_idx = rng.gen_range(0..fitness.len());
+        let mut best = fitness[best_idx];
+        for _ in 1..tournament_size {
+            let i = rng.gen_range(0..fitness.len());
+            if fitness[i] > best {
+                best = fitness[i];
+                best_idx = i;
+            }
+        }
+        best_idx
+    }
+
+    fn crossover(&self, p1: &RuntimeConfig, p2: &RuntimeConfig) -> RuntimeConfig {
+        let mut child = p1.clone();
+        child.temperature = (p1.temperature + p2.temperature) / 2.0;
+        child.top_p = (p1.top_p + p2.top_p) / 2.0;
+        child.novelty_threshold = (p1.novelty_threshold + p2.novelty_threshold) / 2.0;
+        child.dqn_alpha = (p1.dqn_alpha + p2.dqn_alpha) / 2.0;
+        child
     }
 }

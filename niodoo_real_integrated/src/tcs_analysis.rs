@@ -13,6 +13,9 @@ use tcs_knot::{JonesPolynomial, KnotDiagram};
 use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
 use tcs_tqft::{Cobordism, TQFTEngine};
 
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList};
+
 /// Topological signature computed for a state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologicalSignature {
@@ -25,12 +28,16 @@ pub struct TopologicalSignature {
     pub betti_numbers: [usize; 3], // H0, H1, H2
 
     // Knot invariants
-    pub knot_complexity: f32,
+    pub knot_complexity: f64,
     pub knot_polynomial: String,
 
     // TQFT invariants
     pub tqft_dimension: usize,
     pub cobordism_type: Option<Cobordism>,
+
+    // New TDA features for Phase 5
+    pub persistence_entropy: f64,
+    pub spectral_gap: f64,
 
     // Performance metrics
     pub computation_time_ms: f64,
@@ -40,11 +47,13 @@ impl TopologicalSignature {
     pub fn new(
         persistence_features: Vec<PersistenceFeature>,
         betti_numbers: [usize; 3],
-        knot_complexity: f32,
+        knot_complexity: f64,
         knot_polynomial: String,
         tqft_dimension: usize,
         cobordism_type: Option<Cobordism>,
         computation_time_ms: f64,
+        persistence_entropy: f64,
+        spectral_gap: f64,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -55,6 +64,8 @@ impl TopologicalSignature {
             knot_polynomial,
             tqft_dimension,
             cobordism_type,
+            persistence_entropy,
+            spectral_gap,
             computation_time_ms,
         }
     }
@@ -92,57 +103,131 @@ impl TCSAnalyzer {
         let start = Instant::now();
 
         // Convert PAD state to point cloud representation
-        let points = self.pad_to_points(pad_state);
+        let points: Vec<Vec<f64>> = self.pad_to_points(pad_state);
 
-        // Compute persistent homology
-        let persistence_features = self.homology.compute(&points);
-        let betti_numbers = self.compute_betti_numbers(&persistence_features);
+        // Compute persistent homology using Gudhi via pyo3
+        let (betti_numbers, persistence_features, pe, gap, knot_proxy) = Python::with_gil(|py| {
+            let locals = PyDict::new(py);
+            let code = r#"
+import gudhi
+from math import log
 
-        // Extract knot invariants (simplified - treat PAD as knot diagram)
+def compute_tda_features(points, max_edge=2.0, max_dim=2):
+    if not points:
+        return {
+            'betti_numbers': [1, 0, 0],
+            'persistence_features': [],
+            'persistence_entropy': 0.0,
+            'spectral_gap': 0.0,
+            'knot_complexity': 0.0
+        }
+    rc = gudhi.RipsComplex(points=points, max_edge_length=max_edge)
+    st = rc.create_simplex_tree(max_dimension=max_dim)
+    betti = st.betti_numbers()
+    pers = st.persistence()
+    # Compute lifetimes for finite intervals
+    lifetime = 0.0
+    intervals = []
+    for dim, (birth, death) in pers:
+        if death == float('inf'):
+            continue
+        l = death - birth
+        lifetime += l
+        intervals.append((dim, birth, death))
+    if lifetime > 0:
+        pe = 0.0
+        for dim, birth, death in intervals:
+            p = (death - birth) / lifetime
+            pe -= p * log(p)
+    else:
+        pe = 0.0
+    # Pad betti to 3
+    betti_padded = betti + [0] * (3 - len(betti))
+    gap = abs(betti_padded[1] - betti_padded[0])
+    knot = betti_padded[1]
+    # Persistence features: all intervals, inf as None
+    pers_features = [(dim, birth, None if death == float('inf') else death) for dim, (birth, death) in pers]
+    return {
+        'betti_numbers': betti_padded[:3],
+        'persistence_features': pers_features,
+        'persistence_entropy': pe,
+        'spectral_gap': gap,
+        'knot_complexity': float(knot)
+    }
+"#;
+            py.run(code, None, Some(locals)).map_err(|e| anyhow::anyhow!("Python code execution failed: {}", e))?;
+            let compute_fn = locals.get_item("compute_tda_features")
+                .and_then(|f| f.extract::<&PyAny>(py))
+                .ok_or_else(|| anyhow::anyhow!("Failed to extract compute function"))?;
+            let points_py_lists: Vec<Py<PyList>> = points.iter().map(|point| {
+                PyList::new(py, point.iter().cloned()).into()
+            }).collect();
+            let points_py = PyList::new(py, &points_py_lists);
+            let result = compute_fn.call1((points_py,), ()).map_err(|e| anyhow::anyhow!("Python function call failed: {}", e))?;
+            let dict = result.downcast::<PyDict>(py).map_err(|e| anyhow::anyhow!("Result is not a dict: {}", e))?;
+            let betti_vec: Vec<usize> = dict.get_item("betti_numbers")
+                .and_then(|b| b.extract(py))
+                .unwrap_or(vec![1, 0, 0]);
+            let betti_arr = [betti_vec.get(0).copied().unwrap_or(1), betti_vec.get(1).copied().unwrap_or(0), betti_vec.get(2).copied().unwrap_or(0)];
+            let pers_features_raw: Vec<(usize, f64, Option<f64>)> = dict.get_item("persistence_features")
+                .and_then(|p| p.extract(py))
+                .unwrap_or_default();
+            let persistence_features: Vec<PersistenceFeature> = pers_features_raw.into_iter().map(|(dim, birth, death)| PersistenceFeature {
+                dimension: dim,
+                birth,
+                death: death.unwrap_or(f64::INFINITY),
+            }).collect();
+            let pe = dict.get_item("persistence_entropy").and_then(|p| p.extract::<f64>(py)).unwrap_or(0.0);
+            let gap = dict.get_item("spectral_gap").and_then(|g| g.extract::<f64>(py)).unwrap_or(0.0);
+            let knot = dict.get_item("knot_complexity").and_then(|k| k.extract::<f64>(py)).unwrap_or(0.0);
+            Ok((betti_arr, persistence_features, pe, gap, knot))
+        })?;
+
+        // Keep existing knot polynomial computation
         let knot_diagram = self.pad_to_knot_diagram(pad_state);
         let knot_analysis = self.knot_analyzer.analyze(&knot_diagram);
+        let knot_polynomial = knot_analysis.polynomial;
 
-        // Infer cobordism from Betti number changes
+        // Use TDA knot proxy for complexity
+        let knot_complexity = knot_proxy.max(knot_analysis.complexity_score as f64);
+
         let cobordism_type = self.infer_cobordism(&betti_numbers);
 
         let computation_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
         debug!(
-            "Topological analysis: Betti={:?}, Knot complexity={:.3}, Cobordism={:?}",
-            betti_numbers, knot_analysis.complexity_score, cobordism_type
+            "Topological analysis: Betti={:?}, Knot complexity={:.3}, PE={:.3}, Gap={:.3}, Cobordism={:?}",
+            betti_numbers, knot_complexity, pe, gap, cobordism_type
         );
 
         Ok(TopologicalSignature::new(
             persistence_features,
             betti_numbers,
-            knot_analysis.complexity_score,
-            knot_analysis.polynomial,
+            knot_complexity,
+            knot_polynomial,
             self.tqft_engine.dimension,
             cobordism_type,
             computation_time_ms,
+            pe,
+            gap,
         ))
     }
 
     /// Convert PAD state to point cloud for homology computation
-    fn pad_to_points(&self, pad_state: &PadGhostState) -> Vec<DVector<f32>> {
-        // Use Takens embedding to create point cloud from PAD coordinates
-        let pad_as_time_series: Vec<Vec<f32>> =
-            vec![pad_state.pad.iter().map(|&x| x as f32).collect()];
-
+    fn pad_to_points(&self, pad_state: &PadGhostState) -> Vec<Vec<f64>> {
         let mut points = Vec::new();
         for i in 0..7 {
             // Create point from PAD coordinates with mu/sigma as extra dimensions
             let mut coords = Vec::with_capacity(7);
-            coords.push(pad_state.pad[i] as f32);
-            coords.push(pad_state.mu[i] as f32);
-            coords.push(pad_state.sigma[i] as f32);
+            coords.push(pad_state.pad[i] as f64);
+            coords.push(pad_state.mu[i] as f64);
+            coords.push(pad_state.sigma[i] as f64);
             // Pad to 7D
             while coords.len() < 7 {
                 coords.push(0.0);
             }
-            points.push(DVector::from_vec(coords));
+            points.push(coords);
         }
-
         points
     }
 
