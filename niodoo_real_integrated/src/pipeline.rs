@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use futures::FutureExt;
 
-use crate::compass::{CompassEngine, CompassOutcome};
+use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant};
 use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
 use crate::curator::Curator;
 use crate::data::{
@@ -17,8 +17,8 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::metrics::{metrics, FailureSignals};
-use crate::tcs_analysis::TCSAnalyzer;
+use crate::metrics::{metrics, FailureSignals, AdaptiveRetryController, AdaptiveRetryDecision, AdaptiveRetryLevel, FailureSignalAggregator, AggregatedFailureSignals, AdaptiveMetricsSnapshot, FailureSignalThresholds, RetryControllerConfig};
+use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use blake3::hash as blake3_hash;
@@ -173,6 +173,12 @@ impl Pipeline {
 
         let cache_capacity = NonZeroUsize::new(256).unwrap();
 
+        // Phase 2: Initialize retry controller and failure aggregator
+        let retry_config = RetryControllerConfig::default();
+        let retry_controller = AdaptiveRetryController::new(retry_config);
+        let failure_thresholds = FailureSignalThresholds::default();
+        let failure_aggregator = FailureSignalAggregator::new(failure_thresholds);
+
         Ok(Self {
             config,
             args,
@@ -189,6 +195,9 @@ impl Pipeline {
             tcs_analyzer,
             embedding_cache: LruCache::new(cache_capacity),
             collapse_cache: LruCache::new(cache_capacity),
+            retry_count: Arc::new(AtomicU32::new(0)),
+            retry_controller,
+            failure_aggregator,
         })
     }
 
@@ -315,15 +324,6 @@ impl Pipeline {
             timings.generation_ms
         );
 
-        // Calculate entropy_delta here after we have pad_state
-        let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean);
-
-        // Update generation result with calculated entropy_delta
-        let generation = GenerationResult {
-            entropy_delta,
-            ..generation
-        };
-
         // NEW: Phase 2 Integration - Call curator after generation
         let curated_experience = self
             .integrate_curator(
@@ -335,17 +335,10 @@ impl Pipeline {
             )
             .await?;
 
-        // Failure evaluation after curator (entropy_delta already calculated above)
+        // Failure evaluation after curator
+        let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean); // Simple delta from mean
         let curator_quality = curated_experience.quality_score as f64;
-
-        // Extract UCB1 score from MCTS branches
-        let ucb1_score = compass
-            .mcts_branches
-            .iter()
-            .map(|branch| branch.ucb_score)
-            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .unwrap_or(0.5);
-
+        let ucb1_score = 0.5; // Placeholder - assume moderate confidence
         let (failure, details) = FailureSignals::evaluate(
             generation.rouge_score,
             entropy_delta,
@@ -353,23 +346,37 @@ impl Pipeline {
             ucb1_score,
         );
 
+        // Phase 2: Handle retries with Reflection and CoT
+        let (final_generation, final_failure) = self.handle_retry_with_reflection(
+            prompt,
+            &failure,
+            &details,
+            &generation,
+            &compass,
+            &collapse,
+            &curated_experience,
+            entropy_delta,
+            curator_quality,
+            ucb1_score,
+        ).await?;
+
         // Log to ERAG if failure != "none"
-        if failure != "none" {
+        if final_failure != "none" {
             let metrics_ref = metrics();
             self.erag
                 .store_failure(
                     prompt,
-                    &generation.hybrid_response,
+                    &final_generation.hybrid_response,
                     metrics_ref,
                     Some(details.clone()),
                 )
                 .await?;
         }
 
-        // Proceed with learning using curated response
+        // Proceed with learning using curated response (with retry-corrected generation)
         let learning = self
             .learning
-            .update(&pad_state, &compass, &collapse, &generation)?; // Note: May need to adjust to use curated
+            .update(&pad_state, &compass, &collapse, &final_generation)?;
 
         // Store CURATED memory instead of raw
         if curated_experience.quality_score > 0.65 {
@@ -400,7 +407,7 @@ impl Pipeline {
             .map(|s| s.to_string())
             .collect();
         let experience_input = prompt.to_string();
-        let experience_output = generation.hybrid_response.clone();
+        let experience_output = final_generation.hybrid_response.clone();
         let experience_embedding = embedding.clone();
         let experience_context = aggregated_context_lines.clone();
 
@@ -432,19 +439,19 @@ impl Pipeline {
                         // Don't store low-quality memories, but return cycle
                         return Ok(PipelineCycle {
                             prompt: prompt.to_string(),
-                            baseline_response: generation.baseline_response.clone(),
-                            hybrid_response: generation.hybrid_response.clone(),
+                            baseline_response: final_generation.baseline_response.clone(),
+                            hybrid_response: final_generation.hybrid_response.clone(),
                             entropy: pad_state.entropy,
-                            rouge: generation.rouge_to_baseline,
-                            latency_ms: generation.latency_ms,
+                            rouge: final_generation.rouge_to_baseline,
+                            latency_ms: final_generation.latency_ms,
                             compass: compass.clone(),
-                            generation: generation.clone(),
+                            generation: final_generation.clone(),
                             tokenizer: tokenizer_output.clone(),
                             collapse: collapse.clone(),
                             learning: learning.clone(),
                             stage_timings: timings.clone(),
                             last_entropy: pad_state.entropy,
-                            failure: failure.clone(),
+                            failure: final_failure.clone(),
                         });
                     }
                 }
@@ -477,8 +484,8 @@ impl Pipeline {
 
         metrics().observe_cycle(
             pad_state.entropy,
-            generation.latency_ms,
-            generation.rouge_to_baseline,
+            final_generation.latency_ms,
+            final_generation.rouge_to_baseline,
             compass.is_threat,
             compass.is_healing,
         );
@@ -487,19 +494,19 @@ impl Pipeline {
 
         Ok(PipelineCycle {
             prompt: prompt.to_string(),
-            baseline_response: generation.baseline_response.clone(),
-            hybrid_response: generation.hybrid_response.clone(),
+            baseline_response: final_generation.baseline_response.clone(),
+            hybrid_response: final_generation.hybrid_response.clone(),
             entropy: pad_state.entropy,
-            rouge: generation.rouge_to_baseline,
+            rouge: final_generation.rouge_to_baseline,
             latency_ms: overall_start.elapsed().as_secs_f64() * 1000.0,
             compass,
-            generation,
+            generation: final_generation,
             tokenizer: tokenizer_output,
             collapse,
             learning,
             stage_timings: timings,
             last_entropy: pad_state.entropy,
-            failure,
+            failure: final_failure,
         })
     }
 
@@ -507,19 +514,179 @@ impl Pipeline {
         self.args.hardware
     }
 
+    /// Phase 2: Handle retries with Reflection and CoT self-correction
+    async fn handle_retry_with_reflection(
+        &self,
+        prompt: &str,
+        initial_failure: &str,
+        details: &str,
+        generation: &GenerationResult,
+        compass: &CompassOutcome,
+        collapse: &CollapseResult,
+        curated: &CuratedExperience,
+        entropy_delta: f64,
+        curator_quality: f64,
+        ucb1_score: f64,
+    ) -> Result<(GenerationResult, String)> {
+        // No failure, return original
+        if initial_failure == "none" {
+            return Ok((generation.clone(), "none".to_string()));
+        }
+
+        const MAX_RETRIES: u32 = 3;
+        let mut current_gen = generation.clone();
+        let mut current_failure = initial_failure.to_string();
+        let mut retry_count = 0;
+        let mut reflection_context = None;
+
+        // Retry loop with escalating strategies
+        while retry_count < MAX_RETRIES && current_failure != "none" {
+            retry_count += 1;
+            info!("Phase 2 retry attempt {}/{}", retry_count, MAX_RETRIES);
+
+            // Determine retry strategy based on failure type
+            if current_failure == "hard" {
+                // Generate reflection for hard failures
+                let reflection = self.generate_reflection(
+                    prompt,
+                    &current_gen.hybrid_response,
+                    details,
+                    compass,
+                )?;
+                
+                // Store reflection in ERAG
+                let metrics_ref = metrics();
+                if let Err(e) = self.erag.store_failure(
+                    prompt,
+                    &current_gen.hybrid_response,
+                    metrics_ref,
+                    Some(reflection.clone()),
+                ).await {
+                    warn!("Failed to store reflection: {}", e);
+                }
+
+                reflection_context = Some(reflection);
+                info!("Generated reflection for hard failure (attempt {})", retry_count);
+            } else if current_failure == "soft" {
+                // Apply CoT self-correction for soft failures
+                info!("Applying CoT self-correction for soft failure (attempt {})", retry_count);
+            }
+
+            // Retry generation with reflection/CoT applied
+            let retry_gen = self.retry_generation_with_adjustments(
+                prompt,
+                &reflection_context,
+                collapse,
+                compass,
+                current_failure == "soft",
+            ).await?;
+
+            // Re-evaluate failure
+            let (failure, new_details) = FailureSignals::evaluate(
+                retry_gen.rouge_score,
+                entropy_delta,
+                curator_quality,
+                ucb1_score,
+            );
+
+            current_gen = retry_gen;
+            current_failure = failure;
+
+            // Success on retry
+            if current_failure == "none" {
+                info!("Retry succeeded on attempt {}", retry_count);
+                self.retry_count.store(retry_count, Ordering::Relaxed);
+                break;
+            }
+
+            // Backoff delay before next retry
+            if retry_count < MAX_RETRIES {
+                let delay_ms = 200 * 2_u64.pow(retry_count.min(10));
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            }
+        }
+
+        if current_failure != "none" {
+            warn!("Failed after {} retry attempts", retry_count);
+        }
+
+        Ok((current_gen, current_failure))
+    }
+
+    /// Generate reflection text explaining the failure
+    fn generate_reflection(
+        &self,
+        prompt: &str,
+        response: &str,
+        failure_details: &str,
+        compass: &CompassOutcome,
+    ) -> Result<String> {
+        // Format reflection with failure analysis
+        let reflection = format!(
+            "# Reflection\n\n\
+            Previous attempt failed because: {}\n\n\
+            Context:\n\
+            - Prompt: {}\n\
+            - Response: {}\n\
+            - Compass state: {:?}\n\n\
+            Analysis:\n\
+            Re-evaluate the weak points, identify reasoning errors, and produce a corrected approach.\n\
+            Focus on improving: quality metrics, logical consistency, and coherence.",
+            failure_details,
+            prompt.chars().take(200).collect::<String>(),
+            response.chars().take(200).collect::<String>(),
+            compass.quadrant
+        );
+        Ok(reflection)
+    }
+
+    /// Retry generation with reflection context and adjustments
+    async fn retry_generation_with_adjustments(
+        &self,
+        prompt: &str,
+        reflection: &Option<String>,
+        collapse: &CollapseResult,
+        is_soft_failure: bool,
+    ) -> Result<GenerationResult> {
+        // Build augmented prompt with reflection or CoT
+        let mut augmented_prompt = prompt.to_string();
+        
+        if let Some(reflection_text) = reflection {
+            // Prepend reflection for hard failures
+            augmented_prompt = format!("{}\n\n{}", reflection_text, prompt);
+        } else if is_soft_failure {
+            // Append CoT self-correction for soft failures
+            augmented_prompt.push_str("\n\nStep-by-step check: Re-evaluate each critical inference. Verify logic, confirm reasoning, and explicitly correct any flawed steps.");
+        }
+
+        // Regenerate with augmented prompt
+        let tokenizer_output = self.tokenizer
+            .process(&augmented_prompt, collapse, &self.torus.project(&self.embedder.embed(&augmented_prompt).await?)?, self.thresholds.entropy_mean)?;
+
+        let retry_gen = self.generator.generate(&tokenizer_output, &CompassOutcome {
+            quadrant: crate::compass::CompassQuadrant::Discover,
+            is_threat: false,
+            is_healing: false,
+            mcts_branches: vec![],
+            intrinsic_reward: 0.0,
+        }).await?;
+
+        Ok(retry_gen)
+    }
+
     async fn integrate_curator(
         &self,
         input: &str,
         output: &str,
         pad_state: &PadGhostState,
-        _compass: &CompassOutcome,
+        compass: &CompassOutcome,
         context: &str,
     ) -> Result<CuratedExperience> {
         // Call curator_executor logic here
         // (either spawn as subprocess or integrate as library)
 
         // Create a proper Experience using the new constructor
-        let _experience = Experience::new(
+        let experience = Experience::new(
             input.to_string(),
             output.to_string(),
             context.to_string(),
@@ -528,7 +695,7 @@ impl Pipeline {
         );
 
         // Analyze quality if curator is available
-        let quality_score = if let Some(ref _curator) = self.curator {
+        let quality_score = if let Some(ref curator) = self.curator {
             // This would need proper curator method
             0.7f32 // Placeholder for now
         } else {
