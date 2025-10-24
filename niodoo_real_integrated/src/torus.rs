@@ -29,7 +29,10 @@ impl TorusPadMapper {
     /// Map a 896-dimensional embedding onto the 7D PAD+ghost manifold.
     #[instrument(skip_all)]
     pub fn project(&mut self, embedding: &[f32]) -> Result<PadGhostState> {
-        anyhow::ensure!(embedding.len() >= 128, "embedding must be at least 128 dims");
+        anyhow::ensure!(
+            embedding.len() >= 128,
+            "embedding must be at least 128 dims"
+        );
 
         let base_radius = 2.2;
         let tube_radius = 0.8;

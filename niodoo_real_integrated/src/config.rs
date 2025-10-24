@@ -174,11 +174,11 @@ pub struct RuntimeConfig {
     pub entropy_cycles_for_baseline: usize,
     #[serde(default)]
     pub enable_consistency_voting: bool,
-    
+
     // Generation backend configuration
     #[serde(default)]
     pub generation_backend: BackendType,
-    
+
     // Curator configuration
     #[serde(default)]
     pub enable_curator: bool,
@@ -189,6 +189,12 @@ pub struct RuntimeConfig {
     pub curator_temperature: f64,
     pub curator_max_tokens: usize,
     pub assessment_prompt_template: String,
+
+    // Generation timeout and token configuration
+    pub generation_timeout_secs: u64,
+    pub generation_max_tokens: usize,
+    pub dynamic_token_min: usize,
+    pub dynamic_token_max: usize,
 }
 
 impl RuntimeConfig {
@@ -222,7 +228,9 @@ impl RuntimeConfig {
             .to_string();
 
         let vllm_model = env_with_fallback(&["VLLM_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL_PATH"])
-            .unwrap_or_else(|| "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string());
+            .unwrap_or_else(|| {
+                "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string()
+            });
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
         if matches!(args.hardware, HardwareProfile::Laptop5080Q) {
@@ -302,6 +310,23 @@ impl RuntimeConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(256);
 
+        // Generation timeout and token configuration from env
+        let generation_timeout_secs = env_with_fallback(&["GENERATION_TIMEOUT_SECS", "TIMEOUT_SECS"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(60); // Default to 60s (reasonable for API calls)
+
+        let generation_max_tokens = env_with_fallback(&["GENERATION_MAX_TOKENS", "MAX_TOKENS"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(2048); // Default to 2048 (sufficient for complex code generation)
+
+        let dynamic_token_min = env_with_fallback(&["DYNAMIC_TOKEN_MIN"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(256); // Default dynamic clamp minimum
+
+        let dynamic_token_max = env_with_fallback(&["DYNAMIC_TOKEN_MAX"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(512); // Default dynamic clamp maximum
+
         Ok(Self {
             vllm_endpoint,
             vllm_model,
@@ -324,6 +349,10 @@ impl RuntimeConfig {
             curator_max_tokens,
             // Enhanced prompt with strict output format
             assessment_prompt_template: "Score this response (0.0-1.0) for emotional breakthrough potential.\nConsider: breakthrough→high score, stagnation→low score, LearningWill advance→boost score.\n\nPrompt: {}\nResponse: {}\nEntropy: {:.3}, Quadrant: {}\n\nOUTPUT FORMAT: Respond with ONLY a single number (e.g., '0.85'). No text, no explanation, no JSON, just the number.:".to_string(),
+            generation_timeout_secs,
+            generation_max_tokens,
+            dynamic_token_min,
+            dynamic_token_max,
         })
     }
 }
@@ -379,12 +408,16 @@ impl CuratorConfig {
             heuristic_optimal_entropy_high: env_with_fallback(&["CURATOR_HEURISTIC_ENTROPY_HIGH"])
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(2.5),
-            heuristic_optimal_entropy_score: env_with_fallback(&["CURATOR_HEURISTIC_OPTIMAL_SCORE"])
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(0.9),
-            heuristic_suboptimal_entropy_score: env_with_fallback(&["CURATOR_HEURISTIC_SUBOPTIMAL_SCORE"])
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(0.6),
+            heuristic_optimal_entropy_score: env_with_fallback(&[
+                "CURATOR_HEURISTIC_OPTIMAL_SCORE",
+            ])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.9),
+            heuristic_suboptimal_entropy_score: env_with_fallback(&[
+                "CURATOR_HEURISTIC_SUBOPTIMAL_SCORE",
+            ])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.6),
             heuristic_length_weight: env_with_fallback(&["CURATOR_HEURISTIC_LENGTH_WEIGHT"])
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0.4),

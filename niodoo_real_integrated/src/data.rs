@@ -3,10 +3,10 @@ use std::io::BufReader;
 
 use crate::util::shannon_entropy;
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use crate::compass::{CompassOutcome, CompassQuadrant};
 use crate::torus::PadGhostState;
@@ -251,7 +251,7 @@ impl Experience {
             should_store: None,
             refined_output: None,
             processing_time_ms: None,
-            pad_entropy: 0.0, // Default
+            pad_entropy: 0.0,                           // Default
             compass_quadrant: CompassQuadrant::Persist, // Default
             solution_path: None,
             conversation_history: Vec::new(),
@@ -272,7 +272,7 @@ impl Experience {
         let aggregated_context = context.join("\n");
         let solution_path = extract_code_blocks(&output);
         let conversation_history = vec![input.clone(), output.clone()];
-        
+
         Self {
             id: Uuid::new_v4(),
             input,
@@ -313,14 +313,14 @@ impl Experience {
 pub fn extract_code_blocks(text: &str) -> Option<String> {
     // Use regex to find code blocks
     let re = regex::Regex::new(r"```\w*\n([\s\S]*?)```").ok()?;
-    
+
     let mut all_code = Vec::new();
     for cap in re.captures_iter(text) {
         if let Some(code) = cap.get(1) {
             all_code.push(code.as_str().to_string());
         }
     }
-    
+
     if all_code.is_empty() {
         None
     } else {

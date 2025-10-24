@@ -11,16 +11,17 @@ use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
 use crate::curator::Curator;
 use crate::data::{
     compute_dataset_stats, load_emotional_dataset, load_rut_gauntlet_prompts, DatasetStats,
-    RutPrompt, Experience,
+    Experience, RutPrompt,
 };
 use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
-use crate::generation::{GenerationEngine, GenerationResult};
+use crate::generation::{GenerationEngine, GenerationResult, ChatMessage};
 use crate::learning::{LearningLoop, LearningOutcome};
 use crate::metrics::metrics;
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
+use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use tokio::task::spawn_blocking;
@@ -121,11 +122,18 @@ impl Pipeline {
             &config.qdrant_url,
             &config.qdrant_collection,
             config.qdrant_vector_dim,
-            0.65,
+            0.5,  // Bumped down from 0.65 for more memory hits
         )
         .await?;
         let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
-        let generator = GenerationEngine::new(&config.vllm_endpoint, &config.vllm_model)?;
+        let generator = GenerationEngine::new_with_config(
+            &config.vllm_endpoint,
+            &config.vllm_model,
+            config.generation_timeout_secs,
+            config.generation_max_tokens,
+            config.dynamic_token_min,
+            config.dynamic_token_max,
+        )?;
         if let Err(error) = generator.warmup().await {
             warn!(?error, "vLLM warmup failed");
         }
@@ -135,11 +143,10 @@ impl Pipeline {
         );
 
         // Initialize TCS analyzer
-        let tcs_analyzer = TCSAnalyzer::new()
-            .unwrap_or_else(|e| {
-                warn!("Failed to initialize TCS analyzer: {}, using default", e);
-                TCSAnalyzer::default()
-            });
+        let tcs_analyzer = TCSAnalyzer::new().unwrap_or_else(|e| {
+            warn!("Failed to initialize TCS analyzer: {}, using default", e);
+            TCSAnalyzer::default()
+        });
         info!("TCS topology analyzer initialized");
 
         // Initialize curator if enabled
@@ -151,7 +158,10 @@ impl Pipeline {
                     Some(c)
                 }
                 Err(e) => {
-                    warn!("Failed to initialize curator: {}, continuing without curator", e);
+                    warn!(
+                        "Failed to initialize curator: {}, continuing without curator",
+                        e
+                    );
                     None
                 }
             }
@@ -217,7 +227,10 @@ impl Pipeline {
         let tcs_start = Instant::now();
         let topology = self.tcs_analyzer.analyze_state(&pad_state)?;
         timings.tcs_ms = tcs_start.elapsed().as_secs_f64() * 1000.0;
-        info!("Pipeline stage: TCS topology analysis completed in {:.2}ms", timings.tcs_ms);
+        info!(
+            "Pipeline stage: TCS topology analysis completed in {:.2}ms",
+            timings.tcs_ms
+        );
 
         // Pass topology to compass - ACTUAL INTEGRATION
         let (compass, collapse) = tokio::try_join!(
@@ -263,33 +276,52 @@ impl Pipeline {
                 .process(prompt, &collapse, &pad_state, self.thresholds.entropy_mean)?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
+        let is_code_task = is_code_prompt(&prompt);
+
+        let mut vllm_messages: Vec<ChatMessage> = if is_code_task {
+            let clean_augmented = tokenizer_output.augmented_prompt
+                .lines()
+                .filter(|line| !line.starts_with("[CONSCIOUSNESS_STATE]") && !line.contains("Emotional Resonance") && !line.contains("empathy") && !line.contains("values like"))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: "You are an expert Python coder focused on algorithms. Output ONLY complete, runnable Python code solving the request—no explanations, ethics, philosophy, or additional text. For mazes/pathfinding, use Dijkstra with priority queue (heapq). Include all imports and define the grid/state logic precisely.".to_string(),
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: clean_augmented,
+                },
+            ]
+        } else {
+            vec![ChatMessage {
+                role: "user".to_string(),
+                content: tokenizer_output.augmented_prompt.clone(),
+            }]
+        };
+
+        info!("Prompt classified as: {}", if is_code_task { "code_task" } else { "general" });
+
         // Stage 6: Generation
         let generation_start = Instant::now();
-        let generation = if self.config.enable_consistency_voting {
-            let voting = self
-                .generator
-                .generate_with_consistency(&tokenizer_output, &compass)
-                .await?;
 
-            let selected = match voting.winner_index {
-                0 => &voting.candidate_1,
-                1 => &voting.candidate_2,
-                _ => &voting.candidate_3,
-            }
-            .clone();
+        let hybrid_response = self.generator.send_chat(vllm_messages).await?;
 
-            GenerationResult {
-                baseline_response: tokenizer_output.augmented_prompt.clone(),
-                hybrid_response: selected,
-                echoes: Vec::new(),
-                rouge_to_baseline: voting.rouge_scores.iter().copied().sum::<f64>()
-                    / voting.rouge_scores.len() as f64,
-                latency_ms: voting.latency_ms,
-                source: "consistency".to_string(),
-            }
-        } else {
-            self.generator.generate(&tokenizer_output, &compass).await?
+        let latency_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
+
+        let rouge = rouge_l(&hybrid_response, &tokenizer_output.augmented_prompt);
+
+        let generation = GenerationResult {
+            baseline_response: tokenizer_output.augmented_prompt.clone(),
+            hybrid_response,
+            echoes: Vec::new(),
+            rouge_to_baseline: rouge,
+            latency_ms,
+            source: if is_code_task { "code_vllm" } else { "vllm" }.to_string(),
         };
+
         timings.generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
         info!(
             "Pipeline stage: generation completed in {:.2}ms",
@@ -297,35 +329,41 @@ impl Pipeline {
         );
 
         // NEW: Phase 2 Integration - Call curator after generation
-        let curated_experience = self.integrate_curator(
-            prompt,
-            &generation.hybrid_response,
-            &pad_state,
-            &compass,
-            &collapse.aggregated_context
-        ).await?;
+        let curated_experience = self
+            .integrate_curator(
+                prompt,
+                &generation.hybrid_response,
+                &pad_state,
+                &compass,
+                &collapse.aggregated_context,
+            )
+            .await?;
 
         // Proceed with learning using curated response
         let learning = self
             .learning
-            .update(&pad_state, &compass, &collapse, &generation)?;  // Note: May need to adjust to use curated
+            .update(&pad_state, &compass, &collapse, &generation)?; // Note: May need to adjust to use curated
 
         // Store CURATED memory instead of raw
         if curated_experience.quality_score > 0.65 {
-            let solution_path = crate::data::extract_code_blocks(&curated_experience.refined_response);
-            self.erag.upsert_memory(
-                &embedding,
-                &pad_state,
-                &compass,
-                prompt,
-                &curated_experience.refined_response,
-                &[curated_experience.refined_response.clone()],  // context
-                pad_state.entropy,
-                Some(curated_experience.quality_score as f32),
-                None,  // topology
-                solution_path,
-                0,  // iteration_count - will be tracked later
-            ).await.ok();
+            let solution_path =
+                crate::data::extract_code_blocks(&curated_experience.refined_response);
+            self.erag
+                .upsert_memory(
+                    &embedding,
+                    &pad_state,
+                    &compass,
+                    prompt,
+                    &curated_experience.refined_response,
+                    &[curated_experience.refined_response.clone()], // context
+                    pad_state.entropy,
+                    Some(curated_experience.quality_score as f32),
+                    None, // topology
+                    solution_path,
+                    0, // iteration_count - will be tracked later
+                )
+                .await
+                .ok();
         }
 
         // Create Experience from pipeline
@@ -355,8 +393,7 @@ impl Pipeline {
                     if curated.should_store.unwrap_or(true) {
                         info!(
                             "Curator approved memory (quality: {:.3?}, latency: {:.2?}ms)",
-                            curated.quality_score,
-                            curated.processing_time_ms
+                            curated.quality_score, curated.processing_time_ms
                         );
                         let response = curated.refined_output.clone().unwrap_or(curated.output);
                         (response, curated.quality_score)
@@ -391,7 +428,7 @@ impl Pipeline {
             // No curator - store raw response
             (experience.output.clone(), None)
         };
-        
+
         let solution_path = experience.solution_path.clone();
         self.erag
             .upsert_memory(
@@ -449,24 +486,24 @@ impl Pipeline {
     ) -> Result<CuratedExperience> {
         // Call curator_executor logic here
         // (either spawn as subprocess or integrate as library)
-        
+
         // Create a proper Experience using the new constructor
         let experience = Experience::new(
             input.to_string(),
             output.to_string(),
             context.to_string(),
             "curator_refinement".to_string(),
-            0.5,  // Initial score, will be updated
+            0.5, // Initial score, will be updated
         );
-        
+
         // Analyze quality if curator is available
         let quality_score = if let Some(ref curator) = self.curator {
             // This would need proper curator method
-            0.7f32  // Placeholder for now
+            0.7f32 // Placeholder for now
         } else {
             0.5f32
         };
-        
+
         // Refine if needed
         let refined = if quality_score < 0.7 && self.curator.is_some() {
             // Would need proper curator method
@@ -474,7 +511,7 @@ impl Pipeline {
         } else {
             output.to_string()
         };
-        
+
         Ok(CuratedExperience {
             refined_response: refined,
             quality_score,
@@ -571,4 +608,11 @@ fn tokenizer_path() -> Result<PathBuf> {
     } else {
         anyhow::bail!("Tokenizer JSON not found; set TOKENIZER_JSON or QWEN_TOKENIZER")
     }
+}
+
+fn is_code_prompt(prompt: &str) -> bool {
+    let lower = prompt.to_lowercase();
+    lower.contains("python") || lower.contains("dijkstra") || lower.contains("maze") ||
+    lower.contains("pathfinding") || lower.contains("algorithm") || lower.contains("implement") ||
+    lower.contains("program") || lower.contains("code") || lower.contains("function")
 }

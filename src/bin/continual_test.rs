@@ -66,7 +66,7 @@ fn calculate_emotional_conflict(state: &ConsciousnessState) -> EmotionalVector {
     ] {
         if primary == a || primary == b {
             let opposing = if primary == a { *b } else { *a };
-            if let Some(intensity) = state.emotional_state.secondary_emotions.get(&opposing) {
+            if let Some((_, intensity)) = state.emotional_state.secondary_emotions.iter().find(|(emotion, _)| *emotion == opposing) {
                 conflict.add(*intensity);
             }
         }
@@ -663,6 +663,15 @@ impl RealConsciousnessTester {
         }
 
         queries
+    }
+
+    /// Save learning events to JSON file for QLoRA training
+    fn save_learning_events(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let output_path = "learning_events.json";
+        let json_data = serde_json::to_string_pretty(&self.learning_events)?;
+        std::fs::write(output_path, json_data)?;
+        println!("✅ Saved {} learning events to {}", self.learning_events.len(), output_path);
+        Ok(())
     }
 }
 

@@ -1,0 +1,126 @@
+╔══════════════════════════════════════════════════════════════╗
+║        🚀 EPIC LABYRINTH TEST - READY TO RUN 🚀              ║
+╚══════════════════════════════════════════════════════════════╝
+
+✅ SETUP COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📁 Files Created:
+   • epic_labyrinth_prompt.txt          (104 lines - the test prompt)
+   • EPIC_LABYRINTH_TEST_GUIDE.md      (178 lines - full guide)
+   • LABYRINTH_QUICKSTART.txt          (this file)
+
+📋 What This Test Does:
+   • 3D pathfinding with echo chambers (7x7x7 grid)
+   • State transitions: consec_echoes, timers, multipliers
+   • Expected optimal cost: 46
+   • AI must iterate 2-3 times to debug state bugs
+   • Perfect for testing learning patterns and memory
+
+🎯 QUICK START COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Start Dashboard (optional):
+   ./start_dashboard.sh
+   → Opens http://localhost:3000 (admin/niodoo123)
+
+2. Run the Test:
+   ./run_with_metrics.sh "$(cat epic_labyrinth_prompt.txt)" 10
+   → Runs 10 iterations, tracks metrics
+
+3. Monitor Live (separate terminal):
+   ./monitor_live.sh
+   → Real-time entropy/quality updates every 5s
+
+4. Run Again to See Learning:
+   ./run_with_metrics.sh "$(cat epic_labyrinth_prompt.txt)" 10
+   → Compare: Should be faster, lower entropy, better cost
+
+📊 WHAT TO WATCH FOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GOOD SIGNS ✅:
+   • Entropy dropping: 2.5 → 1.8 → 1.5
+   • Cost converging: 60 → 50 → 46
+   • Quality improving: ROUGE > 0.85
+   • AI references past fixes: "From previous solve..."
+
+BAD SIGNS ❌:
+   • Flat entropy (no learning)
+   • Cost stuck at 60+ (ignoring echoes)
+   • AI stubs the problem (quick fix, wrong answer)
+   • No iteration (solves in 1 attempt)
+
+🐛 COMMON BUGS AI WILL HIT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Wrong consec_echoes reset on non-echo moves
+2. Timer doesn't decrement correctly
+3. Multiplier applied before move instead of after
+4. Forgetting to handle echo chamber state overrides
+
+Debug hints if AI struggles:
+   "Rework the consec_echoes logic—it's resetting wrong on echo exits"
+   "Check attune_timer updates—should decrement on non-echo moves"
+   "Verify multiplier—halves on attune (consec==2), doubles on distract"
+
+🔥 WHY THIS BEATS BINARY TREE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Binary Tree:         Epic Labyrinth:
+• Simple step         • Multi-step debugging
+• Easy to stub        • Hard to shortcut
+• Low entropy variance • High variance (explodes if wrong)
+• No learning curve   • Visible learning patterns
+• No state management • Complex 6D state space
+
+This test exercises Niodoo's core strengths:
+✓ Topology (3D grid pathfinding)
+✓ Emotional states (threat/healing via multipliers)
+✓ Memory (should remember past bug fixes)
+✓ Entropy tracking (cost explosions show failures)
+
+📈 EXPECTED RESULTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+First Run:
+   • Cost: 60+ (bugs in state handling)
+   • Entropy: 2.5+ (confused)
+   • Iterations: Many attempts
+   • Memory: None
+
+After Learning (Repeat):
+   • Cost: 46 (optimal)
+   • Entropy: < 2.0 (learned)
+   • Iterations: Fewer (faster convergence)
+   • Memory: References past solves
+
+🎮 FULL GUIDE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For detailed instructions, troubleshooting, and advanced usage:
+   → Read: EPIC_LABYRINTH_TEST_GUIDE.md
+
+This guide includes:
+   • Step-by-step walkthrough
+   • Metric interpretation
+   • Troubleshooting tips
+   • Comparison with other tests
+   • Integration notes
+
+🚀 READY TO ROCK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Your AI is about to face its toughest test yet. This labyrinth
+will force it to:
+   • Debug state transitions 2-3 times
+   • Remember past mistakes
+   • Show visible learning curves
+   • Fail hard if it tries to cheat
+
+Good luck! Watch those entropy curves drop, or catch it trying
+to bullshit its way through. Either way, you'll learn something
+about how your AI really works under pressure.
+
+Now go run it and see what happens! 🔥
+

@@ -36,8 +36,8 @@ fn test_cascade_prompt_clamping() {
         .expect("failed to create generation engine");
 
     let _long_prompt = "a".repeat(500); // Longer than MAX_CHARS
-                                       // The generate_with_fallback method will clamp this internally
-                                       // This just verifies the engine can be created and has the method
+                                        // The generate_with_fallback method will clamp this internally
+                                        // This just verifies the engine can be created and has the method
     let _ = engine;
 }
 

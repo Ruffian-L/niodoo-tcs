@@ -1,0 +1,395 @@
+# Niodoo Learning Metrics - 2025-10-24-053113
+# Generated from: ### Epic 3D Echo Labyrinth Solver Prompt for Your AI
+Yo bro, here's a killer setup prompt you can straight-up copy-paste into your AI (ChatGPT, Claude, whatever). It's tuned to make it sweat the topology and state bugs like we did—expect it to iterate 2-3 times on the code before nailing the cost at 46. I stripped out the solution code so it has to grind it out fresh. Paste it in, hit run, and watch the magic (or the meltdowns). If it chokes, tell it to "rework the state transitions—check consec reset on non-echo moves."
+---
+**Prompt:**
+You are a master pathfinding algorithm engineer trapped in a twisted 3D labyrinth puzzle. Your mission: Write a complete, working Python program using Dijkstra's algorithm (with a priority queue) to find the minimal-cost path from start to end in this volumetric maze. The maze has deceptive "echo chambers" that mess with your navigation costs based on consecutive visits—get it wrong, and costs explode exponentially.
+### Maze Specs
+- **Grid**: A 7x7x7 3D array (z-layers, each a 7x7 list for y-rows, x-cols).
+- **Cells**:
+  - `0`: Open path (cost 1 normally).
+  - `1`: Impassable wall.
+  - `2`: Echo chamber (passable, but triggers state changes—see rules).
+- **Start**: (0, 0, 0) # (x, y, z)
+- **End**: (6, 6, 6)
+- **Moves**: 6 directions: ±x, ±y, ±z (orthogonal only, no diagonals). Stay in bounds [0-6].
+Here's the exact grid (copy this into your code as `grid = [...]`—it's a list of 7 layers, each a list of 7 lists of 7 ints):
+```
+Layer 0 (z=0):
+[[0, 1, 0, 0, 0, 0, 0],
+ [0, 1, 0, 1, 1, 1, 1],
+ [0, 1, 0, 1, 0, 1, 0],
+ [1, 1, 1, 1, 2, 1, 0],
+ [0, 1, 0, 1, 2, 1, 0],
+ [0, 1, 0, 1, 1, 1, 0],
+ [0, 0, 0, 0, 0, 2, 0]]
+Layer 1 (z=1):
+[[1, 1, 1, 1, 1, 1, 0],
+ [1, 1, 1, 1, 1, 1, 1],
+ [0, 1, 0, 1, 0, 1, 0],
+ [1, 1, 1, 1, 1, 1, 1],
+ [1, 1, 0, 1, 0, 1, 1],
+ [1, 1, 1, 1, 1, 1, 1],
+ [1, 1, 1, 1, 1, 1, 1]]
+Layer 2 (z=2):
+[[0, 0, 0, 1, 0, 1, 0],
+ [1, 1, 1, 1, 0, 1, 1],
+ [0, 1, 0, 1, 0, 0, 0],
+ [1, 1, 0, 1, 1, 1, 1],
+ [0, 1, 0, 1, 0, 1, 0],
+ [0, 1, 1, 1, 1, 1, 0],
+ [0, 0, 0, 0, 0, 1, 0]]
+Layer 3 (z=3):
+[[1, 1, 0, 1, 0, 1, 0],
+ [1, 1, 1, 1, 1, 1, 1],
+ [0, 1, 1, 1, 1, 1, 1],
+ [1, 1, 1, 1, 1, 1, 1],
+ [0, 1, 1, 1, 1, 1, 0],
+ [1, 1, 1, 1, 1, 1, 1],
+ [1, 1, 1, 1, 0, 1, 0]]
+Layer 4 (z=4):
+[[0, 1, 0, 0, 0, 1, 0],
+ [0, 1, 1, 1, 0, 1, 0],
+ [0, 1, 0, 1, 0, 1, 0],
+ [1, 1, 0, 1, 1, 1, 1],
+ [0, 0, 0, 1, 0, 0, 0],
+ [1, 1, 1, 1, 0, 1, 1],
+ [0, 0, 0, 1, 0, 1, 0]]
+Layer 5 (z=5):
+[[0, 1, 0, 1, 1, 1, 1],
+ [1, 1, 1, 1, 1, 1, 1],
+ [1, 1, 0, 1, 1, 1, 2],
+ [1, 1, 1, 1, 1, 1, 1],
+ [1, 1, 1, 1, 1, 1, 1],
+ [1, 1, 1, 1, 1, 1, 1],
+ [0, 1, 1, 1, 1, 1, 0]]
+Layer 6 (z=6):
+[[0, 1, 0, 1, 0, 0, 0],
+ [0, 1, 1, 1, 0, 1, 2],
+ [0, 1, 0, 1, 0, 1, 0],
+ [0, 1, 0, 1, 0, 1, 1],
+ [0, 0, 0, 1, 0, 0, 0],
+ [1, 1, 1, 1, 0, 1, 0],
+ [0, 0, 0, 0, 0, 1, 0]]
+```
+### Echo Rules (The Hard Part—State Will Explode If You Botch This)
+This isn't plain shortest path; echoes create a "distraction multiplier" that varies costs. Use **Dijkstra** (priority queue via `heapq`) because costs aren't uniform. Track **full state**: `(x, y, z, consec_echoes, attune_timer, multiplier)`
+- `consec_echoes`: 0-3 (streak of consecutive echoes *ending* at current pos; cap at 3).
+- `attune_timer`: 0-3 (moves left under current multiplier effect).
+- `multiplier`: Integer (1 default; doubles on distraction, halves on attune—use floor div `// 2`, min 1).
+**Initial State**: At start, `(0,0,0, 0, 0, 1)` (assume start isn't echo).
+**Per-Move Logic** (CRITICAL: Update *after* moving to new cell):
+1. Compute new pos `(nx, ny, nz)`. Skip if out-of-bounds or `grid[nz][ny][nx] == 1`.
+2. **Move Cost**: Current state's `multiplier` (add this to total dist).
+3. **New Consec**:
+   - If new cell == 2: `new_consec = 1 if old_consec == 0 else min(3, old_consec + 1)`
+   - Else: `new_consec = 0`
+4. **New Timer**: `new_timer = max(0, old_timer - 1)`
+5. **New Multi**:
+   - Base: `new_multi = 1 if new_timer == 0 else old_multi`
+   - **If new cell == 2 (override)**:
+     - Set `new_timer = 3`
+     - If `new_consec == 2`: Attune! `new_multi = max(1, old_multi // 2)` (halves distraction for next 3 moves)
+     - Else: Distract! `new_multi = old_multi * 2` (doubles for next 3 moves)
+Use a dict for distances keyed by full state tuple. Track prev states for path reconstruction. If you reach end pos (any state), reconstruct the path as list of `(x,y,z)` tuples from start to end.
+### Output
+- Run the code and print:
+  - `Path: [list of (x,y,z) tuples]`
+  - `Total cost: {min_cost}`
+  - `Steps: {len(path)-1}`
+- Expected: Cost 46 (equals steps if no penalties hit). If higher (e.g., 60+), debug state updates—common bugs: forgetting to reset consec on non-echo, applying multi pre-move, or wrong timer override.
+Use only standard libs (`heapq`, `sys`). No external packages. Write the full script in one go, but if it fails tests, explain the bug and rework.
+**Test It**: After writing, simulate a small run (e.g., print dist at end) to verify.
+---
+Boom—feed that to your AI and let it rip. If it spits out garbage on the first try (like infinite loops or wrong cost), just reply with "Nah, rework the consec_echoes logic—it's resetting wrong on echo exits" and watch it iterate. Hit me up with what it barfs out; we can roast it together. What's next, 4D hypercube echoes? 🚀
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="1"} 1.9458940903496649 1761283893246
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="1",le="50.0"} 0 1761283893246
+niodoo_latency_ms_bucket{iteration="1",le="100.0"} 0 1761283893246
+niodoo_latency_ms_bucket{iteration="1",le="250.0"} 0 1761283893246
+niodoo_latency_ms_bucket{iteration="1",le="500.0"} 0 1761283893246
+niodoo_latency_ms_bucket{iteration="1",le="1000.0"} 0 1761283893246
+niodoo_latency_ms_bucket{iteration="1",le="+Inf"} 1 1761283893246
+niodoo_latency_ms_sum{iteration="1"} 19657 1761283893246
+niodoo_latency_ms_count{iteration="1"} 1 1761283893246
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="1"} 0.10729213923972275 1761283893246
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="1"} 0
+0 1761283893246
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="1"} 0
+0 1761283893246
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="2"} 1.9458940903496649 1761283916296
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="2",le="50.0"} 0 1761283916296
+niodoo_latency_ms_bucket{iteration="2",le="100.0"} 0 1761283916296
+niodoo_latency_ms_bucket{iteration="2",le="250.0"} 0 1761283916296
+niodoo_latency_ms_bucket{iteration="2",le="500.0"} 0 1761283916296
+niodoo_latency_ms_bucket{iteration="2",le="1000.0"} 0 1761283916296
+niodoo_latency_ms_bucket{iteration="2",le="+Inf"} 1 1761283916296
+niodoo_latency_ms_sum{iteration="2"} 21009 1761283916296
+niodoo_latency_ms_count{iteration="2"} 1 1761283916296
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="2"} 0.12185414955422838 1761283916296
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="2"} 0
+0 1761283916296
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="2"} 0
+0 1761283916296
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="3"} 1.9458940903496649 1761283940507
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="3",le="50.0"} 0 1761283940507
+niodoo_latency_ms_bucket{iteration="3",le="100.0"} 0 1761283940507
+niodoo_latency_ms_bucket{iteration="3",le="250.0"} 0 1761283940507
+niodoo_latency_ms_bucket{iteration="3",le="500.0"} 0 1761283940507
+niodoo_latency_ms_bucket{iteration="3",le="1000.0"} 0 1761283940507
+niodoo_latency_ms_bucket{iteration="3",le="+Inf"} 1 1761283940507
+niodoo_latency_ms_sum{iteration="3"} 22143 1761283940507
+niodoo_latency_ms_count{iteration="3"} 1 1761283940507
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="3"} 0.10739887523085095 1761283940507
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="3"} 0
+0 1761283940507
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="3"} 0
+0 1761283940507
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="4"} 1.9458940903496649 1761283965429
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="4",le="50.0"} 0 1761283965429
+niodoo_latency_ms_bucket{iteration="4",le="100.0"} 0 1761283965429
+niodoo_latency_ms_bucket{iteration="4",le="250.0"} 0 1761283965429
+niodoo_latency_ms_bucket{iteration="4",le="500.0"} 0 1761283965429
+niodoo_latency_ms_bucket{iteration="4",le="1000.0"} 0 1761283965429
+niodoo_latency_ms_bucket{iteration="4",le="+Inf"} 1 1761283965429
+niodoo_latency_ms_sum{iteration="4"} 22875 1761283965429
+niodoo_latency_ms_count{iteration="4"} 1 1761283965429
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="4"} 0.11835646403912478 1761283965429
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="4"} 0
+0 1761283965429
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="4"} 0
+0 1761283965429
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="5"} 1.9458940903496649 1761283993530
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="5",le="50.0"} 0 1761283993530
+niodoo_latency_ms_bucket{iteration="5",le="100.0"} 0 1761283993530
+niodoo_latency_ms_bucket{iteration="5",le="250.0"} 0 1761283993530
+niodoo_latency_ms_bucket{iteration="5",le="500.0"} 0 1761283993530
+niodoo_latency_ms_bucket{iteration="5",le="1000.0"} 0 1761283993530
+niodoo_latency_ms_bucket{iteration="5",le="+Inf"} 1 1761283993530
+niodoo_latency_ms_sum{iteration="5"} 26057 1761283993530
+niodoo_latency_ms_count{iteration="5"} 1 1761283993530
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="5"} 0.1485761297497317 1761283993530
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="5"} 0
+0 1761283993530
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="5"} 0
+0 1761283993530
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="6"} 1.9458940903496649 1761284016256
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="6",le="50.0"} 0 1761284016256
+niodoo_latency_ms_bucket{iteration="6",le="100.0"} 0 1761284016256
+niodoo_latency_ms_bucket{iteration="6",le="250.0"} 0 1761284016256
+niodoo_latency_ms_bucket{iteration="6",le="500.0"} 0 1761284016256
+niodoo_latency_ms_bucket{iteration="6",le="1000.0"} 0 1761284016256
+niodoo_latency_ms_bucket{iteration="6",le="+Inf"} 1 1761284016256
+niodoo_latency_ms_sum{iteration="6"} 20687 1761284016256
+niodoo_latency_ms_count{iteration="6"} 1 1761284016256
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="6"} 0.1374740616172138 1761284016256
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="6"} 0
+0 1761284016256
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="6"} 0
+0 1761284016256
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="7"} 1.9458940903496649 1761284038017
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="7",le="50.0"} 0 1761284038017
+niodoo_latency_ms_bucket{iteration="7",le="100.0"} 0 1761284038017
+niodoo_latency_ms_bucket{iteration="7",le="250.0"} 0 1761284038017
+niodoo_latency_ms_bucket{iteration="7",le="500.0"} 0 1761284038017
+niodoo_latency_ms_bucket{iteration="7",le="1000.0"} 0 1761284038017
+niodoo_latency_ms_bucket{iteration="7",le="+Inf"} 1 1761284038017
+niodoo_latency_ms_sum{iteration="7"} 19715 1761284038017
+niodoo_latency_ms_count{iteration="7"} 1 1761284038017
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="7"} 0.13101838467602928 1761284038017
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="7"} 0
+0 1761284038017
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="7"} 0
+0 1761284038017
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="8"} 1.9458940903496649 1761284058350
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="8",le="50.0"} 0 1761284058350
+niodoo_latency_ms_bucket{iteration="8",le="100.0"} 0 1761284058350
+niodoo_latency_ms_bucket{iteration="8",le="250.0"} 0 1761284058350
+niodoo_latency_ms_bucket{iteration="8",le="500.0"} 0 1761284058350
+niodoo_latency_ms_bucket{iteration="8",le="1000.0"} 0 1761284058350
+niodoo_latency_ms_bucket{iteration="8",le="+Inf"} 1 1761284058350
+niodoo_latency_ms_sum{iteration="8"} 18290 1761284058350
+niodoo_latency_ms_count{iteration="8"} 1 1761284058350
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="8"} 0.14432242064968534 1761284058350
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="8"} 0
+0 1761284058350
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="8"} 0
+0 1761284058350
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="9"} 1.9458940903496649 1761284078291
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="9",le="50.0"} 0 1761284078291
+niodoo_latency_ms_bucket{iteration="9",le="100.0"} 0 1761284078291
+niodoo_latency_ms_bucket{iteration="9",le="250.0"} 0 1761284078291
+niodoo_latency_ms_bucket{iteration="9",le="500.0"} 0 1761284078291
+niodoo_latency_ms_bucket{iteration="9",le="1000.0"} 0 1761284078291
+niodoo_latency_ms_bucket{iteration="9",le="+Inf"} 1 1761284078291
+niodoo_latency_ms_sum{iteration="9"} 17897 1761284078291
+niodoo_latency_ms_count{iteration="9"} 1 1761284078291
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="9"} 0.12145748937854252 1761284078291
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="9"} 0
+0 1761284078291
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="9"} 0
+0 1761284078291
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="10"} 1.9458940903496649 1761284104874
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="10",le="50.0"} 0 1761284104874
+niodoo_latency_ms_bucket{iteration="10",le="100.0"} 0 1761284104874
+niodoo_latency_ms_bucket{iteration="10",le="250.0"} 0 1761284104874
+niodoo_latency_ms_bucket{iteration="10",le="500.0"} 0 1761284104874
+niodoo_latency_ms_bucket{iteration="10",le="1000.0"} 0 1761284104874
+niodoo_latency_ms_bucket{iteration="10",le="+Inf"} 1 1761284104874
+niodoo_latency_ms_sum{iteration="10"} 24537 1761284104874
+niodoo_latency_ms_count{iteration="10"} 1 1761284104874
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="10"} 0.12429104202724844 1761284104874
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="10"} 0
+0 1761284104874
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="10"} 0
+0 1761284104874
+

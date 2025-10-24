@@ -150,7 +150,9 @@ impl EragClient {
         memories.sort_by(|a, b| {
             let quality_a = a.quality_score.unwrap_or(0.5);
             let quality_b = b.quality_score.unwrap_or(0.5);
-            quality_b.partial_cmp(&quality_a).unwrap_or(std::cmp::Ordering::Equal)
+            quality_b
+                .partial_cmp(&quality_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         let average_similarity = if sims.is_empty() {
@@ -166,17 +168,18 @@ impl EragClient {
             .join("\n");
 
         // Check for higher quality previous solutions
-        let better_solution = memories.iter()
+        let better_solution = memories
+            .iter()
             .filter(|m| m.quality_score.unwrap_or(0.0) > 0.8)
             .find(|m| m.solution_path.is_some());
-        
+
         if let Some(better) = better_solution {
             aggregated_context.push_str(&format!(
                 "\n[Previous optimal solution (quality {:.2}): {}]",
                 better.quality_score.unwrap_or(0.0),
                 better.solution_path.as_ref().unwrap_or(&"N/A".to_string())
             ));
-            
+
             // Add warning if current approach seems suboptimal
             if better.iteration_count > 0 {
                 aggregated_context.push_str(&format!(
@@ -186,7 +189,8 @@ impl EragClient {
             }
         }
 
-        if aggregated_context.len() > 1000 {  // Increased from 100 to accommodate corrections
+        if aggregated_context.len() > 1000 {
+            // Increased from 100 to accommodate corrections
             aggregated_context.truncate(1000);
         }
 
@@ -322,23 +326,46 @@ fn encode_payload(memory: &EragMemory) -> JsonMap<String, JsonValue> {
         payload.insert("quality_score".to_string(), JsonValue::from(quality as f64));
     }
     if let Some(betti) = memory.topology_betti {
-        payload.insert("topology_betti_0".to_string(), JsonValue::from(betti[0] as f64));
-        payload.insert("topology_betti_1".to_string(), JsonValue::from(betti[1] as f64));
-        payload.insert("topology_betti_2".to_string(), JsonValue::from(betti[2] as f64));
+        payload.insert(
+            "topology_betti_0".to_string(),
+            JsonValue::from(betti[0] as f64),
+        );
+        payload.insert(
+            "topology_betti_1".to_string(),
+            JsonValue::from(betti[1] as f64),
+        );
+        payload.insert(
+            "topology_betti_2".to_string(),
+            JsonValue::from(betti[2] as f64),
+        );
     }
     if let Some(knot_complexity) = memory.topology_knot_complexity {
-        payload.insert("topology_knot_complexity".to_string(), JsonValue::from(knot_complexity as f64));
+        payload.insert(
+            "topology_knot_complexity".to_string(),
+            JsonValue::from(knot_complexity as f64),
+        );
     }
-    
+
     // Add continual learning fields
     if let Some(ref solution_path) = memory.solution_path {
-        payload.insert("solution_path".to_string(), JsonValue::String(solution_path.clone()));
+        payload.insert(
+            "solution_path".to_string(),
+            JsonValue::String(solution_path.clone()),
+        );
     }
-    payload.insert("iteration_count".to_string(), JsonValue::from(memory.iteration_count as f64));
+    payload.insert(
+        "iteration_count".to_string(),
+        JsonValue::from(memory.iteration_count as f64),
+    );
     payload.insert(
         "conversation_history".to_string(),
         JsonValue::Array(
-            memory.conversation_history.iter().cloned().map(JsonValue::String).collect()
+            memory
+                .conversation_history
+                .iter()
+                .cloned()
+                .map(JsonValue::String)
+                .collect(),
         ),
     );
 
@@ -369,7 +396,10 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
         })
         .unwrap_or_default();
 
-    let quality_score = payload.get("quality_score").and_then(|v| v.as_f64()).map(|f| f as f32);
+    let quality_score = payload
+        .get("quality_score")
+        .and_then(|v| v.as_f64())
+        .map(|f| f as f32);
     let topology_betti = if payload.contains_key("topology_betti_0") {
         Some([
             extract_number(payload, "topology_betti_0") as usize,
@@ -379,12 +409,16 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
     } else {
         None
     };
-    let topology_knot_complexity = payload.get("topology_knot_complexity").and_then(|v| v.as_f64()).map(|f| f as f32);
-    
-    let solution_path = payload.get("solution_path")
+    let topology_knot_complexity = payload
+        .get("topology_knot_complexity")
+        .and_then(|v| v.as_f64())
+        .map(|f| f as f32);
+
+    let solution_path = payload
+        .get("solution_path")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    
+
     let conversation_history = payload
         .get("conversation_history")
         .and_then(|value| value.as_array())
@@ -395,7 +429,7 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    
+
     let iteration_count = extract_number(payload, "iteration_count") as u32;
 
     EragMemory {

@@ -1,0 +1,293 @@
+# Niodoo Learning Metrics - 2025-10-24-050947
+# Generated from: Implement a balanced binary tree in Rust
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="1"} 1.945891204925554 1761282637322
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="1",le="50.0"} 0 1761282637322
+niodoo_latency_ms_bucket{iteration="1",le="100.0"} 0 1761282637322
+niodoo_latency_ms_bucket{iteration="1",le="250.0"} 0 1761282637322
+niodoo_latency_ms_bucket{iteration="1",le="500.0"} 0 1761282637322
+niodoo_latency_ms_bucket{iteration="1",le="1000.0"} 0 1761282637322
+niodoo_latency_ms_bucket{iteration="1",le="+Inf"} 1 1761282637322
+niodoo_latency_ms_sum{iteration="1"} 49719 1761282637322
+niodoo_latency_ms_count{iteration="1"} 1 1761282637322
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="1"} 0.39415624214667144 1761282637322
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="1"} 0
+0 1761282637322
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="1"} 0
+0 1761282637322
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="2"} 1.945891204925554 1761282687767
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="2",le="50.0"} 0 1761282687767
+niodoo_latency_ms_bucket{iteration="2",le="100.0"} 0 1761282687767
+niodoo_latency_ms_bucket{iteration="2",le="250.0"} 0 1761282687767
+niodoo_latency_ms_bucket{iteration="2",le="500.0"} 0 1761282687767
+niodoo_latency_ms_bucket{iteration="2",le="1000.0"} 0 1761282687767
+niodoo_latency_ms_bucket{iteration="2",le="+Inf"} 1 1761282687767
+niodoo_latency_ms_sum{iteration="2"} 48402 1761282687767
+niodoo_latency_ms_count{iteration="2"} 1 1761282687767
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="2"} 0.22514296744733778 1761282687767
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="2"} 0
+0 1761282687767
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="2"} 0
+0 1761282687767
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="3"} 1.945891204925554 1761282737908
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="3",le="50.0"} 0 1761282737908
+niodoo_latency_ms_bucket{iteration="3",le="100.0"} 0 1761282737908
+niodoo_latency_ms_bucket{iteration="3",le="250.0"} 0 1761282737908
+niodoo_latency_ms_bucket{iteration="3",le="500.0"} 0 1761282737908
+niodoo_latency_ms_bucket{iteration="3",le="1000.0"} 0 1761282737908
+niodoo_latency_ms_bucket{iteration="3",le="+Inf"} 1 1761282737908
+niodoo_latency_ms_sum{iteration="3"} 48094 1761282737908
+niodoo_latency_ms_count{iteration="3"} 1 1761282737908
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="3"} 0.3459718688420963 1761282737908
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="3"} 0
+0 1761282737908
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="3"} 0
+0 1761282737908
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="4"} 1.945891204925554 1761282789213
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="4",le="50.0"} 0 1761282789213
+niodoo_latency_ms_bucket{iteration="4",le="100.0"} 0 1761282789213
+niodoo_latency_ms_bucket{iteration="4",le="250.0"} 0 1761282789213
+niodoo_latency_ms_bucket{iteration="4",le="500.0"} 0 1761282789213
+niodoo_latency_ms_bucket{iteration="4",le="1000.0"} 0 1761282789213
+niodoo_latency_ms_bucket{iteration="4",le="+Inf"} 1 1761282789213
+niodoo_latency_ms_sum{iteration="4"} 49260 1761282789213
+niodoo_latency_ms_count{iteration="4"} 1 1761282789213
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="4"} 0.28157461100796377 1761282789213
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="4"} 0
+0 1761282789213
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="4"} 0
+0 1761282789213
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="5"} 1.945891204925554 1761282841397
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="5",le="50.0"} 0 1761282841397
+niodoo_latency_ms_bucket{iteration="5",le="100.0"} 0 1761282841397
+niodoo_latency_ms_bucket{iteration="5",le="250.0"} 0 1761282841397
+niodoo_latency_ms_bucket{iteration="5",le="500.0"} 0 1761282841397
+niodoo_latency_ms_bucket{iteration="5",le="1000.0"} 0 1761282841397
+niodoo_latency_ms_bucket{iteration="5",le="+Inf"} 1 1761282841397
+niodoo_latency_ms_sum{iteration="5"} 50137 1761282841397
+niodoo_latency_ms_count{iteration="5"} 1 1761282841397
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="5"} 0.17632741029802515 1761282841397
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="5"} 0
+0 1761282841397
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="5"} 0
+0 1761282841397
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="6"} 1.945891204925554 1761282893381
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="6",le="50.0"} 0 1761282893381
+niodoo_latency_ms_bucket{iteration="6",le="100.0"} 0 1761282893381
+niodoo_latency_ms_bucket{iteration="6",le="250.0"} 0 1761282893381
+niodoo_latency_ms_bucket{iteration="6",le="500.0"} 0 1761282893381
+niodoo_latency_ms_bucket{iteration="6",le="1000.0"} 0 1761282893381
+niodoo_latency_ms_bucket{iteration="6",le="+Inf"} 1 1761282893381
+niodoo_latency_ms_sum{iteration="6"} 49937 1761282893381
+niodoo_latency_ms_count{iteration="6"} 1 1761282893381
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="6"} 0.21367364607320358 1761282893381
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="6"} 0
+0 1761282893381
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="6"} 0
+0 1761282893381
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="7"} 1.945891204925554 1761282945835
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="7",le="50.0"} 0 1761282945835
+niodoo_latency_ms_bucket{iteration="7",le="100.0"} 0 1761282945835
+niodoo_latency_ms_bucket{iteration="7",le="250.0"} 0 1761282945835
+niodoo_latency_ms_bucket{iteration="7",le="500.0"} 0 1761282945835
+niodoo_latency_ms_bucket{iteration="7",le="1000.0"} 0 1761282945835
+niodoo_latency_ms_bucket{iteration="7",le="+Inf"} 1 1761282945835
+niodoo_latency_ms_sum{iteration="7"} 50404 1761282945835
+niodoo_latency_ms_count{iteration="7"} 1 1761282945835
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="7"} 0.4063227575801304 1761282945835
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="7"} 0
+0 1761282945835
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="7"} 0
+0 1761282945835
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="8"} 1.945891204925554 1761282998041
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="8",le="50.0"} 0 1761282998041
+niodoo_latency_ms_bucket{iteration="8",le="100.0"} 0 1761282998041
+niodoo_latency_ms_bucket{iteration="8",le="250.0"} 0 1761282998041
+niodoo_latency_ms_bucket{iteration="8",le="500.0"} 0 1761282998041
+niodoo_latency_ms_bucket{iteration="8",le="1000.0"} 0 1761282998041
+niodoo_latency_ms_bucket{iteration="8",le="+Inf"} 1 1761282998041
+niodoo_latency_ms_sum{iteration="8"} 50160 1761282998041
+niodoo_latency_ms_count{iteration="8"} 1 1761282998041
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="8"} 0.3373764906752925 1761282998041
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="8"} 0
+0 1761282998041
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="8"} 0
+0 1761282998041
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="9"} 1.945891204925554 1761283050270
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="9",le="50.0"} 0 1761283050270
+niodoo_latency_ms_bucket{iteration="9",le="100.0"} 0 1761283050270
+niodoo_latency_ms_bucket{iteration="9",le="250.0"} 0 1761283050270
+niodoo_latency_ms_bucket{iteration="9",le="500.0"} 0 1761283050270
+niodoo_latency_ms_bucket{iteration="9",le="1000.0"} 0 1761283050270
+niodoo_latency_ms_bucket{iteration="9",le="+Inf"} 1 1761283050270
+niodoo_latency_ms_sum{iteration="9"} 50187 1761283050270
+niodoo_latency_ms_count{iteration="9"} 1 1761283050270
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="9"} 0.22090730861082378 1761283050270
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="9"} 0
+0 1761283050270
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="9"} 0
+0 1761283050270
+
+# HELP niodoo_entropy_bits Current consciousness entropy in bits
+# TYPE niodoo_entropy_bits gauge
+niodoo_entropy_bits{iteration="10"} 1.945891204925554 1761283102546
+
+# HELP niodoo_latency_ms Pipeline processing latency in milliseconds
+# TYPE niodoo_latency_ms histogram
+niodoo_latency_ms_bucket{iteration="10",le="50.0"} 0 1761283102546
+niodoo_latency_ms_bucket{iteration="10",le="100.0"} 0 1761283102546
+niodoo_latency_ms_bucket{iteration="10",le="250.0"} 0 1761283102546
+niodoo_latency_ms_bucket{iteration="10",le="500.0"} 0 1761283102546
+niodoo_latency_ms_bucket{iteration="10",le="1000.0"} 0 1761283102546
+niodoo_latency_ms_bucket{iteration="10",le="+Inf"} 1 1761283102546
+niodoo_latency_ms_sum{iteration="10"} 50234 1761283102546
+niodoo_latency_ms_count{iteration="10"} 1 1761283102546
+
+# HELP niodoo_rouge_l ROUGE-L similarity score
+# TYPE niodoo_rouge_l gauge
+niodoo_rouge_l{iteration="10"} 0.21147186250416117 1761283102546
+
+# HELP niodoo_threat_cycles Total threat detection cycles
+# TYPE niodoo_threat_cycles counter
+niodoo_threat_cycles{iteration="10"} 0
+0 1761283102546
+
+# HELP niodoo_healing_cycles Total healing detection cycles
+# TYPE niodoo_healing_cycles counter
+niodoo_healing_cycles{iteration="10"} 0
+0 1761283102546
+

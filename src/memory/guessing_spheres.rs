@@ -38,6 +38,20 @@ impl EmotionalVector {
         .sqrt()
     }
 
+    /// Alias for magnitude() - computes the norm of the vector
+    pub fn norm(&self) -> f32 {
+        self.magnitude()
+    }
+
+    /// Add a scalar value to all components
+    pub fn add(&mut self, value: f32) {
+        self.joy += value;
+        self.sadness += value;
+        self.anger += value;
+        self.fear += value;
+        self.surprise += value;
+    }
+
     pub fn get(&self, index: usize) -> Option<f32> {
         match index {
             0 => Some(self.joy),

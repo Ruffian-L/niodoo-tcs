@@ -1,0 +1,1 @@
+FROM ./models/Qwen2-1.5B-Instruct.Q4_K_M.gguf

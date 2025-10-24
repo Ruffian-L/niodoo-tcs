@@ -53,18 +53,33 @@ pub struct GenerationEngine {
     gpt: Option<GptClient>,
     // GPU availability tracking
     gpu_available: bool,
+    // Dynamic timeout and token configuration
+    timeout_secs: u64,
+    dynamic_token_min: usize,
+    dynamic_token_max: usize,
 }
 
 static GLOBAL_CLIENT: OnceCell<Client> = OnceCell::new();
 
 impl GenerationEngine {
     pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self> {
+        Self::new_with_config(endpoint, model, 300, 1024, 256, 512)
+    }
+
+    pub fn new_with_config(
+        endpoint: impl Into<String>,
+        model: impl Into<String>,
+        timeout_secs: u64,
+        max_tokens: usize,
+        dynamic_token_min: usize,
+        dynamic_token_max: usize,
+    ) -> Result<Self> {
         let client = GLOBAL_CLIENT
             .get_or_try_init(|| {
                 Client::builder()
                     .pool_max_idle_per_host(32)
                     .pool_idle_timeout(Duration::from_secs(60))
-                    .timeout(Duration::from_secs(5))
+                    .timeout(Duration::from_secs(timeout_secs)) // Configurable timeout
                     .build()
             })?
             .clone();
@@ -79,17 +94,20 @@ impl GenerationEngine {
         };
         // Probe GPU availability
         let gpu_available = Self::probe_gpu_availability();
-        
+
         Ok(Self {
             endpoint: full_endpoint,
             model: model.into(),
             temperature: 0.5,
             top_p: 0.6,
-            max_tokens: 16,
+            max_tokens,
             client: Arc::new(client),
             claude: None,
             gpt: None,
             gpu_available,
+            timeout_secs,
+            dynamic_token_min,
+            dynamic_token_max,
         })
     }
 
@@ -112,9 +130,9 @@ impl GenerationEngine {
     pub async fn generate_with_fallback(&self, prompt: &str) -> Result<(String, String)> {
         let start = Instant::now();
 
-        // Try Claude first (5s timeout)
+        // Try Claude first (configurable timeout)
         if let Some(claude) = &self.claude {
-            match timeout(Duration::from_secs(5), claude.complete(prompt)).await {
+            match timeout(Duration::from_secs(self.timeout_secs), claude.complete(prompt)).await {
                 Ok(Ok(response)) => {
                     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
                     info!(
@@ -135,9 +153,9 @@ impl GenerationEngine {
             info!("Claude client not configured, skipping to GPT");
         }
 
-        // Try GPT next (5s timeout)
+        // Try GPT next (configurable timeout)
         if let Some(gpt) = &self.gpt {
-            match timeout(Duration::from_secs(5), gpt.complete(prompt)).await {
+            match timeout(Duration::from_secs(self.timeout_secs), gpt.complete(prompt)).await {
                 Ok(Ok(response)) => {
                     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
                     info!(latency_ms, api = "gpt", "generation succeeded with GPT");
@@ -325,7 +343,7 @@ impl GenerationEngine {
                 content: prompt,
             },
         ];
-        match timeout(Duration::from_secs(5), self.send_chat(messages)).await {
+        match timeout(Duration::from_secs(self.timeout_secs), self.send_chat(messages)).await {
             Ok(Ok(resp)) => Ok((resp, "vllm".to_string())),
             Ok(Err(error)) => {
                 warn!(
@@ -360,7 +378,7 @@ impl GenerationEngine {
                 content: prompt,
             },
         ];
-        let response = match timeout(Duration::from_secs(5), self.send_chat(messages)).await {
+        let response = match timeout(Duration::from_secs(self.timeout_secs), self.send_chat(messages)).await {
             Ok(Ok(resp)) => resp,
             Ok(Err(error)) => {
                 warn!(
@@ -380,14 +398,18 @@ impl GenerationEngine {
         Ok(LensEcho { lens, response })
     }
 
-    async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
+    pub async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
+        // Dynamic max_tokens based on message complexity (configurable clamp range)
+        let prompt_len: usize = messages.iter().map(|m| m.content.len()).sum();
+        let dynamic_max_tokens = (prompt_len * 2).clamp(self.dynamic_token_min, self.dynamic_token_max);
+
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
             messages,
             temperature: self.temperature,
             top_p: self.top_p,
             repetition_penalty: 1.2,
-            max_tokens: self.max_tokens,
+            max_tokens: dynamic_max_tokens.max(self.max_tokens), // Use at least the configured minimum
         };
 
         let response = self
@@ -426,6 +448,9 @@ impl GenerationEngine {
         } else {
             warn!("GPU not available - using CPU fallback mode");
         }
+
+        let warmup_content = std::env::var("WARMUP_CONTENT")
+            .unwrap_or_else(|_| "warmup".to_string());
         
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
@@ -436,7 +461,7 @@ impl GenerationEngine {
                 },
                 ChatMessage {
                     role: "user".to_string(),
-                    content: "warmup".to_string(),
+                    content: warmup_content,
                 },
             ],
             temperature: self.temperature,
@@ -449,7 +474,7 @@ impl GenerationEngine {
             .client
             .post(&self.endpoint)
             .json(&payload)
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(self.timeout_secs))
             .send()
             .await
             .with_context(|| {
@@ -505,7 +530,7 @@ impl GenerationEngine {
                 // nvidia-smi not available, GPU likely not present
             }
         }
-        
+
         false
     }
 
@@ -553,17 +578,12 @@ impl GenerationEngine {
 }
 
 fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho]) -> String {
-    let baseline_snippet = snippet(baseline, 70);
-    let focus_echo = echoes
+    // Return the best actual response, not a summary
+    echoes
         .iter()
-        .find(|echo| echo.lens == "Claude")
-        .or_else(|| echoes.first());
-
-    let (lens_label, echo_snippet) = focus_echo
-        .map(|echo| (echo.lens.as_str(), snippet(&echo.response, 50)))
-        .unwrap_or(("Echo", "∅".to_string()));
-
-    format!("Baseline: {baseline_snippet}. Echo lift: {lens_label} {echo_snippet}. Pull which?")
+        .find(|e| e.lens == "Claude")
+        .map(|e| e.response.clone())
+        .unwrap_or_else(|| baseline.to_string())
 }
 
 fn snippet(text: &str, limit: usize) -> String {
@@ -606,9 +626,9 @@ struct ChatCompletionRequest {
 }
 
 #[derive(Debug, Serialize, Clone)]
-struct ChatMessage {
-    role: String,
-    content: String,
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
 }
 
 #[derive(Debug, Deserialize)]

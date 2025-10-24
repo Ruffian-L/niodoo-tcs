@@ -44,17 +44,17 @@ pub struct JsonParser;
 
 impl ResponseParser for JsonParser {
     fn parse_score(&self, text: &str) -> Result<f32> {
-        let json_val: Value = serde_json::from_str(text)
-            .map_err(|e| anyhow!("JSON parse failed: {}", e))?;
-        
+        let json_val: Value =
+            serde_json::from_str(text).map_err(|e| anyhow!("JSON parse failed: {}", e))?;
+
         if let Some(score) = json_val.get("score").and_then(|v| v.as_f64()) {
             return Ok(score as f32);
         }
-        
+
         if let Some(score) = json_val.get("quality").and_then(|v| v.as_f64()) {
             return Ok(score as f32);
         }
-        
+
         Err(anyhow!("No score/quality field in JSON"))
     }
 }
@@ -139,20 +139,22 @@ impl ResponseParser for HeuristicParser {
     fn parse_score(&self, _text: &str) -> Result<f32> {
         // Length-based score (normalized to 0-1)
         let length_score = self.response.len().min(self.max_length) as f32 / self.max_length as f32;
-        
+
         // Entropy-based score (check if in optimal range)
-        let entropy_score = if self.entropy > self.optimal_entropy_low && self.entropy < self.optimal_entropy_high {
+        let entropy_score = if self.entropy > self.optimal_entropy_low
+            && self.entropy < self.optimal_entropy_high
+        {
             self.optimal_entropy_score
         } else {
             self.suboptimal_entropy_score
         };
-        
+
         // Weighted combination
         let entropy_weight = 1.0 - self.length_weight;
         let quality = (length_score * self.length_weight + entropy_score * entropy_weight)
             .max(0.0)
             .min(1.0);
-        
+
         debug!(
             "HeuristicParser: length={:.3}, entropy={:.3}, score={:.3}",
             length_score, entropy_score, quality
@@ -209,14 +211,14 @@ impl CascadingParser {
 
         // Cascading fallback: try other parsers
         debug!("Cascading to alternative parsers");
-        
+
         // Try JSON even if mode is regex
         if self.mode != ParserMode::Json {
             if let Ok(score) = JsonParser.parse_score(text) {
                 return Ok(score);
             }
         }
-        
+
         // Try regex even if mode is json
         if self.mode != ParserMode::Regex {
             if let Ok(regex_parser) = RegexParser::new() {
@@ -225,13 +227,13 @@ impl CascadingParser {
                 }
             }
         }
-        
+
         // Final fallback to heuristic
         if let Some(ref heuristic) = self.heuristic_fallback {
             warn!("All parsers failed, using heuristic fallback");
             return heuristic.parse_score(text);
         }
-        
+
         Err(anyhow!("All parsing strategies failed"))
     }
 }
@@ -270,4 +272,3 @@ mod tests {
         assert_eq!(parser.parse(text).unwrap(), 0.75);
     }
 }
-

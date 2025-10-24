@@ -40,7 +40,10 @@ pub struct Curator {
 impl Curator {
     /// Initialize the Curator with vLLM connection
     pub fn new(config: CuratorConfig) -> Result<Self> {
-        info!("Initializing Curator with vLLM endpoint: {}", config.vllm_endpoint);
+        info!(
+            "Initializing Curator with vLLM endpoint: {}",
+            config.vllm_endpoint
+        );
 
         let client = Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
@@ -59,7 +62,8 @@ impl Curator {
             "input": text
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/v1/embeddings", self.config.vllm_endpoint))
             .json(&request)
             .send()
@@ -98,7 +102,7 @@ impl Curator {
     pub async fn call_model(&self, prompt: &str) -> Result<String> {
         // Check if using Ollama (not vLLM)
         let is_ollama = self.config.vllm_endpoint.contains("11434");
-        
+
         if is_ollama {
             // Ollama API format
             let request = json!({
@@ -107,7 +111,8 @@ impl Curator {
                 "stream": false
             });
 
-            let response = self.client
+            let response = self
+                .client
                 .post(&format!("{}/api/generate", self.config.vllm_endpoint))
                 .json(&request)
                 .send()
@@ -116,13 +121,11 @@ impl Curator {
                 .await?;
 
             debug!("Curator Ollama response: {:?}", response);
-            
-            let content = response["response"]
-                .as_str()
-                .ok_or_else(|| {
-                    warn!("Ollama response format: {:?}", response);
-                    anyhow!("Invalid Ollama response format")
-                })?;
+
+            let content = response["response"].as_str().ok_or_else(|| {
+                warn!("Ollama response format: {:?}", response);
+                anyhow!("Invalid Ollama response format")
+            })?;
 
             Ok(content.to_string())
         } else {
@@ -134,8 +137,12 @@ impl Curator {
                 "max_tokens": self.config.max_tokens
             });
 
-            let response = self.client
-                .post(&format!("{}/v1/chat/completions", self.config.vllm_endpoint))
+            let response = self
+                .client
+                .post(&format!(
+                    "{}/v1/chat/completions",
+                    self.config.vllm_endpoint
+                ))
                 .json(&request)
                 .send()
                 .await?
@@ -143,7 +150,7 @@ impl Curator {
                 .await?;
 
             debug!("Curator vLLM response: {:?}", response);
-            
+
             let content = response["choices"][0]["message"]["content"]
                 .as_str()
                 .ok_or_else(|| anyhow!("Invalid response format"))?;
@@ -169,18 +176,24 @@ impl Curator {
                 // Use cascading parser with heuristic fallback
                 let parser = CascadingParser::new(self.config.parse_mode)
                     .with_heuristic_fallback(response.to_string(), pad_state_entropy);
-                
+
                 match parser.parse(&result) {
                     Ok(score) => {
-                        debug!("Curator quality assessment (mode: {:?}): {:.3}", self.config.parse_mode, score);
+                        debug!(
+                            "Curator quality assessment (mode: {:?}): {:.3}",
+                            self.config.parse_mode, score
+                        );
                         Ok(score)
                     }
                     Err(e) => {
-                        warn!("All parsing strategies failed: {}, using direct heuristic", e);
+                        warn!(
+                            "All parsing strategies failed: {}, using direct heuristic",
+                            e
+                        );
                         // Last resort: create heuristic parser with config values
                         let heuristic = crate::curator_parser::HeuristicParser::new(
                             response.to_string(),
-                            pad_state_entropy
+                            pad_state_entropy,
                         )
                         .with_config(
                             self.config.heuristic_max_length,
@@ -199,7 +212,7 @@ impl Curator {
                 // Fallback: create heuristic parser with config values
                 let heuristic = crate::curator_parser::HeuristicParser::new(
                     response.to_string(),
-                    pad_state_entropy
+                    pad_state_entropy,
                 )
                 .with_config(
                     self.config.heuristic_max_length,
@@ -237,30 +250,38 @@ impl Curator {
     }
 
     /// Curate a response: assess quality and optionally refine
-    pub async fn curate_response(
-        &self,
-        experience: Experience,
-    ) -> Result<Experience> {
+    pub async fn curate_response(&self, experience: Experience) -> Result<Experience> {
         let start = Instant::now();
         let prompt = &experience.input;
         let mut response = experience.output.clone();
 
         // Assess quality
-        let compass_quadrant_str = match experience.compass_quadrant { // Assume added to Experience
+        let compass_quadrant_str = match experience.compass_quadrant {
+            // Assume added to Experience
             crate::compass::CompassQuadrant::Panic => "Panic",
             crate::compass::CompassQuadrant::Persist => "Persist",
             crate::compass::CompassQuadrant::Discover => "Discover",
             crate::compass::CompassQuadrant::Master => "Master",
         };
-        
-        let quality_score = self.assess_quality(prompt, &response, experience.pad_entropy, compass_quadrant_str).await?;
+
+        let quality_score = self
+            .assess_quality(
+                prompt,
+                &response,
+                experience.pad_entropy,
+                compass_quadrant_str,
+            )
+            .await?;
 
         // Determine if we should store
         let should_store = quality_score >= self.config.quality_threshold;
 
         // Refine if low quality but above absolute minimum
         if !should_store && quality_score >= self.config.minimum_threshold {
-            info!("Response below quality threshold ({:.3}), attempting refinement", quality_score);
+            info!(
+                "Response below quality threshold ({:.3}), attempting refinement",
+                quality_score
+            );
             response = self.refine_response(prompt, &response).await?;
         }
 
@@ -305,12 +326,12 @@ impl Curator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::CuratorConfig;
-    use crate::data::Experience;
     use crate::compass::CompassOutcome;
-    use crate::torus::PadGhostState;
+    use crate::config::CuratorConfig;
     use crate::config::RuntimeConfig;
-    use crate::curator_parser::{ParserMode, CascadingParser};
+    use crate::curator_parser::{CascadingParser, ParserMode};
+    use crate::data::Experience;
+    use crate::torus::PadGhostState;
 
     // Simple mock for testing
     struct MockCurator {
@@ -333,8 +354,8 @@ mod tests {
     fn test_curator_parse_modes() {
         // Test JSON parser mode
         let json_response = r#"{"score": 0.85}"#;
-        let parser = CascadingParser::new(ParserMode::Json)
-            .with_heuristic_fallback("test".to_string(), 1.8);
+        let parser =
+            CascadingParser::new(ParserMode::Json).with_heuristic_fallback("test".to_string(), 1.8);
         let score = parser.parse(json_response).unwrap();
         assert_eq!(score, 0.85);
 
@@ -393,10 +414,9 @@ mod tests {
 
         // Text response but JSON mode - should cascade to regex parser
         let text_response = "Score: 0.66";
-        let parser = CascadingParser::new(ParserMode::Json)
-            .with_heuristic_fallback("test".to_string(), 1.8);
+        let parser =
+            CascadingParser::new(ParserMode::Json).with_heuristic_fallback("test".to_string(), 1.8);
         let score = parser.parse(text_response).unwrap();
         assert_eq!(score, 0.66);
     }
 }
-

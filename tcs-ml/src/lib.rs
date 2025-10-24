@@ -942,7 +942,6 @@ enum Intent {
     GeneralQuery,
 }
 
-
 #[derive(Debug, Default, Clone)]
 struct InputPatterns {
     intent: Intent,

@@ -65,7 +65,11 @@ impl CompassEngine {
     }
 
     #[instrument(skip_all)]
-    pub fn evaluate(&mut self, state: &PadGhostState, topology: Option<&crate::tcs_analysis::TopologicalSignature>) -> Result<CompassOutcome> {
+    pub fn evaluate(
+        &mut self,
+        state: &PadGhostState,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Result<CompassOutcome> {
         let mut pleasure = state.pad[0];
         let mut arousal = state.pad[1];
         let mut dominance = state.pad[2];
@@ -78,7 +82,8 @@ impl CompassEngine {
             pleasure = (pleasure * 1.1).clamp(-1.0, 1.0);
         }
 
-        let mut variance = state.sigma.iter().map(|v| v.abs()).sum::<f64>() / state.sigma.len() as f64;
+        let mut variance =
+            state.sigma.iter().map(|v| v.abs()).sum::<f64>() / state.sigma.len() as f64;
 
         // Integrate topology analysis into threat detection
         if let Some(topo) = topology {

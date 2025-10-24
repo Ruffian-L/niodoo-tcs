@@ -445,7 +445,11 @@ fn prepare_output_dir(provided: Option<PathBuf>) -> Result<PathBuf> {
     let dir = if let Some(path) = provided {
         path
     } else {
-        let timestamp = SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs().to_string();
+        let timestamp = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            .to_string();
         let sanitized = timestamp.replace(':', "-");
         PathBuf::from("logs").join(format!("rut_gauntlet-{}", sanitized))
     };

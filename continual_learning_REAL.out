@@ -1,0 +1,2409 @@
+🚀 NIODOO CONTINUAL LEARNING SESSION
+=====================================
+Started at: Thu Oct 23 15:22:07 UTC 2025
+This will run continuously, generating learning data
+Go hang with your family - check back later for cool patterns!
+
+📚 Loaded 10 complex problems for learning
+
+🎯 Starting continual learning loop...
+Press Ctrl+C to stop (progress is saved)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 1 - 15:22:07
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 45894.515618ms
+  🧠 Memories: 77
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 2 - 15:23:01
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 37836.380109ms
+  🧠 Memories: 79
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 3 - 15:23:47
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 46017.074307ms
+  🧠 Memories: 81
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 4 - 15:24:42
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 46031.29535ms
+  🧠 Memories: 83
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 5 - 15:25:36
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46020.745316ms
+  🧠 Memories: 85
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 6 - 15:26:31
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46054.62078ms
+  🧠 Memories: 87
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 7 - 15:27:25
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 38800.37214ms
+  🧠 Memories: 88
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 8 - 15:28:13
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 35978.7452ms
+  🧠 Memories: 90
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 9 - 15:28:57
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 24010.132889ms
+  🧠 Memories: 92
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 10 - 15:29:30
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46057.644158999996ms
+  🧠 Memories: 94
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 11 - 15:30:24
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 32853.548965999995ms
+  🧠 Memories: 96
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 12 - 15:31:06
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 46114.324699000004ms
+  🧠 Memories: 98
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 13 - 15:32:00
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 35272.813024ms
+  🧠 Memories: 100
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 14 - 15:32:44
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: .
+  ⏱️  Latency: 31516.620056ms
+  🧠 Memories: 101
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 15 - 15:33:24
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 46088.398076ms
+  🧠 Memories: 103
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 16 - 15:34:18
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46090.094886000006ms
+  🧠 Memories: 105
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 17 - 15:35:13
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 42551.730869ms
+  🧠 Memories: 106
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 18 - 15:36:03
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46127.899853ms
+  🧠 Memories: 108
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 19 - 15:36:58
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46109.457954ms
+  🧠 Memories: 110
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 20 - 15:37:52
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46106.968967ms
+  🧠 Memories: 112
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 21 - 15:38:47
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 36505.464328ms
+  🧠 Memories: 114
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 22 - 15:39:32
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 41527.903497ms
+  🧠 Memories: 116
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 23 - 15:40:22
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 46066.282242ms
+  🧠 Memories: 118
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 24 - 15:41:16
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 33380.348222ms
+  🧠 Memories: 119
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 25 - 15:41:58
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 40137.464882ms
+  🧠 Memories: 121
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 26 - 15:42:46
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46061.106698ms
+  🧠 Memories: 122
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 27 - 15:43:41
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 39475.075722ms
+  🧠 Memories: 124
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 28 - 15:44:29
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46113.114111ms
+  🧠 Memories: 125
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 29 - 15:45:24
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 36899.032171ms
+  🧠 Memories: 127
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 30 - 15:46:10
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 46080.623543ms
+  🧠 Memories: 129
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 31 - 15:47:04
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 46060.844987000004ms
+  🧠 Memories: 131
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 32 - 15:47:59
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 44643.043925ms
+  🧠 Memories: 133
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 33 - 15:48:52
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 38381.721321ms
+  🧠 Memories: 134
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 34 - 15:49:39
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46078.459568ms
+  🧠 Memories: 136
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 35 - 15:50:33
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 34287.235885999995ms
+  🧠 Memories: 138
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 36 - 15:51:16
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 40148.259174000006ms
+  🧠 Memories: 140
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 37 - 15:52:04
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46029.212223ms
+  🧠 Memories: 141
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 38 - 15:52:59
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 39034.69829ms
+  🧠 Memories: 143
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 39 - 15:53:46
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 37625.402736ms
+  🧠 Memories: 145
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 40 - 15:54:32
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 46037.26638ms
+  🧠 Memories: 147
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 41 - 15:55:27
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 36931.726622ms
+  🧠 Memories: 149
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 42 - 15:56:12
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 40995.117643ms
+  🧠 Memories: 151
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 43 - 15:57:02
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 30404.216929000002ms
+  🧠 Memories: 153
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 44 - 15:57:40
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 34196.09384ms
+  🧠 Memories: 155
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 45 - 15:58:23
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 46026.627705000006ms
+  🧠 Memories: 157
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 46 - 15:59:17
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 34204.754758ms
+  🧠 Memories: 159
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 47 - 16:00:00
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 39066.732821000005ms
+  🧠 Memories: 161
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 48 - 16:00:47
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46030.125208ms
+  🧠 Memories: 163
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 49 - 16:01:42
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 40518.932534ms
+  🧠 Memories: 164
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 50 - 16:02:31
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46079.407265ms
+  🧠 Memories: 166
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 51 - 16:03:25
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 32160.565904000003ms
+  🧠 Memories: 167
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 52 - 16:04:06
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46091.806545ms
+  🧠 Memories: 168
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 53 - 16:05:01
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 39922.256091ms
+  🧠 Memories: 170
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 54 - 16:05:49
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 29111.156136ms
+  🧠 Memories: 172
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 55 - 16:06:26
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46125.132942000004ms
+  🧠 Memories: 174
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 56 - 16:07:21
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46110.848733ms
+  🧠 Memories: 176
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 57 - 16:08:15
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 37682.718334ms
+  🧠 Memories: 177
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 58 - 16:09:01
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 38640.256282ms
+  🧠 Memories: 179
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 59 - 16:09:48
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46131.331916ms
+  🧠 Memories: 180
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 60 - 16:10:44
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46123.509531ms
+  🧠 Memories: 182
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 61 - 16:11:38
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 46087.460368ms
+  🧠 Memories: 184
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 62 - 16:12:33
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 35559.823801ms
+  🧠 Memories: 186
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 63 - 16:13:17
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 32337.734696ms
+  🧠 Memories: 188
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 64 - 16:13:57
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 46062.97217ms
+  🧠 Memories: 190
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 65 - 16:14:52
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 30180.438186ms
+  🧠 Memories: 192
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 66 - 16:15:30
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 40431.655233ms
+  🧠 Memories: 193
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 67 - 16:16:19
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46111.323167999995ms
+  🧠 Memories: 194
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 68 - 16:17:14
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 36042.100824ms
+  🧠 Memories: 196
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 69 - 16:17:58
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 38423.05676ms
+  🧠 Memories: 198
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 70 - 16:18:45
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46093.505904ms
+  🧠 Memories: 200
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 71 - 16:19:39
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46066.039334ms
+  🧠 Memories: 201
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 72 - 16:20:34
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 46125.087705ms
+  🧠 Memories: 203
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 73 - 16:21:28
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 30717.560899ms
+  🧠 Memories: 205
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 74 - 16:22:08
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 32568.798743000003ms
+  🧠 Memories: 207
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 75 - 16:22:49
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 37585.329418ms
+  🧠 Memories: 209
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 76 - 16:23:34
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 37331.273509ms
+  🧠 Memories: 211
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 77 - 16:24:20
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 29170.759575999997ms
+  🧠 Memories: 213
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 78 - 16:24:58
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46089.017853000005ms
+  🧠 Memories: 215
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 79 - 16:25:52
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 36002.972137ms
+  🧠 Memories: 217
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 80 - 16:26:37
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46046.457214999995ms
+  🧠 Memories: 219
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 81 - 16:27:31
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 38629.392523ms
+  🧠 Memories: 221
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 82 - 16:28:18
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 46107.064080000004ms
+  🧠 Memories: 223
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 83 - 16:29:12
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46073.689330999994ms
+  🧠 Memories: 224
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 84 - 16:30:07
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46081.93122ms
+  🧠 Memories: 226
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 85 - 16:31:01
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 28701.539158ms
+  🧠 Memories: 228
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 86 - 16:31:38
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46041.77344ms
+  🧠 Memories: 229
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 87 - 16:32:33
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 31565.608461ms
+  🧠 Memories: 231
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 88 - 16:33:13
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 39405.478337ms
+  🧠 Memories: 233
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 89 - 16:34:01
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 46054.885149999995ms
+  🧠 Memories: 235
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 90 - 16:34:55
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46084.514606ms
+  🧠 Memories: 237
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 91 - 16:35:50
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 37740.654561ms
+  🧠 Memories: 239
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 92 - 16:36:36
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 30426.552049ms
+  🧠 Memories: 241
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 93 - 16:37:15
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46102.717526ms
+  🧠 Memories: 242
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 94 - 16:38:09
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46082.201441000005ms
+  🧠 Memories: 244
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 95 - 16:39:04
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 34825.759038000004ms
+  🧠 Memories: 245
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 96 - 16:39:47
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 39120.308157ms
+  🧠 Memories: 247
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 97 - 16:40:35
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 34850.309680000006ms
+  🧠 Memories: 249
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 98 - 16:41:18
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 37850.61022ms
+  🧠 Memories: 250
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 99 - 16:42:04
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 27255.603507ms
+  🧠 Memories: 252
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 100 - 16:42:40
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46034.086602ms
+  🧠 Memories: 253
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 101 - 16:43:34
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46036.148042999994ms
+  🧠 Memories: 255
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 102 - 16:44:29
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 36793.644780999995ms
+  🧠 Memories: 257
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 103 - 16:45:14
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 36976.042069ms
+  🧠 Memories: 259
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 104 - 16:45:59
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 41850.022813ms
+  🧠 Memories: 261
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 105 - 16:46:49
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 40101.743596ms
+  🧠 Memories: 262
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 106 - 16:47:38
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: .
+  ⏱️  Latency: 37366.065165ms
+  🧠 Memories: 264
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 107 - 16:48:24
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 37381.660091ms
+  🧠 Memories: 266
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 108 - 16:49:09
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 36054.469646ms
+  🧠 Memories: 268
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 109 - 16:49:54
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 38763.914915999994ms
+  🧠 Memories: 269
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 110 - 16:50:41
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46062.911391999995ms
+  🧠 Memories: 271
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 111 - 16:51:35
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 32344.447556ms
+  🧠 Memories: 273
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 112 - 16:52:16
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46093.649513000004ms
+  🧠 Memories: 275
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 113 - 16:53:11
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 26535.60758ms
+  🧠 Memories: 277
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 114 - 16:53:46
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46100.441057ms
+  🧠 Memories: 279
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 115 - 16:54:40
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 44702.568812000005ms
+  🧠 Memories: 281
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 116 - 16:55:33
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46100.707894ms
+  🧠 Memories: 283
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 117 - 16:56:28
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 37141.177716ms
+  🧠 Memories: 285
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 118 - 16:57:13
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 29554.528863000003ms
+  🧠 Memories: 286
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 119 - 16:57:51
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 42686.06942ms
+  🧠 Memories: 288
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 120 - 16:58:42
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 46041.290816ms
+  🧠 Memories: 290
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 121 - 16:59:37
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 34204.01265800001ms
+  🧠 Memories: 291
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 122 - 17:00:19
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 33927.379404ms
+  🧠 Memories: 293
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 123 - 17:01:02
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46101.153435ms
+  🧠 Memories: 295
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 124 - 17:01:57
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 31945.943485ms
+  🧠 Memories: 297
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 125 - 17:02:37
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 43157.536608ms
+  🧠 Memories: 299
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 126 - 17:03:29
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 46066.001906ms
+  🧠 Memories: 301
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 127 - 17:04:23
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 38951.421752ms
+  🧠 Memories: 302
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 128 - 17:05:10
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 35985.397155ms
+  🧠 Memories: 304
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 129 - 17:05:55
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 32859.562093ms
+  🧠 Memories: 306
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 130 - 17:06:36
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46046.733167ms
+  🧠 Memories: 308
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 131 - 17:07:31
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46044.757072ms
+  🧠 Memories: 310
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 132 - 17:08:25
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 27631.213688ms
+  🧠 Memories: 312
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 133 - 17:09:01
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 32710.334622ms
+  🧠 Memories: 313
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 134 - 17:09:42
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 46072.111817ms
+  🧠 Memories: 315
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 135 - 17:10:37
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 40925.855253999995ms
+  🧠 Memories: 317
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 136 - 17:11:26
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 45479.970672999996ms
+  🧠 Memories: 318
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 137 - 17:12:20
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46109.967812999996ms
+  🧠 Memories: 320
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 138 - 17:13:14
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46111.613924ms
+  🧠 Memories: 321
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 139 - 17:14:09
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 34429.633337ms
+  🧠 Memories: 323
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 140 - 17:14:52
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46053.919566ms
+  🧠 Memories: 325
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 141 - 17:15:46
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 39834.247744ms
+  🧠 Memories: 327
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 142 - 17:16:34
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 40690.112536ms
+  🧠 Memories: 329
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 143 - 17:17:23
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 31840.621751ms
+  🧠 Memories: 331
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 144 - 17:18:04
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 37381.593373ms
+  🧠 Memories: 332
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 145 - 17:18:49
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 46092.469562ms
+  🧠 Memories: 334
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 146 - 17:19:44
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 34366.603795ms
+  🧠 Memories: 336
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 147 - 17:20:27
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 36916.349068999996ms
+  🧠 Memories: 338
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 148 - 17:21:12
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46114.958371999994ms
+  🧠 Memories: 339
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 149 - 17:22:06
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 37182.721551999995ms
+  🧠 Memories: 340
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 150 - 17:22:52
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46019.008732ms
+  🧠 Memories: 342
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 151 - 17:23:46
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 27492.114922999997ms
+  🧠 Memories: 344
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 152 - 17:24:22
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 40850.851801ms
+  🧠 Memories: 346
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 153 - 17:25:11
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 46049.169483ms
+  🧠 Memories: 348
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 154 - 17:26:06
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 36152.473657ms
+  🧠 Memories: 350
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 155 - 17:26:51
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 39197.050626ms
+  🧠 Memories: 352
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 156 - 17:27:38
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 46092.298088ms
+  🧠 Memories: 354
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 157 - 17:28:33
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 30144.689943ms
+  🧠 Memories: 356
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 158 - 17:29:11
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 36452.158961ms
+  🧠 Memories: 358
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 159 - 17:29:56
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46065.186925ms
+  🧠 Memories: 360
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 160 - 17:30:50
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 44983.717302000005ms
+  🧠 Memories: 362
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 161 - 17:31:44
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 42129.23597ms
+  🧠 Memories: 364
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 162 - 17:32:34
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 34481.068891ms
+  🧠 Memories: 365
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 163 - 17:33:17
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 32947.226419000006ms
+  🧠 Memories: 367
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 164 - 17:33:59
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46036.40091ms
+  🧠 Memories: 369
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 165 - 17:34:53
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 31535.299421ms
+  🧠 Memories: 371
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 166 - 17:35:33
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 29888.175296ms
+  🧠 Memories: 373
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 167 - 17:36:11
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46068.134073ms
+  🧠 Memories: 375
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 168 - 17:37:06
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 41689.960257000006ms
+  🧠 Memories: 377
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 169 - 17:37:56
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 38283.966103ms
+  🧠 Memories: 379
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 170 - 17:38:42
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46028.253130000005ms
+  🧠 Memories: 380
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 171 - 17:39:37
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46046.036449ms
+  🧠 Memories: 381
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 172 - 17:40:31
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 42883.814537ms
+  🧠 Memories: 383
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 173 - 17:41:22
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: .
+  ⏱️  Latency: 27765.784581ms
+  🧠 Memories: 385
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 174 - 17:41:59
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 28756.634241ms
+  🧠 Memories: 387
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 175 - 17:42:36
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 36331.418786ms
+  🧠 Memories: 389
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 176 - 17:43:20
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 41618.530182999995ms
+  🧠 Memories: 391
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 177 - 17:44:10
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 41624.329826ms
+  🧠 Memories: 393
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 178 - 17:45:01
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46065.962258ms
+  🧠 Memories: 395
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 179 - 17:45:55
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 34246.647555999996ms
+  🧠 Memories: 396
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 180 - 17:46:38
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46036.767254ms
+  🧠 Memories: 398
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 181 - 17:47:32
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 38071.221768999996ms
+  🧠 Memories: 400
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 182 - 17:48:18
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 46101.453744ms
+  🧠 Memories: 402
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 183 - 17:49:13
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 32692.970971000002ms
+  🧠 Memories: 404
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 184 - 17:49:54
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 34048.658942ms
+  🧠 Memories: 405
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 185 - 17:50:37
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 28469.806179ms
+  🧠 Memories: 407
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 186 - 17:51:13
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 30617.954693ms
+  🧠 Memories: 409
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 187 - 17:51:52
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 30973.656358ms
+  🧠 Memories: 411
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 188 - 17:52:32
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 37986.9742ms
+  🧠 Memories: 412
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 189 - 17:53:18
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 46023.103583000004ms
+  🧠 Memories: 414
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 190 - 17:54:12
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 46048.824127ms
+  🧠 Memories: 416
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 191 - 17:55:07
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 40315.876823ms
+  🧠 Memories: 417
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 192 - 17:55:56
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 32261.613122999996ms
+  🧠 Memories: 419
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 193 - 17:56:36
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 45121.408914ms
+  🧠 Memories: 421
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 194 - 17:57:30
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 37590.897732000005ms
+  🧠 Memories: 422
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 195 - 17:58:16
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 41346.345835ms
+  🧠 Memories: 424
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 196 - 17:59:05
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 45147.998868ms
+  🧠 Memories: 426
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 197 - 17:59:59
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 45125.146424ms
+  🧠 Memories: 428
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 198 - 18:00:52
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 36923.110160000004ms
+  🧠 Memories: 430
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 199 - 18:01:38
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 35173.709750999995ms
+  🧠 Memories: 432
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 200 - 18:02:21
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46076.930413ms
+  🧠 Memories: 434
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 201 - 18:03:16
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 6
+  ⏱️  Latency: 46083.481571ms
+  🧠 Memories: 436
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 202 - 18:04:10
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 27054.101578ms
+  🧠 Memories: 438
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 203 - 18:04:46
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46089.30723200001ms
+  🧠 Memories: 440
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 204 - 18:05:40
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46101.559760000004ms
+  🧠 Memories: 441
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 205 - 18:06:35
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 46102.793281ms
+  🧠 Memories: 443
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 206 - 18:07:29
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 23191.690243ms
+  🧠 Memories: 445
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 207 - 18:08:01
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 32758.298734ms
+  🧠 Memories: 447
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 208 - 18:08:42
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 46081.635315ms
+  🧠 Memories: 449
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 209 - 18:09:36
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 35753.946647ms
+  🧠 Memories: 451
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 210 - 18:10:20
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 45303.058048ms
+  🧠 Memories: 453
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 211 - 18:11:14
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 30545.47123ms
+  🧠 Memories: 455
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 212 - 18:11:53
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 46038.087005ms
+  🧠 Memories: 457
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 213 - 18:12:48
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 32169.72311ms
+  🧠 Memories: 458
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 214 - 18:13:28
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 30050.562351ms
+  🧠 Memories: 460
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 215 - 18:14:07
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 46066.791766999995ms
+  🧠 Memories: 462
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 216 - 18:15:01
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46057.037543ms
+  🧠 Memories: 464
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 217 - 18:15:56
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 29898.343096ms
+  🧠 Memories: 466
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 218 - 18:16:34
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 8
+  ⏱️  Latency: 32477.040854000003ms
+  🧠 Memories: 468
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 219 - 18:17:15
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 42819.882442ms
+  🧠 Memories: 469
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 220 - 18:18:06
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 43468.842574ms
+  🧠 Memories: 471
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 221 - 18:18:58
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 34481.764106999995ms
+  🧠 Memories: 473
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 222 - 18:19:41
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 35679.676309999995ms
+  🧠 Memories: 474
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 223 - 18:20:25
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46046.169045ms
+  🧠 Memories: 476
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 224 - 18:21:19
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 38348.619624ms
+  🧠 Memories: 477
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 225 - 18:22:06
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 41804.565744ms
+  🧠 Memories: 479
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 226 - 18:22:56
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46055.115174ms
+  🧠 Memories: 481
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 227 - 18:23:51
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 46108.183213ms
+  🧠 Memories: 483
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 228 - 18:24:46
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: .
+  ⏱️  Latency: 36678.277319ms
+  🧠 Memories: 485
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 229 - 18:25:31
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 43015.948145ms
+  🧠 Memories: 487
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 230 - 18:26:22
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 45872.160172ms
+  🧠 Memories: 488
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 231 - 18:27:17
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 46051.123129ms
+  🧠 Memories: 490
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 232 - 18:28:12
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 2
+  ⏱️  Latency: 42152.834192999995ms
+  🧠 Memories: 492
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 233 - 18:29:02
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 38725.131154ms
+  🧠 Memories: 494
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 234 - 18:29:49
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46024.951498999995ms
+  🧠 Memories: 496
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 235 - 18:30:44
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 1
+  ⏱️  Latency: 32898.891794999996ms
+  🧠 Memories: 498
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 236 - 18:31:25
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 46100.528849ms
+  🧠 Memories: 499
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 237 - 18:32:19
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 42633.237557ms
+  🧠 Memories: 500
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 238 - 18:33:10
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 39974.728675ms
+  🧠 Memories: 502
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 239 - 18:33:59
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 35994.444139ms
+  🧠 Memories: 504
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 240 - 18:34:43
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46029.449718ms
+  🧠 Memories: 505
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 241 - 18:35:38
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 43052.2523ms
+  🧠 Memories: 507
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 242 - 18:36:29
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: 5
+  ⏱️  Latency: 46036.589028999995ms
+  🧠 Memories: 509
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 243 - 18:37:24
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 37165.684232ms
+  🧠 Memories: 510
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 244 - 18:38:09
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 32969.307579ms
+  🧠 Memories: 512
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 245 - 18:38:51
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46057.147274ms
+  🧠 Memories: 514
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 246 - 18:39:45
+📝 Prompt: Create a distributed consensus algorithm using Raft protocol...
+  📊 Entropy: 1.945905147290552
+  📈 ROUGE: 0.0
+  ⭐ Quality: 0
+  ⏱️  Latency: 34858.650497ms
+  🧠 Memories: 515
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 247 - 18:40:28
+📝 Prompt: Build a lock-free concurrent hash map with memory ordering...
+  📊 Entropy: 1.94590394116001
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46067.868838ms
+  🧠 Memories: 517
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 248 - 18:41:23
+📝 Prompt: Design a neural network from scratch in Rust with backpropag...
+  📊 Entropy: 1.9458978607285318
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 45298.97382ms
+  🧠 Memories: 519
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 249 - 18:42:16
+📝 Prompt: Implement a JIT compiler for a simple language...
+  📊 Entropy: 1.9458963597049073
+  📈 ROUGE: 0.0
+  ⭐ Quality: 4
+  ⏱️  Latency: 46054.182017ms
+  🧠 Memories: 520
+  💬 Response: ...
+
+🔁 MEMORY TEST - Repeating earlier problem...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 250 - 18:43:11
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...
+  📊 Entropy: 1.945904560922925
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 46055.171686ms
+  🧠 Memories: 522
+  💬 Response: ...
+Check if this was faster/better than iteration 1!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 251 - 18:44:05
+📝 Prompt: Create a real-time ray tracer with global illumination...
+  📊 Entropy: 1.9458988459315947
+  📈 ROUGE: 0.0
+  ⭐ Quality: 9
+  ⏱️  Latency: 27038.969481ms
+  🧠 Memories: 524
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 252 - 18:44:41
+📝 Prompt: Build a database storage engine with B+ trees and WAL...
+  📊 Entropy: 1.945901232301813
+  📈 ROUGE: 0.0
+  ⭐ Quality: 3
+  ⏱️  Latency: 35269.459281ms
+  🧠 Memories: 526
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 253 - 18:45:24
+📝 Prompt: Implement TCP from scratch over raw sockets...
+  📊 Entropy: 1.945900092638904
+  📈 ROUGE: 0.0
+  ⭐ Quality: .
+  ⏱️  Latency: 39770.296534ms
+  🧠 Memories: 528
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 254 - 18:46:13
+📝 Prompt: Create a garbage collector with generational collection...
+  📊 Entropy: 1.9459006302850985
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 35215.527004999996ms
+  🧠 Memories: 530
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 255 - 18:46:56
+📝 Prompt: Build a type inference system for a functional language...
+  📊 Entropy: 1.9459044923240498
+  📈 ROUGE: 0.0
+  ⭐ Quality: 7
+  ⏱️  Latency: 42153.222695ms
+  🧠 Memories: 532
+  💬 Response: ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Iteration 256 - 18:47:47
+📝 Prompt: Implement a balanced binary tree in Rust that handles 1M nod...

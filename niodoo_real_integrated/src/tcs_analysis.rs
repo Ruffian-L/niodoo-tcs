@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::compass::CompassOutcome;
 use crate::torus::PadGhostState;
 use tcs_knot::{CognitiveKnot, JonesPolynomial, KnotDiagram};
-use tcs_tda::{PersistentHomology, PersistenceFeature, TakensEmbedding};
+use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
 use tcs_tqft::{Cobordism, FrobeniusAlgebra, TQFTEngine};
 
 /// Topological signature computed for a state
@@ -19,20 +19,20 @@ use tcs_tqft::{Cobordism, FrobeniusAlgebra, TQFTEngine};
 pub struct TopologicalSignature {
     pub id: Uuid,
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    
+
     // Persistent homology features
     #[serde(skip)]
     pub persistence_features: Vec<PersistenceFeature>,
     pub betti_numbers: [usize; 3], // H0, H1, H2
-    
+
     // Knot invariants
     pub knot_complexity: f32,
     pub knot_polynomial: String,
-    
+
     // TQFT invariants
     pub tqft_dimension: usize,
     pub cobordism_type: Option<Cobordism>,
-    
+
     // Performance metrics
     pub computation_time_ms: f64,
 }
@@ -127,10 +127,9 @@ impl TCSAnalyzer {
     /// Convert PAD state to point cloud for homology computation
     fn pad_to_points(&self, pad_state: &PadGhostState) -> Vec<DVector<f32>> {
         // Use Takens embedding to create point cloud from PAD coordinates
-        let pad_as_time_series: Vec<Vec<f32>> = vec![
-            pad_state.pad.iter().map(|&x| x as f32).collect(),
-        ];
-        
+        let pad_as_time_series: Vec<Vec<f32>> =
+            vec![pad_state.pad.iter().map(|&x| x as f32).collect()];
+
         let mut points = Vec::new();
         for i in 0..7 {
             // Create point from PAD coordinates with mu/sigma as extra dimensions
@@ -144,20 +143,20 @@ impl TCSAnalyzer {
             }
             points.push(DVector::from_vec(coords));
         }
-        
+
         points
     }
 
     /// Compute Betti numbers from persistence features
     fn compute_betti_numbers(&self, features: &[PersistenceFeature]) -> [usize; 3] {
         let mut betti = [0usize; 3];
-        
+
         for feature in features {
             if feature.dimension < 3 {
                 betti[feature.dimension] += 1;
             }
         }
-        
+
         betti
     }
 
@@ -169,16 +168,16 @@ impl TCSAnalyzer {
             .iter()
             .map(|&val| {
                 if val > 0.5 {
-                    1  // Over-crossing
+                    1 // Over-crossing
                 } else if val < -0.5 {
                     -1 // Under-crossing
                 } else {
-                    0  // No crossing
+                    0 // No crossing
                 }
             })
             .filter(|&x| x != 0)
             .collect();
-        
+
         KnotDiagram { crossings }
     }
 
@@ -260,9 +259,8 @@ mod tests {
             mu: [0.0; 7],
             sigma: [0.5; 7],
         };
-        
+
         let diagram = analyzer.pad_to_knot_diagram(&pad_state);
         assert!(!diagram.crossings.is_empty());
     }
 }
-
