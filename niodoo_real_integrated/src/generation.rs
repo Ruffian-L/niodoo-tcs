@@ -32,6 +32,8 @@ pub struct GenerationResult {
     pub echoes: Vec<LensEcho>,
     pub rouge_to_baseline: f64,
     pub latency_ms: f64,
+    pub rouge_score: f64,  // New: ROUGE F1
+    pub entropy_delta: f64,  // New: Change in entropy
     pub source: String,
 }
 
@@ -132,7 +134,12 @@ impl GenerationEngine {
 
         // Try Claude first (configurable timeout)
         if let Some(claude) = &self.claude {
-            match timeout(Duration::from_secs(self.timeout_secs), claude.complete(prompt)).await {
+            match timeout(
+                Duration::from_secs(self.timeout_secs),
+                claude.complete(prompt),
+            )
+            .await
+            {
                 Ok(Ok(response)) => {
                     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
                     info!(
@@ -219,6 +226,8 @@ impl GenerationEngine {
             echoes,
             rouge_to_baseline: rouge,
             latency_ms,
+            rouge_score: rouge, // Assign the calculated rouge_score
+            entropy_delta: 0.0, // Placeholder, will be calculated later
             source: baseline_source,
         })
     }
@@ -342,7 +351,12 @@ impl GenerationEngine {
                 content: prompt,
             },
         ];
-        match timeout(Duration::from_secs(self.timeout_secs), self.send_chat(messages)).await {
+        match timeout(
+            Duration::from_secs(self.timeout_secs),
+            self.send_chat(messages),
+        )
+        .await
+        {
             Ok(Ok(resp)) => Ok((resp, "vllm".to_string())),
             Ok(Err(error)) => {
                 warn!(
@@ -377,7 +391,12 @@ impl GenerationEngine {
                 content: prompt,
             },
         ];
-        let response = match timeout(Duration::from_secs(self.timeout_secs), self.send_chat(messages)).await {
+        let response = match timeout(
+            Duration::from_secs(self.timeout_secs),
+            self.send_chat(messages),
+        )
+        .await
+        {
             Ok(Ok(resp)) => resp,
             Ok(Err(error)) => {
                 warn!(
@@ -400,7 +419,8 @@ impl GenerationEngine {
     pub async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
         // Dynamic max_tokens based on message complexity (configurable clamp range)
         let prompt_len: usize = messages.iter().map(|m| m.content.len()).sum();
-        let dynamic_max_tokens = (prompt_len * 2).clamp(self.dynamic_token_min, self.dynamic_token_max);
+        let dynamic_max_tokens =
+            (prompt_len * 2).clamp(self.dynamic_token_min, self.dynamic_token_max);
 
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
@@ -448,9 +468,9 @@ impl GenerationEngine {
             warn!("GPU not available - using CPU fallback mode");
         }
 
-        let warmup_content = std::env::var("WARMUP_CONTENT")
-            .unwrap_or_else(|_| "warmup".to_string());
-        
+        let warmup_content =
+            std::env::var("WARMUP_CONTENT").unwrap_or_else(|_| "warmup".to_string());
+
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
             messages: vec![

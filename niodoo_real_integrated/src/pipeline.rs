@@ -121,7 +121,7 @@ impl Pipeline {
             &config.qdrant_url,
             &config.qdrant_collection,
             config.qdrant_vector_dim,
-            0.5,  // Bumped down from 0.65 for more memory hits
+            0.5, // Bumped down from 0.65 for more memory hits
         )
         .await?;
         let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;

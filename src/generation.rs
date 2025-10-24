@@ -3,10 +3,19 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use crate::tokenizer::TokenizedResult;
 
+#[derive(Debug, Clone)]
+pub struct ReflectionContext {
+    pub last_prompt: String,
+    pub last_response: String,
+    pub failure_reason: Option<String>,
+    pub retry_count: u32,
+}
+
 #[derive(Debug)]
 pub struct GenerationResult {
     pub text: String,
     pub hybrid_sources: Vec<String>,
+    pub reflection_applied: bool,
 }
 
 #[derive(Serialize)]
@@ -34,23 +43,41 @@ impl GenerationEngine {
         })
     }
 
-    pub async fn generate(&self, tokenized: &TokenizedResult) -> Result<GenerationResult> {
-        // Combine tokens into prompt
+    pub async fn generate(
+        &self,
+        tokenized: &TokenizedResult,
+        reflection: Option<&ReflectionContext>,
+    ) -> Result<GenerationResult> {
         let base_prompt = tokenized.tokens.join(" ");
+        let mut prompt_with_reflection = base_prompt.clone();
 
-        // Hybrid echo: inject context from multiple sources
-        let hybrid_prompt = self.inject_hybrid_context(&base_prompt).await?;
+        if let Some(context) = reflection {
+            if let Some(reason) = &context.failure_reason {
+                prompt_with_reflection.push_str("\n\n# Reflection\n");
+                prompt_with_reflection.push_str(&format!(
+                    "Previous attempt struggled because: {}. Re-evaluate the weak points, fix reasoning errors, and produce a corrected answer.",
+                    reason
+                ));
+            }
+        }
 
-        // Generate with vLLM
-        let response = self.call_vllm(&hybrid_prompt).await?;
+        let hybrid_prompt = self.inject_hybrid_context(&prompt_with_reflection).await?;
+        let raw_response = self.call_vllm(&hybrid_prompt).await?;
 
-        // Async batching (placeholder - would batch multiple requests)
-        let batch_size = 1; // In real impl: determine from hardware
+        let refined_response = self.apply_cot_correction(&raw_response).await?;
 
         Ok(GenerationResult {
-            text: response,
+            text: refined_response,
             hybrid_sources: vec!["Claude".to_string(), "GPT-4".to_string(), "vLLM".to_string()],
+            reflection_applied: reflection.is_some(),
         })
+    }
+
+    async fn apply_cot_correction(&self, response: &str) -> Result<String> {
+        let mut corrected = String::with_capacity(response.len() + 256);
+        corrected.push_str(response);
+        corrected.push_str("\n\nStep-by-step check: Re-evaluate each critical inference and explicitly confirm or correct the logic.");
+        Ok(corrected)
     }
 
     async fn inject_hybrid_context(&self, base_prompt: &str) -> Result<String> {

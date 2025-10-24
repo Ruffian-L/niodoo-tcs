@@ -257,6 +257,15 @@ impl EragClient {
             Err(err) => Err(anyhow!("failed to upsert erag memory: {err}")),
         }
     }
+
+    pub async fn store_failure(&self, prompt: &str, output: &str, metrics: &crate::metrics::Metrics, reflection: Option<String>) -> Result<()> {
+        let embedding = self.embedder.embed(prompt).await?;
+        let doc = Document {
+            content: format!("Failed: prompt={prompt}, output={output}, metrics={metrics:?}, reflection={reflection:?}"),
+            embedding,
+        };
+        self.qdrant.upsert_documents(vec![doc]).await?;
+        Ok(())\n    }
 }
 
 #[derive(Debug, Serialize)]

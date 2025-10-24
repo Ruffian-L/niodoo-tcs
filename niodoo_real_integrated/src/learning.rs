@@ -104,3 +104,23 @@ impl LearningLoop {
         self.entropy_history.push_back(value);
     }
 }
+
+#[derive(Clone)]
+pub struct DqnState {
+    pub params: Vec<f64>,  // e.g., [novelty_threshold, self_awareness_level]
+}
+
+#[derive(Clone)]
+pub struct DqnAction {
+    pub adjustments: Vec<f64>,  // deltas for each param
+}
+
+impl LearningLoop {
+    pub fn compute_reward(&self, delta: f64, rouge: f64) -> f64 {
+        -delta + rouge
+    }
+    // Stub for DQN update
+    pub fn dqn_update(&mut self, state: DqnState, action: DqnAction, reward: f64, next_state: DqnState) {
+        // TODO: Replay buffer push, target net, etc.
+    }
+}

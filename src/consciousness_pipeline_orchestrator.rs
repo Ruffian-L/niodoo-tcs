@@ -44,6 +44,10 @@ use crate::compass::Compass;  // MCTS decision
 use crate::erag::EragMemory;  // Qdrant retrieval
 use crate::consciousness::{ConsciousnessState, EmotionType};
 use crate::consciousness_engine::ConsciousnessEngine;
+use crate::metrics::{
+    AdaptiveMetricsSnapshot, AdaptiveRetryController, AdaptiveRetryDecision, AdaptiveRetryLevel,
+    FailureSignalAggregator, FailureSignalThresholds,
+};
 use crate::phase6_integration::{Phase6IntegrationSystem, Phase6IntegrationBuilder};
 use crate::phase6_config::Phase6Config;
 
@@ -245,6 +249,8 @@ pub struct ConsciousnessPipelineOrchestrator {
     
     /// Pipeline statistics
     stats: Arc<RwLock<PipelineStats>>,
+    failure_aggregator: Arc<RwLock<FailureSignalAggregator>>,
+    retry_controller: Arc<RwLock<AdaptiveRetryController>>,
 }
 
 /// Pipeline configuration
@@ -350,6 +356,12 @@ impl ConsciousnessPipelineOrchestrator {
             config,
             performance_monitor: Arc::new(RwLock::new(PerformanceMonitor::default())),
             stats: Arc::new(RwLock::new(PipelineStats::default())),
+            failure_aggregator: Arc::new(RwLock::new(FailureSignalAggregator::new(
+                FailureSignalThresholds::default(),
+            ))),
+            retry_controller: Arc::new(RwLock::new(AdaptiveRetryController::new(
+                crate::metrics::RetryControllerConfig::default(),
+            ))),
         }
     }
 
@@ -379,6 +391,15 @@ impl ConsciousnessPipelineOrchestrator {
 
     /// Process input through the complete consciousness pipeline
     pub async fn process_input(&self, input: PipelineInput) -> Result<PipelineOutput> {
+        self.process_input_once(&input, 1, None).await
+    }
+
+    async fn process_input_once(
+        &self,
+        input: &PipelineInput,
+        attempt: u32,
+        last_failure: Option<String>,
+    ) -> Result<PipelineOutput> {
         let start_time = Instant::now();
         info!("🎼 Processing input through consciousness pipeline: {}", &input.text[..50.min(input.text.len())]);
 
@@ -488,7 +509,15 @@ impl ConsciousnessPipelineOrchestrator {
 
         // Stage 7: Response Generation (100ms budget)
         let stage7_start = Instant::now();
-        let response = self.generate_response_stage(&processed_input, &decision_result).await?;
+        let reflection_context = last_failure.map(|reason| crate::generation::ReflectionContext {
+            last_prompt: processed_input.text.clone(),
+            last_response: decision_result.chosen_action.clone(),
+            failure_reason: Some(reason),
+            retry_count: attempt,
+        });
+        let response = self
+            .generate_response_stage(&processed_input, &decision_result, reflection_context)
+            .await?;
         let stage7_time = stage7_start.elapsed().as_millis() as f32;
         stage_breakdown.push(StageMetrics {
             stage_name: "Response Generation".to_string(),
@@ -654,11 +683,23 @@ impl ConsciousnessPipelineOrchestrator {
     }
 
     /// Stage 7: Response Generation
-    async fn generate_response_stage(&self, input: &PipelineInput, decision: &DecisionResult) -> Result<String> {
+    async fn generate_response_stage(
+        &self,
+        input: &PipelineInput,
+        decision: &DecisionResult,
+        reflection: Option<crate::generation::ReflectionContext>,
+    ) -> Result<String> {
         debug!("✨ Generating response");
         
         // Response is already generated in decision making stage
-        Ok(decision.chosen_action.clone())
+        let mut response = decision.chosen_action.clone();
+        if let Some(ctx) = reflection {
+            response.push_str("\n\nReflection note: ");
+            if let Some(reason) = ctx.failure_reason {
+                response.push_str(&format!("Previous attempt failed because {}.", reason));
+            }
+        }
+        Ok(response)
     }
 
     /// Stage 8: Phase 6 Integration

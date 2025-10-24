@@ -311,9 +311,10 @@ impl RuntimeConfig {
             .unwrap_or(256);
 
         // Generation timeout and token configuration from env
-        let generation_timeout_secs = env_with_fallback(&["GENERATION_TIMEOUT_SECS", "TIMEOUT_SECS"])
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(60); // Default to 60s (reasonable for API calls)
+        let generation_timeout_secs =
+            env_with_fallback(&["GENERATION_TIMEOUT_SECS", "TIMEOUT_SECS"])
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(60); // Default to 60s (reasonable for API calls)
 
         let generation_max_tokens = env_with_fallback(&["GENERATION_MAX_TOKENS", "MAX_TOKENS"])
             .and_then(|value| value.parse().ok())

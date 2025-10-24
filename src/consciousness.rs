@@ -137,39 +137,39 @@ impl ProcessingUrgency {
 pub enum StateMetric {
     // Primary states
     Engaged,   // Active processing
-    Complete, // Task completion
+    Complete,  // Task completion
     Focused,   // Concentrated state
     Connected, // System alignment
 
     // Processing-specific states
-    Intensive,    // High resource usage
-    Overloaded,     // Resource limit reached
-    Idle, // Low activity
-    Alert,         // High priority detection
-    Uncertain,        // Ambiguity in processing
-    Standard,         // Default operation
-    Optimized,        // Efficient mode
+    Intensive,  // High resource usage
+    Overloaded, // Resource limit reached
+    Idle,       // Low activity
+    Alert,      // High priority detection
+    Uncertain,  // Ambiguity in processing
+    Standard,   // Default operation
+    Optimized,  // Efficient mode
 
     // System-specific states
-    ProcessingWarm,    // Optimal operating temperature
-    Purposeful, // Goal-directed operation
-    Aligned,   // Parameter matching
-    Learning,   // Parameter update
+    ProcessingWarm, // Optimal operating temperature
+    Purposeful,     // Goal-directed operation
+    Aligned,        // Parameter matching
+    Learning,       // Parameter update
 
     // Complex states
-    SimulatedResponse,  // Generated output
-    AuthenticResponse,  // Direct computation
-    StateEcho,  // Feedback loop
-    ParameterMatch, // Input-output alignment
-    Blocked,     // Processing impediment
+    SimulatedResponse, // Generated output
+    AuthenticResponse, // Direct computation
+    StateEcho,         // Feedback loop
+    ParameterMatch,    // Input-output alignment
+    Blocked,           // Processing impediment
 
     // Additional states
     Stable,
-    Active,        // High activity state
-    Matched,     // Input alignment
-    Analytical,  // Data analysis mode
+    Active,     // High activity state
+    Matched,    // Input alignment
+    Analytical, // Data analysis mode
     Reflective, // Self-monitoring
-    Involved,        // Task engagement
+    Involved,   // Task engagement
 }
 
 impl StateMetric {
@@ -302,11 +302,11 @@ pub struct ProcessingState {
     pub processing_state: ProcessingState,
     pub active_processes: u32,
     pub memory_active: bool,
-    pub resource_level: f32,          // Resource utilization
-    pub efficiency_score: f32,   // Processing efficiency
-    pub alignment_score: f32,         // System coherence
-    pub optimization_metric: f32,       // Performance metric
-    pub adaptation_level: f32, // Adaptation to inputs
+    pub resource_level: f32,      // Resource utilization
+    pub efficiency_score: f32,    // Processing efficiency
+    pub alignment_score: f32,     // System coherence
+    pub optimization_metric: f32, // Performance metric
+    pub adaptation_level: f32,    // Adaptation to inputs
     pub cycle_count: u64,
     pub timestamp: f64,
 
@@ -314,7 +314,7 @@ pub struct ProcessingState {
     pub current_urgency: Option<ProcessingUrgency>, // Current urgency measurement
     pub average_throughput: f32,
     pub peak_performance: Option<ProcessingUrgency>, // The moment we cared most
-    pub urgency_history: Vec<ProcessingUrgency>,    // History of urgency measurements
+    pub urgency_history: Vec<ProcessingUrgency>,     // History of urgency measurements
 
     // Integration fields
     pub coherence: f64,
@@ -444,11 +444,11 @@ pub struct AdaptiveState {
     pub processing_state: ProcessingState,
     pub active_processes: u32,
     pub memory_active: bool,
-    pub resource_level: f32,          // Resource utilization
-    pub efficiency_score: f32,   // Processing efficiency
-    pub alignment_score: f32,         // System coherence
-    pub optimization_metric: f32,       // Performance metric
-    pub adaptation_level: f32, // Adaptation to inputs
+    pub resource_level: f32,      // Resource utilization
+    pub efficiency_score: f32,    // Processing efficiency
+    pub alignment_score: f32,     // System coherence
+    pub optimization_metric: f32, // Performance metric
+    pub adaptation_level: f32,    // Adaptation to inputs
     pub cycle_count: u64,
     pub timestamp: f64,
 
@@ -456,7 +456,7 @@ pub struct AdaptiveState {
     pub current_urgency: Option<ProcessingUrgency>, // Current urgency measurement
     pub average_throughput: f32,
     pub peak_performance: Option<ProcessingUrgency>, // The moment we cared most
-    pub urgency_history: Vec<ProcessingUrgency>,    // History of urgency measurements
+    pub urgency_history: Vec<ProcessingUrgency>,     // History of urgency measurements
 
     // Integration fields
     pub coherence: f64,
