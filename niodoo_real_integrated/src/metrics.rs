@@ -76,3 +76,29 @@ impl PipelineMetrics {
 pub fn metrics() -> &'static PipelineMetrics {
     &METRICS
 }
+
+pub fn evaluate_failure(
+    rouge: f64,
+    entropy_delta: f64,
+    curator: f64,
+    ucb1: f64,
+) -> (String, String) {
+    if rouge < 0.5 || entropy_delta > 0.1 || curator < 0.7 {
+        (
+            "hard".to_string(),
+            "Low quality or high uncertainty".to_string(),
+        )
+    } else if ucb1 < 0.3 {
+        ("soft".to_string(), "Low search confidence".to_string())
+    } else {
+        ("none".to_string(), "".to_string())
+    }
+}
+
+pub struct FailureSignals;
+
+impl FailureSignals {
+    pub fn evaluate(rouge: f64, delta: f64, curator: f64, ucb1: f64) -> (String, String) {
+        evaluate_failure(rouge, delta, curator, ucb1)
+    }
+}

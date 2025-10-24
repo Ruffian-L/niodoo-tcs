@@ -519,12 +519,17 @@ impl RealConsciousnessTester {
                                     niodoo_consciousness::consciousness::EmotionType::Satisfied;
 
                                 // Clear negative/conflicting secondary emotions during healing
-                                consciousness_state.emotional_state.secondary_emotions.retain(|(emotion, _)| {
-                                    !matches!(emotion, 
-                                        niodoo_consciousness::consciousness::EmotionType::Anxious |
-                                        niodoo_consciousness::consciousness::EmotionType::Frustrated |
-                                        niodoo_consciousness::consciousness::EmotionType::Overwhelmed)
-                                });
+                                consciousness_state
+                                    .emotional_state
+                                    .secondary_emotions
+                                    .retain(|(emotion, _)| {
+                                        !matches!(
+                                            emotion,
+                                            niodoo_consciousness::consciousness::EmotionType::Anxious
+                                                | niodoo_consciousness::consciousness::EmotionType::Frustrated
+                                                | niodoo_consciousness::consciousness::EmotionType::Overwhelmed
+                                        )
+                                    });
 
                                 // Add positive healing emotions
                                 consciousness_state.emotional_state.add_secondary_emotion(

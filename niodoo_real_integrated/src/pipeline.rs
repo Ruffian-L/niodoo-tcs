@@ -17,7 +17,7 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::metrics::metrics;
+use crate::metrics::{metrics, FailureSignals};
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
@@ -59,6 +59,8 @@ pub struct PipelineCycle {
     pub collapse: CollapseResult,
     pub learning: LearningOutcome,
     pub stage_timings: StageTimings,
+    pub last_entropy: f64,
+    pub failure: String, // "soft", "hard", "none"
 }
 
 #[derive(Debug, Clone, Default)]
@@ -297,7 +299,12 @@ impl Pipeline {
                 rouge_to_baseline: voting.rouge_scores.iter().copied().sum::<f64>()
                     / voting.rouge_scores.len() as f64,
                 latency_ms: voting.latency_ms,
+                rouge_score: voting.rouge_scores.iter().copied().sum::<f64>()
+                    / voting.rouge_scores.len() as f64,
+                entropy_delta: 0.0,
                 source: "consistency".to_string(),
+                failure_type: None,
+                failure_details: None,
             }
         } else {
             self.generator.generate(&tokenizer_output, &compass).await?
@@ -318,6 +325,30 @@ impl Pipeline {
                 &collapse.aggregated_context,
             )
             .await?;
+
+        // Failure evaluation after curator
+        let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean); // Simple delta from mean
+        let curator_quality = curated_experience.quality_score as f64;
+        let ucb1_score = 0.5; // Placeholder - assume moderate confidence
+        let (failure, details) = FailureSignals::evaluate(
+            generation.rouge_score,
+            entropy_delta,
+            curator_quality,
+            ucb1_score,
+        );
+
+        // Log to ERAG if failure != "none"
+        if failure != "none" {
+            let metrics_ref = metrics();
+            self.erag
+                .store_failure(
+                    prompt,
+                    &generation.hybrid_response,
+                    metrics_ref,
+                    Some(details.clone()),
+                )
+                .await?;
+        }
 
         // Proceed with learning using curated response
         let learning = self
@@ -396,6 +427,8 @@ impl Pipeline {
                             collapse: collapse.clone(),
                             learning: learning.clone(),
                             stage_timings: timings.clone(),
+                            last_entropy: pad_state.entropy,
+                            failure: failure.clone(),
                         });
                     }
                 }
@@ -449,6 +482,8 @@ impl Pipeline {
             collapse,
             learning,
             stage_timings: timings,
+            last_entropy: pad_state.entropy,
+            failure,
         })
     }
 

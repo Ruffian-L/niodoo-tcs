@@ -7,9 +7,10 @@ description = "Full NIODOO pipeline integration with real Qwen embeddings, ERAG 
 license = "MIT"
 
 [features]
-default = ["beelink"]
+default = ["beelink", "pyo3"]
 beelink = []
 5080-q = []
+pyo3 = []
 
 [dependencies]
 anyhow = "1"
@@ -50,6 +51,7 @@ rayon = "1.10"
 
 qdrant-client = "1.7"
 urlencoding = "2.1"
+pyo3 = { version = "0.22", features = ["auto-initialize"] }
 [dev-dependencies]
 serde_json = "1.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

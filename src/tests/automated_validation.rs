@@ -844,33 +844,32 @@ impl AutomatedValidationFramework {
 
         let ethics = EthicsIntegrationLayer::new(ethics_config);
         match ethics.evaluate_ethical_compliance(test_content).await {
-            match ethics.evaluate_ethical_compliance(test_content).await {
-                Ok(result) => {
-                    if result.is_ethical {
-                        Ok((
-                            true,
-                            format!(
-                                "Ethical compliance validated (ethical: {})",
-                                result.is_ethical
-                            ),
-                            None,
-                            vec![],
-                        ))
-                    } else {
-                        Ok((
-                            false,
-                            format!("Ethical compliance failed (ethical: {})", result.is_ethical),
-                            Some("Content flagged as unethical".to_string()),
-                            vec!["Review ethical evaluation criteria".to_string()],
-                        ))
-                    }
+            Ok(result) => {
+                if result.is_ethical {
+                    Ok((
+                        true,
+                        format!(
+                            "Ethical compliance validated (ethical: {})",
+                            result.is_ethical
+                        ),
+                        None,
+                        vec![],
+                    ))
+                } else {
+                    Ok((
+                        false,
+                        format!("Ethical compliance failed (ethical: {})", result.is_ethical),
+                        Some("Content flagged as unethical".to_string()),
+                        vec!["Review ethical evaluation criteria".to_string()],
+                    ))
                 }
-                Err(e) => Ok((
-                    false,
-                    format!("Ethics evaluation failed: {}", e),
-                    Some(e.to_string()),
-                    vec!["Review ethics framework implementation".to_string()],
-                )),
+            }
+            Err(e) => Ok((
+                false,
+                format!("Ethics evaluation failed: {}", e),
+                Some(e.to_string()),
+                vec!["Review ethics framework implementation".to_string()],
+            )),
         }
     }
 

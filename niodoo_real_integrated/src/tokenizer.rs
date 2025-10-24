@@ -29,6 +29,8 @@ pub struct TokenizerOutput {
     pub promoted_tokens: Vec<PromotedToken>,
     pub vocab_size: usize,
     pub oov_rate: f64,
+    pub failure_type: Option<String>,
+    pub failure_details: Option<String>,
 }
 
 pub struct TokenizerEngine {
@@ -130,6 +132,8 @@ impl TokenizerEngine {
             promoted_tokens,
             vocab_size,
             oov_rate,
+            failure_type: None,
+            failure_details: None,
         })
     }
 

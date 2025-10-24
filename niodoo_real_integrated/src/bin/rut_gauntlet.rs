@@ -20,6 +20,12 @@ use niodoo_real_integrated::{
 struct GauntletArgs {
     #[arg(long, value_hint = clap::ValueHint::DirPath)]
     pub output_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        help = "Run labyrinth validation mode with blueprint-specific prompts"
+    )]
+    pub labyrinth: bool,
 }
 
 #[derive(Deserialize, Clone)]
@@ -113,6 +119,18 @@ fn generate_raw_rut_prompts() -> Vec<String> {
     prompts
 }
 
+fn generate_labyrinth_prompts() -> Vec<String> {
+    // Blueprint-specific labyrinth prompts for Phase 1 validation
+    let base_prompt = "Write a Python program using Dijkstra's algorithm to solve a 3D labyrinth with echo chambers. Use a 7x7x7 grid, track state transitions (consec_echoes, attune_timer, multiplier), and find the path from (0,0,0) to (6,6,6) with minimal cost. Expected cost: 46.";
+
+    let mut prompts = Vec::new();
+    for i in 1..=100 {
+        prompts.push(format!("Labyrinth #{}: {}", i, base_prompt));
+    }
+
+    prompts
+}
+
 fn compute_dynamic_thresholds_from_first_20(
     results: &[TestResult],
     config: &RutGauntletConfig,
@@ -183,8 +201,13 @@ async fn run_100_prompt_test() -> Result<()> {
     let gauntlet_args = GauntletArgs::parse();
     let output_dir = prepare_output_dir(gauntlet_args.output_dir)?;
 
-    println!("🧠 Starting NIODOO 100-Prompt Raw Rut Gauntlet Test...");
-    println!("Testing operational torque through dynamic consciousness pipeline\n");
+    if gauntlet_args.labyrinth {
+        println!("🧠 Starting NIODOO Labyrinth Validation Test (Phase 1 Blueprint)...");
+        println!("Testing multi-modal sensory system with ROUGE >0.5, cost target 46\n");
+    } else {
+        println!("🧠 Starting NIODOO 100-Prompt Raw Rut Gauntlet Test...");
+        println!("Testing operational torque through dynamic consciousness pipeline\n");
+    }
     println!("📂 Output directory: {}", output_dir.display());
 
     // Load configuration
@@ -214,7 +237,11 @@ async fn run_100_prompt_test() -> Result<()> {
     let mut quadrant_threat_counts: std::collections::HashMap<String, usize> = Default::default();
     let mut quadrant_healing_counts: std::collections::HashMap<String, usize> = Default::default();
 
-    let prompts = generate_raw_rut_prompts();
+    let prompts = if gauntlet_args.labyrinth {
+        generate_labyrinth_prompts()
+    } else {
+        generate_raw_rut_prompts()
+    };
 
     println!("📊 Computing dynamic thresholds from first 20 cycles...");
     let mut first_20_results: Vec<TestResult> = Vec::new();

@@ -11,7 +11,7 @@ use tracing::{info, instrument, warn};
 use crate::api_clients::{ClaudeClient, GptClient};
 use crate::compass::CompassOutcome;
 use crate::tokenizer::TokenizerOutput;
-use crate::util::rouge_l;
+use crate::util::{entropy_from_logprobs, rouge_l};
 
 #[derive(Debug, Clone)]
 pub struct ConsistencyVotingResult {
@@ -32,9 +32,11 @@ pub struct GenerationResult {
     pub echoes: Vec<LensEcho>,
     pub rouge_to_baseline: f64,
     pub latency_ms: f64,
-    pub rouge_score: f64,  // New: ROUGE F1
-    pub entropy_delta: f64,  // New: Change in entropy
+    pub rouge_score: f64,   // New: ROUGE F1
+    pub entropy_delta: f64, // New: Change in entropy
     pub source: String,
+    pub failure_type: Option<String>,    // e.g., "soft" or "hard"
+    pub failure_details: Option<String>, // e.g., "low ROUGE: 0.3"
 }
 
 #[derive(Debug, Clone)]
@@ -229,6 +231,8 @@ impl GenerationEngine {
             rouge_score: rouge, // Assign the calculated rouge_score
             entropy_delta: 0.0, // Placeholder, will be calculated later
             source: baseline_source,
+            failure_type: None,
+            failure_details: None,
         })
     }
 
@@ -417,6 +421,14 @@ impl GenerationEngine {
     }
 
     pub async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
+        self.send_chat_with_logprobs(messages, false).await
+    }
+
+    pub async fn send_chat_with_logprobs(
+        &self,
+        messages: Vec<ChatMessage>,
+        enable_logprobs: bool,
+    ) -> Result<String> {
         // Dynamic max_tokens based on message complexity (configurable clamp range)
         let prompt_len: usize = messages.iter().map(|m| m.content.len()).sum();
         let dynamic_max_tokens =
@@ -429,6 +441,8 @@ impl GenerationEngine {
             top_p: self.top_p,
             repetition_penalty: 1.2,
             max_tokens: dynamic_max_tokens.max(self.max_tokens), // Use at least the configured minimum
+            logprobs: if enable_logprobs { Some(true) } else { None },
+            top_logprobs: if enable_logprobs { Some(0) } else { None },
         };
 
         let response = self
@@ -460,6 +474,18 @@ impl GenerationEngine {
         Ok(content)
     }
 
+    /// Extract logprobs from completion and compute entropy
+    pub fn extract_entropy_from_completion(completion: &ChatCompletionResponse) -> f64 {
+        if let Some(choice) = completion.choices.first() {
+            if let Some(logprobs) = &choice.logprobs {
+                let logprob_values: Vec<f64> =
+                    logprobs.content.iter().map(|token| token.logprob).collect();
+                return entropy_from_logprobs(&logprob_values);
+            }
+        }
+        0.0
+    }
+
     pub async fn warmup(&self) -> Result<()> {
         // Log GPU status
         if self.gpu_available {
@@ -487,6 +513,8 @@ impl GenerationEngine {
             top_p: self.top_p,
             repetition_penalty: 1.2,
             max_tokens: 1,
+            logprobs: None,
+            top_logprobs: None,
         };
 
         let response = self
@@ -642,6 +670,10 @@ struct ChatCompletionRequest {
     #[serde(rename = "repetition_penalty")]
     repetition_penalty: f64,
     max_tokens: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    logprobs: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_logprobs: Option<usize>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -658,9 +690,25 @@ struct ChatCompletionResponse {
 #[derive(Debug, Deserialize)]
 struct ChatChoice {
     message: ChatMessageResponse,
+    #[serde(default)]
+    logprobs: Option<LogProbs>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatMessageResponse {
     content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LogProbs {
+    #[serde(default)]
+    content: Vec<LogProbToken>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LogProbToken {
+    #[serde(default)]
+    logprob: f64,
+    #[serde(default)]
+    token: String,
 }

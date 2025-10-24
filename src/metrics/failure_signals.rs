@@ -444,3 +444,15 @@ impl FailureSignalAggregator {
     }
 }
 
+// Simple failure evaluation wrapper
+pub mod simple {
+    use crate::metrics;
+
+    pub struct FailureSignals;
+
+    impl FailureSignals {
+        pub fn evaluate(rouge: f64, delta: f64, curator: f64, ucb1: f64) -> (String, String) {
+            metrics::evaluate_failure(rouge, delta, curator, ucb1)
+        }
+    }
+}

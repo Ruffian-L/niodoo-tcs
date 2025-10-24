@@ -107,12 +107,12 @@ impl LearningLoop {
 
 #[derive(Clone)]
 pub struct DqnState {
-    pub params: Vec<f64>,  // e.g., [novelty_threshold, self_awareness_level]
+    pub params: Vec<f64>, // e.g., [novelty_threshold, self_awareness_level]
 }
 
 #[derive(Clone)]
 pub struct DqnAction {
-    pub adjustments: Vec<f64>,  // deltas for each param
+    pub adjustments: Vec<f64>, // deltas for each param
 }
 
 impl LearningLoop {
@@ -120,7 +120,13 @@ impl LearningLoop {
         -delta + rouge
     }
     // Stub for DQN update
-    pub fn dqn_update(&mut self, state: DqnState, action: DqnAction, reward: f64, next_state: DqnState) {
+    pub fn dqn_update(
+        &mut self,
+        state: DqnState,
+        action: DqnAction,
+        reward: f64,
+        next_state: DqnState,
+    ) {
         // TODO: Replay buffer push, target net, etc.
     }
 }

@@ -68,6 +68,8 @@ pub struct CollapseResult {
     pub top_hits: Vec<EragMemory>,
     pub aggregated_context: String,
     pub average_similarity: f32,
+    pub failure_type: Option<String>,
+    pub failure_details: Option<String>,
 }
 
 impl EragClient {
@@ -165,7 +167,10 @@ impl EragClient {
             .iter()
             .flat_map(|m| m.erag_context.clone())
             .collect::<Vec<_>>()
-            .join("\n");
+            .join(
+                "
+",
+            );
 
         // Check for higher quality previous solutions
         let better_solution = memories
@@ -175,7 +180,8 @@ impl EragClient {
 
         if let Some(better) = better_solution {
             aggregated_context.push_str(&format!(
-                "\n[Previous optimal solution (quality {:.2}): {}]",
+                "
+[Previous optimal solution (quality {:.2}): {}]",
                 better.quality_score.unwrap_or(0.0),
                 better.solution_path.as_ref().unwrap_or(&"N/A".to_string())
             ));
@@ -183,7 +189,8 @@ impl EragClient {
             // Add warning if current approach seems suboptimal
             if better.iteration_count > 0 {
                 aggregated_context.push_str(&format!(
-                    "\n[Note: This problem was solved optimally in {} iterations previously]",
+                    "
+[Note: This problem was solved optimally in {} iterations previously]",
                     better.iteration_count
                 ));
             }
@@ -198,6 +205,8 @@ impl EragClient {
             top_hits: memories,
             aggregated_context,
             average_similarity,
+            failure_type: None,
+            failure_details: None,
         })
     }
 
@@ -258,14 +267,24 @@ impl EragClient {
         }
     }
 
-    pub async fn store_failure(&self, prompt: &str, output: &str, metrics: &crate::metrics::Metrics, reflection: Option<String>) -> Result<()> {
-        let embedding = self.embedder.embed(prompt).await?;
-        let doc = Document {
-            content: format!("Failed: prompt={prompt}, output={output}, metrics={metrics:?}, reflection={reflection:?}"),
-            embedding,
-        };
-        self.qdrant.upsert_documents(vec![doc]).await?;
-        Ok(())\n    }
+    pub async fn store_failure(
+        &self,
+        prompt: &str,
+        output: &str,
+        _metrics: &crate::metrics::PipelineMetrics,
+        reflection: Option<String>,
+    ) -> Result<()> {
+        // Store failure as a memory with a special flag
+        // For now, we'll log it. In production, you'd want to mark it specially in Qdrant
+        tracing::warn!(
+            "Storing failure: prompt={}, output={}, reflection={:?}",
+            prompt,
+            output,
+            reflection
+        );
+        // TODO: Implement proper failure storage in Qdrant with special tags
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize)]
