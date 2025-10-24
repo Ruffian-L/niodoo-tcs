@@ -1,12 +1,13 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use futures::FutureExt;
 
-use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant};
+use crate::compass::{CompassEngine, CompassOutcome};
 use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
 use crate::curator::Curator;
 use crate::data::{
@@ -17,14 +18,14 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::metrics::{metrics, FailureSignals, AdaptiveRetryController, AdaptiveRetryDecision, AdaptiveRetryLevel, FailureSignalAggregator, AggregatedFailureSignals, AdaptiveMetricsSnapshot, FailureSignalThresholds, RetryControllerConfig};
-use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
+use crate::metrics::{metrics, FailureSignals};
+use crate::tcs_analysis::TCSAnalyzer;
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use tokio::task::spawn_blocking;
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 
 // Define CuratedExperience struct
 #[derive(Debug, Clone)]
@@ -91,6 +92,7 @@ pub struct Pipeline {
     tcs_analyzer: TCSAnalyzer,
     embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
     collapse_cache: LruCache<u64, CacheEntry<CollapseResult>>,
+    retry_count: Arc<AtomicU32>,
 }
 
 impl Pipeline {
@@ -173,12 +175,6 @@ impl Pipeline {
 
         let cache_capacity = NonZeroUsize::new(256).unwrap();
 
-        // Phase 2: Initialize retry controller and failure aggregator
-        let retry_config = RetryControllerConfig::default();
-        let retry_controller = AdaptiveRetryController::new(retry_config);
-        let failure_thresholds = FailureSignalThresholds::default();
-        let failure_aggregator = FailureSignalAggregator::new(failure_thresholds);
-
         Ok(Self {
             config,
             args,
@@ -196,8 +192,6 @@ impl Pipeline {
             embedding_cache: LruCache::new(cache_capacity),
             collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
-            retry_controller,
-            failure_aggregator,
         })
     }
 
@@ -336,9 +330,17 @@ impl Pipeline {
             .await?;
 
         // Failure evaluation after curator
-        let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean); // Simple delta from mean
+        let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean);
         let curator_quality = curated_experience.quality_score as f64;
-        let ucb1_score = 0.5; // Placeholder - assume moderate confidence
+        
+        // Extract actual UCB1 score from MCTS branches
+        let ucb1_score = compass
+            .mcts_branches
+            .iter()
+            .map(|branch| branch.ucb_score)
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(self.thresholds.mcts_c); // Fallback to configured threshold
+        
         let (failure, details) = FailureSignals::evaluate(
             generation.rouge_score,
             entropy_delta,
@@ -646,6 +648,7 @@ impl Pipeline {
         prompt: &str,
         reflection: &Option<String>,
         collapse: &CollapseResult,
+        compass: &CompassOutcome,
         is_soft_failure: bool,
     ) -> Result<GenerationResult> {
         // Build augmented prompt with reflection or CoT
@@ -654,22 +657,26 @@ impl Pipeline {
         if let Some(reflection_text) = reflection {
             // Prepend reflection for hard failures
             augmented_prompt = format!("{}\n\n{}", reflection_text, prompt);
+            info!("Retry with reflection (hard failure)");
         } else if is_soft_failure {
             // Append CoT self-correction for soft failures
             augmented_prompt.push_str("\n\nStep-by-step check: Re-evaluate each critical inference. Verify logic, confirm reasoning, and explicitly correct any flawed steps.");
+            info!("Retry with CoT (soft failure)");
         }
 
-        // Regenerate with augmented prompt
-        let tokenizer_output = self.tokenizer
-            .process(&augmented_prompt, collapse, &self.torus.project(&self.embedder.embed(&augmented_prompt).await?)?, self.thresholds.entropy_mean)?;
-
-        let retry_gen = self.generator.generate(&tokenizer_output, &CompassOutcome {
-            quadrant: crate::compass::CompassQuadrant::Discover,
-            is_threat: false,
-            is_healing: false,
-            mcts_branches: vec![],
-            intrinsic_reward: 0.0,
-        }).await?;
+        // Generate new embedding for augmented prompt
+        let retry_embedding = self.embedder.embed(&augmented_prompt).await?;
+        let retry_pad_state = self.torus.project(&retry_embedding)?;
+        
+        // Regenerate tokenizer output with augmented prompt
+        let retry_tokenizer = self.tokenizer
+            .process(&augmented_prompt, collapse, &retry_pad_state, self.thresholds.entropy_mean)?;
+        
+        // Actually regenerate with adjusted prompt
+        let retry_gen = self.generator.generate(&retry_tokenizer, compass).await?;
+        
+        info!("Retry generation completed with {} augmentation", 
+            if reflection.is_some() { "reflection" } else { "CoT" });
 
         Ok(retry_gen)
     }
@@ -696,16 +703,53 @@ impl Pipeline {
 
         // Analyze quality if curator is available
         let quality_score = if let Some(ref curator) = self.curator {
-            // This would need proper curator method
-            0.7f32 // Placeholder for now
+            // Calculate quality based on actual curator metrics
+            // Use compass quadrant from context if available
+            let compass_quadrant_str = if compass.quadrant == crate::compass::CompassQuadrant::Panic { "Panic" }
+                else if compass.quadrant == crate::compass::CompassQuadrant::Persist { "Persist" }
+                else if compass.quadrant == crate::compass::CompassQuadrant::Discover { "Discover" }
+                else { "Master" };
+            
+            match curator.assess_quality(input, output, pad_state.entropy, compass_quadrant_str).await {
+                Ok(q) => q as f32,
+                Err(e) => {
+                    warn!("Curator quality assessment failed: {}, using fallback", e);
+                    // Fallback quality score based on heuristics
+                    let length_score = (output.len().min(1000) as f32 / 1000.0) * 0.3;
+                    let content_score = if output.contains("solution") || output.contains("implementation") { 0.4 } else { 0.2 };
+                    (length_score + content_score).min(1.0)
+                }
+            }
         } else {
-            0.5f32
+            // Fallback quality score based on heuristics
+            let length_score = (output.len().min(1000) as f32 / 1000.0) * 0.3;
+            let content_score = if output.contains("solution") || output.contains("implementation") { 0.4 } else { 0.2 };
+            (length_score + content_score).min(1.0)
         };
 
-        // Refine if needed
-        let refined = if quality_score < 0.7 && self.curator.is_some() {
-            // Would need proper curator method
-            output.to_string()
+        // Refine if needed (use config threshold)
+        let refinement_threshold = if let Some(ref curator) = self.curator {
+            curator.config.quality_threshold
+        } else {
+            0.5 // Fallback threshold
+        };
+        
+        let refined = if quality_score < refinement_threshold {
+            // Attempt refinement for low-quality responses
+            if let Some(ref curator) = self.curator {
+                match curator.refine_response(input, output).await {
+                    Ok(refined_output) => {
+                        info!("Curator refined low-quality response ({} -> improved)", quality_score);
+                        refined_output
+                    }
+                    Err(e) => {
+                        warn!("Curator refinement failed: {}, using original", e);
+                        output.to_string()
+                    }
+                }
+            } else {
+                output.to_string()
+            }
         } else {
             output.to_string()
         };
