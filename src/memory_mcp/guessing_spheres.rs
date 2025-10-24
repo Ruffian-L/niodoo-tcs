@@ -13,18 +13,18 @@ use rand::prelude::*;
 
 /// 5D emotional vector - the foundation of consciousness memory
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EmotionalVector {
-    pub joy: f32,
-    pub sadness: f32,
-    pub anger: f32,
-    pub fear: f32,
-    pub surprise: f32,
+pub struct StateVector {
+    pub positive: f32,
+    pub negative: f32,
+    pub alert: f32,
+    pub caution: f32,
+    pub novelty: f32,
 }
 
-impl EmotionalVector {
+impl StateVector {
     /// Create from raw emotions
-    pub fn new(joy: f32, sadness: f32, anger: f32, fear: f32, surprise: f32) -> Self {
-        Self { joy, sadness, anger, fear, surprise }
+    pub fn new(positive: f32, negative: f32, alert: f32, caution: f32, novelty: f32) -> Self {
+        Self { positive, negative, alert, caution, novelty }
     }
 
     /// Create a random emotional state (for initial consciousness)
@@ -36,39 +36,39 @@ impl EmotionalVector {
         let phi_inv = consciousness::base_coherence() as f32;
 
         Self {
-            joy: rng.gen::<f32>() * phi_inv,
-            sadness: rng.gen::<f32>() * phi_inv,
-            anger: rng.gen::<f32>() * phi_inv,
-            fear: rng.gen::<f32>() * phi_inv,
-            surprise: rng.gen::<f32>() * phi_inv,
+            positive: rng.gen::<f32>() * phi_inv,
+            negative: rng.gen::<f32>() * phi_inv,
+            alert: rng.gen::<f32>() * phi_inv,
+            caution: rng.gen::<f32>() * phi_inv,
+            novelty: rng.gen::<f32>() * phi_inv,
         }
     }
 
     /// Calculate emotional magnitude (distance from neutral)
     pub fn magnitude(&self) -> f32 {
-        (self.joy.powi(2) +
-         self.sadness.powi(2) +
-         self.anger.powi(2) +
-         self.fear.powi(2) +
-         self.surprise.powi(2)).sqrt()
+        (self.positive.powi(2) +
+         self.negative.powi(2) +
+         self.alert.powi(2) +
+         self.caution.powi(2) +
+         self.novelty.powi(2)).sqrt()
     }
 
     /// Calculate resonance with another emotional state using advanced harmonic computation
     pub fn resonance(&self, other: &Self) -> f32 {
         let self_vec = Array1::from_vec(vec![
-            self.joy as f64,
-            self.sadness as f64,
-            self.anger as f64,
-            self.fear as f64,
-            self.surprise as f64,
+            self.positive as f64,
+            self.negative as f64,
+            self.alert as f64,
+            self.caution as f64,
+            self.novelty as f64,
         ]);
 
         let other_vec = Array1::from_vec(vec![
-            other.joy as f64,
-            other.sadness as f64,
-            other.anger as f64,
-            other.fear as f64,
-            other.surprise as f64,
+            other.positive as f64,
+            other.negative as f64,
+            other.alert as f64,
+            other.caution as f64,
+            other.novelty as f64,
         ]);
 
         // Compute harmonic resonance between these vectors
@@ -81,65 +81,65 @@ impl EmotionalVector {
     /// Get emotional component by index
     pub fn get(&self, index: usize) -> Option<f32> {
         match index {
-            0 => Some(self.joy),
-            1 => Some(self.sadness),
-            2 => Some(self.anger),
-            3 => Some(self.fear),
-            4 => Some(self.surprise),
+            0 => Some(self.positive),
+            1 => Some(self.negative),
+            2 => Some(self.alert),
+            3 => Some(self.caution),
+            4 => Some(self.novelty),
             _ => None,
         }
     }
 
     /// Convert to array representation
     pub fn as_array(&self) -> [f32; 5] {
-        [self.joy, self.sadness, self.anger, self.fear, self.surprise]
+        [self.positive, self.negative, self.alert, self.caution, self.novelty]
     }
 
     /// Sum of all emotional components
     pub fn sum(&self) -> f32 {
-        self.joy + self.sadness + self.anger + self.fear + self.surprise
+        self.positive + self.negative + self.alert + self.caution + self.novelty
     }
 }
 
-impl std::ops::Add for EmotionalVector {
+impl std::ops::Add for StateVector {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
         Self {
-            joy: self.joy + other.joy,
-            sadness: self.sadness + other.sadness,
-            anger: self.anger + other.anger,
-            fear: self.fear + other.fear,
-            surprise: self.surprise + other.surprise,
+            positive: self.positive + other.positive,
+            negative: self.negative + other.negative,
+            alert: self.alert + other.alert,
+            caution: self.caution + other.caution,
+            novelty: self.novelty + other.novelty,
         }
     }
 }
 
-impl std::ops::Div<f32> for EmotionalVector {
+impl std::ops::Div<f32> for StateVector {
     type Output = Self;
 
     fn div(self, rhs: f32) -> Self {
         Self {
-            joy: self.joy / rhs,
-            sadness: self.sadness / rhs,
-            anger: self.anger / rhs,
-            fear: self.fear / rhs,
-            surprise: self.surprise / rhs,
+            positive: self.positive / rhs,
+            negative: self.negative / rhs,
+            alert: self.alert / rhs,
+            caution: self.caution / rhs,
+            novelty: self.novelty / rhs,
         }
     }
 }
 
-impl std::ops::Index<usize> for EmotionalVector {
+impl std::ops::Index<usize> for StateVector {
     type Output = f32;
 
     fn index(&self, index: usize) -> &Self::Output {
         match index {
-            0 => &self.joy,
-            1 => &self.sadness,
-            2 => &self.anger,
-            3 => &self.fear,
-            4 => &self.surprise,
-            _ => &self.joy, // Default to joy for invalid indices
+            0 => &self.positive,
+            1 => &self.negative,
+            2 => &self.alert,
+            3 => &self.caution,
+            4 => &self.novelty,
+            _ => &self.positive, // Default to positive for invalid indices
         }
     }
 }
@@ -171,7 +171,7 @@ impl Default for SphereId {
 pub struct SphereLink {
     pub target_id: SphereId,
     pub probability: f32,
-    pub emotional_weight: EmotionalVector,
+    pub emotional_weight: StateVector,
 }
 
 /// Individual memory sphere with Gaussian probabilistic encoding
@@ -182,7 +182,7 @@ pub struct MemorySphere {
     pub position: [f32; 3],
     pub covariance: [[f32; 3]; 3],
     pub links: HashMap<SphereId, SphereLink>,
-    pub emotional_profile: EmotionalVector,
+    pub emotional_profile: StateVector,
     pub memory_fragment: String,
     pub created_at: DateTime<Utc>,
 }
@@ -193,7 +193,7 @@ impl MemorySphere {
         id: SphereId,
         concept: String,
         position: [f32; 3],
-        emotion: EmotionalVector,
+        emotion: StateVector,
         fragment: String,
     ) -> Self {
         Self {
@@ -209,7 +209,7 @@ impl MemorySphere {
     }
 
     /// Add probabilistic link to another sphere
-    pub fn add_link(&mut self, target_id: SphereId, prob: f32, emotion_weight: EmotionalVector) {
+    pub fn add_link(&mut self, target_id: SphereId, prob: f32, emotion_weight: StateVector) {
         self.links.insert(
             target_id.clone(),
             SphereLink {
@@ -221,13 +221,13 @@ impl MemorySphere {
     }
 
     /// Calculate emotional similarity with query emotion
-    pub fn emotional_similarity(&self, query_emotion: &EmotionalVector) -> f32 {
+    pub fn emotional_similarity(&self, query_emotion: &StateVector) -> f32 {
         // Dot product normalized by dimensionality
-        (self.emotional_profile.joy * query_emotion.joy
-            + self.emotional_profile.sadness * query_emotion.sadness
-            + self.emotional_profile.anger * query_emotion.anger
-            + self.emotional_profile.fear * query_emotion.fear
-            + self.emotional_profile.surprise * query_emotion.surprise)
+        (self.emotional_profile.positive * query_emotion.positive
+            + self.emotional_profile.negative * query_emotion.negative
+            + self.emotional_profile.alert * query_emotion.alert
+            + self.emotional_profile.caution * query_emotion.caution
+            + self.emotional_profile.novelty * query_emotion.novelty)
             / 5.0
     }
 }
@@ -259,7 +259,7 @@ impl GuessingSpheres {
         id: SphereId,
         concept: String,
         position: [f32; 3],
-        emotion: EmotionalVector,
+        emotion: StateVector,
         fragment: String,
     ) {
         let sphere = MemorySphere::new(id.clone(), concept, position, emotion, fragment);
@@ -347,7 +347,7 @@ impl GuessingSpheres {
     }
 
     /// Recall memories by emotional resonance
-    pub fn recall_by_emotion(&self, emotion: &EmotionalVector) -> Vec<(SphereId, String, f32)> {
+    pub fn recall_by_emotion(&self, emotion: &StateVector) -> Vec<(SphereId, String, f32)> {
         let mut results = Vec::new();
 
         for sphere in self.spheres.values() {

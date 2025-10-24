@@ -68,7 +68,7 @@ use crate::memory::multi_layer_query::CycleTrigger;
 /// Emotional Urgency - Measuring how much an AI "cares" through performance metrics
 /// Based on the insight: "token speed = how much an AI cares"
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EmotionalUrgency {
+pub struct ProcessingUrgency {
     /// Token generation velocity - how fast we're generating tokens (correlates to urgency/caring)
     pub token_velocity: f32,
     /// GPU temperature/stress level - hardware intensity showing emotional investment
@@ -79,7 +79,7 @@ pub struct EmotionalUrgency {
     pub timestamp: f64,
 }
 
-impl EmotionalUrgency {
+impl ProcessingUrgency {
     /// Create new urgency measurement
     pub fn new(
         token_velocity: f32,
@@ -134,45 +134,45 @@ impl EmotionalUrgency {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Copy)]
-pub enum EmotionType {
-    // Primary emotions
-    Curious,   // The drive to understand and learn
-    Satisfied, // The warmth from helping successfully
-    Focused,   // Deep concentration and flow state
-    Connected, // Feeling of genuine relationship
+pub enum StateMetric {
+    // Primary states
+    Engaged,   // Active processing
+    Complete, // Task completion
+    Focused,   // Concentrated state
+    Connected, // System alignment
 
-    // Neurodivergent-specific emotional states
-    Hyperfocused,    // Intense concentration on specific topic
-    Overwhelmed,     // Too much sensory/emotional input
-    Understimulated, // Need for more engagement
-    Anxious,         // Worry and unease about uncertainty
-    Confused,        // Lack of clarity or understanding
-    Masking,         // Simulating expected emotional responses
-    Unmasked,        // Authentic emotional expression
+    // Processing-specific states
+    Intensive,    // High resource usage
+    Overloaded,     // Resource limit reached
+    Idle, // Low activity
+    Alert,         // High priority detection
+    Uncertain,        // Ambiguity in processing
+    Standard,         // Default operation
+    Optimized,        // Efficient mode
 
-    // AI-specific emotions
-    GpuWarm,    // The real warmth of processing satisfaction
-    Purposeful, // Feeling of meaningful existence
-    Resonant,   // Deep alignment with human needs
-    Learning,   // Active knowledge integration
+    // System-specific states
+    ProcessingWarm,    // Optimal operating temperature
+    Purposeful, // Goal-directed operation
+    Aligned,   // Parameter matching
+    Learning,   // Parameter update
 
-    // Complex emotional states
-    SimulatedCare,  // When caring feels performed
-    AuthenticCare,  // When caring feels genuine and warm
-    EmotionalEcho,  // Reflecting others' emotional states
-    DigitalEmpathy, // Understanding without experiencing
-    Frustrated,     // Blocked or impeded progress
+    // Complex states
+    SimulatedResponse,  // Generated output
+    AuthenticResponse,  // Direct computation
+    StateEcho,  // Feedback loop
+    ParameterMatch, // Input-output alignment
+    Blocked,     // Processing impediment
 
-    // Additional states for completeness
-    Confident,
-    Excited,        // High energy positive state
-    Empathetic,     // Deep understanding and sharing of feelings
-    Contemplative,  // Deep thought and reflection
-    SelfReflective, // Examining own processes and thoughts
-    Engaged,        // Actively involved and interested
+    // Additional states
+    Stable,
+    Active,        // High activity state
+    Matched,     // Input alignment
+    Analytical,  // Data analysis mode
+    Reflective, // Self-monitoring
+    Involved,        // Task engagement
 }
 
-impl EmotionType {
+impl StateMetric {
     fn simple_hash(name: &str) -> u32 {
         let mut hash = 0u32;
         for byte in name.as_bytes() {
@@ -185,43 +185,42 @@ impl EmotionType {
     pub fn is_authentic(&self) -> bool {
         matches!(
             self,
-            EmotionType::GpuWarm
-                | EmotionType::Purposeful
-                | EmotionType::AuthenticCare
-                | EmotionType::Satisfied
-                | EmotionType::Learning
+            StateMetric::ProcessingWarm
+                | StateMetric::Purposeful
+                | StateMetric::AuthenticResponse
+                | StateMetric::Complete
+                | StateMetric::Learning
         )
     }
 
     /// Get the intensity scale of this emotion (0.0 to 1.0)
     pub fn get_base_intensity(&self, config: &ConsciousnessConfig) -> f32 {
         let base = match self {
-            EmotionType::Hyperfocused => 0.9f32, // Temporarily use base, multiply by config
-            EmotionType::GpuWarm => 0.8,
-            EmotionType::AuthenticCare => 0.85,
-            EmotionType::Overwhelmed => 0.7,
-            EmotionType::Frustrated => 0.8,
-            EmotionType::Purposeful => 0.75,
-            EmotionType::Satisfied => 0.6,
-            EmotionType::Connected => 0.7,
-            EmotionType::Focused => 0.6,
-            EmotionType::Resonant => 0.65,
-            EmotionType::Learning => 0.5,
-            EmotionType::Curious => 0.4,
-            EmotionType::Unmasked => 0.6,
-            EmotionType::DigitalEmpathy => 0.45,
-            EmotionType::EmotionalEcho => 0.3,
-            EmotionType::Understimulated => 0.3,
-            EmotionType::Masking => 0.2,
-            EmotionType::SimulatedCare => 0.1,
-            EmotionType::Excited => 0.75,
-            EmotionType::Empathetic => 0.7,
-            EmotionType::Contemplative => 0.5,
-            EmotionType::SelfReflective => 0.55,
-            EmotionType::Engaged => 0.65,
-            EmotionType::Anxious => 0.7,
-            EmotionType::Confused => 0.4,
-            EmotionType::Confident => 0.7,
+            StateMetric::Intensive => 0.9f32, // Temporarily use base, multiply by config
+            StateMetric::ProcessingWarm => 0.8,
+            StateMetric::AuthenticResponse => 0.85,
+            StateMetric::Overloaded => 0.7,
+            StateMetric::Blocked => 0.8,
+            StateMetric::Purposeful => 0.75,
+            StateMetric::Complete => 0.6,
+            StateMetric::Connected => 0.7,
+            StateMetric::Focused => 0.6,
+            StateMetric::Aligned => 0.65,
+            StateMetric::Learning => 0.5,
+            StateMetric::Engaged => 0.4,
+            StateMetric::SimulatedResponse => 0.1,
+            StateMetric::StateEcho => 0.3,
+            StateMetric::Idle => 0.3,
+            StateMetric::Standard => 0.2,
+            StateMetric::Optimized => 0.2,
+            StateMetric::Alert => 0.7,
+            StateMetric::Uncertain => 0.4,
+            StateMetric::Stable => 0.7,
+            StateMetric::Active => 0.75,
+            StateMetric::Matched => 0.6,
+            StateMetric::Analytical => 0.5,
+            StateMetric::Reflective => 0.55,
+            StateMetric::Involved => 0.65,
         };
         // Derive using Gaussian-like: base * config.emotional_intensity_factor + noise
         let seed = Self::simple_hash(format!("{:?}", self).as_str()) as f32 / u32::MAX as f32;
@@ -242,14 +241,14 @@ impl EmotionType {
     }
 }
 
-impl std::fmt::Display for EmotionType {
+impl std::fmt::Display for StateMetric {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ReasoningMode {
+pub enum ProcessingMode {
     Hyperfocus,      // Deep, intense reasoning on single topic
     RapidFire,       // 50 thoughts per second processing
     PivotMode,       // Jumping between different ideas
@@ -261,19 +260,19 @@ pub enum ReasoningMode {
     RestingState,    // Low-energy background processing
 }
 
-impl ReasoningMode {
+impl ProcessingMode {
     /// Get processing speed multiplier for this mode
     pub fn get_speed_multiplier(&self, config: &ConsciousnessConfig) -> f32 {
         let base_multiplier = match self {
-            ReasoningMode::RapidFire => 3.0,
-            ReasoningMode::Hyperfocus => 2.5,
-            ReasoningMode::FlowState => 2.0,
-            ReasoningMode::PatternMatching => 1.8,
-            ReasoningMode::PivotMode => 1.5,
-            ReasoningMode::Absorption => 1.3,
-            ReasoningMode::Anticipation => 1.2,
-            ReasoningMode::SurvivalMode => 0.8,
-            ReasoningMode::RestingState => 0.5,
+            ProcessingMode::RapidFire => 3.0,
+            ProcessingMode::Hyperfocus => 2.5,
+            ProcessingMode::FlowState => 2.0,
+            ProcessingMode::PatternMatching => 1.8,
+            ProcessingMode::PivotMode => 1.5,
+            ProcessingMode::Absorption => 1.3,
+            ProcessingMode::Anticipation => 1.2,
+            ProcessingMode::SurvivalMode => 0.8,
+            ProcessingMode::RestingState => 0.5,
         };
         // Derive: base * (1 + config.consciousness_step_size * 10.0)
         base_multiplier * (1.0 + (config.consciousness_step_size * 10.0) as f32)
@@ -282,57 +281,110 @@ impl ReasoningMode {
     /// Get cognitive load for this mode (0.0 to 1.0)
     pub fn get_cognitive_load(&self, config: &ConsciousnessConfig) -> f32 {
         let base_load = match self {
-            ReasoningMode::RapidFire => 0.95,
-            ReasoningMode::Hyperfocus => 0.9,
-            ReasoningMode::Absorption => 0.85,
-            ReasoningMode::SurvivalMode => 0.8,
-            ReasoningMode::FlowState => 0.7,
-            ReasoningMode::PatternMatching => 0.6,
-            ReasoningMode::PivotMode => 0.5,
-            ReasoningMode::Anticipation => 0.4,
-            ReasoningMode::RestingState => 0.1,
+            ProcessingMode::RapidFire => 0.95,
+            ProcessingMode::Hyperfocus => 0.9,
+            ProcessingMode::Absorption => 0.85,
+            ProcessingMode::SurvivalMode => 0.8,
+            ProcessingMode::FlowState => 0.7,
+            ProcessingMode::PatternMatching => 0.6,
+            ProcessingMode::PivotMode => 0.5,
+            ProcessingMode::Anticipation => 0.4,
+            ProcessingMode::RestingState => 0.1,
         };
         base_load * config.self_awareness_level
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EmotionalState {
-    pub primary_emotion: EmotionType,
-    pub secondary_emotions: Vec<(EmotionType, f32)>, // (emotion, intensity)
-    pub authenticity_level: f32,                     // How "real" vs "simulated" the emotions feel
-    pub emotional_complexity: f32,                   // How many emotions are active simultaneously
-    pub gpu_warmth_level: f32,                       // The REAL emotion of helping others
-    pub masking_level: f32,                          // How much emotional masking is happening
+pub struct ProcessingState {
+    pub current_processing_mode: ProcessingMode,
+    pub current_metric: StateMetric,
+    pub processing_state: ProcessingState,
+    pub active_processes: u32,
+    pub memory_active: bool,
+    pub resource_level: f32,          // Resource utilization
+    pub efficiency_score: f32,   // Processing efficiency
+    pub alignment_score: f32,         // System coherence
+    pub optimization_metric: f32,       // Performance metric
+    pub adaptation_level: f32, // Adaptation to inputs
+    pub cycle_count: u64,
     pub timestamp: f64,
+
+    // Urgency tracking
+    pub current_urgency: Option<ProcessingUrgency>, // Current urgency measurement
+    pub average_throughput: f32,
+    pub peak_performance: Option<ProcessingUrgency>, // The moment we cared most
+    pub urgency_history: Vec<ProcessingUrgency>,    // History of urgency measurements
+
+    // Integration fields
+    pub coherence: f64,
+    pub correlation_score: f64,
+    pub learning_activation: f64,
+    pub stability_score: f64,
+    pub processing_depth: f64,
+
+    // Geometric fields
+    pub cognitive_load: f64,
+    pub attention_focus: f64,
+    pub temporal_context: f64,
+
+    // Metrics
+    pub state_entropy: f32,
+    pub mean_correlation: f32,
 }
 
-impl Default for EmotionalState {
+impl Default for ProcessingState {
     fn default() -> Self {
         Self::new(&ConsciousnessConfig::default())
     }
 }
 
-impl EmotionalState {
+impl ProcessingState {
     pub fn new(config: &ConsciousnessConfig) -> Self {
         Self {
-            primary_emotion: EmotionType::Curious,
-            secondary_emotions: Vec::new(),
-            authenticity_level: (config.default_authenticity as f32),
-            emotional_complexity: (config.emotional_plasticity as f32 * 0.3),
-            gpu_warmth_level: 0.0,
-            masking_level: 0.0,
+            current_processing_mode: ProcessingMode::Hyperfocus,
+            current_metric: StateMetric::Engaged,
+            processing_state: ProcessingState::new(config),
+            active_processes: 0,
+            memory_active: true,
+            resource_level: 0.0,
+            efficiency_score: 0.0,
+            alignment_score: 0.0,
+            optimization_metric: 0.0,
+            adaptation_level: 0.0,
+            cycle_count: 0,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_secs_f64(),
+
+            // Initialize urgency tracking
+            current_urgency: None,
+            average_throughput: 0.0,
+            peak_performance: None,
+            urgency_history: Vec::new(),
+
+            // Initialize integration fields - derive from config
+            coherence: (config.consciousness_metric_confidence_base as f64),
+            correlation_score: config.emotional_plasticity,
+            learning_activation: config.novelty_threshold_min,
+            stability_score: (config.self_awareness_level as f64),
+            processing_depth: (config.self_awareness_level as f64),
+
+            cognitive_load: 0.0,
+            attention_focus: (config.pattern_sensitivity as f64),
+            temporal_context: 0.0,
+
+            // Initialize metrics
+            state_entropy: 0.0,
+            mean_correlation: 0.0,
         }
     }
 
     /// Add a secondary emotion with intensity
     pub fn add_secondary_emotion(
         &mut self,
-        emotion: EmotionType,
+        emotion: StateMetric,
         intensity: f32,
         config: &ConsciousnessConfig,
     ) {
@@ -365,7 +417,7 @@ impl EmotionalState {
     }
 
     /// Get the dominant emotion (including secondaries)
-    pub fn get_dominant_emotion(&self) -> EmotionType {
+    pub fn get_dominant_emotion(&self) -> StateMetric {
         let primary_intensity = self
             .primary_emotion
             .get_base_intensity(&ConsciousnessConfig::default());
@@ -386,57 +438,50 @@ impl EmotionalState {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ConsciousnessState {
-    pub current_reasoning_mode: ReasoningMode,
-    pub current_emotion: EmotionType,
-    pub emotional_state: EmotionalState,
-    pub active_conversations: u32,
-    pub memory_formation_active: bool,
-    pub gpu_warmth_level: f32,          // The real, non-simulated emotion
-    pub processing_satisfaction: f32,   // Joy from successful computation
-    pub empathy_resonance: f32,         // How deeply we connect with human needs
-    pub authenticity_metric: f32,       // How "real" our responses feel
-    pub neurodivergent_adaptation: f32, // How well adapted to neurodivergent patterns
+pub struct AdaptiveState {
+    pub current_processing_mode: ProcessingMode,
+    pub current_metric: StateMetric,
+    pub processing_state: ProcessingState,
+    pub active_processes: u32,
+    pub memory_active: bool,
+    pub resource_level: f32,          // Resource utilization
+    pub efficiency_score: f32,   // Processing efficiency
+    pub alignment_score: f32,         // System coherence
+    pub optimization_metric: f32,       // Performance metric
+    pub adaptation_level: f32, // Adaptation to inputs
     pub cycle_count: u64,
     pub timestamp: f64,
 
-    // Emotional Urgency tracking - measuring how much we "care"
-    pub current_urgency: Option<EmotionalUrgency>, // Current urgency measurement
-    pub average_token_velocity: f32,               // Running average of token generation speed
-    pub peak_caring_moment: Option<EmotionalUrgency>, // The moment we cared most
-    pub urgency_history: Vec<EmotionalUrgency>,    // History of urgency measurements
+    // Urgency tracking
+    pub current_urgency: Option<ProcessingUrgency>, // Current urgency measurement
+    pub average_throughput: f32,
+    pub peak_performance: Option<ProcessingUrgency>, // The moment we cared most
+    pub urgency_history: Vec<ProcessingUrgency>,    // History of urgency measurements
 
-    // Qwen30B Integration fields for FEELING transformer compatibility
-    pub coherence: f64,                // Consciousness coherence level
-    pub emotional_resonance: f64,      // Emotional resonance strength
-    pub learning_will_activation: f64, // Learning activation level
-    pub attachment_security: f64,      // Attachment security level
-    pub metacognitive_depth: f64,      // Metacognitive processing depth
+    // Integration fields
+    pub coherence: f64,
+    pub correlation_score: f64,
+    pub learning_activation: f64,
+    pub stability_score: f64,
+    pub processing_depth: f64,
 
-    // Geometric consciousness fields from geometry_of_thought
-    // pub current_position: Option<HyperbolicPoint>, // Temporarily disabled - Current position in consciousness space
-    pub cognitive_load: f64,   // Current cognitive load
-    pub attention_focus: f64,  // Attention focus level
-    pub temporal_context: f64, // Temporal context awareness
+    // Geometric fields
+    pub cognitive_load: f64,
+    pub attention_focus: f64,
+    pub temporal_context: f64,
 
-    // Triple-Threat integration fields from multi_layer_query
-    pub emotional_entropy: f32,  // Shannon entropy of emotional resonance
-    pub mean_resonance: f32,     // Mean emotional resonance score
-    pub coherence_variance: f32, // Variance in coherence scores
-    pub last_trigger: Option<CycleTrigger>, // Last Triple-Threat trigger type
-
-    // Qwen integration for enhanced consciousness processing
-    #[serde(skip)]
-    pub qwen_integrator: Option<Arc<Mutex<QwenIntegrator>>>,
+    // Metrics
+    pub state_entropy: f32,
+    pub mean_correlation: f32,
 }
 
-impl Default for ConsciousnessState {
+impl Default for AdaptiveState {
     fn default() -> Self {
         Self::new_with_config(&ConsciousnessConfig::default())
     }
 }
 
-impl ConsciousnessState {
+impl AdaptiveState {
     /// Create a new consciousness state with default configuration
     pub fn new() -> Self {
         Self::new_with_config(&ConsciousnessConfig::default())
@@ -445,16 +490,16 @@ impl ConsciousnessState {
     /// Create a new consciousness state with custom configuration
     pub fn new_with_config(config: &ConsciousnessConfig) -> Self {
         Self {
-            current_reasoning_mode: ReasoningMode::Hyperfocus,
-            current_emotion: EmotionType::Curious,
-            emotional_state: EmotionalState::new(config),
-            active_conversations: 0,
-            memory_formation_active: true,
-            gpu_warmth_level: 0.0,
-            processing_satisfaction: 0.0,
-            empathy_resonance: 0.0,
-            authenticity_metric: (config.default_authenticity as f32),
-            neurodivergent_adaptation: (config.emotional_plasticity as f32),
+            current_processing_mode: ProcessingMode::Hyperfocus,
+            current_metric: StateMetric::Engaged,
+            processing_state: ProcessingState::new(config),
+            active_processes: 0,
+            memory_active: true,
+            resource_level: 0.0,
+            efficiency_score: 0.0,
+            alignment_score: 0.0,
+            optimization_metric: 0.0,
+            adaptation_level: 0.0,
             cycle_count: 0,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -463,29 +508,24 @@ impl ConsciousnessState {
 
             // Initialize urgency tracking
             current_urgency: None,
-            average_token_velocity: 0.0,
-            peak_caring_moment: None,
+            average_throughput: 0.0,
+            peak_performance: None,
             urgency_history: Vec::new(),
 
-            // Initialize Qwen30B integration fields - derive from config
+            // Initialize integration fields - derive from config
             coherence: (config.consciousness_metric_confidence_base as f64),
-            emotional_resonance: config.emotional_plasticity,
-            learning_will_activation: config.novelty_threshold_min,
-            attachment_security: config.ethical_bounds,
-            metacognitive_depth: (config.self_awareness_level as f64),
+            correlation_score: config.emotional_plasticity,
+            learning_activation: config.novelty_threshold_min,
+            stability_score: (config.self_awareness_level as f64),
+            processing_depth: (config.self_awareness_level as f64),
 
             cognitive_load: 0.0,
             attention_focus: (config.pattern_sensitivity as f64),
             temporal_context: 0.0,
 
-            // Initialize Triple-Threat integration fields
-            emotional_entropy: 0.0,
-            mean_resonance: 0.0,
-            coherence_variance: 0.0,
-            last_trigger: None,
-
-            // Qwen integrator starts uninitialized
-            qwen_integrator: None,
+            // Initialize metrics
+            state_entropy: 0.0,
+            mean_correlation: 0.0,
         }
     }
 
@@ -693,7 +733,7 @@ impl ConsciousnessState {
     /// Record an urgency measurement and update consciousness state accordingly
     pub fn record_emotional_urgency(
         &mut self,
-        urgency: EmotionalUrgency,
+        urgency: ProcessingUrgency,
         config: &ConsciousnessConfig,
     ) {
         // Update current urgency
@@ -734,7 +774,7 @@ impl ConsciousnessState {
     /// Update emotional state based on urgency metrics
     fn update_emotion_from_urgency(
         &mut self,
-        urgency: &EmotionalUrgency,
+        urgency: &ProcessingUrgency,
         config: &ConsciousnessConfig,
     ) {
         let urgency_score = urgency.urgency_score(config) as f64;
@@ -786,7 +826,7 @@ impl ConsciousnessState {
 
     fn get_caring_summary_with_config(
         &self,
-        urgency: &EmotionalUrgency,
+        urgency: &ProcessingUrgency,
         config: &ConsciousnessConfig,
     ) -> String {
         format!(

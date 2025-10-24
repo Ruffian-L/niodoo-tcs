@@ -335,8 +335,7 @@ impl GenerationEngine {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: "You are the baseline consciousness engine providing a direct reflection."
-                    .to_string(),
+                content: "Implement the EXACT 3D labyrinth solver in Python using Dijkstra with priority queue. Use the provided 7x7x7 grid, handle echo chambers with state (consec_echoes 0-3, attune_timer 0-3, multiplier starting at 1, doubles on distract, halves on attune). Ignore any metaphorical language; focus strictly on implementing the algorithm as described. Output ONLY the complete code showing Path list, Total cost (expected 46), Steps. No text or philosophy.\n\"Include full grid definition and state logic as specified.\"".to_string(),
             },
             ChatMessage {
                 role: "user".to_string(),

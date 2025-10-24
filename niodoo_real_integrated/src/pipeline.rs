@@ -15,13 +15,12 @@ use crate::data::{
 };
 use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
-use crate::generation::{GenerationEngine, GenerationResult, ChatMessage};
+use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
 use crate::metrics::metrics;
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
-use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use tokio::task::spawn_blocking;
@@ -276,52 +275,33 @@ impl Pipeline {
                 .process(prompt, &collapse, &pad_state, self.thresholds.entropy_mean)?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
-        let is_code_task = is_code_prompt(&prompt);
-
-        let mut vllm_messages: Vec<ChatMessage> = if is_code_task {
-            let clean_augmented = tokenizer_output.augmented_prompt
-                .lines()
-                .filter(|line| !line.starts_with("[CONSCIOUSNESS_STATE]") && !line.contains("Emotional Resonance") && !line.contains("empathy") && !line.contains("values like"))
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            vec![
-                ChatMessage {
-                    role: "system".to_string(),
-                    content: "You are an expert Python coder focused on algorithms. Output ONLY complete, runnable Python code solving the request—no explanations, ethics, philosophy, or additional text. For mazes/pathfinding, use Dijkstra with priority queue (heapq). Include all imports and define the grid/state logic precisely.".to_string(),
-                },
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: clean_augmented,
-                },
-            ]
-        } else {
-            vec![ChatMessage {
-                role: "user".to_string(),
-                content: tokenizer_output.augmented_prompt.clone(),
-            }]
-        };
-
-        info!("Prompt classified as: {}", if is_code_task { "code_task" } else { "general" });
-
         // Stage 6: Generation
         let generation_start = Instant::now();
+        let generation = if self.config.enable_consistency_voting {
+            let voting = self
+                .generator
+                .generate_with_consistency(&tokenizer_output, &compass)
+                .await?;
 
-        let hybrid_response = self.generator.send_chat(vllm_messages).await?;
+            let selected = match voting.winner_index {
+                0 => &voting.candidate_1,
+                1 => &voting.candidate_2,
+                _ => &voting.candidate_3,
+            }
+            .clone();
 
-        let latency_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
-
-        let rouge = rouge_l(&hybrid_response, &tokenizer_output.augmented_prompt);
-
-        let generation = GenerationResult {
-            baseline_response: tokenizer_output.augmented_prompt.clone(),
-            hybrid_response,
-            echoes: Vec::new(),
-            rouge_to_baseline: rouge,
-            latency_ms,
-            source: if is_code_task { "code_vllm" } else { "vllm" }.to_string(),
+            GenerationResult {
+                baseline_response: tokenizer_output.augmented_prompt.clone(),
+                hybrid_response: selected,
+                echoes: Vec::new(),
+                rouge_to_baseline: voting.rouge_scores.iter().copied().sum::<f64>()
+                    / voting.rouge_scores.len() as f64,
+                latency_ms: voting.latency_ms,
+                source: "consistency".to_string(),
+            }
+        } else {
+            self.generator.generate(&tokenizer_output, &compass).await?
         };
-
         timings.generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
         info!(
             "Pipeline stage: generation completed in {:.2}ms",
@@ -602,17 +582,11 @@ fn tokenizer_path() -> Result<PathBuf> {
         }
     }
 
-    let fallback = PathBuf::from("../tokenizer.json");
-    if fallback.exists() {
-        Ok(fallback)
-    } else {
-        anyhow::bail!("Tokenizer JSON not found; set TOKENIZER_JSON or QWEN_TOKENIZER")
+    // Absolute fallback
+    let absolute_fallback = PathBuf::from("/workspace/Niodoo-Final/models/tokenizer.json");
+    if absolute_fallback.exists() {
+        return Ok(absolute_fallback);
     }
-}
 
-fn is_code_prompt(prompt: &str) -> bool {
-    let lower = prompt.to_lowercase();
-    lower.contains("python") || lower.contains("dijkstra") || lower.contains("maze") ||
-    lower.contains("pathfinding") || lower.contains("algorithm") || lower.contains("implement") ||
-    lower.contains("program") || lower.contains("code") || lower.contains("function")
+    anyhow::bail!("Tokenizer JSON not found; set TOKENIZER_JSON or QWEN_TOKENIZER")
 }

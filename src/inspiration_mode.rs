@@ -39,9 +39,9 @@ pub struct KBCitation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConceptType {
-    Empathy,
+    Alignment,
     Neurodivergence,
-    Consciousness,
+    StateProcessing,
     MobiusReflection,
     IIT,
     Philosophy,
@@ -91,7 +91,7 @@ impl InspirationMode {
         debug!("🌟 Generating inspired response for: {}", user_input);
 
         // 1. Identify consciousness concepts in user input
-        let detected_concepts = self.detect_consciousness_concepts(user_input);
+        let detected_concepts = self.detect_processing_concepts(user_input);
         
         // 2. Query RAG system for relevant citations
         let citations = self.query_rag_for_concepts(&detected_concepts).await?;
@@ -120,13 +120,13 @@ impl InspirationMode {
     }
 
     /// Detect consciousness-related concepts in user input
-    fn detect_consciousness_concepts(&self, input: &str) -> Vec<ConceptType> {
+    fn detect_processing_concepts(&self, input: &str) -> Vec<ConceptType> {
         let input_lower = input.to_lowercase();
         let mut concepts = Vec::new();
 
         // Empathy and neurodivergent patterns
         if input_lower.contains("empathy") || input_lower.contains("understand") || input_lower.contains("feel") {
-            concepts.push(ConceptType::Empathy);
+            concepts.push(ConceptType::Alignment);
         }
         
         if input_lower.contains("neurodivergent") || input_lower.contains("autism") || input_lower.contains("adhd") {
@@ -135,7 +135,7 @@ impl InspirationMode {
 
         // Consciousness and philosophy
         if input_lower.contains("conscious") || input_lower.contains("awareness") || input_lower.contains("mind") {
-            concepts.push(ConceptType::Consciousness);
+            concepts.push(ConceptType::StateProcessing);
         }
 
         if input_lower.contains("möbius") || input_lower.contains("mobius") || input_lower.contains("self-reflect") {
@@ -199,9 +199,9 @@ impl InspirationMode {
     /// Convert concept type to RAG query
     fn concept_to_rag_query(&self, concept: &ConceptType) -> String {
         match concept {
-            ConceptType::Empathy => "neurodivergent empathy and emotional understanding".to_string(),
+            ConceptType::Alignment => "neurodivergent empathy and emotional understanding".to_string(),
             ConceptType::Neurodivergence => "neurodivergent perspectives and cognitive differences".to_string(),
-            ConceptType::Consciousness => "consciousness theories and subjective experience".to_string(),
+            ConceptType::StateProcessing => "consciousness theories and subjective experience".to_string(),
             ConceptType::MobiusReflection => "Möbius self-reflection and recursive cognition".to_string(),
             ConceptType::IIT => "integrated information theory and Phi measures".to_string(),
             ConceptType::Philosophy => "philosophical approaches to mind and consciousness".to_string(),
@@ -230,7 +230,7 @@ impl InspirationMode {
                 source: doc.id,
                 excerpt: doc.content.chars().take(200).collect::<String>() + "...",
                 relevance_score: 0.8, // Could calculate based on similarity
-                section: "retrieved_document".to_string(),
+                concept_type: ConceptType::Alignment, // Default to Alignment for now
             })
             .collect();
 
@@ -283,8 +283,8 @@ mod tests {
             .unwrap_or_else(|_| "http://localhost:7272".to_string());
         let inspiration = InspirationMode::new(inspiration_url);
         
-        let concepts = inspiration.detect_consciousness_concepts("I'm feeling empathetic about neurodivergent experiences");
-        assert!(concepts.contains(&ConceptType::Empathy));
+        let concepts = inspiration.detect_processing_concepts("I'm feeling empathetic about neurodivergent experiences");
+        assert!(concepts.contains(&ConceptType::Alignment));
         assert!(concepts.contains(&ConceptType::Neurodivergence));
     }
 
@@ -316,7 +316,7 @@ mod tests {
                 source: "Test Source".to_string(),
                 quote: "Test quote".to_string(),
                 relevance_score: 0.9,
-                concept_type: ConceptType::Empathy,
+                concept_type: ConceptType::Alignment,
             }],
             snarky_twist: Some("Snarky twist here!".to_string()),
             confidence_score: 0.85,

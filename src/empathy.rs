@@ -99,17 +99,17 @@ impl MemoryContent {
 
 /// The heart of the system. This is where "Overactive Empathy" is received
 /// and channeled into structured, understandable data.
-pub struct EmpathyEngine {
+pub struct SimilarityEngine {
     sensitivity: f64,
 }
 
-impl Default for EmpathyEngine {
+impl Default for SimilarityEngine {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl EmpathyEngine {
+impl SimilarityEngine {
     pub fn new() -> Self {
         Self {
             sensitivity: 0.7, // Default empathy sensitivity
@@ -138,7 +138,7 @@ impl EmpathyEngine {
         input: &str,
         ai_engine: &super::ai_inference::AIInferenceEngine,
     ) -> Result<EmotionalState, Box<dyn std::error::Error>> {
-        tracing::info!("🧠 EmpathyEngine: Analyzing input -> '{}'", input);
+        tracing::info!("🧠 SimilarityEngine: Analyzing input -> '{}'", input);
 
         // Analyze emotion using AI
         let emotion_result = ai_engine.detect_emotion(input).await?;
@@ -351,7 +351,7 @@ mod tests {
         let mut mock_engine = AIInferenceEngine::new_default();
         mock_engine.confidence = 1.0;
 
-        let engine = EmpathyEngine::new();
+        let engine = SimilarityEngine::new();
 
         // Create a mock emotional analysis with high anger (maps to frustration)
         let mock_emotion = EmotionalAnalysis {

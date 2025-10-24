@@ -15,8 +15,81 @@ METRICS_FILE="$METRICS_DIR/metrics-$TIMESTAMP.prom"
 LOG_FILE="$METRICS_DIR/run-$TIMESTAMP.log"
 
 # Parse arguments
-PROMPT="${1:-Implement a balanced binary tree in Rust}"
-ITERATIONS="${2:-5}"
+PROMPT=""
+PROMPT_FILE=""
+ITERATIONS=""
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --prompt|-p)
+            PROMPT="$2"
+            shift 2
+            ;;
+        --prompt-file|-f)
+            PROMPT_FILE="$2"
+            shift 2
+            ;;
+        --iterations|-n)
+            ITERATIONS="$2"
+            shift 2
+            ;;
+        --help|-h)
+            cat <<'EOF'
+Usage: ./run_with_metrics.sh [options] [PROMPT] [ITERATIONS]
+
+Options:
+  -p, --prompt "..."        Inline prompt string (default if no file provided)
+  -f, --prompt-file PATH    Read prompt contents from PATH (preserves newlines)
+  -n, --iterations N        Number of iterations to run (default: 5)
+  -h, --help                Show this help message
+
+If no options are provided, the first positional argument is treated as the
+prompt and the second positional argument as the iteration count.
+EOF
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            POSITIONAL+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [ ${#POSITIONAL[@]} -gt 0 ]; then
+    if [ -z "$PROMPT" ] && [ -z "$PROMPT_FILE" ]; then
+        PROMPT="${POSITIONAL[0]}"
+        POSITIONAL=("${POSITIONAL[@]:1}")
+    fi
+fi
+
+if [ ${#POSITIONAL[@]} -gt 0 ]; then
+    if [ -z "$ITERATIONS" ]; then
+        ITERATIONS="${POSITIONAL[0]}"
+        POSITIONAL=("${POSITIONAL[@]:1}")
+    fi
+fi
+
+if [ -n "$PROMPT_FILE" ]; then
+    if [ ! -f "$PROMPT_FILE" ]; then
+        echo "Prompt file not found: $PROMPT_FILE" >&2
+        exit 1
+    fi
+    PROMPT="$(cat "$PROMPT_FILE")"
+fi
+
+PROMPT="${PROMPT:-Implement a balanced binary tree in Rust}"
+ITERATIONS="${ITERATIONS:-5}"
+
+if ! [[ "$ITERATIONS" =~ ^[0-9]+$ ]]; then
+    echo "Iterations must be a positive integer, got: $ITERATIONS" >&2
+    exit 1
+fi
+
 
 # Set environment variables for full pipeline mode
 export TOKENIZER_JSON="${TOKENIZER_JSON:-/workspace/Niodoo-Final/models/tokenizer.json}"
@@ -28,7 +101,11 @@ echo -e "${CYAN}║            🚀 NIODOO TEST WITH METRICS 🚀               
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BLUE}📋 Configuration:${NC}"
-echo -e "   Prompt: ${YELLOW}$PROMPT${NC}"
+if [ -n "$PROMPT_FILE" ]; then
+    echo -e "   Prompt Source: ${YELLOW}file://$PROMPT_FILE${NC}"
+else
+    echo -e "   Prompt: ${YELLOW}$PROMPT${NC}"
+fi
 echo -e "   Iterations: ${YELLOW}$ITERATIONS${NC}"
 echo -e "   Metrics: ${GREEN}$METRICS_FILE${NC}"
 echo -e "   Log: ${GREEN}$LOG_FILE${NC}"
