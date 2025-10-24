@@ -683,7 +683,7 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Deserialize)]
-struct ChatCompletionResponse {
+pub struct ChatCompletionResponse {
     choices: Vec<ChatChoice>,
 }
 

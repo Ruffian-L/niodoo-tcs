@@ -122,10 +122,10 @@ impl LearningLoop {
     // Stub for DQN update
     pub fn dqn_update(
         &mut self,
-        state: DqnState,
-        action: DqnAction,
-        reward: f64,
-        next_state: DqnState,
+        _state: DqnState,
+        _action: DqnAction,
+        _reward: f64,
+        _next_state: DqnState,
     ) {
         // TODO: Replay buffer push, target net, etc.
     }

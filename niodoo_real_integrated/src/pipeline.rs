@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use futures::FutureExt;
 
-use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant};
+use crate::compass::{CompassEngine, CompassOutcome};
 use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
 use crate::curator::Curator;
 use crate::data::{
@@ -18,7 +18,7 @@ use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
 use crate::metrics::{metrics, FailureSignals};
-use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
+use crate::tcs_analysis::TCSAnalyzer;
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use blake3::hash as blake3_hash;
@@ -315,6 +315,15 @@ impl Pipeline {
             timings.generation_ms
         );
 
+        // Calculate entropy_delta here after we have pad_state
+        let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean);
+
+        // Update generation result with calculated entropy_delta
+        let generation = GenerationResult {
+            entropy_delta,
+            ..generation
+        };
+
         // NEW: Phase 2 Integration - Call curator after generation
         let curated_experience = self
             .integrate_curator(
@@ -326,10 +335,17 @@ impl Pipeline {
             )
             .await?;
 
-        // Failure evaluation after curator
-        let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean); // Simple delta from mean
+        // Failure evaluation after curator (entropy_delta already calculated above)
         let curator_quality = curated_experience.quality_score as f64;
-        let ucb1_score = 0.5; // Placeholder - assume moderate confidence
+
+        // Extract UCB1 score from MCTS branches
+        let ucb1_score = compass
+            .mcts_branches
+            .iter()
+            .map(|branch| branch.ucb_score)
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.5);
+
         let (failure, details) = FailureSignals::evaluate(
             generation.rouge_score,
             entropy_delta,
@@ -496,14 +512,14 @@ impl Pipeline {
         input: &str,
         output: &str,
         pad_state: &PadGhostState,
-        compass: &CompassOutcome,
+        _compass: &CompassOutcome,
         context: &str,
     ) -> Result<CuratedExperience> {
         // Call curator_executor logic here
         // (either spawn as subprocess or integrate as library)
 
         // Create a proper Experience using the new constructor
-        let experience = Experience::new(
+        let _experience = Experience::new(
             input.to_string(),
             output.to_string(),
             context.to_string(),
@@ -512,7 +528,7 @@ impl Pipeline {
         );
 
         // Analyze quality if curator is available
-        let quality_score = if let Some(ref curator) = self.curator {
+        let quality_score = if let Some(ref _curator) = self.curator {
             // This would need proper curator method
             0.7f32 // Placeholder for now
         } else {

@@ -129,3 +129,13 @@ learning_events.csv
 # VS Code remote
 .vscode-server/
 
+# Generated consolidated Rust markdown files
+niodoo_complete_rust.md
+niodoo_real_integrated_rust.md
+all_rust.md
+all_custom_rust.md
+
+# Generation scripts (can be kept if useful)
+generate_rust_md.sh
+generate_md.sh
+
