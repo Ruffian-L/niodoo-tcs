@@ -14,6 +14,7 @@ use crate::config::ModelConfig;
 use crate::consciousness::ConsciousnessState;
 use crate::philosophy::{ActionPotential, CodexPersona};
 use ndarray::{s, Array1, Array2, Array3};
+use niodoo_core::ConsciousnessState;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

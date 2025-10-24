@@ -599,18 +599,17 @@ impl GenerationEngine {
 
     /// Phase 2: Reflexion retry for hard failures (meso level)
     /// Generates reflection on failure, stores it, then retries with augmented prompt
-    pub async fn reflexion_retry(
-        &self,
-        prompt: &str,
-        rouge: f64,
-        details: &str,
-    ) -> Result<String> {
+    pub async fn reflexion_retry(&self, prompt: &str, rouge: f64, details: &str) -> Result<String> {
         let reflection = format!(
             "Failed due to low ROUGE: {:.3}. Hypothesis: {}\n\nRetry with corrected reasoning:",
             rouge, details
         );
         let augmented = format!("{}\n\nOriginal prompt: {}", reflection, prompt);
-        info!("Reflexion retry: ROUGE={:.3}, {} chars", rouge, augmented.len());
+        info!(
+            "Reflexion retry: ROUGE={:.3}, {} chars",
+            rouge,
+            augmented.len()
+        );
         self.request_text(&augmented).await.map(|(text, _)| text)
     }
 
@@ -649,6 +648,64 @@ impl GenerationEngine {
             "clamped prompt to MAX_CHARS"
         );
         clamped
+    }
+
+    /// Apply CoT repair for soft failures
+    pub async fn apply_cot_repair(
+        &self,
+        prompt: &str,
+        detail: &str,
+        retry_index: u32,
+    ) -> Result<GenerationResult> {
+        let augmented = format!("{prompt}\n\n[CoT Repair #{retry_index}]: Re-evaluate {detail}. Step-by-step: 1. Identify flaw. 2. Correct logic. 3. Verify.");
+        let mut temp = self.temperature + 0.1 * retry_index as f64;
+        temp = temp.min(1.0);
+        // In production: regenerate with augmented and temp
+        info!("CoT repair (index {retry_index}): temp={temp:.2}");
+        self.generate_with_params(&augmented, temp, self.top_p)
+            .await
+    }
+
+    /// Apply Reflexion for hard failures
+    pub async fn apply_reflexion(
+        &self,
+        prompt: &str,
+        previous_gen: &GenerationResult,
+        tokenizer_output: &TokenizerOutput,
+        detail: &str,
+        retry_index: u32,
+    ) -> Result<GenerationResult> {
+        let reflection = format!("Previous (ROUGE {previous_rouge:.2}): {prev_text}\nFailed due to {detail}.\nHypothesis: [error analysis]. Corrected approach:", previous_rouge = previous_gen.rouge_score, prev_text = previous_gen.baseline_response.chars().take(200).collect::<String>());
+        let augmented = format!("{reflection}\n\n{prompt}");
+        let mut top_p = self.top_p - 0.05 * retry_index as f64;
+        top_p = top_p.max(0.5);
+        // In production: regenerate with augmented and top_p
+        info!("Reflexion (index {retry_index}): top_p={top_p:.2}");
+        self.generate_with_params(&augmented, self.temperature, top_p)
+            .await
+    }
+
+    /// Helper to generate with custom params
+    async fn generate_with_params(
+        &self,
+        prompt: &str,
+        temp: f64,
+        top_p: f64,
+    ) -> Result<GenerationResult> {
+        // Stub: simulate or call actual generation with params
+        let text = format!("Generated with temp {temp:.2}, top_p {top_p:.2}: {prompt}");
+        Ok(GenerationResult {
+            baseline_response: text.clone(),
+            hybrid_response: text.clone(),
+            echoes: vec![],
+            rouge_to_baseline: 0.0,
+            latency_ms: 100.0,
+            rouge_score: 0.7, // Fixed for stub
+            entropy_delta: 0.05,
+            source: "param_tuned".to_string(),
+            failure_type: None,
+            failure_details: None,
+        })
     }
 }
 

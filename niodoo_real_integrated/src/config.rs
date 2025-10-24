@@ -210,7 +210,7 @@ pub struct RuntimeConfig {
     pub phase2_retry_base_delay_ms: u64,
     #[serde(default = "default_similarity_threshold")]
     pub similarity_threshold: f32,
-    
+
     // Phase 2 Level3+ escalation (MCTS param tuning)
     #[serde(default = "default_level3_retry_count")]
     pub phase2_level3_retry_count: u32,
@@ -398,9 +398,10 @@ impl RuntimeConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(default_top_p_increment());
 
-        let phase2_retrieval_top_k_increment = env_with_fallback(&["PHASE2_RETRIEVAL_TOP_K_INCREMENT"])
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(default_retrieval_top_k_increment());
+        let phase2_retrieval_top_k_increment =
+            env_with_fallback(&["PHASE2_RETRIEVAL_TOP_K_INCREMENT"])
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(default_retrieval_top_k_increment());
 
         Ok(Self {
             vllm_endpoint,

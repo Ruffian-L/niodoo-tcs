@@ -2,7 +2,7 @@
 //! Copyright (c) 2025 Jason Van Pham
 
 use super::{retrieval::RetrievalEngine, Document};
-use crate::consciousness::ConsciousnessState;
+use niodoo_core::ConsciousnessState;
 // Temporarily disabled due to ONNX linking issues
 // // use crate::qwen_inference::QwenInference; // Temporarily disabled
 use anyhow::Result;

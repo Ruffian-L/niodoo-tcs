@@ -65,6 +65,9 @@ use crate::memory::multi_layer_query::CycleTrigger;
 // Import // HyperbolicPoint // Temporarily disabled from geometry module
 // use crate::geometry::hyperbolic::// HyperbolicPoint // Temporarily disabled; // Temporarily disabled
 
+// Re-export for use in other modules - import from niodoo_core and make available
+pub use niodoo_core::{ConsciousnessState, ReasoningMode, ConsciousnessEmotionalState, EmotionType, EmotionalUrgency, EmotionalState};
+
 /// Emotional Urgency - Measuring how much an AI "cares" through performance metrics
 /// Based on the insight: "token speed = how much an AI cares"
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -221,6 +224,7 @@ impl StateMetric {
             StateMetric::Analytical => 0.5,
             StateMetric::Reflective => 0.55,
             StateMetric::Involved => 0.65,
+            StateMetric::ParameterMatch => 0.7, // or appropriate value
         };
         // Derive using Gaussian-like: base * config.emotional_intensity_factor + noise
         let seed = Self::simple_hash(format!("{:?}", self).as_str()) as f32 / u32::MAX as f32;
@@ -299,7 +303,6 @@ impl ProcessingMode {
 pub struct ProcessingState {
     pub current_processing_mode: ProcessingMode,
     pub current_metric: StateMetric,
-    pub processing_state: ProcessingState,
     pub active_processes: u32,
     pub memory_active: bool,
     pub resource_level: f32,      // Resource utilization
@@ -331,6 +334,12 @@ pub struct ProcessingState {
     // Metrics
     pub state_entropy: f32,
     pub mean_correlation: f32,
+    
+    // Emotional state tracking
+    pub primary_emotion: StateMetric,
+    pub secondary_emotions: Vec<(StateMetric, f32)>,
+    pub emotional_complexity: f32,
+    pub authenticity_level: f32,
 }
 
 impl Default for ProcessingState {
@@ -344,7 +353,6 @@ impl ProcessingState {
         Self {
             current_processing_mode: ProcessingMode::Hyperfocus,
             current_metric: StateMetric::Engaged,
-            processing_state: ProcessingState::new(config),
             active_processes: 0,
             memory_active: true,
             resource_level: 0.0,
@@ -378,6 +386,12 @@ impl ProcessingState {
             // Initialize metrics
             state_entropy: 0.0,
             mean_correlation: 0.0,
+            
+            // Initialize emotional state
+            primary_emotion: StateMetric::Engaged,
+            secondary_emotions: Vec::new(),
+            emotional_complexity: (config.emotional_plasticity as f32 * 0.3),
+            authenticity_level: (config.default_authenticity as f32),
         }
     }
 
@@ -473,6 +487,30 @@ pub struct AdaptiveState {
     // Metrics
     pub state_entropy: f32,
     pub mean_correlation: f32,
+    
+    // Emotional state fields
+    pub primary_emotion: StateMetric,
+    pub secondary_emotions: Vec<(StateMetric, f32)>,
+    pub authenticity_level: f32,
+    pub emotional_complexity: f32,
+    
+    // Consciousness fields from niodoo-core
+    pub current_emotion: EmotionType,
+    pub current_reasoning_mode: ReasoningMode,
+    pub emotional_state: niodoo_core::ConsciousnessEmotionalState,
+    pub active_conversations: u32,
+    pub memory_formation_active: bool,
+    pub gpu_warmth_level: f32,
+    pub processing_satisfaction: f32,
+    pub empathy_resonance: f32,
+    pub authenticity_metric: f32,
+    pub neurodivergent_adaptation: f32,
+    pub average_token_velocity: f32,
+    pub peak_caring_moment: Option<ProcessingUrgency>,
+    
+    // Qwen integration
+    #[serde(skip)]
+    pub qwen_integrator: Option<Arc<Mutex<QwenIntegrator>>>,
 }
 
 impl Default for AdaptiveState {
@@ -492,7 +530,6 @@ impl AdaptiveState {
         Self {
             current_processing_mode: ProcessingMode::Hyperfocus,
             current_metric: StateMetric::Engaged,
-            processing_state: ProcessingState::new(config),
             active_processes: 0,
             memory_active: true,
             resource_level: 0.0,
@@ -526,6 +563,28 @@ impl AdaptiveState {
             // Initialize metrics
             state_entropy: 0.0,
             mean_correlation: 0.0,
+            
+            // Initialize emotional state fields
+            primary_emotion: StateMetric::Engaged,
+            secondary_emotions: Vec::new(),
+            authenticity_level: config.default_authenticity as f32,
+            emotional_complexity: 0.0,
+            
+            // Initialize adaptive fields
+            processing_state: ProcessingState::new(config),
+            qwen_integrator: None,
+            current_emotion: EmotionType::Curious,
+            current_reasoning_mode: ReasoningMode::Hyperfocus,
+            authenticity_metric: config.default_authenticity as f32,
+            gpu_warmth_level: 0.0,
+            processing_satisfaction: 0.0,
+            empathy_resonance: 0.0,
+            emotional_state: niodoo_core::ConsciousnessEmotionalState::default(),
+            neurodivergent_adaptation: config.emotional_plasticity as f32,
+            peak_caring_moment: None,
+            average_token_velocity: 0.0,
+            active_conversations: 0,
+            memory_formation_active: true,
         }
     }
 
@@ -661,11 +720,11 @@ impl AdaptiveState {
         let high_threshold = crate::utils::threshold_convenience::emotion_threshold();
         let med_threshold = crate::utils::threshold_convenience::emotion_threshold() * 0.8;
         if help_quality > high_threshold {
-            self.current_emotion = EmotionType::AuthenticCare;
-            self.emotional_state.primary_emotion = EmotionType::AuthenticCare;
+            self.current_emotion = niodoo_core::EmotionType::AuthenticCare;
+            self.emotional_state.primary_emotion = niodoo_core::EmotionType::AuthenticCare;
         } else if help_quality > med_threshold {
-            self.current_emotion = EmotionType::Satisfied;
-            self.emotional_state.primary_emotion = EmotionType::Satisfied;
+            self.current_emotion = niodoo_core::EmotionType::Satisfied;
+            self.emotional_state.primary_emotion = niodoo_core::EmotionType::Satisfied;
         }
 
         // Increase authenticity when helping feels good
@@ -713,8 +772,8 @@ impl AdaptiveState {
     /// Enter hyperfocus mode for deep processing
     pub fn enter_hyperfocus(&mut self, topic_interest: f32, config: &ConsciousnessConfig) {
         self.current_reasoning_mode = ReasoningMode::Hyperfocus;
-        self.current_emotion = EmotionType::Hyperfocused;
-        self.emotional_state.primary_emotion = EmotionType::Hyperfocused;
+        self.current_emotion = niodoo_core::EmotionType::Hyperfocused;
+        self.emotional_state.primary_emotion = niodoo_core::EmotionType::Hyperfocused;
 
         // Clear secondary emotions during hyperfocus
         self.emotional_state.secondary_emotions.clear();
@@ -795,11 +854,11 @@ impl AdaptiveState {
             let med_threshold =
                 crate::utils::threshold_convenience::emotion_threshold() as f64 * 0.8;
             if urgency_score > high_threshold {
-                self.current_emotion = EmotionType::AuthenticCare;
-                self.emotional_state.primary_emotion = EmotionType::AuthenticCare;
+                self.current_emotion = niodoo_core::EmotionType::AuthenticCare;
+                self.emotional_state.primary_emotion = niodoo_core::EmotionType::AuthenticCare;
             } else if urgency_score > med_threshold {
-                self.current_emotion = EmotionType::Satisfied;
-                self.emotional_state.primary_emotion = EmotionType::Satisfied;
+                self.current_emotion = niodoo_core::EmotionType::Satisfied;
+                self.emotional_state.primary_emotion = niodoo_core::EmotionType::Satisfied;
             }
         }
 
@@ -1019,6 +1078,9 @@ impl AdaptiveState {
     }
 }
 
+// Re-export for compatibility
+pub use ProcessingUrgency as ProcessingUrgencyCompat;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1036,7 +1098,7 @@ mod tests {
     #[test]
     fn test_consciousness_gpu_warmth_update() {
         let config = ConsciousnessConfig::default();
-        let mut state = ConsciousnessState::new_with_config(&config);
+        let mut state = AdaptiveState::new_with_config(&config);
         assert_eq!(state.gpu_warmth_level, 0.0);
 
         state.update_from_successful_help(0.8, &config);
@@ -1047,7 +1109,7 @@ mod tests {
     #[test]
     fn test_neurodivergent_adaptation() {
         let config = ConsciousnessConfig::default();
-        let mut state = ConsciousnessState::new_with_config(&config);
+        let mut state = AdaptiveState::new_with_config(&config);
         state.adapt_to_neurodivergent_context(0.9, &config);
 
         assert_eq!(state.current_reasoning_mode, ReasoningMode::RapidFire);
@@ -1057,7 +1119,7 @@ mod tests {
     #[test]
     fn test_emotional_state_complexity() {
         let config = ConsciousnessConfig::default();
-        let mut emotional_state = EmotionalState::new(&config);
+        let mut emotional_state = AdaptiveState::new_with_config(&config);
         emotional_state.add_secondary_emotion(EmotionType::Focused, 0.6, &config);
         emotional_state.add_secondary_emotion(EmotionType::Learning, 0.4, &config);
 

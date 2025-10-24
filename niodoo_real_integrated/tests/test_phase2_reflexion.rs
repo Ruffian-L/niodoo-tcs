@@ -80,8 +80,11 @@ async fn test_reflexion_retry_on_hard_failure() -> Result<()> {
             if cycle.failure == "hard" {
                 // Check that the response includes reflection markers
                 let has_reflection = cycle.generation.hybrid_response.contains("# Reflection")
-                    || cycle.generation.hybrid_response.contains("Previous attempt");
-                
+                    || cycle
+                        .generation
+                        .hybrid_response
+                        .contains("Previous attempt");
+
                 println!("✅ Reflexion retry triggered for hard failure");
                 println!("  Has reflection markers: {}", has_reflection);
             }
@@ -118,7 +121,7 @@ async fn test_reflexion_reduces_hard_failures() -> Result<()> {
             // If it was a hard failure initially, check retry helped
             if let Some(ref failure_type) = cycle.generation.failure_type {
                 println!("  Failure type: {}", failure_type);
-                
+
                 // Success if final failure is "none" or "soft" (improved from hard)
                 let success = cycle.failure == "none" || cycle.failure == "soft";
                 assert!(success, "Reflexion should reduce hard failures");
@@ -147,13 +150,13 @@ async fn test_circuit_breaker_max_retries() -> Result<()> {
         Ok(Ok(cycle)) => {
             println!("✅ Circuit breaker test completed");
             println!("  Failure: {}", cycle.failure);
-            
+
             // Verify it didn't retry infinitely
             assert!(
                 cycle.generation.latency_ms < 45000.0,
                 "Pipeline should terminate before timeout"
             );
-            
+
             println!("✅ Circuit breaker prevented infinite retries");
             Ok(())
         }
@@ -185,7 +188,7 @@ async fn test_retry_escalation_levels() -> Result<()> {
             println!("✅ Escalation test completed");
             println!("  Failure: {}", cycle.failure);
             println!("  ROUGE: {:.3}", cycle.rouge);
-            
+
             // Check if escalation occurred (latency increases with retries)
             if cycle.generation.latency_ms > 5000.0 {
                 println!("✅ Retry escalation detected (high latency indicates multiple retries)");
@@ -215,7 +218,7 @@ async fn test_backoff_jitter() -> Result<()> {
             println!("✅ Backoff test completed");
             println!("  Elapsed: {:.2}s", elapsed.as_secs_f64());
             println!("  Latency: {:.2}ms", cycle.generation.latency_ms);
-            
+
             // Jitter creates variability in timing
             if elapsed.as_millis() > 500 {
                 println!("✅ Backoff with jitter applied");
@@ -242,11 +245,11 @@ async fn test_reflection_storage_in_erag() -> Result<()> {
         Ok(Ok(cycle)) => {
             println!("✅ ERAG storage test completed");
             println!("  Failure: {}", cycle.failure);
-            
+
             // Check if failure details contain reflection info
             if let Some(ref details) = cycle.generation.failure_details {
                 println!("  Failure details: {}", &details[..details.len().min(100)]);
-                
+
                 // If it was a hard failure, reflection should be stored
                 if cycle.failure == "hard" {
                     println!("✅ Hard failure detected - reflection should be stored in ERAG");
@@ -283,10 +286,10 @@ async fn test_end_to_end_phase2_integration() -> Result<()> {
                 println!("Prompt: {}", &prompt[..prompt.len().min(40)]);
                 println!("  Failure: {}", cycle.failure);
                 println!("  ROUGE: {:.3}", cycle.rouge);
-                
+
                 if cycle.failure != "none" {
                     total_failures += 1;
-                    
+
                     // Check if correction helped
                     if cycle.rouge > 0.4 {
                         successful_corrections += 1;
@@ -308,7 +311,7 @@ async fn test_end_to_end_phase2_integration() -> Result<()> {
     println!("  Total prompts: {}", prompts.len());
     println!("  Failures detected: {}", total_failures);
     println!("  Successful corrections: {}", successful_corrections);
-    
+
     if total_failures > 0 {
         let success_rate = successful_corrections as f64 / total_failures as f64;
         println!("  Correction success rate: {:.1}%", success_rate * 100.0);
@@ -318,4 +321,3 @@ async fn test_end_to_end_phase2_integration() -> Result<()> {
     println!("✅ Phase 2 end-to-end integration test passed");
     Ok(())
 }
-

@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -18,7 +18,7 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::metrics::{metrics, FailureSignals};
+use crate::metrics::{metrics, FailureSignals, RetryContext};
 use crate::tcs_analysis::TCSAnalyzer;
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
@@ -75,6 +75,7 @@ pub struct StageTimings {
     pub tokenizer_ms: f64,
     pub generation_ms: f64,
     pub learning_ms: f64,
+    pub threat_cycle_ms: f64,
 }
 
 pub struct Pipeline {
@@ -94,6 +95,7 @@ pub struct Pipeline {
     embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
     collapse_cache: LruCache<u64, CacheEntry<CollapseResult>>,
     retry_count: Arc<AtomicU32>,
+    retry_context: Arc<Mutex<RetryContext>>,
 }
 
 impl Pipeline {
@@ -193,6 +195,13 @@ impl Pipeline {
             embedding_cache: LruCache::new(cache_capacity),
             collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
+            retry_context: Arc::new(Mutex::new(RetryContext {
+                soft_retries: 0,
+                hard_retries: 0,
+                total_retries: 0,
+                reflection_buffer: None,
+                rng_seed: 42,
+            })),
         })
     }
 
@@ -333,7 +342,7 @@ impl Pipeline {
         // Failure evaluation after curator
         let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean);
         let curator_quality = curated_experience.quality_score as f64;
-        
+
         // Extract actual UCB1 score from MCTS branches
         let ucb1_score = compass
             .mcts_branches
@@ -341,7 +350,7 @@ impl Pipeline {
             .map(|branch| branch.ucb_score)
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(self.thresholds.mcts_c); // Fallback to configured threshold
-        
+
         let (failure, details) = FailureSignals::evaluate(
             generation.rouge_score,
             entropy_delta,
@@ -350,18 +359,20 @@ impl Pipeline {
         );
 
         // Phase 2: Handle retries with Reflection and CoT
-        let (final_generation, final_failure) = self.handle_retry_with_reflection(
-            prompt,
-            &failure,
-            &details,
-            &generation,
-            &compass,
-            &collapse,
-            &curated_experience,
-            entropy_delta,
-            curator_quality,
-            ucb1_score,
-        ).await?;
+        let (final_generation, final_failure) = self
+            .handle_retry_with_reflection(
+                prompt,
+                &failure,
+                &details,
+                &generation,
+                &compass,
+                &collapse,
+                &curated_experience,
+                entropy_delta,
+                curator_quality,
+                ucb1_score,
+            )
+            .await?;
 
         // Log to ERAG if failure != "none"
         if final_failure != "none" {
@@ -372,6 +383,8 @@ impl Pipeline {
                     &final_generation.hybrid_response,
                     metrics_ref,
                     Some(details.clone()),
+                    &final_failure,
+                    self.retry_count.load(Ordering::Relaxed),
                 )
                 .await?;
         }
@@ -542,28 +555,40 @@ impl Pipeline {
         let mut current_failure = initial_failure.to_string();
         let mut retry_count = 0;
 
+        let loop_start = Instant::now();
+
         // Retry loop with escalating strategies
         while retry_count < max_retries && current_failure != "none" {
             retry_count += 1;
-            info!("Phase 2 retry attempt {}/{}", retry_count, max_retries);
+            info!(retry = retry_count, tier = ?current_failure, detail = ?details, "retry loop attempt");
 
             // Store failure in ERAG before retry
             let metrics_ref = metrics();
-            if let Err(e) = self.erag.store_failure(
-                prompt,
-                &current_gen.hybrid_response,
-                metrics_ref,
-                Some(format!("Retry {}: {}", retry_count, details)),
-            ).await {
+            if let Err(e) = self
+                .erag
+                .store_failure(
+                    prompt,
+                    &current_gen.hybrid_response,
+                    metrics_ref,
+                    Some(format!("Retry {}: {}", retry_count, details)),
+                    &current_failure,
+                    retry_count,
+                )
+                .await
+            {
                 warn!("Failed to store failure: {}", e);
             }
 
             // Level3+ escalation: Tune MCTS/retrieval params for repeated failures
             let is_level3 = retry_count > self.config.phase2_level3_retry_count;
             if is_level3 {
-                info!("Level3 escalation: Applying parameter tuning (attempt {})", retry_count);
+                info!(
+                    "Level3 escalation: Applying parameter tuning (attempt {})",
+                    retry_count
+                );
                 // Log escalation metrics (actual tuning would require mutable access to compass/thresholds)
-                info!("Suggested tuning: MCTS c += {:.3}, top_p += {:.3}, retrieval_top_k += {}",
+                info!(
+                    "Suggested tuning: MCTS c += {:.3}, top_p += {:.3}, retrieval_top_k += {}",
                     self.config.phase2_mcts_c_increment,
                     self.config.phase2_top_p_increment,
                     self.config.phase2_retrieval_top_k_increment
@@ -573,29 +598,27 @@ impl Pipeline {
             // Determine retry strategy based on failure type
             let retry_response = if current_failure == "hard" {
                 // Meso: Reflexion for hard failures
-                self.generator.reflexion_retry(
-                    prompt,
-                    current_gen.rouge_score,
-                    details,
-                ).await?
+                self.generator
+                    .reflexion_retry(prompt, current_gen.rouge_score, details)
+                    .await?
             } else {
                 // Micro: CoT for soft failures (2-3 iterations)
                 let mut best_response = current_gen.hybrid_response.clone();
                 let mut best_rouge = current_gen.rouge_score;
-                
+
                 for cot_iter in 0..3 {
-                    let cot_response = self.generator.cot_self_correct(
-                        prompt,
-                        "low-confidence reasoning",
-                    ).await?;
-                    
+                    let cot_response = self
+                        .generator
+                        .cot_self_correct(prompt, "low-confidence reasoning")
+                        .await?;
+
                     // Recompute ROUGE
                     let new_rouge = rouge_l(&cot_response, &best_response);
                     if new_rouge > best_rouge {
                         best_response = cot_response;
                         best_rouge = new_rouge;
                     }
-                    
+
                     if best_rouge > 0.5 {
                         info!("CoT iteration {} achieved ROUGE > 0.5", cot_iter + 1);
                         break;
@@ -631,7 +654,10 @@ impl Pipeline {
 
             // Success on retry
             if current_failure == "none" {
-                info!("Retry succeeded on attempt {} (ROUGE: {:.3})", retry_count, current_gen.rouge_score);
+                info!(
+                    "Retry succeeded on attempt {} (ROUGE: {:.3})",
+                    retry_count, current_gen.rouge_score
+                );
                 self.retry_count.store(retry_count, Ordering::Relaxed);
                 break;
             }
@@ -646,16 +672,22 @@ impl Pipeline {
 
         if current_failure != "none" {
             warn!("Failed after {} retry attempts", retry_count);
-            
+
             // Circuit breaker: If max retries exceeded, escalate to Phase 3
             if retry_count >= max_retries {
                 warn!("Circuit breaker triggered: Escalating to Phase 3 (threat->healing cycle)");
                 // Phase 3 would handle long-term recovery (e.g., threat cycle activation)
                 // For now, log the escalation
-                info!("Phase 3 escalation: retry_count={}, failure={}, details={}", 
-                    retry_count, current_failure, details);
+                info!(
+                    "Phase 3 escalation: retry_count={}, failure={}, details={}",
+                    retry_count, current_failure, details
+                );
             }
         }
+
+        let threat_cycle_ms = loop_start.elapsed().as_secs_f64() * 1000.0;
+        let mut timings = StageTimings::default();
+        timings.threat_cycle_ms = threat_cycle_ms;
 
         Ok((current_gen, current_failure))
     }
@@ -684,37 +716,59 @@ impl Pipeline {
         let quality_score = if let Some(ref curator) = self.curator {
             // Calculate quality based on actual curator metrics
             // Use compass quadrant from context if available
-            let compass_quadrant_str = if compass.quadrant == crate::compass::CompassQuadrant::Panic { "Panic" }
-                else if compass.quadrant == crate::compass::CompassQuadrant::Persist { "Persist" }
-                else if compass.quadrant == crate::compass::CompassQuadrant::Discover { "Discover" }
-                else { "Master" };
-            
-            match curator.assess_quality(input, output, pad_state.entropy, compass_quadrant_str).await {
+            let compass_quadrant_str = if compass.quadrant == crate::compass::CompassQuadrant::Panic
+            {
+                "Panic"
+            } else if compass.quadrant == crate::compass::CompassQuadrant::Persist {
+                "Persist"
+            } else if compass.quadrant == crate::compass::CompassQuadrant::Discover {
+                "Discover"
+            } else {
+                "Master"
+            };
+
+            match curator
+                .assess_quality(input, output, pad_state.entropy, compass_quadrant_str)
+                .await
+            {
                 Ok(q) => q as f32,
                 Err(e) => {
                     warn!("Curator quality assessment failed: {}, using fallback", e);
                     // Fallback quality score based on heuristics
                     let length_score = (output.len().min(1000) as f32 / 1000.0) * 0.3;
-                    let content_score = if output.contains("solution") || output.contains("implementation") { 0.4 } else { 0.2 };
+                    let content_score =
+                        if output.contains("solution") || output.contains("implementation") {
+                            0.4
+                        } else {
+                            0.2
+                        };
                     (length_score + content_score).min(1.0)
                 }
             }
         } else {
             // Fallback quality score based on heuristics
             let length_score = (output.len().min(1000) as f32 / 1000.0) * 0.3;
-            let content_score = if output.contains("solution") || output.contains("implementation") { 0.4 } else { 0.2 };
+            let content_score = if output.contains("solution") || output.contains("implementation")
+            {
+                0.4
+            } else {
+                0.2
+            };
             (length_score + content_score).min(1.0)
         };
 
         // Refine if needed (use config threshold)
         let refinement_threshold = self.config.curator_quality_threshold;
-        
+
         let refined = if quality_score < refinement_threshold {
             // Attempt refinement for low-quality responses
             if let Some(ref curator) = self.curator {
                 match curator.refine_response(input, output).await {
                     Ok(refined_output) => {
-                        info!("Curator refined low-quality response ({} -> improved)", quality_score);
+                        info!(
+                            "Curator refined low-quality response ({} -> improved)",
+                            quality_score
+                        );
                         refined_output
                     }
                     Err(e) => {

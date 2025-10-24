@@ -271,8 +271,10 @@ impl EragClient {
         &self,
         prompt: &str,
         output: &str,
-        _metrics: &crate::metrics::PipelineMetrics,
+        metrics: &crate::metrics::PipelineMetrics,
         reflection: Option<String>,
+        failure_tier: &str,
+        retry_count: u32,
     ) -> Result<()> {
         // Store failure as a memory with a special flag
         // For now, we'll log it. In production, you'd want to mark it specially in Qdrant

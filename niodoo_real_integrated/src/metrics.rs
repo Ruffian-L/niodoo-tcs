@@ -1,9 +1,13 @@
+use crate::generation::GenerationResult;
 use anyhow::{Error, Result};
+use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use prometheus::{
     register_counter, register_gauge, register_histogram, Counter, Encoder, Gauge, Histogram,
     HistogramOpts, TextEncoder,
 };
+use rand::Rng;
+use std::time::Duration;
 
 static METRICS: Lazy<PipelineMetrics> =
     Lazy::new(|| PipelineMetrics::new().expect("failed to initialise Prometheus metrics"));
@@ -71,6 +75,48 @@ impl PipelineMetrics {
         TextEncoder::new().encode(&metric_families, &mut buffer)?;
         Ok(String::from_utf8(buffer).unwrap_or_default())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct RetryContext {
+    pub soft_retries: u32,
+    pub hard_retries: u32,
+    pub total_retries: u32,
+    pub reflection_buffer: Option<String>,
+    pub rng_seed: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RetryOutcome {
+    generation: GenerationResult,
+    failure_tier: String,
+    updated_counts: RetryContext,
+}
+
+pub trait RetryStrategy {
+    fn compute_backoff(&self, attempt: u32, is_hard: bool) -> Duration;
+}
+
+impl RetryStrategy for PipelineMetrics {
+    fn compute_backoff(&self, attempt: u32, is_hard: bool) -> Duration {
+        let base = if is_hard { 500 } else { 200 };
+        let exp = 2u64.pow(attempt.min(5));
+        let jitter = rand::thread_rng().gen_range(0..100);
+        Duration::from_millis(base * exp + jitter)
+    }
+}
+
+// Prometheus counters
+lazy_static! {
+    static ref SOFT_RETRIES: Counter =
+        register_counter!("niodoo_soft_retries_total", "Total soft failure retries").unwrap();
+    static ref HARD_RETRIES: Counter =
+        register_counter!("niodoo_hard_retries_total", "Total hard failure retries").unwrap();
+    static ref SUCCESS_AFTER_RETRY: Counter = register_counter!(
+        "niodoo_success_after_retry",
+        "Successful generations after retry"
+    )
+    .unwrap();
 }
 
 pub fn metrics() -> &'static PipelineMetrics {

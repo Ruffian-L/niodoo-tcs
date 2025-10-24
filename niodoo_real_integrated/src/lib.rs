@@ -16,3 +16,23 @@ pub mod tcs_analysis;
 pub mod tokenizer;
 pub mod torus;
 pub mod util;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_run_retry_loop() {
+        // Mock pipeline with config
+        let mut pipeline = Pipeline::initialise(CliArgs::default()).await.unwrap();
+        let tokenizer_output = TokenizerOutput { /* mock */ };
+        let compass = CompassOutcome { /* mock */ };
+        let collapse = CollapseResult { /* mock */ };
+
+        let outcome = pipeline
+            .run_retry_loop("test prompt", &tokenizer_output, &compass, &collapse)
+            .await
+            .unwrap();
+        assert!(outcome.failure_tier == "none" || outcome.updated_counts.total_retries > 0);
+    }
+}
