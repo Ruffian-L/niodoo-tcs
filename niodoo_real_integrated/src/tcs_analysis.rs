@@ -8,11 +8,10 @@ use std::time::Instant;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::compass::CompassOutcome;
 use crate::torus::PadGhostState;
-use tcs_knot::{CognitiveKnot, JonesPolynomial, KnotDiagram};
+use tcs_knot::{JonesPolynomial, KnotDiagram};
 use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
-use tcs_tqft::{Cobordism, FrobeniusAlgebra, TQFTEngine};
+use tcs_tqft::{Cobordism, TQFTEngine};
 
 /// Topological signature computed for a state
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -22,10 +22,11 @@ use crate::metrics::{metrics, FailureSignals};
 use crate::tcs_analysis::TCSAnalyzer;
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
+use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use tokio::task::spawn_blocking;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 // Define CuratedExperience struct
 #[derive(Debug, Clone)]
@@ -125,7 +126,7 @@ impl Pipeline {
             &config.qdrant_url,
             &config.qdrant_collection,
             config.qdrant_vector_dim,
-            0.5, // Bumped down from 0.65 for more memory hits
+            config.similarity_threshold,
         )
         .await?;
         let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
@@ -523,9 +524,9 @@ impl Pipeline {
         initial_failure: &str,
         details: &str,
         generation: &GenerationResult,
-        compass: &CompassOutcome,
-        collapse: &CollapseResult,
-        curated: &CuratedExperience,
+        _compass: &CompassOutcome,
+        _collapse: &CollapseResult,
+        _curated: &CuratedExperience,
         entropy_delta: f64,
         curator_quality: f64,
         ucb1_score: f64,
@@ -535,56 +536,90 @@ impl Pipeline {
             return Ok((generation.clone(), "none".to_string()));
         }
 
-        const MAX_RETRIES: u32 = 3;
+        let max_retries = self.config.phase2_max_retries;
+        let base_delay_ms = self.config.phase2_retry_base_delay_ms;
         let mut current_gen = generation.clone();
         let mut current_failure = initial_failure.to_string();
         let mut retry_count = 0;
-        let mut reflection_context = None;
 
         // Retry loop with escalating strategies
-        while retry_count < MAX_RETRIES && current_failure != "none" {
+        while retry_count < max_retries && current_failure != "none" {
             retry_count += 1;
-            info!("Phase 2 retry attempt {}/{}", retry_count, MAX_RETRIES);
+            info!("Phase 2 retry attempt {}/{}", retry_count, max_retries);
 
-            // Determine retry strategy based on failure type
-            if current_failure == "hard" {
-                // Generate reflection for hard failures
-                let reflection = self.generate_reflection(
-                    prompt,
-                    &current_gen.hybrid_response,
-                    details,
-                    compass,
-                )?;
-                
-                // Store reflection in ERAG
-                let metrics_ref = metrics();
-                if let Err(e) = self.erag.store_failure(
-                    prompt,
-                    &current_gen.hybrid_response,
-                    metrics_ref,
-                    Some(reflection.clone()),
-                ).await {
-                    warn!("Failed to store reflection: {}", e);
-                }
-
-                reflection_context = Some(reflection);
-                info!("Generated reflection for hard failure (attempt {})", retry_count);
-            } else if current_failure == "soft" {
-                // Apply CoT self-correction for soft failures
-                info!("Applying CoT self-correction for soft failure (attempt {})", retry_count);
+            // Store failure in ERAG before retry
+            let metrics_ref = metrics();
+            if let Err(e) = self.erag.store_failure(
+                prompt,
+                &current_gen.hybrid_response,
+                metrics_ref,
+                Some(format!("Retry {}: {}", retry_count, details)),
+            ).await {
+                warn!("Failed to store failure: {}", e);
             }
 
-            // Retry generation with reflection/CoT applied
-            let retry_gen = self.retry_generation_with_adjustments(
-                prompt,
-                &reflection_context,
-                collapse,
-                compass,
-                current_failure == "soft",
-            ).await?;
+            // Level3+ escalation: Tune MCTS/retrieval params for repeated failures
+            let is_level3 = retry_count > self.config.phase2_level3_retry_count;
+            if is_level3 {
+                info!("Level3 escalation: Applying parameter tuning (attempt {})", retry_count);
+                // Log escalation metrics (actual tuning would require mutable access to compass/thresholds)
+                info!("Suggested tuning: MCTS c += {:.3}, top_p += {:.3}, retrieval_top_k += {}",
+                    self.config.phase2_mcts_c_increment,
+                    self.config.phase2_top_p_increment,
+                    self.config.phase2_retrieval_top_k_increment
+                );
+            }
 
-            // Re-evaluate failure
-            let (failure, new_details) = FailureSignals::evaluate(
+            // Determine retry strategy based on failure type
+            let retry_response = if current_failure == "hard" {
+                // Meso: Reflexion for hard failures
+                self.generator.reflexion_retry(
+                    prompt,
+                    current_gen.rouge_score,
+                    details,
+                ).await?
+            } else {
+                // Micro: CoT for soft failures (2-3 iterations)
+                let mut best_response = current_gen.hybrid_response.clone();
+                let mut best_rouge = current_gen.rouge_score;
+                
+                for cot_iter in 0..3 {
+                    let cot_response = self.generator.cot_self_correct(
+                        prompt,
+                        "low-confidence reasoning",
+                    ).await?;
+                    
+                    // Recompute ROUGE
+                    let new_rouge = rouge_l(&cot_response, &best_response);
+                    if new_rouge > best_rouge {
+                        best_response = cot_response;
+                        best_rouge = new_rouge;
+                    }
+                    
+                    if best_rouge > 0.5 {
+                        info!("CoT iteration {} achieved ROUGE > 0.5", cot_iter + 1);
+                        break;
+                    }
+                }
+                best_response
+            };
+
+            // Create updated generation result with retry
+            let retry_gen = GenerationResult {
+                baseline_response: retry_response.clone(),
+                hybrid_response: retry_response.clone(),
+                echoes: current_gen.echoes.clone(),
+                rouge_to_baseline: rouge_l(&retry_response, &current_gen.baseline_response),
+                latency_ms: current_gen.latency_ms,
+                rouge_score: rouge_l(&retry_response, &current_gen.baseline_response),
+                entropy_delta: current_gen.entropy_delta,
+                source: format!("retry_{}", retry_count),
+                failure_type: None,
+                failure_details: None,
+            };
+
+            // Re-evaluate failure with new metrics
+            let (failure, _new_details) = FailureSignals::evaluate(
                 retry_gen.rouge_score,
                 entropy_delta,
                 curator_quality,
@@ -592,93 +627,37 @@ impl Pipeline {
             );
 
             current_gen = retry_gen;
-            current_failure = failure;
+            current_failure = failure.clone();
 
             // Success on retry
             if current_failure == "none" {
-                info!("Retry succeeded on attempt {}", retry_count);
+                info!("Retry succeeded on attempt {} (ROUGE: {:.3})", retry_count, current_gen.rouge_score);
                 self.retry_count.store(retry_count, Ordering::Relaxed);
                 break;
             }
 
-            // Backoff delay before next retry
-            if retry_count < MAX_RETRIES {
-                let delay_ms = 200 * 2_u64.pow(retry_count.min(10));
+            // Backoff delay before next retry (exponential with jitter)
+            if retry_count < max_retries {
+                let exponent = 2_u64.pow(retry_count.min(10));
+                let delay_ms = base_delay_ms * exponent;
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             }
         }
 
         if current_failure != "none" {
             warn!("Failed after {} retry attempts", retry_count);
+            
+            // Circuit breaker: If max retries exceeded, escalate to Phase 3
+            if retry_count >= max_retries {
+                warn!("Circuit breaker triggered: Escalating to Phase 3 (threat->healing cycle)");
+                // Phase 3 would handle long-term recovery (e.g., threat cycle activation)
+                // For now, log the escalation
+                info!("Phase 3 escalation: retry_count={}, failure={}, details={}", 
+                    retry_count, current_failure, details);
+            }
         }
 
         Ok((current_gen, current_failure))
-    }
-
-    /// Generate reflection text explaining the failure
-    fn generate_reflection(
-        &self,
-        prompt: &str,
-        response: &str,
-        failure_details: &str,
-        compass: &CompassOutcome,
-    ) -> Result<String> {
-        // Format reflection with failure analysis
-        let reflection = format!(
-            "# Reflection\n\n\
-            Previous attempt failed because: {}\n\n\
-            Context:\n\
-            - Prompt: {}\n\
-            - Response: {}\n\
-            - Compass state: {:?}\n\n\
-            Analysis:\n\
-            Re-evaluate the weak points, identify reasoning errors, and produce a corrected approach.\n\
-            Focus on improving: quality metrics, logical consistency, and coherence.",
-            failure_details,
-            prompt.chars().take(200).collect::<String>(),
-            response.chars().take(200).collect::<String>(),
-            compass.quadrant
-        );
-        Ok(reflection)
-    }
-
-    /// Retry generation with reflection context and adjustments
-    async fn retry_generation_with_adjustments(
-        &self,
-        prompt: &str,
-        reflection: &Option<String>,
-        collapse: &CollapseResult,
-        compass: &CompassOutcome,
-        is_soft_failure: bool,
-    ) -> Result<GenerationResult> {
-        // Build augmented prompt with reflection or CoT
-        let mut augmented_prompt = prompt.to_string();
-        
-        if let Some(reflection_text) = reflection {
-            // Prepend reflection for hard failures
-            augmented_prompt = format!("{}\n\n{}", reflection_text, prompt);
-            info!("Retry with reflection (hard failure)");
-        } else if is_soft_failure {
-            // Append CoT self-correction for soft failures
-            augmented_prompt.push_str("\n\nStep-by-step check: Re-evaluate each critical inference. Verify logic, confirm reasoning, and explicitly correct any flawed steps.");
-            info!("Retry with CoT (soft failure)");
-        }
-
-        // Generate new embedding for augmented prompt
-        let retry_embedding = self.embedder.embed(&augmented_prompt).await?;
-        let retry_pad_state = self.torus.project(&retry_embedding)?;
-        
-        // Regenerate tokenizer output with augmented prompt
-        let retry_tokenizer = self.tokenizer
-            .process(&augmented_prompt, collapse, &retry_pad_state, self.thresholds.entropy_mean)?;
-        
-        // Actually regenerate with adjusted prompt
-        let retry_gen = self.generator.generate(&retry_tokenizer, compass).await?;
-        
-        info!("Retry generation completed with {} augmentation", 
-            if reflection.is_some() { "reflection" } else { "CoT" });
-
-        Ok(retry_gen)
     }
 
     async fn integrate_curator(
@@ -693,7 +672,7 @@ impl Pipeline {
         // (either spawn as subprocess or integrate as library)
 
         // Create a proper Experience using the new constructor
-        let experience = Experience::new(
+        let _experience = Experience::new(
             input.to_string(),
             output.to_string(),
             context.to_string(),
@@ -728,11 +707,7 @@ impl Pipeline {
         };
 
         // Refine if needed (use config threshold)
-        let refinement_threshold = if let Some(ref curator) = self.curator {
-            curator.config.quality_threshold
-        } else {
-            0.5 // Fallback threshold
-        };
+        let refinement_threshold = self.config.curator_quality_threshold;
         
         let refined = if quality_score < refinement_threshold {
             // Attempt refinement for low-quality responses

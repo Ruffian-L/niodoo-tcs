@@ -389,9 +389,71 @@ impl ConsciousnessPipelineOrchestrator {
         Ok(())
     }
 
-    /// Process input through the complete consciousness pipeline
+    /// Process input through the complete consciousness pipeline with retry logic
     pub async fn process_input(&self, input: PipelineInput) -> Result<PipelineOutput> {
-        self.process_input_once(&input, 1, None).await
+        // Initialize retry state
+        // Note: max_retries is enforced by the retry controller itself in next_decision()
+        let mut attempt = 1;
+        let mut last_failure: Option<String> = None;
+        
+        loop {
+            // Check failure signals from previous attempt
+            let mut signals = {
+                let aggregator = self.failure_aggregator.read().await;
+                // Create snapshot from context (stub - in real impl would come from metrics)
+                let snapshot = AdaptiveMetricsSnapshot {
+                    rouge: None,
+                    entropy: None,
+                    entropy_delta: None,
+                    ucb1: None,
+                    compass_state: None,
+                    curator_quality: None,
+                    fallbacks_triggered: 0,
+                };
+                aggregator.aggregate(&snapshot)
+            };
+            
+            // Get retry decision
+            let retry_decision = {
+                let mut controller = self.retry_controller.write().await;
+                controller.next_decision(&signals)
+            };
+            
+            // Process attempt
+            match self.process_input_once(&input, attempt, last_failure.clone()).await {
+                Ok(output) => {
+                    // Success - reset retry controller
+                    {
+                        let mut controller = self.retry_controller.write().await;
+                        controller.register_success();
+                    }
+                    return Ok(output);
+                }
+                Err(e) => {
+                    // Failure - evaluate and prepare retry
+                    let failure_reason = e.to_string();
+                    last_failure = Some(failure_reason.clone());
+                    
+                    // Log failure details
+                    warn!("Pipeline attempt {} failed: {}", attempt, failure_reason);
+                    
+                    // Check if we should retry
+                    // Retry controller handles max_retries internally via next_decision()
+                    if !retry_decision.should_retry {
+                        error!("Retry decision = false after {} attempts", attempt);
+                        return Err(anyhow::anyhow!("Pipeline failed after {} attempts: {}", attempt, failure_reason));
+                    }
+                    
+                    // Apply backoff delay if specified
+                    if let Some(delay) = retry_decision.next_delay {
+                        warn!("Retrying after {:?} backoff (level: {:?})", delay, retry_decision.level);
+                        tokio::time::sleep(delay).await;
+                    }
+                    
+                    attempt += 1;
+                }
+            }
+        }
     }
 
     async fn process_input_once(
@@ -682,24 +744,45 @@ impl ConsciousnessPipelineOrchestrator {
         })
     }
 
-    /// Stage 7: Response Generation
+    /// Stage 7: Response Generation with CoT and Reflexion
     async fn generate_response_stage(
         &self,
         input: &PipelineInput,
         decision: &DecisionResult,
         reflection: Option<crate::generation::ReflectionContext>,
     ) -> Result<String> {
-        debug!("✨ Generating response");
+        debug!("✨ Generating response with reflection support");
         
-        // Response is already generated in decision making stage
-        let mut response = decision.chosen_action.clone();
-        if let Some(ctx) = reflection {
-            response.push_str("\n\nReflection note: ");
-            if let Some(reason) = ctx.failure_reason {
-                response.push_str(&format!("Previous attempt failed because {}.", reason));
-            }
+        // Get failure signals for CoT
+        let mut soft_signals = Vec::new();
+        {
+            let aggregator = self.failure_aggregator.read().await;
+            let snapshot = AdaptiveMetricsSnapshot {
+                rouge: Some(decision.brain_consensus as f64),
+                entropy: None,
+                entropy_delta: None,
+                ucb1: None,
+                compass_state: None,
+                curator_quality: None,
+                fallbacks_triggered: 0,
+            };
+            let signals = aggregator.aggregate(&snapshot);
+            soft_signals = signals.soft_signals.iter()
+                .map(|s| s.description.clone())
+                .collect();
         }
-        Ok(response)
+        
+        // Use GenerationEngine for proper CoT/Reflexion
+        let gen_engine = GenerationEngine::new()?;
+        use crate::tokenizer::TokenizedResult;
+        let tokenized = TokenizedResult {
+            tokens: input.text.split_whitespace().map(|s| s.to_string()).collect(),
+        };
+        
+        let soft_sigs_opt = if soft_signals.is_empty() { None } else { Some(&soft_signals) };
+        let gen_result = gen_engine.generate(&tokenized, reflection.as_ref(), soft_sigs_opt).await?;
+        
+        Ok(gen_result.text)
     }
 
     /// Stage 8: Phase 6 Integration

@@ -586,6 +586,34 @@ impl GenerationEngine {
         self.gpu_available
     }
 
+    /// Phase 2: CoT self-correction for soft failures (micro level)
+    /// Generates a step-by-step reasoning prompt to correct low-confidence tokens
+    pub async fn cot_self_correct(&self, prompt: &str, low_conf_token: &str) -> Result<String> {
+        let cot_prompt = format!(
+            "Re-evaluate critical reasoning step by step, focusing on [{}].\n\n{}",
+            low_conf_token, prompt
+        );
+        info!("CoT self-correction: {} chars", cot_prompt.len());
+        self.request_text(&cot_prompt).await.map(|(text, _)| text)
+    }
+
+    /// Phase 2: Reflexion retry for hard failures (meso level)
+    /// Generates reflection on failure, stores it, then retries with augmented prompt
+    pub async fn reflexion_retry(
+        &self,
+        prompt: &str,
+        rouge: f64,
+        details: &str,
+    ) -> Result<String> {
+        let reflection = format!(
+            "Failed due to low ROUGE: {:.3}. Hypothesis: {}\n\nRetry with corrected reasoning:",
+            rouge, details
+        );
+        let augmented = format!("{}\n\nOriginal prompt: {}", reflection, prompt);
+        info!("Reflexion retry: ROUGE={:.3}, {} chars", rouge, augmented.len());
+        self.request_text(&augmented).await.map(|(text, _)| text)
+    }
+
     fn format_lens_prompt(prompt: &str, directive: &str, compass: &CompassOutcome) -> String {
         let clipped = Self::clamp_prompt(prompt);
         let pulse = snippet(&clipped, 180);

@@ -144,6 +144,34 @@ impl Default for BackendType {
     }
 }
 
+fn default_max_retries() -> u32 {
+    3
+}
+
+fn default_retry_base_delay_ms() -> u64 {
+    200
+}
+
+fn default_similarity_threshold() -> f32 {
+    0.5
+}
+
+fn default_level3_retry_count() -> u32 {
+    2
+}
+
+fn default_mcts_c_increment() -> f64 {
+    0.1
+}
+
+fn default_top_p_increment() -> f64 {
+    0.05
+}
+
+fn default_retrieval_top_k_increment() -> i32 {
+    2
+}
+
 impl BackendType {
     pub fn from_env() -> Self {
         std::env::var("GENERATION_BACKEND")
@@ -174,6 +202,24 @@ pub struct RuntimeConfig {
     pub entropy_cycles_for_baseline: usize,
     #[serde(default)]
     pub enable_consistency_voting: bool,
+
+    // Phase 2 retry configuration
+    #[serde(default = "default_max_retries")]
+    pub phase2_max_retries: u32,
+    #[serde(default = "default_retry_base_delay_ms")]
+    pub phase2_retry_base_delay_ms: u64,
+    #[serde(default = "default_similarity_threshold")]
+    pub similarity_threshold: f32,
+    
+    // Phase 2 Level3+ escalation (MCTS param tuning)
+    #[serde(default = "default_level3_retry_count")]
+    pub phase2_level3_retry_count: u32,
+    #[serde(default = "default_mcts_c_increment")]
+    pub phase2_mcts_c_increment: f64,
+    #[serde(default = "default_top_p_increment")]
+    pub phase2_top_p_increment: f64,
+    #[serde(default = "default_retrieval_top_k_increment")]
+    pub phase2_retrieval_top_k_increment: i32,
 
     // Generation backend configuration
     #[serde(default)]
@@ -328,6 +374,34 @@ impl RuntimeConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(512); // Default dynamic clamp maximum
 
+        let phase2_max_retries = env_with_fallback(&["PHASE2_MAX_RETRIES"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default_max_retries());
+
+        let phase2_retry_base_delay_ms = env_with_fallback(&["PHASE2_RETRY_BASE_DELAY_MS"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default_retry_base_delay_ms());
+
+        let similarity_threshold = env_with_fallback(&["SIMILARITY_THRESHOLD"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default_similarity_threshold());
+
+        let phase2_level3_retry_count = env_with_fallback(&["PHASE2_LEVEL3_RETRY_COUNT"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default_level3_retry_count());
+
+        let phase2_mcts_c_increment = env_with_fallback(&["PHASE2_MCTS_C_INCREMENT"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default_mcts_c_increment());
+
+        let phase2_top_p_increment = env_with_fallback(&["PHASE2_TOP_P_INCREMENT"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default_top_p_increment());
+
+        let phase2_retrieval_top_k_increment = env_with_fallback(&["PHASE2_RETRIEVAL_TOP_K_INCREMENT"])
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default_retrieval_top_k_increment());
+
         Ok(Self {
             vllm_endpoint,
             vllm_model,
@@ -340,6 +414,13 @@ impl RuntimeConfig {
             rut_gauntlet_path,
             entropy_cycles_for_baseline,
             enable_consistency_voting,
+            phase2_max_retries,
+            phase2_retry_base_delay_ms,
+            similarity_threshold,
+            phase2_level3_retry_count,
+            phase2_mcts_c_increment,
+            phase2_top_p_increment,
+            phase2_retrieval_top_k_increment,
             generation_backend,
             enable_curator,
             curator_model_name,
