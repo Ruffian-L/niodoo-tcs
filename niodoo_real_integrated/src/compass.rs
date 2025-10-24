@@ -19,6 +19,7 @@ pub struct CompassOutcome {
     pub is_healing: bool,
     pub mcts_branches: Vec<MctsBranch>,
     pub intrinsic_reward: f64,
+    pub ucb1_score: Option<f64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -148,12 +149,15 @@ impl CompassEngine {
         self.last_entropy = Some(state.entropy);
         self.last_variance = Some(variance);
 
+        let ucb1_score = mcts_branches.first().map(|b| b.ucb_score);
+        
         let outcome = CompassOutcome {
             quadrant,
             is_threat,
             is_healing,
             mcts_branches,
             intrinsic_reward,
+            ucb1_score: ucb1_score,
         };
 
         self.ingest_outcome(state, &outcome, variance);

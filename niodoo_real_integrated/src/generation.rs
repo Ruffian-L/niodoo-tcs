@@ -671,7 +671,6 @@ impl GenerationEngine {
         &self,
         prompt: &str,
         previous_gen: &GenerationResult,
-        tokenizer_output: &TokenizerOutput,
         detail: &str,
         retry_index: u32,
     ) -> Result<GenerationResult> {
@@ -692,20 +691,126 @@ impl GenerationEngine {
         temp: f64,
         top_p: f64,
     ) -> Result<GenerationResult> {
-        // Stub: simulate or call actual generation with params
-        let text = format!("Generated with temp {temp:.2}, top_p {top_p:.2}: {prompt}");
+        let start = Instant::now();
+        
+        // Prepare messages for generation
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: "Implement the EXACT 3D labyrinth solver in Python using Dijkstra with priority queue. Use the provided 7x7x7 grid, handle echo chambers with state (consec_echoes 0-3, attune_timer 0-3, multiplier starting at 1, doubles on distract, halves on attune). Ignore any metaphorical language; focus strictly on implementing the algorithm as described. Output ONLY the complete code showing Path list, Total cost (expected 46), Steps. No text or philosophy.\n\"Include full grid definition and state logic as specified.\"".to_string(),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            },
+        ];
+
+        // Call generation with custom params
+        let result = self.send_chat_with_custom_params(messages, temp, top_p, true).await;
+        
+        let (generated_text, logprobs) = match result {
+            Ok((text, lp)) => (text, lp),
+            Err(e) => {
+                warn!(?e, "Generation failed, returning fallback");
+                return Ok(GenerationResult {
+                    baseline_response: "Generation failed".to_string(),
+                    hybrid_response: "Generation failed".to_string(),
+                    echoes: vec![],
+                    rouge_to_baseline: 0.0,
+                    latency_ms: start.elapsed().as_secs_f64() * 1000.0,
+                    rouge_score: 0.0,
+                    entropy_delta: 0.0,
+                    source: "failed".to_string(),
+                    failure_type: Some("hard".to_string()),
+                    failure_details: Some(format!("Generation error: {}", e)),
+                });
+            }
+        };
+
+        // Compute entropy delta from logprobs
+        let entropy_delta = if let Some(ref lp) = logprobs {
+            let logprob_values: Vec<f64> = lp.iter().map(|token| token.logprob).collect();
+            entropy_from_logprobs(&logprob_values)
+        } else {
+            0.0
+        };
+
+        // Compute rouge score comparing to prompt (baseline)
+        let rouge_score = rouge_l(&generated_text, prompt);
+
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
         Ok(GenerationResult {
-            baseline_response: text.clone(),
-            hybrid_response: text.clone(),
+            baseline_response: generated_text.clone(),
+            hybrid_response: generated_text.clone(),
             echoes: vec![],
-            rouge_to_baseline: 0.0,
-            latency_ms: 100.0,
-            rouge_score: 0.7, // Fixed for stub
-            entropy_delta: 0.05,
+            rouge_to_baseline: rouge_score,
+            latency_ms,
+            rouge_score,
+            entropy_delta,
             source: "param_tuned".to_string(),
             failure_type: None,
             failure_details: None,
         })
+    }
+
+    /// Send chat with custom temperature and top_p parameters
+    async fn send_chat_with_custom_params(
+        &self,
+        messages: Vec<ChatMessage>,
+        temp: f64,
+        top_p: f64,
+        enable_logprobs: bool,
+    ) -> Result<(String, Option<Vec<LogProbToken>>)> {
+        // Dynamic max_tokens based on message complexity
+        let prompt_len: usize = messages.iter().map(|m| m.content.len()).sum();
+        let dynamic_max_tokens =
+            (prompt_len * 2).clamp(self.dynamic_token_min, self.dynamic_token_max);
+
+        let payload = ChatCompletionRequest {
+            model: self.model.clone(),
+            messages,
+            temperature: temp,
+            top_p,
+            repetition_penalty: 1.2,
+            max_tokens: dynamic_max_tokens.max(self.max_tokens),
+            logprobs: if enable_logprobs { Some(true) } else { None },
+            top_logprobs: if enable_logprobs { Some(0) } else { None },
+        };
+
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .json(&payload)
+            .send()
+            .await
+            .with_context(|| format!("failed to call vLLM endpoint {}", self.endpoint))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            warn!(%status, %body, "vLLM returned error status");
+            anyhow::bail!("vLLM request failed: {status}");
+        }
+
+        let completion: ChatCompletionResponse = response
+            .json()
+            .await
+            .context("failed to parse vLLM chat completion response")?;
+
+        let content = completion
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.clone())
+            .unwrap_or_default();
+
+        let logprobs = completion
+            .choices
+            .first()
+            .and_then(|choice| choice.logprobs.as_ref())
+            .map(|lp| lp.content.clone());
+
+        Ok((content, logprobs))
     }
 }
 
@@ -790,7 +895,7 @@ struct LogProbs {
     content: Vec<LogProbToken>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct LogProbToken {
     #[serde(default)]
     logprob: f64,

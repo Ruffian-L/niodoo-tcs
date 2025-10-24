@@ -178,6 +178,7 @@ fn emotion_to_int(emotion: &EmotionType) -> c_int {
         EmotionType::Contemplative => 23,
         EmotionType::SelfReflective => 24,
         EmotionType::Engaged => 25,
+        EmotionType::Neutral => 26,
     }
 }
 

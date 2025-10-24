@@ -80,13 +80,14 @@ pub struct StageTimings {
 
 pub struct Pipeline {
     pub config: RuntimeConfig,
+    config_arc: Arc<Mutex<RuntimeConfig>>,
     pub args: CliArgs,
     pub thresholds: Thresholds,
     pub dataset_stats: DatasetStats,
     embedder: QwenStatefulEmbedder,
     torus: TorusPadMapper,
     compass: Arc<Mutex<CompassEngine>>,
-    erag: EragClient,
+    erag: Arc<EragClient>,
     tokenizer: TokenizerEngine,
     generator: GenerationEngine,
     learning: LearningLoop,
@@ -143,9 +144,16 @@ impl Pipeline {
         if let Err(error) = generator.warmup().await {
             warn!(?error, "vLLM warmup failed");
         }
+        let config_arc = Arc::new(Mutex::new(config.clone()));
+        let erag_arc = Arc::new(erag.clone());
         let learning = LearningLoop::new(
-            config.entropy_cycles_for_baseline.max(8),
-            thresholds.variance_spike,
+            config.learning_window,
+            config.breakthrough_threshold,
+            config.dqn_epsilon,
+            config.dqn_gamma,
+            config.dqn_alpha,
+            erag_arc.clone(),
+            config_arc.clone(),
         );
 
         // Initialize TCS analyzer
@@ -179,14 +187,15 @@ impl Pipeline {
         let cache_capacity = NonZeroUsize::new(256).unwrap();
 
         Ok(Self {
-            config,
+            config: config.clone(),
+            config_arc: config_arc.clone(),
             args,
             thresholds,
             dataset_stats: stats,
             embedder,
             torus,
             compass,
-            erag,
+            erag: erag_arc.clone(),
             tokenizer,
             generator,
             learning,
@@ -359,7 +368,7 @@ impl Pipeline {
         );
 
         // Phase 2: Handle retries with Reflection and CoT
-        let (final_generation, final_failure) = self
+        let (final_generation, final_failure, threat_cycle_ms) = self
             .handle_retry_with_reflection(
                 prompt,
                 &failure,
@@ -373,6 +382,9 @@ impl Pipeline {
                 ucb1_score,
             )
             .await?;
+        
+        // Update timings with threat cycle timing
+        timings.threat_cycle_ms = threat_cycle_ms;
 
         // Log to ERAG if failure != "none"
         if final_failure != "none" {
@@ -543,10 +555,10 @@ impl Pipeline {
         entropy_delta: f64,
         curator_quality: f64,
         ucb1_score: f64,
-    ) -> Result<(GenerationResult, String)> {
-        // No failure, return original
+    ) -> Result<(GenerationResult, String, f64)> {
+        // No failure, return original with zero threat cycle time
         if initial_failure == "none" {
-            return Ok((generation.clone(), "none".to_string()));
+            return Ok((generation.clone(), "none".to_string(), 0.0));
         }
 
         let max_retries = self.config.phase2_max_retries;
@@ -677,19 +689,17 @@ impl Pipeline {
             if retry_count >= max_retries {
                 warn!("Circuit breaker triggered: Escalating to Phase 3 (threat->healing cycle)");
                 // Phase 3 would handle long-term recovery (e.g., threat cycle activation)
-                // For now, log the escalation
-                info!(
-                    "Phase 3 escalation: retry_count={}, failure={}, details={}",
-                    retry_count, current_failure, details
+                // Return error to prevent further processing
+                anyhow::bail!(
+                    "Circuit breaker escalated: retry_count={} >= max_retries={}, failure={}, details={}",
+                    retry_count, max_retries, current_failure, details
                 );
             }
         }
 
         let threat_cycle_ms = loop_start.elapsed().as_secs_f64() * 1000.0;
-        let mut timings = StageTimings::default();
-        timings.threat_cycle_ms = threat_cycle_ms;
 
-        Ok((current_gen, current_failure))
+        Ok((current_gen, current_failure, threat_cycle_ms))
     }
 
     async fn integrate_curator(

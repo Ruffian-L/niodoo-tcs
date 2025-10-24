@@ -257,22 +257,22 @@ impl GeometryOfThoughtConsciousness {
             .sum::<f64>()
             / attractor.final_activity.len() as f64;
 
+        // Convert attractor dynamics to valence-arousal-dominance model
+        let valence = if (attractor.bump_center / 100.0 - 0.5) > 0.0 {
+            0.7  // Positive valence for satisfied
+        } else {
+            -0.5  // Negative valence for frustrated
+        };
+        
+        let arousal = (activity_sum / attractor.final_activity.len() as f64).clamp(0.0, 1.0);
+        let dominance = (1.0 - activity_variance.sqrt()).clamp(-1.0, 1.0);
+        let authenticity = 0.8;
+
         EmotionalState {
-            primary_emotion: if (attractor.bump_center / 100.0 - 0.5) > 0.0 {
-                EmotionType::Satisfied
-            } else {
-                EmotionType::Frustrated
-            },
-            secondary_emotions: vec![],
-            authenticity_level: 0.8,
-            emotional_complexity: (activity_variance.sqrt() * 1000.0) as f32,
-            gpu_warmth_level: (activity_sum / attractor.final_activity.len() as f64 * 1000.0)
-                as f32,
-            masking_level: 0.2,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs_f64(),
+            valence,
+            arousal,
+            dominance,
+            authenticity,
         }
     }
 
@@ -283,17 +283,19 @@ impl GeometryOfThoughtConsciousness {
         emotion: &EmotionalState,
         learning: f64,
     ) -> String {
-        let emotional_desc = match emotion.primary_emotion {
-            EmotionType::Satisfied | EmotionType::AuthenticCare | EmotionType::Connected => {
-                "positive"
-            }
-            EmotionType::Anxious | EmotionType::Frustrated | EmotionType::Overwhelmed => "negative",
-            _ => "neutral",
+        // Map valence to emotional description
+        let emotional_desc = if emotion.valence > 0.3 {
+            "positive"
+        } else if emotion.valence < -0.3 {
+            "negative"
+        } else {
+            "neutral"
         };
 
-        let arousal_desc = if emotion.emotional_complexity > 0.7 {
+        // Map arousal to engagement level
+        let arousal_desc = if emotion.arousal > 0.7 {
             "highly engaged"
-        } else if emotion.emotional_complexity < 0.3 {
+        } else if emotion.arousal < 0.3 {
             "calm"
         } else {
             "moderately engaged"
@@ -315,8 +317,26 @@ impl GeometryOfThoughtConsciousness {
         // Update position in hyperbolic space
         // self.consciousness_state.current_position = Some(response.hyperbolic_position.clone()); // Field removed
 
-        // Update emotional state
-        self.consciousness_state.emotional_state = response.emotional_state.clone();
+        // Update emotional state - convert from MobiusEmotionalState to ConsciousnessEmotionalState
+        use crate::consciousness::ConsciousnessEmotionalState;
+        self.consciousness_state.emotional_state = ConsciousnessEmotionalState {
+            primary_emotion: if response.emotional_state.valence > 0.3 {
+                EmotionType::Satisfied
+            } else if response.emotional_state.valence < -0.3 {
+                EmotionType::Frustrated
+            } else {
+                EmotionType::Neutral
+            },
+            secondary_emotions: vec![],
+            authenticity_level: response.emotional_state.authenticity as f32,
+            emotional_complexity: (response.emotional_state.arousal * 2.0) as f32,
+            gpu_warmth_level: response.emotional_state.arousal as f32,
+            masking_level: (1.0 - response.emotional_state.authenticity) as f32,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs_f64(),
+        };
 
         // Update cognitive load based on learning signal
         self.consciousness_state.cognitive_load = response.learning_signal;

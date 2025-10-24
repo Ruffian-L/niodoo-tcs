@@ -55,6 +55,7 @@ pub struct EragMemory {
     pub iteration_count: u32,
 }
 
+#[derive(Clone)]
 pub struct EragClient {
     client: Client,
     base_url: String,
@@ -68,6 +69,7 @@ pub struct CollapseResult {
     pub top_hits: Vec<EragMemory>,
     pub aggregated_context: String,
     pub average_similarity: f32,
+    pub curator_quality: Option<f32>,
     pub failure_type: Option<String>,
     pub failure_details: Option<String>,
 }
@@ -205,6 +207,7 @@ impl EragClient {
             top_hits: memories,
             aggregated_context,
             average_similarity,
+            curator_quality: Some(average_similarity as f32),
             failure_type: None,
             failure_details: None,
         })
@@ -271,10 +274,10 @@ impl EragClient {
         &self,
         prompt: &str,
         output: &str,
-        metrics: &crate::metrics::PipelineMetrics,
+        _metrics: &crate::metrics::PipelineMetrics,
         reflection: Option<String>,
-        failure_tier: &str,
-        retry_count: u32,
+        _failure_tier: &str,
+        _retry_count: u32,
     ) -> Result<()> {
         // Store failure as a memory with a special flag
         // For now, we'll log it. In production, you'd want to mark it specially in Qdrant

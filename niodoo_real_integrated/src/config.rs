@@ -172,6 +172,26 @@ fn default_retrieval_top_k_increment() -> i32 {
     2
 }
 
+fn default_dqn_epsilon() -> f64 {
+    0.9
+}
+
+fn default_dqn_gamma() -> f64 {
+    0.99
+}
+
+fn default_dqn_alpha() -> f64 {
+    0.1
+}
+
+fn default_learning_window() -> usize {
+    10
+}
+
+fn default_breakthrough_threshold() -> f64 {
+    0.2
+}
+
 impl BackendType {
     pub fn from_env() -> Self {
         std::env::var("GENERATION_BACKEND")
@@ -241,6 +261,22 @@ pub struct RuntimeConfig {
     pub generation_max_tokens: usize,
     pub dynamic_token_min: usize,
     pub dynamic_token_max: usize,
+
+    // Phase 3: DQN parameters for macro-scale adaptive learning
+    #[serde(default = "default_dqn_epsilon")]
+    pub dqn_epsilon: f64,
+    #[serde(default = "default_dqn_gamma")]
+    pub dqn_gamma: f64,
+    #[serde(default = "default_dqn_alpha")]
+    pub dqn_alpha: f64,
+    #[serde(default = "default_learning_window")]
+    pub learning_window: usize,
+    #[serde(default = "default_breakthrough_threshold")]
+    pub breakthrough_threshold: f64,
+    
+    // Generation parameters
+    pub temperature: f64,
+    pub top_p: f64,
 }
 
 impl RuntimeConfig {
@@ -436,6 +472,13 @@ impl RuntimeConfig {
             generation_max_tokens,
             dynamic_token_min,
             dynamic_token_max,
+            dqn_epsilon: default_dqn_epsilon(),
+            dqn_gamma: default_dqn_gamma(),
+            dqn_alpha: default_dqn_alpha(),
+            learning_window: default_learning_window(),
+            breakthrough_threshold: default_breakthrough_threshold(),
+            temperature: 0.7,
+            top_p: 0.9,
         })
     }
 }
@@ -512,7 +555,7 @@ fn load_env_file(path: &Path) -> Result<()> {
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("unable to read env file {}", path.display()))?;
 
-    for (line_index, line) in contents.lines().enumerate() {
+    for (_line_index, line) in contents.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;

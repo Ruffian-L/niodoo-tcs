@@ -2237,9 +2237,9 @@ impl ConsciousnessMemoryProcessor {
     /// Calculate attachment security based on processing stability
     fn calculate_attachment_security(&self) -> f64 {
         // Attachment security grows with consistent, stable processing
-        let base_security = 0.5;
-        let coherence_bonus = self.consciousness_state.coherence * 0.3;
-        let resonance_bonus = self.consciousness_state.emotional_resonance * 0.2;
+        let base_security = 0.5f64;
+        let coherence_bonus = self.consciousness_state.coherence * 0.3f64;
+        let resonance_bonus = self.consciousness_state.emotional_resonance * 0.2f64;
 
         (base_security + coherence_bonus + resonance_bonus).min(1.0f64)
     }
@@ -2249,7 +2249,7 @@ impl ConsciousnessMemoryProcessor {
         let latency_ms = processing_time.as_millis() as f64;
 
         // Update rolling average latency with dynamic smoothing
-        let alpha = (0.05 + self.consciousness_state.coherence * 0.1).min(0.2f64); // Dynamic smoothing factor
+        let alpha = (0.05f64 + self.consciousness_state.coherence * 0.1f64).min(0.2f64); // Dynamic smoothing factor
         self.performance_monitor.avg_latency_ms =
             alpha * latency_ms + (1.0 - alpha) * self.performance_monitor.avg_latency_ms;
 

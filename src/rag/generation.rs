@@ -2,7 +2,7 @@
 //! Copyright (c) 2025 Jason Van Pham
 
 use super::{retrieval::RetrievalEngine, Document};
-use niodoo_core::ConsciousnessState;
+use crate::consciousness::ConsciousnessState;
 // Temporarily disabled due to ONNX linking issues
 // // use crate::qwen_inference::QwenInference; // Temporarily disabled
 use anyhow::Result;
@@ -19,7 +19,7 @@ impl RagGeneration {
     fn process_query(
         &mut self,
         query: &str,
-        context: &crate::consciousness::ConsciousnessState,
+        context: &ConsciousnessState,
     ) -> Result<String> {
         // Create a temporary mutable state for processing
         let mut temp_state = context.clone();
@@ -165,7 +165,7 @@ impl RagGeneration {
     pub fn generate(
         &mut self,
         query: &str,
-        state: &mut crate::consciousness::ConsciousnessState,
+        state: &mut ConsciousnessState,
     ) -> Result<String> {
         // Use real retrieval with consciousness state
         let retrieved_with_scores = self.retrieval.retrieve(query, state);
@@ -323,7 +323,7 @@ Response:"#,
     /// Update consciousness state based on RAG process
     fn update_consciousness_state(
         &self,
-        state: &mut crate::consciousness::ConsciousnessState,
+        state: &mut ConsciousnessState,
         documents: &[Document],
     ) -> Result<()> {
         // Boost empathy resonance based on document relevance

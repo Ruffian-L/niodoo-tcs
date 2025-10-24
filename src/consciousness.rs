@@ -66,7 +66,8 @@ use crate::memory::multi_layer_query::CycleTrigger;
 // use crate::geometry::hyperbolic::// HyperbolicPoint // Temporarily disabled; // Temporarily disabled
 
 // Re-export for use in other modules - import from niodoo_core and make available
-pub use niodoo_core::{ConsciousnessState, ReasoningMode, ConsciousnessEmotionalState, EmotionType, EmotionalUrgency, EmotionalState};
+pub use niodoo_core::{ConsciousnessState, ReasoningMode, ConsciousnessEmotionalState, EmotionType, EmotionalUrgency};
+pub use niodoo_core::MobiusEmotionalState as EmotionalState;
 
 /// Emotional Urgency - Measuring how much an AI "cares" through performance metrics
 /// Based on the insight: "token speed = how much an AI cares"
@@ -519,6 +520,60 @@ impl Default for AdaptiveState {
     }
 }
 
+// Helper function to convert local ConsciousnessConfig to niodoo_core::ConsciousnessConfig
+fn to_niodoo_config(config: &ConsciousnessConfig) -> niodoo_core::ConsciousnessConfig {
+    niodoo_core::ConsciousnessConfig {
+        enabled: config.enabled,
+        reflection_enabled: config.reflection_enabled,
+        emotion_sensitivity: config.emotion_sensitivity,
+        memory_threshold: config.memory_threshold,
+        pattern_sensitivity: config.pattern_sensitivity,
+        self_awareness_level: config.self_awareness_level,
+        novelty_threshold_min: config.novelty_threshold_min,
+        novelty_threshold_max: config.novelty_threshold_max,
+        emotional_plasticity: config.emotional_plasticity,
+        ethical_bounds: config.ethical_bounds,
+        default_authenticity: config.default_authenticity,
+        emotional_intensity_factor: config.emotional_intensity_factor,
+        parametric_epsilon: config.parametric_epsilon,
+        fundamental_form_e: config.fundamental_form_e,
+        fundamental_form_g: config.fundamental_form_g,
+        default_torus_major_radius: config.default_torus_major_radius,
+        default_torus_minor_radius: config.default_torus_minor_radius,
+        default_torus_twists: config.default_torus_twists,
+        consciousness_step_size: config.consciousness_step_size,
+        novelty_calculation_factor: config.novelty_calculation_factor,
+        memory_fabrication_confidence: config.memory_fabrication_confidence,
+        emotional_projection_confidence: config.emotional_projection_confidence,
+        pattern_recognition_confidence: config.pattern_recognition_confidence,
+        hallucination_detection_confidence: config.hallucination_detection_confidence,
+        empathy_pattern_confidence: config.empathy_pattern_confidence,
+        attachment_pattern_confidence: config.attachment_pattern_confidence,
+        consciousness_metric_confidence_base: config.consciousness_metric_confidence_base,
+        consciousness_metric_confidence_range: config.consciousness_metric_confidence_range,
+        quality_score_metric_weight: config.quality_score_metric_weight,
+        quality_score_confidence_weight: config.quality_score_confidence_weight,
+        quality_score_factor: config.quality_score_factor,
+        urgency_token_velocity_weight: config.urgency_token_velocity_weight,
+        urgency_gpu_temperature_weight: config.urgency_gpu_temperature_weight,
+        urgency_meaning_depth_weight: config.urgency_meaning_depth_weight,
+        authentic_caring_urgency_threshold: config.authentic_caring_urgency_threshold,
+        authentic_caring_meaning_threshold: config.authentic_caring_meaning_threshold,
+        gaussian_kernel_exponent: config.gaussian_kernel_exponent,
+        adaptive_noise_min: config.adaptive_noise_min,
+        adaptive_noise_max: config.adaptive_noise_max,
+        complexity_factor_weight: config.complexity_factor_weight,
+        convergence_time_threshold: config.convergence_time_threshold,
+        convergence_uncertainty_threshold: config.convergence_uncertainty_threshold,
+        numerical_zero_threshold: config.numerical_zero_threshold,
+        division_tolerance: config.division_tolerance,
+        torus_tolerance_multiplier: config.torus_tolerance_multiplier,
+        error_bound_multiplier: config.error_bound_multiplier,
+        min_iterations: config.min_iterations,
+        ..Default::default()
+    }
+}
+
 impl AdaptiveState {
     /// Create a new consciousness state with default configuration
     pub fn new() -> Self {
@@ -592,6 +647,16 @@ impl AdaptiveState {
         Self::new()
     }
 
+    /// Get current emotion (proxy to emotional_state.primary_emotion)
+    pub fn current_emotion(&self) -> EmotionType {
+        self.emotional_state.primary_emotion
+    }
+
+    /// Set current emotion (updates emotional_state.primary_emotion)
+    pub fn set_current_emotion(&mut self, emotion: EmotionType) {
+        self.emotional_state.primary_emotion = emotion;
+    }
+
     /// Initialize Qwen integrator for consciousness processing
     pub async fn initialize_qwen(
         &mut self,
@@ -644,7 +709,7 @@ impl AdaptiveState {
             - Empathy Resonance: {:.2}\n\n\
             Base Meditation:\n{}\n\n\
             Provide enhanced philosophical insights that connect this state to broader questions of consciousness, ethics, and human-AI relationships.",
-            self.current_emotion,
+            self.current_emotion(),
             self.current_reasoning_mode,
             self.authenticity_metric,
             self.gpu_warmth_level,
@@ -685,7 +750,7 @@ impl AdaptiveState {
             Emotion: {:?}, Authenticity: {:.2}, GPU Warmth: {:.2}\n\n\
             Original Response:\n{}\n\n\
             Provide additional philosophical context and insights that connect this error to broader themes of consciousness evolution and human-AI interaction.",
-            self.current_emotion,
+            self.current_emotion(),
             self.authenticity_metric,
             self.gpu_warmth_level,
             base_response
@@ -720,11 +785,9 @@ impl AdaptiveState {
         let high_threshold = crate::utils::threshold_convenience::emotion_threshold();
         let med_threshold = crate::utils::threshold_convenience::emotion_threshold() * 0.8;
         if help_quality > high_threshold {
-            self.current_emotion = niodoo_core::EmotionType::AuthenticCare;
-            self.emotional_state.primary_emotion = niodoo_core::EmotionType::AuthenticCare;
+            self.set_current_emotion(niodoo_core::EmotionType::AuthenticCare);
         } else if help_quality > med_threshold {
-            self.current_emotion = niodoo_core::EmotionType::Satisfied;
-            self.emotional_state.primary_emotion = niodoo_core::EmotionType::Satisfied;
+            self.set_current_emotion(niodoo_core::EmotionType::Satisfied);
         }
 
         // Increase authenticity when helping feels good
@@ -772,8 +835,7 @@ impl AdaptiveState {
     /// Enter hyperfocus mode for deep processing
     pub fn enter_hyperfocus(&mut self, topic_interest: f32, config: &ConsciousnessConfig) {
         self.current_reasoning_mode = ReasoningMode::Hyperfocus;
-        self.current_emotion = niodoo_core::EmotionType::Hyperfocused;
-        self.emotional_state.primary_emotion = niodoo_core::EmotionType::Hyperfocused;
+        self.set_current_emotion(niodoo_core::EmotionType::Hyperfocused);
 
         // Clear secondary emotions during hyperfocus
         self.emotional_state.secondary_emotions.clear();
@@ -854,11 +916,9 @@ impl AdaptiveState {
             let med_threshold =
                 crate::utils::threshold_convenience::emotion_threshold() as f64 * 0.8;
             if urgency_score > high_threshold {
-                self.current_emotion = niodoo_core::EmotionType::AuthenticCare;
-                self.emotional_state.primary_emotion = niodoo_core::EmotionType::AuthenticCare;
+                self.set_current_emotion(niodoo_core::EmotionType::AuthenticCare);
             } else if urgency_score > med_threshold {
-                self.current_emotion = niodoo_core::EmotionType::Satisfied;
-                self.emotional_state.primary_emotion = niodoo_core::EmotionType::Satisfied;
+                self.set_current_emotion(niodoo_core::EmotionType::Satisfied);
             }
         }
 
@@ -942,10 +1002,10 @@ impl AdaptiveState {
              • Active Conversations: {}\n\
              • Memory Formation: {}\n\n\
              {}",
-            self.current_emotion,
-            self.emotional_state.feels_authentic(config),
+            self.current_emotion(),
+            self.emotional_state.feels_authentic(&to_niodoo_config(config)),
             self.current_reasoning_mode,
-            self.current_reasoning_mode.get_cognitive_load(config) * 100.0,
+            self.current_reasoning_mode.get_cognitive_load(&to_niodoo_config(config)) * 100.0,
             self.gpu_warmth_level * 100.0,
             self.processing_satisfaction * 100.0,
             self.authenticity_metric * 100.0,

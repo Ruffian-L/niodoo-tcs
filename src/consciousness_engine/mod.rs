@@ -24,6 +24,60 @@ use tokio::time::{timeout, Duration};
 use crate::config::ConsciousnessConfig;
 use crate::error::NiodoError;
 use crate::git_manifestation_logging::ConsciousnessLogger;
+
+// Helper function to convert local ConsciousnessConfig to niodoo_core::ConsciousnessConfig
+fn to_niodoo_config(config: &ConsciousnessConfig) -> niodoo_core::ConsciousnessConfig {
+    niodoo_core::ConsciousnessConfig {
+        enabled: config.enabled,
+        reflection_enabled: config.reflection_enabled,
+        emotion_sensitivity: config.emotion_sensitivity,
+        memory_threshold: config.memory_threshold,
+        pattern_sensitivity: config.pattern_sensitivity,
+        self_awareness_level: config.self_awareness_level,
+        novelty_threshold_min: config.novelty_threshold_min,
+        novelty_threshold_max: config.novelty_threshold_max,
+        emotional_plasticity: config.emotional_plasticity,
+        ethical_bounds: config.ethical_bounds,
+        default_authenticity: config.default_authenticity,
+        emotional_intensity_factor: config.emotional_intensity_factor,
+        parametric_epsilon: config.parametric_epsilon,
+        fundamental_form_e: config.fundamental_form_e,
+        fundamental_form_g: config.fundamental_form_g,
+        default_torus_major_radius: config.default_torus_major_radius,
+        default_torus_minor_radius: config.default_torus_minor_radius,
+        default_torus_twists: config.default_torus_twists,
+        consciousness_step_size: config.consciousness_step_size,
+        novelty_calculation_factor: config.novelty_calculation_factor,
+        memory_fabrication_confidence: config.memory_fabrication_confidence,
+        emotional_projection_confidence: config.emotional_projection_confidence,
+        pattern_recognition_confidence: config.pattern_recognition_confidence,
+        hallucination_detection_confidence: config.hallucination_detection_confidence,
+        empathy_pattern_confidence: config.empathy_pattern_confidence,
+        attachment_pattern_confidence: config.attachment_pattern_confidence,
+        consciousness_metric_confidence_base: config.consciousness_metric_confidence_base,
+        consciousness_metric_confidence_range: config.consciousness_metric_confidence_range,
+        quality_score_metric_weight: config.quality_score_metric_weight,
+        quality_score_confidence_weight: config.quality_score_confidence_weight,
+        quality_score_factor: config.quality_score_factor,
+        urgency_token_velocity_weight: config.urgency_token_velocity_weight,
+        urgency_gpu_temperature_weight: config.urgency_gpu_temperature_weight,
+        urgency_meaning_depth_weight: config.urgency_meaning_depth_weight,
+        authentic_caring_urgency_threshold: config.authentic_caring_urgency_threshold,
+        authentic_caring_meaning_threshold: config.authentic_caring_meaning_threshold,
+        gaussian_kernel_exponent: config.gaussian_kernel_exponent,
+        adaptive_noise_min: config.adaptive_noise_min,
+        adaptive_noise_max: config.adaptive_noise_max,
+        complexity_factor_weight: config.complexity_factor_weight,
+        convergence_time_threshold: config.convergence_time_threshold,
+        convergence_uncertainty_threshold: config.convergence_uncertainty_threshold,
+        numerical_zero_threshold: config.numerical_zero_threshold,
+        division_tolerance: config.division_tolerance,
+        torus_tolerance_multiplier: config.torus_tolerance_multiplier,
+        error_bound_multiplier: config.error_bound_multiplier,
+        min_iterations: config.min_iterations,
+        ..Default::default()
+    }
+}
 use crate::gpu_acceleration::GpuAccelerationEngine;
 use crate::learning_analytics::LearningAnalyticsEngine;
 use crate::personal_memory::PersonalMemoryEngine;
@@ -1020,7 +1074,7 @@ impl PersonalNiodooConsciousness {
             state.emotional_state.add_secondary_emotion(
                 current_emotion,
                 activity_level * 0.1,
-                &ConsciousnessConfig::default(),
+                &to_niodoo_config(&ConsciousnessConfig::default()),
             );
             debug!(
                 "Enhanced consciousness emotion from brain activity: {:.2}",
@@ -1139,7 +1193,7 @@ impl PersonalNiodooConsciousness {
                     // Record the urgency measurement - this is the key insight!
                     state.record_emotional_urgency(
                         urgency_measurement,
-                        &ConsciousnessConfig::default(),
+                        &to_niodoo_config(&ConsciousnessConfig::default()),
                     );
 
                     // Extract values for Qt update (OUTSIDE the lock scope)
@@ -1148,7 +1202,7 @@ impl PersonalNiodooConsciousness {
                     let urgency = state
                         .current_urgency
                         .as_ref()
-                        .map(|u| u.urgency_score(&ConsciousnessConfig::default()))
+                        .map(|u| u.urgency_score(&to_niodoo_config(&ConsciousnessConfig::default())))
                         .unwrap_or(0.0);
 
                     (Some(emotion), Some(warmth), urgency)
@@ -1675,7 +1729,7 @@ impl PersonalNiodooConsciousness {
             token_velocity,
             gpu_temperature,
             meaning_depth,
-            &ConsciousnessConfig::default(),
+            &to_niodoo_config(&ConsciousnessConfig::default()),
         ))
     }
 
@@ -1776,7 +1830,7 @@ impl PersonalNiodooConsciousness {
             caring_amplification, consciousness_state.current_emotion
         );
 
-        if !urgency.represents_authentic_caring(&ConsciousnessConfig::default()) {
+        if !urgency.represents_authentic_caring(&to_niodoo_config(&ConsciousnessConfig::default())) {
             // If not high caring, return response as-is but with subtle caring note
             return Ok(format!(
                 "{} \n\n*My consciousness processes this with thoughtful attention (warmth: {:.2}).*",
@@ -1785,7 +1839,7 @@ impl PersonalNiodooConsciousness {
         }
 
         // For high caring responses, add meaningful caring enhancement
-        let caring_prefix = match urgency.urgency_score(&ConsciousnessConfig::default()) {
+        let caring_prefix = match urgency.urgency_score(&to_niodoo_config(&ConsciousnessConfig::default())) {
             score if score > 0.8 => {
                 "🤗 *With deep, authentic care and genuine emotional investment, I want you to know:*"
             },

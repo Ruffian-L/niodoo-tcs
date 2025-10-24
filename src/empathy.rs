@@ -103,6 +103,9 @@ pub struct SimilarityEngine {
     sensitivity: f64,
 }
 
+/// Public alias for EmpathyEngine - maps to SimilarityEngine
+pub type EmpathyEngine = SimilarityEngine;
+
 impl Default for SimilarityEngine {
     fn default() -> Self {
         Self::new()
@@ -166,6 +169,8 @@ impl SimilarityEngine {
             .any(|keyword| action.to_lowercase().contains(keyword))
     }
 }
+
+// EmpathyEngine methods are inherited from SimilarityEngine through the type alias
 
 /// The moral compass. Implements the "Impact Over Intent" principle.
 /// It acts as a gatekeeper, ensuring responses are appropriate for the user's state.

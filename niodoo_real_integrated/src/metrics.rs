@@ -93,6 +93,20 @@ pub struct RetryOutcome {
     updated_counts: RetryContext,
 }
 
+impl RetryOutcome {
+    pub fn generation(&self) -> &GenerationResult {
+        &self.generation
+    }
+
+    pub fn failure_tier(&self) -> &str {
+        &self.failure_tier
+    }
+
+    pub fn updated_counts(&self) -> &RetryContext {
+        &self.updated_counts
+    }
+}
+
 pub trait RetryStrategy {
     fn compute_backoff(&self, attempt: u32, is_hard: bool) -> Duration;
 }
