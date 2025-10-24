@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use once_cell::sync::OnceCell;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -248,8 +248,8 @@ impl GenerationEngine {
             source: baseline_source,
             failure_type: None,
             failure_details: None,
-            ucb1_score: compass.ucb1_score,
-            curator_quality: compass.curator_quality,
+            ucb1_score: compass.ucb1_score.unwrap_or(0.5),
+            curator_quality: compass.curator_quality.unwrap_or(0.5),
         })
     }
 

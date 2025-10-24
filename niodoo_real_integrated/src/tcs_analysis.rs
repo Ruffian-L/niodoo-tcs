@@ -107,7 +107,7 @@ impl TCSAnalyzer {
 
         // Compute persistent homology using Gudhi via pyo3
         let (betti_numbers, persistence_features, pe, gap, knot_proxy) = Python::with_gil(|py| {
-            let locals = PyDict::new(py);
+            let locals = PyDict::new_bound(py);
             let code = r#"
 import gudhi
 from math import log
@@ -155,31 +155,31 @@ def compute_tda_features(points, max_edge=2.0, max_dim=2):
         'knot_complexity': float(knot)
     }
 "#;
-            py.run(code, None, Some(locals)).map_err(|e| anyhow::anyhow!("Python code execution failed: {}", e))?;
+            py.run_bound(code, None, Some(&locals)).map_err(|e| anyhow::anyhow!("Python code execution failed: {}", e))?;
             let compute_fn = locals.get_item("compute_tda_features")
-                .and_then(|f| f.extract::<&PyAny>(py))
+                .and_then(|f| f.downcast::<PyAny>(py))
                 .ok_or_else(|| anyhow::anyhow!("Failed to extract compute function"))?;
             let points_py_lists: Vec<Py<PyList>> = points.iter().map(|point| {
-                PyList::new(py, point.iter().cloned()).into()
+                PyList::new_bound(py, point.iter().cloned()).into()
             }).collect();
-            let points_py = PyList::new(py, &points_py_lists);
-            let result = compute_fn.call1((points_py,), ()).map_err(|e| anyhow::anyhow!("Python function call failed: {}", e))?;
+            let points_py = PyList::new_bound(py, &points_py_lists);
+            let result = compute_fn.call1((points_py,)).map_err(|e| anyhow::anyhow!("Python function call failed: {}", e))?;
             let dict = result.downcast::<PyDict>(py).map_err(|e| anyhow::anyhow!("Result is not a dict: {}", e))?;
             let betti_vec: Vec<usize> = dict.get_item("betti_numbers")
-                .and_then(|b| b.extract(py))
+                .and_then(|b| b.extract())
                 .unwrap_or(vec![1, 0, 0]);
             let betti_arr = [betti_vec.get(0).copied().unwrap_or(1), betti_vec.get(1).copied().unwrap_or(0), betti_vec.get(2).copied().unwrap_or(0)];
             let pers_features_raw: Vec<(usize, f64, Option<f64>)> = dict.get_item("persistence_features")
-                .and_then(|p| p.extract(py))
+                .and_then(|p| p.extract())
                 .unwrap_or_default();
             let persistence_features: Vec<PersistenceFeature> = pers_features_raw.into_iter().map(|(dim, birth, death)| PersistenceFeature {
                 dimension: dim,
                 birth,
                 death: death.unwrap_or(f64::INFINITY),
             }).collect();
-            let pe = dict.get_item("persistence_entropy").and_then(|p| p.extract::<f64>(py)).unwrap_or(0.0);
-            let gap = dict.get_item("spectral_gap").and_then(|g| g.extract::<f64>(py)).unwrap_or(0.0);
-            let knot = dict.get_item("knot_complexity").and_then(|k| k.extract::<f64>(py)).unwrap_or(0.0);
+            let pe = dict.get_item("persistence_entropy").and_then(|p| p.extract::<f64>()).unwrap_or(0.0);
+            let gap = dict.get_item("spectral_gap").and_then(|g| g.extract::<f64>()).unwrap_or(0.0);
+            let knot = dict.get_item("knot_complexity").and_then(|k| k.extract::<f64>()).unwrap_or(0.0);
             Ok((betti_arr, persistence_features, pe, gap, knot))
         })?;
 

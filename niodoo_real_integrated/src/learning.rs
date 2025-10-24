@@ -452,6 +452,7 @@ impl LearningLoop {
 
         let mut param_deltas = HashMap::new();
 
+        let batch_len = batch.len();
         for tuple in batch {
             let delta = tuple.action.delta * 0.01; // Inner gradient
             *param_deltas.entry(tuple.action.param.clone()).or_insert(0.0) += delta;
@@ -460,7 +461,7 @@ impl LearningLoop {
         // Outer meta-update: average deltas and apply to config
         let mut config = self.config.lock().unwrap();
         for (param, total_delta) in &param_deltas {
-            let avg_delta = total_delta / batch.len() as f64;
+            let avg_delta = total_delta / batch_len as f64;
             match param.as_str() {
                 "temperature" => {
                     config.temperature += avg_delta;

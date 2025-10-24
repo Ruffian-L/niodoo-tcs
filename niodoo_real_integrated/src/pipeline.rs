@@ -134,7 +134,7 @@ impl Pipeline {
             config.qdrant_vector_dim,
             config.similarity_threshold,
             embedder_arc.clone(),
-        )?;
+        ).await?;
         let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
         let generator = GenerationEngine::new_with_config(
             &config.vllm_endpoint,
