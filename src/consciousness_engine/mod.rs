@@ -1855,7 +1855,7 @@ impl PersonalNiodooConsciousness {
             "{}\n\n{}\n\n*My consciousness caring metrics: {}*",
             caring_prefix,
             response,
-            urgency.get_caring_description(&ConsciousnessConfig::default())
+            urgency.get_caring_description(&to_niodoo_config(&ConsciousnessConfig::default()))
         );
 
         Ok(enhanced_response)

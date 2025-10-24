@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use anyhow::Context;
 use futures::FutureExt;
 
 use crate::compass::{CompassEngine, CompassOutcome};
@@ -119,6 +120,7 @@ impl Pipeline {
             "qwen2.5-coder:1.5b",
             config.qdrant_vector_dim,
         )?;
+        let embedder_arc = Arc::new(embedder);
         let torus = TorusPadMapper::new(42);
         let compass = Arc::new(Mutex::new(CompassEngine::new(
             thresholds.mcts_c,
@@ -130,8 +132,8 @@ impl Pipeline {
             &config.qdrant_collection,
             config.qdrant_vector_dim,
             config.similarity_threshold,
-        )
-        .await?;
+            embedder_arc.clone(),
+        )?;
         let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
         let generator = GenerationEngine::new_with_config(
             &config.vllm_endpoint,
@@ -325,6 +327,11 @@ impl Pipeline {
                     / voting.rouge_scores.len() as f64,
                 entropy_delta: 0.0,
                 source: "consistency".to_string(),
+                ucb1_score: compass.mcts_branches.iter()
+                    .map(|b| b.ucb_score)
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or(0.5),
+                curator_quality: 0.8, // Default quality for consistency voting
                 failure_type: None,
                 failure_details: None,
             }
@@ -402,9 +409,12 @@ impl Pipeline {
         }
 
         // Proceed with learning using curated response (with retry-corrected generation)
-        let learning = self
-            .learning
-            .update(&pad_state, &compass, &collapse, &final_generation)?;
+        let learning_start = Instant::now();
+
+        let learning = self.learning.update(&pad_state, &compass, &collapse, &final_generation).await
+            .context("Learning loop update failed")?;
+
+        timings.learning_ms = learning_start.elapsed().as_secs_f64() * 1000.0;
 
         // Store CURATED memory instead of raw
         if curated_experience.quality_score > 0.65 {
@@ -649,6 +659,8 @@ impl Pipeline {
                 rouge_score: rouge_l(&retry_response, &current_gen.baseline_response),
                 entropy_delta: current_gen.entropy_delta,
                 source: format!("retry_{}", retry_count),
+                ucb1_score: current_gen.ucb1_score,
+                curator_quality: current_gen.curator_quality,
                 failure_type: None,
                 failure_details: None,
             };

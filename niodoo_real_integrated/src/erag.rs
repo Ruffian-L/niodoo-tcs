@@ -6,9 +6,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::time::Duration;
 use tracing::{info, instrument, warn};
+use std::sync::Arc;
 
 use crate::compass::CompassOutcome;
 use crate::torus::PadGhostState;
+use crate::metrics::PipelineMetrics;
+use crate::qdrant::PointStruct;
+use crate::embedding::QwenStatefulEmbedder;
+use crate::learning::{DqnState, DqnAction, ReplayTuple};
+use qdrant_client::qdrant::{PointStruct, SearchPoints, Filter, FieldCondition::MatchValue, FieldCondition::Range as QRange, ScrollPoints};
+use qdrant_client::prelude::*;
+use serde_json::Value as JsonValue;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmotionalVector {
@@ -62,6 +70,7 @@ pub struct EragClient {
     collection: String,
     vector_dim: usize,
     pub similarity_threshold: f32,
+    embedder: Arc<QwenStatefulEmbedder>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,11 +84,12 @@ pub struct CollapseResult {
 }
 
 impl EragClient {
-    pub async fn new(
+    pub fn new(
         url: &str,
         collection: &str,
         vector_dim: usize,
         similarity_threshold: f32,
+        embedder: Arc<QwenStatefulEmbedder>,
     ) -> Result<Self> {
         // Priority: env var > config > default
         let base_url = std::env::var("QDRANT_URL")
@@ -96,6 +106,7 @@ impl EragClient {
             collection: collection.to_string(),
             vector_dim,
             similarity_threshold,
+            embedder,
         })
     }
 
@@ -274,21 +285,138 @@ impl EragClient {
         &self,
         prompt: &str,
         output: &str,
-        _metrics: &crate::metrics::PipelineMetrics,
+        metrics: &PipelineMetrics,
         reflection: Option<String>,
-        _failure_tier: &str,
-        _retry_count: u32,
+        failure_type: &str,
+        retry_count: u32,
     ) -> Result<()> {
-        // Store failure as a memory with a special flag
-        // For now, we'll log it. In production, you'd want to mark it specially in Qdrant
-        tracing::warn!(
-            "Storing failure: prompt={}, output={}, reflection={:?}",
-            prompt,
-            output,
-            reflection
+        let payload = json!({
+            "type": "failure_episode",
+            "prompt": prompt,
+            "output": output,
+            "metrics": {
+                "rouge": metrics.rouge_score,
+                "entropy_delta": metrics.entropy_delta,
+                "ucb1": metrics.ucb1_score,
+                "curator": metrics.curator_quality,
+                "latency_ms": metrics.latency_ms,
+            },
+            "reflection": reflection,
+            "failure_type": failure_type,
+            "retry_count": retry_count,
+        });
+
+        let embedding = self.embedder.embed(prompt).await?;
+        // Upsert to Qdrant with payload
+        let point = PointStruct::new(
+            uuid::Uuid::new_v4().to_string(),
+            embedding,
+            payload,
         );
-        // TODO: Implement proper failure storage in Qdrant with special tags
+        self.qdrant.upsert_points("failures", vec![point], None).await?;
+        info!("Stored failure episode");
         Ok(())
+    }
+
+    pub async fn search(&self, query: &str, k: usize) -> Result<Vec<SearchHit>> {
+        let embedding = self.embedder.embed(query).await?;
+        let request = SearchPoints {
+            collection_name: self.collection.clone(),
+            filter: None,
+            vector: embedding,
+            limit: k as u64,
+            with_payload: Some(true.into()),
+            with_vectors: None,
+        };
+        let url = format!("{}/collections/{}/points/search", self.base_url, self.collection);
+        let resp = self.client.post(&url).json(&request).send().await?;
+        let search_resp: qdrant_client::qdrant::SearchResponse = resp.json().await?;
+        Ok(search_resp.result)
+    }
+
+    pub async fn store_dqn_tuple(&self, tuple: &DqnTuple) -> Result<()> {
+        let content = format!("DQN: state={:?} action={} reward={} next={:?}", tuple.state, tuple.action_param, tuple.reward, tuple.next_state);
+        let embedding = self.embedder.embed(&content).await?;
+        let payload = json!({
+            "type": "dqn_tuple",
+            "tuple": tuple
+        });
+        let point = PointStruct::new(
+            Uuid::new_v4().to_string(),
+            embedding,
+            payload,
+        );
+        let url = format!("{}/collections/{}/points", self.base_url, self.collection);
+        let resp = self.client.put(&url).json(&json!({"points": [point]})).send().await?;
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to store DQN tuple: {}", resp.status()))
+        }
+    }
+
+    pub async fn query_replay_batch(&self, query: &str, _query_metrics: &[f64], k: usize) -> Result<Vec<ReplayTuple>> {
+        let hits = self.search(query, k).await?;
+        let mut tuples = Vec::new();
+        for hit in hits {
+            if let Some(payload) = hit.payload {
+                let p = payload.get("tuple").and_then(|t| t.as_object());
+                if let Some(tp) = p {
+                    let state = tp["state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                    let action = DqnAction {
+                        param: tp["action_param"].as_str().unwrap_or("").to_string(),
+                        delta: tp["action_delta"].as_f64().unwrap_or(0.0),
+                    };
+                    let reward = tp["reward"].as_f64().unwrap_or(0.0);
+                    let next_state = tp["next_state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                    let metrics = SimpleMetrics::from(&payload);
+                    tuples.push(ReplayTuple {
+                        state: DqnState { metrics: state },
+                        action,
+                        reward,
+                        next_state: DqnState { metrics: next_state },
+                        metrics: Some(metrics),
+                    });
+                }
+            }
+        }
+        Ok(tuples)
+    }
+
+    pub async fn query_low_reward_tuples(&self, min_reward: f64, k: usize) -> Result<Vec<DqnTuple>> {
+        let filter = Filter::from_condition(
+            Condition::must([
+                Condition::field("type").eq("dqn_tuple"),
+                Condition::field("tuple.reward").lt(min_reward),
+            ])
+        );
+        let request = ScrollPoints {
+            collection_name: self.collection.clone(),
+            filter: Some(filter),
+            limit: Some(k as u64),
+            with_payload: Some(true.into()),
+            with_vectors: None,
+            offset: None,
+        };
+        let url = format!("{}/collections/{}/points/scroll", self.base_url, self.collection);
+        let resp = self.client.post(&url).json(&request).send().await?;
+        let scroll_resp: qdrant_client::qdrant::ScrollResponse = resp.json().await?;
+        let mut tuples = Vec::new();
+        for point in scroll_resp.result {
+            if let Some(payload) = point.payload {
+                let p = payload.get("tuple").and_then(|t| t.as_object());
+                if let Some(tp) = p {
+                    let state = tp["state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                    let action_param = tp["action_param"].as_str().unwrap_or("").to_string();
+                    let action_delta = tp["action_delta"].as_f64().unwrap_or(0.0);
+                    let reward = tp["reward"].as_f64().unwrap_or(0.0);
+                    let next_state = tp["next_state"].as_array().map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect()).unwrap_or_default();
+                    tuples.push(DqnTuple { state, action_param, action_delta, reward, next_state });
+                }
+            }
+        }
+        tuples.sort_by(|a, b| b.reward.partial_cmp(&a.reward).unwrap_or(std::cmp::Ordering::Equal)); // sort by reward desc
+        Ok(tuples)
     }
 }
 
@@ -313,6 +441,49 @@ struct SearchHit {
     score: f32,
     #[serde(default)]
     payload: JsonMap<String, JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DqnTuple {
+    pub state: Vec<f64>,
+    pub action_param: String,
+    pub action_delta: f64,
+    pub reward: f64,
+    pub next_state: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SimpleMetrics {
+    pub rouge_score: f64,
+    pub entropy_delta: f64,
+    pub ucb1_score: f64,
+    pub curator_quality: f64,
+    pub latency_ms: f64,
+}
+
+impl From<&JsonMap<String, JsonValue>> for SimpleMetrics {
+    fn from(p: &JsonMap<String, JsonValue>) -> Self {
+        Self {
+            rouge_score: extract_number(p, "rouge"),
+            entropy_delta: extract_number(p, "entropy_delta"),
+            ucb1_score: extract_number(p, "ucb1"),
+            curator_quality: extract_number(p, "curator"),
+            latency_ms: extract_number(p, "latency_ms"),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ScrollResponse {
+    pub result: Vec<ScrollPoint>,
+    #[serde(default)]
+    pub next_page_offset: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct ScrollPoint {
+    pub id: String,
+    pub payload: Option<JsonMap<String, JsonValue>>,
 }
 
 fn encode_payload(memory: &EragMemory) -> JsonMap<String, JsonValue> {

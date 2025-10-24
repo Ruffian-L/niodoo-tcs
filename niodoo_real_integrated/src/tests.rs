@@ -8,7 +8,7 @@ use crate::erag::CollapseResult;
 #[ignore]
 // TODO: Implement proper test infrastructure for retry loop
 // Need to create mock generation results, failure signals, and retry context
-// Issue reference: #XXXX
+// Issue reference: retry loop testing infrastructure needs to be implemented
 async fn test_run_retry_loop() {
     // Mock pipeline with config
     let mut pipeline = Pipeline::initialise(CliArgs::default()).await.unwrap();

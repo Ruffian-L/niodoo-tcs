@@ -47,24 +47,33 @@ impl DqnState {
     }
 }
 
+// Custom Hash implementation based on to_key
 impl std::hash::Hash for DqnState {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.to_key().hash(state);
     }
 }
 
+// Custom PartialEq implementation based on to_key
 impl PartialEq for DqnState {
     fn eq(&self, other: &Self) -> bool {
         self.to_key() == other.to_key()
     }
 }
 
+// Custom Eq implementation based on to_key
 impl Eq for DqnState {}
 
 #[derive(Clone, Debug)]
 pub struct DqnAction {
     pub param: String,  // e.g., "temperature"
     pub delta: f64,     // e.g., 0.1 or -0.1
+}
+
+impl DqnAction {
+    pub fn to_key(&self) -> String {
+        format!("{}:{:.2}", self.param, self.delta)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -88,6 +97,8 @@ pub struct LearningLoop {
     erag: Arc<EragClient>,
     config: Arc<Mutex<RuntimeConfig>>,
     episode_count: u32,
+    initial_epsilon: f64,
+    initial_alpha: f64,
 }
 
 impl LearningLoop {
@@ -133,6 +144,10 @@ impl LearningLoop {
                 param: "retrieval_top_k".to_string(),
                 delta: 5.0,
             },
+            DqnAction { param: "novelty_threshold".to_string(), delta: -0.1 },
+            DqnAction { param: "novelty_threshold".to_string(), delta: 0.1 },
+            DqnAction { param: "self_awareness_level".to_string(), delta: -0.1 },
+            DqnAction { param: "self_awareness_level".to_string(), delta: 0.1 },
         ];
         Self {
             entropy_history: VecDeque::with_capacity(window),
@@ -147,10 +162,12 @@ impl LearningLoop {
             erag,
             config,
             episode_count: 0,
+            initial_epsilon: epsilon,
+            initial_alpha: alpha,
         }
     }
 
-    pub fn update(
+    pub async fn update(
         &mut self,
         pad_state: &PadGhostState,
         compass: &CompassOutcome,
@@ -187,6 +204,8 @@ impl LearningLoop {
                 "retrieval_top_k" => {
                     config.phase2_retrieval_top_k_increment += action.delta as i32
                 }
+                "novelty_threshold" => config.novelty_threshold += action.delta,
+                "self_awareness_level" => config.self_awareness_level += action.delta,
                 _ => {}
             }
         }
@@ -196,15 +215,15 @@ impl LearningLoop {
 
         let reward = self.compute_reward(entropy_delta, generation.rouge_score);
 
-        self.dqn_update(state.clone(), action.clone(), reward, next_state.clone());
+        self.dqn_update(state.clone(), action.clone(), reward, next_state.clone()).await?;
 
         // Every 5 episodes, run Reptile and check QLoRA trigger
         if self.episode_count % 5 == 0 {
-            self.reptile_step(32); // Batch size
+            self.reptile_step(32).await?;
             if self.average_reward() < 0.0 {
-                self.trigger_qlora();
+                self.trigger_qlora().await?;
             }
-            self.decay_epsilon();
+            self.decay_schedules();
         }
 
         // Existing event/breakthrough logic...
@@ -286,11 +305,11 @@ impl LearningLoop {
                 let max_key = qs
                     .iter()
                     .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-                    .map(|(k, _)| k)
-                    .unwrap();
+                    .map(|(k, _)| k.clone())
+                    .unwrap_or_else(|| self.action_space[0].to_key());
                 self.action_space
                     .iter()
-                    .find(|a| a.param == *max_key)
+                    .find(|a| a.to_key() == max_key)
                     .cloned()
                     .unwrap_or_else(|| self.action_space[0].clone())
             } else {
@@ -299,13 +318,13 @@ impl LearningLoop {
         }
     }
 
-    fn dqn_update(
+    async fn dqn_update(
         &mut self,
         state: DqnState,
         action: DqnAction,
         reward: f64,
         next_state: DqnState,
-    ) {
+    ) -> Result<()> {
         // Add to replay buffer
         self.replay_buffer.push(ReplayTuple {
             state: state.clone(),
@@ -331,7 +350,7 @@ impl LearningLoop {
 
         for tuple in batch {
             let s_key = tuple.state.to_key();
-            let a_key = tuple.action.param.clone();
+            let a_key = tuple.action.to_key();
             
             // Compute max_next_q first (immutable borrow)
             let next_qs = self.q_table.get(&tuple.next_state.to_key());
@@ -346,9 +365,20 @@ impl LearningLoop {
             qs.insert(a_key, new_q);
         }
 
-        // Store in ERAG for long-term (async stub)
-        // Note: In real impl, this would await erag.store_dqn_tuple
-        info!("DQN tuple stored in replay buffer");
+        #[cfg(not(test))]
+        {
+            let tuple = DqnTuple {
+                state: state.metrics.clone(),
+                action_param: action.param.clone(),
+                action_delta: action.delta,
+                reward,
+                next_state: next_state.metrics.clone(),
+            };
+            if let Err(e) = self.erag.store_dqn_tuple(&tuple).await {
+                tracing::warn!("Failed to store DQN tuple: {}", e);
+            }
+        }
+        Ok(())
     }
 
     fn estimate_next_state(&self, state: &DqnState, action: &DqnAction) -> DqnState {
@@ -359,6 +389,8 @@ impl LearningLoop {
             "top_p" => new_metrics[1] += action.delta * 0.1,       // affect rouge
             "mcts_c" => new_metrics[3] += action.delta * 0.1,     // affect ucb1
             "retrieval_top_k" => new_metrics[4] += action.delta * 0.01, // affect curator
+            "novelty_threshold" => new_metrics[1] += action.delta * 0.05, // affect rouge
+            "self_awareness_level" => new_metrics[0] += action.delta * 0.03, // affect entropy
             _ => {}
         }
         DqnState {
@@ -366,42 +398,91 @@ impl LearningLoop {
         }
     }
 
-    fn reptile_step(&mut self, batch_size: usize) {
+    async fn reptile_step(&mut self, batch_size: usize) -> Result<()> {
         // Sample batch from replay
-        let mut rng = thread_rng();
-        let batch: Vec<_> = (0..batch_size.min(self.replay_buffer.len()))
-            .map(|_| self.replay_buffer.choose(&mut rng).cloned().unwrap())
-            .collect();
+        let batch: Vec<_> = if self.replay_buffer.len() < batch_size / 2 {
+            #[cfg(not(test))]
+            {
+                let query_metrics = if let Some(last) = self.replay_buffer.last() {
+                    last.state.metrics.as_slice()
+                } else {
+                    &[0.0; 5][..]
+                };
+                let erag_batch = self.erag.query_replay_batch("", query_metrics, batch_size).await?;
+                let mut full = self.replay_buffer.iter().cloned().collect::<Vec<_>>();
+                full.extend(erag_batch);
+                full.truncate(batch_size);
+                full
+            }
+            #[cfg(test)]
+            {
+                let mut rng = thread_rng();
+                (0..batch_size.min(self.replay_buffer.len())).map(|_| self.replay_buffer.choose(&mut rng).cloned().unwrap()).collect()
+            }
+        } else {
+            let mut rng = thread_rng();
+            (0..batch_size.min(self.replay_buffer.len())).map(|_| self.replay_buffer.choose(&mut rng).cloned().unwrap()).collect()
+        };
 
         let mut param_deltas = HashMap::new();
 
         for tuple in batch {
-            // Inner loop simulation (compute delta)
             let delta = tuple.action.delta * 0.01; // Inner gradient
-            *param_deltas.entry(tuple.action.param).or_insert(0.0) += delta;
+            *param_deltas.entry(tuple.action.param.clone()).or_insert(0.0) += delta;
         }
 
         // Outer meta-update: average deltas and apply to config
         let mut config = self.config.lock().unwrap();
         for (param, total_delta) in param_deltas {
-            let avg_delta = total_delta / batch_size as f64;
+            let avg_delta = total_delta / batch.len() as f64;
             match param.as_str() {
-                "temperature" => config.temperature += avg_delta,
-                "top_p" => config.top_p += avg_delta,
-                "mcts_c" => config.phase2_mcts_c_increment += avg_delta,
-                "retrieval_top_k" => {
-                    config.phase2_retrieval_top_k_increment += avg_delta as i32
-                }
+                "temperature" => config.temperature += avg_delta; config.temperature = config.temperature.clamp(0.1, 1.0),
+                "top_p" => config.top_p += avg_delta; config.top_p = config.top_p.clamp(0.1, 1.0),
+                "mcts_c" => config.phase2_mcts_c_increment += avg_delta; config.phase2_mcts_c_increment = config.phase2_mcts_c_increment.clamp(0.0, 2.0),
+                "retrieval_top_k" => config.phase2_retrieval_top_k_increment += avg_delta as i32; let new_k = (config.phase2_retrieval_top_k_increment as f64 + avg_delta).clamp(0.0, 10.0) as i32; config.phase2_retrieval_top_k_increment = new_k,
+                "novelty_threshold" => config.novelty_threshold += avg_delta; config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0),
+                "self_awareness_level" => config.self_awareness_level += avg_delta; config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0),
                 _ => {}
             }
         }
         info!("Reptile meta-update applied");
+        Ok(())
     }
 
-    fn trigger_qlora(&self) {
-        // Stub: Trigger QLoRA fine-tuning
-        info!("QLoRA triggered due to low reward - fine-tuning model");
-        // In full impl: call QLoRA on recent low-reward episodes from ERAG
+    async fn trigger_qlora(&mut self) -> Result<()> {
+        #[cfg(not(test))]
+        {
+            let low_tuples = self.erag.query_low_reward_tuples(-0.5, 16).await?;
+            if low_tuples.is_empty() {
+                info!("No low-reward tuples for QLoRA");
+                return Ok(());
+            }
+            let mut param_deltas: HashMap<String, f64> = HashMap::new();
+            for tuple in &low_tuples {
+                let amplified_delta = tuple.action_delta * (1.0 - tuple.reward * 2.0).max(-2.0).min(2.0);
+                *param_deltas.entry(tuple.action_param.clone()).or_insert(0.0) += amplified_delta;
+            }
+            let avg_len = low_tuples.len() as f64;
+            let mut config = self.config.lock().unwrap();
+            for (param, total) in param_deltas {
+                let avg_delta = total / avg_len * 0.5; // conservative
+                match param.as_str() {
+                    "temperature" => config.temperature += avg_delta; config.temperature = config.temperature.clamp(0.1, 1.0),
+                    "top_p" => config.top_p += avg_delta; config.top_p = config.top_p.clamp(0.1, 1.0),
+                    "mcts_c" => config.phase2_mcts_c_increment += avg_delta; config.phase2_mcts_c_increment = config.phase2_mcts_c_increment.clamp(0.0, 2.0),
+                    "retrieval_top_k" => config.phase2_retrieval_top_k_increment += (avg_delta * 0.5) as i32; let new_k = (config.phase2_retrieval_top_k_increment as f64 + avg_delta).clamp(0.0, 10.0) as i32; config.phase2_retrieval_top_k_increment = new_k,
+                    "novelty_threshold" => config.novelty_threshold += avg_delta; config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0),
+                    "self_awareness_level" => config.self_awareness_level += avg_delta; config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0),
+                    _ => {},
+                }
+            }
+            info!("QLoRA fine-tuning simulated: adjusted {} params from {} low-reward tuples", param_deltas.len(), low_tuples.len());
+        }
+        #[cfg(test)]
+        {
+            info!("QLoRA skipped in test mode");
+        }
+        Ok(())
     }
 
     fn average_reward(&self) -> f64 {
@@ -415,8 +496,13 @@ impl LearningLoop {
             / self.replay_buffer.len() as f64
     }
 
-    fn decay_epsilon(&mut self) {
-        self.epsilon *= 0.995;
+    fn decay_schedules(&mut self) {
+        let episodes = self.episode_count as f64;
+        let epsilon_decay_rate = 0.001;
+        self.epsilon = self.initial_epsilon / (1.0 + episodes * epsilon_decay_rate).max(1.0);
         self.epsilon = self.epsilon.max(0.01);
+        let alpha_decay_rate = 0.0005;
+        self.alpha = self.initial_alpha / (1.0 + episodes * alpha_decay_rate).max(1.0);
+        self.alpha = self.alpha.max(0.001);
     }
 }

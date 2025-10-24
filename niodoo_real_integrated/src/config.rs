@@ -77,6 +77,19 @@ pub struct CliArgs {
     pub config: Option<String>,
 }
 
+impl Default for CliArgs {
+    fn default() -> Self {
+        Self {
+            prompt: None,
+            prompt_file: None,
+            swarm: 1,
+            output: OutputFormat::Csv,
+            hardware: HardwareProfile::Beelink,
+            config: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum)]
 pub enum OutputFormat {
     #[serde(rename = "csv")]
@@ -192,6 +205,14 @@ fn default_breakthrough_threshold() -> f64 {
     0.2
 }
 
+fn default_novelty_threshold() -> f64 {
+    0.5
+}
+
+fn default_self_awareness_level() -> f64 {
+    0.3
+}
+
 impl BackendType {
     pub fn from_env() -> Self {
         std::env::var("GENERATION_BACKEND")
@@ -277,6 +298,10 @@ pub struct RuntimeConfig {
     // Generation parameters
     pub temperature: f64,
     pub top_p: f64,
+    #[serde(default = "default_novelty_threshold")]
+    pub novelty_threshold: f64,
+    #[serde(default = "default_self_awareness_level")]
+    pub self_awareness_level: f64,
 }
 
 impl RuntimeConfig {
@@ -479,6 +504,8 @@ impl RuntimeConfig {
             breakthrough_threshold: default_breakthrough_threshold(),
             temperature: 0.7,
             top_p: 0.9,
+            novelty_threshold: env_with_fallback(&["NOVELTY_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or(0.5),
+            self_awareness_level: env_with_fallback(&["SELF_AWARENESS_LEVEL"]).and_then(|v| v.parse().ok()).unwrap_or(0.3),
         })
     }
 }

@@ -33,7 +33,7 @@ mod tests {
     // TODO: Implement proper mocks for retry loop testing
     // The run_retry_loop method doesn't exist on Pipeline - need to use handle_retry_with_reflection instead
     // Fields that need proper mocks: failure signals, retry context, generation results
-    // Issue reference: #XXXX
+    // Issue reference: retry loop testing infrastructure needs to be implemented
     async fn test_run_retry_loop() {
         // Mock pipeline with config
         let mut pipeline = Pipeline::initialise(CliArgs::default()).await.unwrap();

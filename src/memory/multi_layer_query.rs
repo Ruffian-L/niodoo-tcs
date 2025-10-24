@@ -11,6 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
+use niodoo_core::memory::multi_layer_query::CycleTrigger;
 
 /// Memory result with both semantic and emotional resonance scores
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,22 +50,7 @@ fn emotional_distance(a: &EmotionalVector, b: &EmotionalVector) -> f32 {
     .sqrt()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CycleTrigger {
-    MismatchCrisis,
-    UniformStagnation,
-    VarianceSpike,
-}
-
-impl CycleTrigger {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            CycleTrigger::MismatchCrisis => "mismatch_crisis",
-            CycleTrigger::UniformStagnation => "uniform_stagnation",
-            CycleTrigger::VarianceSpike => "variance_spike",
-        }
-    }
-}
+// CycleTrigger is imported from niodoo-core
 
 #[derive(Debug, Clone)]
 pub struct CycleDiagnostics {
@@ -394,7 +380,8 @@ impl MultiLayerMemoryQuery {
                 );
 
                 // INTEGRATION: Update consciousness state with trigger
-                state.last_trigger = Some(CycleTrigger::MismatchCrisis);
+                // TODO: Add last_trigger field to ConsciousnessState
+                // state.last_trigger = Some(CycleTrigger::MismatchCrisis);
 
                 // Persist learning event for Qwen fine-tuning
                 let _ = self.persist_learning_event(
@@ -452,7 +439,8 @@ impl MultiLayerMemoryQuery {
                 );
 
                 // INTEGRATION: Update consciousness state with trigger
-                state.last_trigger = Some(CycleTrigger::UniformStagnation);
+                // TODO: Add last_trigger field to ConsciousnessState
+                // state.last_trigger = Some(CycleTrigger::UniformStagnation);
 
                 // Persist learning event
                 let _ = self.persist_learning_event(
@@ -505,7 +493,8 @@ impl MultiLayerMemoryQuery {
                 );
 
                 // INTEGRATION: Update consciousness state with trigger
-                state.last_trigger = Some(CycleTrigger::VarianceSpike);
+                // TODO: Add last_trigger field to ConsciousnessState
+                // state.last_trigger = Some(CycleTrigger::VarianceSpike);
 
                 // Persist learning event
                 let _ = self.persist_learning_event(

@@ -254,12 +254,12 @@ impl RealConsciousnessTester {
             initial_state.emotional_state.add_secondary_emotion(
                 niodoo_consciousness::consciousness::EmotionType::Focused,
                 0.3,
-                &niodoo_consciousness::config::ConsciousnessConfig::default(),
+                &niodoo_consciousness::ConsciousnessConfig::default(),
             );
             initial_state.emotional_state.add_secondary_emotion(
                 niodoo_consciousness::consciousness::EmotionType::Learning,
                 0.2,
-                &niodoo_consciousness::config::ConsciousnessConfig::default(),
+                &niodoo_consciousness::ConsciousnessConfig::default(),
             );
 
             // Calculate initial entropy
@@ -488,7 +488,11 @@ impl RealConsciousnessTester {
                     }
 
                     // Check if this triggered a threat event by looking at the state
-                    if state.last_trigger.is_some() {
+                    // TODO: Re-enable when last_trigger field is added to ConsciousnessState
+                    // if state.last_trigger.is_some() {
+                    //     cycle_threats += 1;
+                    //     self.total_threats += 1;
+                    if false {
                         cycle_threats += 1;
                         self.total_threats += 1;
 
@@ -535,12 +539,12 @@ impl RealConsciousnessTester {
                                 consciousness_state.emotional_state.add_secondary_emotion(
                                     niodoo_consciousness::consciousness::EmotionType::Purposeful,
                                     0.5,
-                                    &niodoo_consciousness::config::ConsciousnessConfig::default(),
+                                    &niodoo_consciousness::ConsciousnessConfig::default(),
                                 );
                                 consciousness_state.emotional_state.add_secondary_emotion(
                                     niodoo_consciousness::consciousness::EmotionType::Confident,
                                     0.4,
-                                    &niodoo_consciousness::config::ConsciousnessConfig::default(),
+                                    &niodoo_consciousness::ConsciousnessConfig::default(),
                                 );
 
                                 // Recalculate entropy with new emotional state

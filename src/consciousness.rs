@@ -59,8 +59,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
-// Import CycleTrigger for Triple-Threat integration
-use crate::memory::multi_layer_query::CycleTrigger;
+// Import CycleTrigger for Triple-Threat integration  
+use niodoo_core::memory::multi_layer_query::CycleTrigger;
 
 // Import // HyperbolicPoint // Temporarily disabled from geometry module
 // use crate::geometry::hyperbolic::// HyperbolicPoint // Temporarily disabled; // Temporarily disabled

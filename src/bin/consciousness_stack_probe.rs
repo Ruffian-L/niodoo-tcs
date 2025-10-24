@@ -12,7 +12,7 @@
 //!   cargo run --bin consciousness_stack_probe
 //!   RUST_BACKTRACE=full cargo run --bin consciousness_stack_probe
 
-use niodoo_consciousness::config::system_config::ConsciousnessConfig;
+use niodoo_consciousness::config::ConsciousnessConfig;
 use niodoo_consciousness::consciousness::ConsciousnessState;
 
 fn main() {

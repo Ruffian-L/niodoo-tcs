@@ -35,6 +35,8 @@ pub struct GenerationResult {
     pub rouge_score: f64,   // New: ROUGE F1
     pub entropy_delta: f64, // New: Change in entropy
     pub source: String,
+    pub ucb1_score: f64, // From compass
+    pub curator_quality: f64, // From collapse/curator
     pub failure_type: Option<String>,    // e.g., "soft" or "hard"
     pub failure_details: Option<String>, // e.g., "low ROUGE: 0.3"
 }
@@ -233,6 +235,8 @@ impl GenerationEngine {
             source: baseline_source,
             failure_type: None,
             failure_details: None,
+            ucb1_score: compass.ucb1_score,
+            curator_quality: compass.curator_quality,
         })
     }
 
@@ -723,6 +727,8 @@ impl GenerationEngine {
                     source: "failed".to_string(),
                     failure_type: Some("hard".to_string()),
                     failure_details: Some(format!("Generation error: {}", e)),
+                    ucb1_score: 0.5, // Default for failed generation
+                    curator_quality: 0.5, // Default for failed generation
                 });
             }
         };
@@ -751,6 +757,8 @@ impl GenerationEngine {
             source: "param_tuned".to_string(),
             failure_type: None,
             failure_details: None,
+            ucb1_score: 0.5, // Default for failed generation
+            curator_quality: 0.5, // Default for failed generation
         })
     }
 

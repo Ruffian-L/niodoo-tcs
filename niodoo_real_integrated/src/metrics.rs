@@ -4,10 +4,13 @@ use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use prometheus::{
     register_counter, register_gauge, register_histogram, Counter, Encoder, Gauge, Histogram,
-    HistogramOpts, TextEncoder,
+    HistogramOpts, TextEncoder, GaugeVec, register_gauge_vec,
 };
 use rand::Rng;
 use std::time::Duration;
+use std::collections::VecDeque;
+use std::cell::UnsafeCell;
+use std::sync::Once;
 
 static METRICS: Lazy<PipelineMetrics> =
     Lazy::new(|| PipelineMetrics::new().expect("failed to initialise Prometheus metrics"));
@@ -133,6 +136,43 @@ lazy_static! {
     .unwrap();
 }
 
+lazy_static! {
+    static ref AVG_ROUGE: GaugeVec = register_gauge_vec!("niodoo_avg_rouge", "Average ROUGE score over episodes", &["type"]).unwrap();
+    static ref AVG_ENTROPY_DELTA: GaugeVec = register_gauge_vec!("niodoo_avg_entropy_delta", "Average entropy delta over episodes", &["type"]).unwrap();
+}
+
+#[derive(Default)]
+pub struct FailureAggregator {
+    rouge_history: VecDeque<f64>,
+    entropy_history: VecDeque<f64>,
+    window: usize,
+}
+
+impl FailureAggregator {
+    pub fn new(window: usize) -> Self {
+        Self {
+            rouge_history: VecDeque::with_capacity(window),
+            entropy_history: VecDeque::with_capacity(window),
+            window,
+        }
+    }
+
+    pub fn record(&mut self, rouge: f64, entropy_delta: f64) {
+        if self.rouge_history.len() == self.window {
+            self.rouge_history.pop_front();
+            self.entropy_history.pop_front();
+        }
+        self.rouge_history.push_back(rouge);
+        self.entropy_history.push_back(entropy_delta);
+
+        let avg_rouge = self.rouge_history.iter().sum::<f64>() / self.rouge_history.len() as f64;
+        let avg_entropy = self.entropy_history.iter().sum::<f64>() / self.entropy_history.len() as f64;
+
+        AVG_ROUGE.with_label_values(&["macro"]).set(avg_rouge);
+        AVG_ENTROPY_DELTA.with_label_values(&["macro"]).set(avg_entropy);
+    }
+}
+
 pub fn metrics() -> &'static PipelineMetrics {
     &METRICS
 }
@@ -160,5 +200,17 @@ pub struct FailureSignals;
 impl FailureSignals {
     pub fn evaluate(rouge: f64, delta: f64, curator: f64, ucb1: f64) -> (String, String) {
         evaluate_failure(rouge, delta, curator, ucb1)
+    }
+}
+
+static INIT: Once = Once::new();
+static AGG: UnsafeCell<FailureAggregator> = UnsafeCell::new(FailureAggregator::new(10));
+
+pub fn failure_aggregator() -> &'static mut FailureAggregator {
+    unsafe {
+        INIT.call_once(|| {
+            // init if needed
+        });
+        &mut *AGG.get()
     }
 }
