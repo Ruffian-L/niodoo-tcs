@@ -54,3 +54,11 @@ path = "src/main.rs"
 [[bin]]
 name = "rut_gauntlet"
 path = "src/bin/rut_gauntlet.rs"
+
+[[bin]]
+name = "metrics_server"
+path = "src/bin/metrics_server.rs"
+
+[[bin]]
+name = "continuous_runner"
+path = "src/bin/continuous_runner.rs"
