@@ -249,7 +249,7 @@ impl GenerationEngine {
             failure_type: None,
             failure_details: None,
             ucb1_score: compass.ucb1_score.unwrap_or(0.5),
-            curator_quality: compass.curator_quality.unwrap_or(0.5),
+            curator_quality: 0.5, // Default quality - CompassOutcome doesn't have this field
         })
     }
 

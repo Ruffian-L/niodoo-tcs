@@ -15,10 +15,8 @@ use rand_distr::{Distribution, Normal};
 use std::time::Instant;
 use tracing::info;
 
-use niodoo_consciousness::{
-    config::ConsciousnessConfig,
-    consciousness::{ConsciousnessState, EmotionType},
-};
+use niodoo_core::config::system_config::ConsciousnessConfig;
+use niodoo_core::consciousness::{ConsciousnessState, EmotionType};
 
 /// 2025 Benchmark configuration with Gaussian uncertainty
 #[derive(Debug, Clone)]

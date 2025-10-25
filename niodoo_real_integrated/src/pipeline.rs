@@ -19,7 +19,6 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::tcs_predictor::TcsPredictor;
 use crate::metrics::{metrics, FailureSignals, RetryContext};
 use crate::tcs_analysis::TCSAnalyzer;
 use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
@@ -121,7 +120,7 @@ impl Pipeline {
             "qwen2.5-coder:1.5b",
             config.qdrant_vector_dim,
         )?;
-        let embedder_arc = Arc::new(embedder);
+        let embedder_arc = Arc::new(embedder.clone());
         let torus = TorusPadMapper::new(42);
         let compass = Arc::new(Mutex::new(CompassEngine::new(
             thresholds.mcts_c,
@@ -259,7 +258,7 @@ impl Pipeline {
         );
 
         // Phase 5.3: Check if predictor should trigger (knot > 0.4)
-        let topology_json = serde_json::to_string(&topology).unwrap_or_default();
+        let _topology_json = serde_json::to_string(&topology).unwrap_or_default();
         info!(
             "Topological signature: knot={:.3}, betti={:?}, pe={:.3}, gap={:.3}",
             topology.knot_complexity, topology.betti_numbers, topology.persistence_entropy, topology.spectral_gap
@@ -409,7 +408,7 @@ impl Pipeline {
                     prompt,
                     &final_generation.hybrid_response,
                     metrics_ref,
-                    Some(details.clone()),
+                    Some(details.to_string()),
                     &final_failure,
                     self.retry_count.load(Ordering::Relaxed),
                 )

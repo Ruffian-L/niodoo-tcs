@@ -353,6 +353,10 @@ path = "tests/unit_tests.rs"
 name = "emotional_pipeline_integration"
 path = "../tests/emotional_pipeline_integration.rs"
 
+[[test]]
+name = "tcs_v10_integration"
+path = "../tests/tcs_v10_integration.rs"
+
 [[example]]
 name = "silicon_synapse_demo"
 path = "../examples/silicon_synapse_demo.rs"

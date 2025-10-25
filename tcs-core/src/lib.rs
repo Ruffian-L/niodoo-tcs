@@ -8,6 +8,8 @@
 
 use std::time::{Duration, Instant};
 
+pub mod metrics;
+
 pub mod events {
     //! Event types emitted by the orchestrator when notable topological
     //! structures appear in the incoming data stream.

@@ -15,3 +15,4 @@ rayon = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+phlite = "0.1.0"

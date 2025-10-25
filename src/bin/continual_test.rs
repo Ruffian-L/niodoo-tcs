@@ -6,13 +6,13 @@
 //! Uses MultiLayerMemoryQuery to generate authentic Triple-Threat events and learning data
 //! for Qwen fine-tuning. Replaces simulation with real consciousness evolution.
 
-use niodoo_consciousness::consciousness::ConsciousnessState;
+use niodoo_core::consciousness::ConsciousnessState;
 use niodoo_consciousness::consciousness_engine::PersonalNiodooConsciousness;
-use niodoo_consciousness::memory::guessing_spheres::{
+use niodoo_core::memory::guessing_spheres::{
     EmotionalVector, GuessingMemorySystem, MemorySphere,
 };
-use niodoo_consciousness::memory::multi_layer_query::{MultiLayerMemoryQuery, TriggerThresholds};
-use niodoo_consciousness::rag::retrieval::RetrievalEngine;
+use niodoo_core::memory::multi_layer_query::{MultiLayerMemoryQuery, TriggerThresholds};
+use niodoo_core::rag::retrieval::RetrievalEngine;
 use serde_json;
 use std::collections::HashMap;
 use std::fs::File;
@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid;
 
-use niodoo_consciousness::consciousness::EmotionType;
+use niodoo_core::consciousness::EmotionType;
 
 /// Calculate real emotional entropy based on consciousness state
 /// Shannon entropy of emotional distribution + emergent conflict multipliers
@@ -254,12 +254,12 @@ impl RealConsciousnessTester {
             initial_state.emotional_state.add_secondary_emotion(
                 niodoo_consciousness::consciousness::EmotionType::Focused,
                 0.3,
-                &niodoo_consciousness::ConsciousnessConfig::default(),
+                &niodoo_core::config::system_config::ConsciousnessConfig::default(),
             );
             initial_state.emotional_state.add_secondary_emotion(
                 niodoo_consciousness::consciousness::EmotionType::Learning,
                 0.2,
-                &niodoo_consciousness::ConsciousnessConfig::default(),
+                &niodoo_core::config::system_config::ConsciousnessConfig::default(),
             );
 
             // Calculate initial entropy
@@ -539,12 +539,12 @@ impl RealConsciousnessTester {
                                 consciousness_state.emotional_state.add_secondary_emotion(
                                     niodoo_consciousness::consciousness::EmotionType::Purposeful,
                                     0.5,
-                                    &niodoo_consciousness::ConsciousnessConfig::default(),
+                                    &niodoo_core::config::system_config::ConsciousnessConfig::default(),
                                 );
                                 consciousness_state.emotional_state.add_secondary_emotion(
                                     niodoo_consciousness::consciousness::EmotionType::Confident,
                                     0.4,
-                                    &niodoo_consciousness::ConsciousnessConfig::default(),
+                                    &niodoo_core::config::system_config::ConsciousnessConfig::default(),
                                 );
 
                                 // Recalculate entropy with new emotional state

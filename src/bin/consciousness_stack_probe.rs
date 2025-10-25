@@ -12,8 +12,8 @@
 //!   cargo run --bin consciousness_stack_probe
 //!   RUST_BACKTRACE=full cargo run --bin consciousness_stack_probe
 
-use niodoo_consciousness::config::ConsciousnessConfig;
-use niodoo_consciousness::consciousness::ConsciousnessState;
+use niodoo_core::config::system_config::ConsciousnessConfig;
+use niodoo_core::consciousness::ConsciousnessState;
 
 fn main() {
     println!("🧠 Consciousness Stack Probe - Isolating initialization path");

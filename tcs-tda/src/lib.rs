@@ -9,6 +9,7 @@ use nalgebra::DVector;
 use ndarray::{Array1, Array2};
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Result of a persistent homology computation for a single feature.
 #[derive(Debug, Clone)]
@@ -151,6 +152,12 @@ impl TakensEmbedding {
     }
 }
 
+#[derive(Clone)]
+struct Simplex {
+    vertices: Vec<usize>,
+    filtration: f32,
+}
+
 /// Persistent homology helper implementing a lightweight Vietoris–Rips
 /// filtration suitable for medium-sized point clouds.
 #[derive(Debug, Clone)]
@@ -168,44 +175,132 @@ impl PersistentHomology {
     }
 
     pub fn compute(&self, points: &[DVector<f32>]) -> Vec<PersistenceFeature> {
-        if points.is_empty() {
-            return Vec::new();
+        let n = points.len();
+        let dist = self.distance_matrix(points);
+        
+        // Generate simplices: vertices, edges, triangles (dim<=2)
+        let mut simplices = vec![];
+        // 0-simplex
+        for i in 0..n {
+            simplices.push(Simplex { vertices: vec![i], filtration: 0.0 });
         }
-
-        let mut features = Vec::new();
-        let distances = pairwise_distances(points);
-
-        // H0 features: birth at 0, death when components merge.
-        for i in 0..points.len() {
-            let death = distances
-                .row(i)
-                .iter()
-                .filter(|&&d| d > 0.0)
-                .fold(f32::INFINITY, |acc, &d| acc.min(d));
-            features.push(PersistenceFeature {
-                birth: 0.0,
-                death,
-                dimension: 0,
-            });
+        // 1-simplex
+        for i in 0..n {
+            for j in i+1..n {
+                let d = dist[i * n + j];
+                if d <= self.max_edge_length {
+                    simplices.push(Simplex { vertices: vec![i,j], filtration: d });
+                }
+            }
         }
-
-        if self.max_dimension >= 1 {
-            for i in 0..points.len() {
-                for j in (i + 1)..points.len() {
-                    let dist = distances[(i, j)];
-                    if dist <= self.max_edge_length {
-                        features.push(PersistenceFeature {
-                            birth: dist * 0.5,
-                            death: dist,
-                            dimension: 1,
-                        });
+        // 2-simplex
+        for i in 0..n {
+            for j in i+1..n {
+                let d_ij = dist[i * n + j];
+                if d_ij > self.max_edge_length { continue; }
+                for k in j+1..n {
+                    let d_ik = dist[i * n + k];
+                    let d_jk = dist[j * n + k];
+                    let max_d = d_ij.max(d_ik.max(d_jk));
+                    if max_d <= self.max_edge_length {
+                        simplices.push(Simplex { vertices: vec![i,j,k], filtration: max_d });
                     }
                 }
             }
         }
+        simplices.sort_by(|a,b| a.filtration.partial_cmp(&b.filtration).unwrap());
 
-        features.sort_by(|a, b| a.birth.partial_cmp(&b.birth).unwrap());
+        // Boundary matrix: columns are simplices, rows are faces
+        let num_sim = simplices.len();
+        let mut boundary = vec![vec![0i32; num_sim]; num_sim];  // Sparse, but dense for small n
+        let mut face_to_sim = BTreeMap::new();
+        
+        // Build face to simplex mapping
+        for (idx, sim) in simplices.iter().enumerate() {
+            face_to_sim.insert(sim.vertices.clone(), idx);
+        }
+        
+        for col in 0..num_sim {
+            let sim = &simplices[col];
+            let dim = sim.vertices.len() - 1;
+            if dim == 0 { continue; }  // No boundary
+            for face_idx in 0..sim.vertices.len() {
+                let mut face = sim.vertices.clone();
+                face.remove(face_idx);
+                face.sort();
+                // Find row for face
+                if let Some(&r) = face_to_sim.get(&face) {
+                    boundary[r][col] = if face_idx % 2 == 0 { 1 } else { -1 };  // Orientation
+                }
+            }
+        }
+
+        // Column reduction for persistence
+        let mut low = vec![usize::MAX; num_sim];
+        let mut pair = vec![usize::MAX; num_sim];
+        for col in 0..num_sim {
+            let mut current_col = col;
+            while low[current_col] != usize::MAX {
+                current_col = low[current_col];
+            }
+            for row in 0..num_sim {
+                if boundary[row][current_col] != 0 {
+                    let pivot = low[row];
+                    if pivot != usize::MAX {
+                        for r in 0..num_sim {
+                            boundary[r][col] += boundary[r][pivot] * boundary[row][current_col];
+                        }
+                    } else {
+                        low[row] = current_col;
+                    }
+                }
+            }
+            // Find pivot
+            let pivot_row = (0..num_sim).find(|&r| boundary[r][col] != 0 && low[r] == col);
+            if let Some(pr) = pivot_row {
+                low[pr] = col;
+                pair[pr] = col;
+            }
+        }
+
+        // Extract persistence: unpaired positive = birth, paired = death
+        let mut features = vec![];
+        for i in 0..num_sim {
+            if pair[i] == usize::MAX && low[i] != usize::MAX {  // Birth
+                let birth = simplices[i].filtration;
+                let death = if let Some(death_col) = (i+1..num_sim).find(|&j| pair[j] == i) {
+                    simplices[death_col].filtration
+                } else {
+                    self.max_edge_length * 2.0  // Inf
+                };
+                let dim = simplices[i].vertices.len() - 1;
+                if dim <= self.max_dimension {
+                    features.push(PersistenceFeature {
+                        birth,
+                        death,
+                        dimension: dim,
+                    });
+                }
+            }
+        }
+        features.sort_by(|a,b| a.dimension.cmp(&b.dimension).then(a.birth.partial_cmp(&b.birth).unwrap()));
         features
+    }
+
+    fn distance_matrix(&self, points: &[DVector<f32>]) -> Vec<f32> {
+        let n = points.len();
+        let mut dist = vec![0.0; n*n];
+        for i in 0..n {
+            for j in 0..n {
+                if i == j {
+                    dist[i*n + j] = 0.0;
+                } else {
+                    let d = (&points[i] - &points[j]).norm();
+                    dist[i*n + j] = d;
+                }
+            }
+        }
+        dist
     }
 
     pub fn witness_complex(

@@ -1,8 +1,6 @@
 //! Phase 5.3: TCS Topological Predictor
 //! Predicts reward deltas and optimal actions based on topological features
 
-use anyhow::Result;
-use rand::prelude::*;
 use std::collections::HashMap;
 use tracing::{debug, info};
 
@@ -44,7 +42,7 @@ impl TcsPredictor {
     }
 
     /// Phase 5.3: Predict optimal action based on topological features
-    pub fn predict_action(&self, sig: &TopologicalSignature, config: &RuntimeConfig) -> (String, f64) {
+    pub fn predict_action(&self, sig: &TopologicalSignature, _config: &RuntimeConfig) -> (String, f64) {
         // If knot complexity is high, suggest reducing temperature/entropy
         if sig.knot_complexity > 0.4 {
             debug!("High knot complexity {:.3}, suggesting temperature reduction", sig.knot_complexity);

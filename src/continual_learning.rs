@@ -18,6 +18,174 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
+use std::vec::Vec;
+use nalgebra::{DMatrix, DVector};
+
+#[derive(Clone)]
+struct Model {
+    w: f64,
+}
+
+impl Model {
+    fn new() -> Self {
+        Model { w: 0.0 }
+    }
+
+    fn predict(&self, x: f64) -> f64 {
+        self.w * x
+    }
+
+    fn grad(&self, x: f64, y: f64) -> f64 {
+        2.0 * x * (self.predict(x) - y)
+    }
+
+    fn update(&mut self, grad: f64, lr: f64) {
+        self.w -= lr * grad;
+    }
+}
+
+fn mock_data(task: u32) -> Vec<(f64, f64)> {
+    let factor = task as f64 + 1.0;
+    vec![
+        (1.0, factor * 1.0 + 0.01),
+        (2.0, factor * 2.0 - 0.01),
+        (3.0, factor * 3.0 + 0.02),
+        (4.0, factor * 4.0 - 0.02),
+    ]
+}
+
+fn compute_fisher(model: &Model, data: &Vec<(f64, f64)>) -> f64 {
+    let mut fisher = 0.0;
+    for &(x, y) in data.iter() {
+        let grad = model.grad(x, y);
+        fisher += grad * grad;
+    }
+    fisher / data.len() as f64
+}
+
+/// Enhanced Fisher matrix computation using nalgebra for multi-parameter models
+pub fn compute_fisher_matrix(
+    model: &Model,
+    data: &Vec<(f64, f64)>,
+) -> nalgebra::DMatrix<f64> {
+    let n_params = 1; // Simple 1-param model
+    let mut fisher = nalgebra::DMatrix::<f64>::zeros(n_params, n_params);
+    
+    for &(x, y) in data.iter() {
+        let grad = model.grad(x, y);
+        fisher[(0, 0)] += grad * grad;
+    }
+    
+    fisher /= data.len() as f64;
+    fisher
+}
+
+/// Extended EWC implementation with forgetting rate tracking
+impl ForgettingPrevention {
+    pub fn update_fisher_matrix(&mut self, fisher_matrix: &nalgebra::DMatrix<f64>) {
+        // Store Fisher matrix information for forgetting prevention
+        let fisher_trace = fisher_matrix.trace();
+        self.forgetting_curve.forgetting_rate = 1.0 / (1.0 + fisher_trace);
+    }
+    
+    pub fn forgetting_rate(&self) -> f64 {
+        self.forgetting_curve.forgetting_rate
+    }
+}
+
+#[derive(Clone)]
+struct EWCComponent {
+    prev_w: f64,
+    fisher: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForgettingPrevention {
+    pub review_scheduler: ReviewScheduler,
+    pub reinforcement_strategies: HashMap<String, ReinforcementStrategy>,
+    pub forgetting_curve: ForgettingCurve,
+    pub recall_triggers: Vec<RecallTrigger>,
+    pub spaced_repetition: SpacedRepetitionConfig,
+    components: Vec<EWCComponent>,
+    lambda: f64,
+}
+
+impl ForgettingPrevention {
+    pub fn new(lambda: f64) -> Self {
+        Self {
+            review_scheduler: ReviewScheduler {
+                scheduled_reviews: HashMap::new(),
+                review_intervals: vec![1.0, 6.0, 24.0, 72.0, 168.0],
+                max_reviews_per_day: 10,
+                current_review_load: 0,
+            },
+            reinforcement_strategies: HashMap::new(),
+            forgetting_curve: ForgettingCurve {
+                forgetting_rate: 0.1,
+                decay_function: DecayFunction {
+                    function_type: DecayFunctionType::Exponential,
+                    parameters: HashMap::new(),
+                    accuracy: 0.8,
+                },
+                interference_factors: HashMap::new(),
+                optimal_review_timing: Vec::new(),
+            },
+            recall_triggers: Vec::new(),
+            spaced_repetition: SpacedRepetitionConfig {
+                initial_intervals: vec![1.0, 6.0, 24.0, 72.0, 168.0],
+                difficulty_factor: 1.0,
+                max_interval_days: 30.0,
+                min_interval_hours: 1.0,
+                easiness_calculation: EasinessCalculation::SM2,
+            },
+            components: Vec::new(),
+            lambda,
+        }
+    }
+
+    pub fn add_task(&mut self, prev_model: &Model, fisher: f64) {
+        self.components.push(EWCComponent {
+            prev_w: prev_model.w,
+            fisher,
+        });
+    }
+
+    pub fn penalty_grad(&self, current_w: f64) -> f64 {
+        let mut grad = 0.0;
+        for comp in &self.components {
+            grad += self.lambda * comp.fisher * (current_w - comp.prev_w);
+        }
+        grad
+    }
+}
+
+fn train(model: &mut Model, data: &Vec<(f64, f64)>, epochs: usize, lr: f64, ewc: &ForgettingPrevention) {
+    for _ in 0..epochs {
+        for &(x, y) in data.iter() {
+            let loss_grad = model.grad(x, y);
+            let penalty_grad = ewc.penalty_grad(model.w);
+            let total_grad = loss_grad + penalty_grad;
+            model.update(total_grad, lr);
+        }
+    }
+}
+
+fn compute_mse(model: &Model, data: &Vec<(f64, f64)>) -> f64 {
+    let mut mse = 0.0;
+    for &(x, y) in data.iter() {
+        let pred = model.predict(x);
+        mse += (pred - y).powf(2.0);
+    }
+    mse / data.len() as f64
+}
+
+fn compute_retention(initial_mse: f64, current_mse: f64) -> f64 {
+    if current_mse <= initial_mse {
+        1.0
+    } else {
+        1.0 - (current_mse - initial_mse) / initial_mse
+    }
+}
 
 /// Validation status for knowledge and learning updates
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -480,233 +648,34 @@ pub struct SessionPerformance {
 /// Forgetting prevention mechanisms
 #[derive(Debug, Clone)]
 pub struct ForgettingPrevention {
-    /// Review scheduling system
-    pub review_scheduler: ReviewScheduler,
-
-    /// Knowledge reinforcement strategies
-    pub reinforcement_strategies: HashMap<String, ReinforcementStrategy>,
-
-    /// Forgetting curve modeling
-    pub forgetting_curve: ForgettingCurve,
-
-    /// Active recall triggers
-    pub recall_triggers: Vec<RecallTrigger>,
-
-    /// Spaced repetition parameters
-    pub spaced_repetition: SpacedRepetitionConfig,
+    pub fisher_matrix: DMatrix<f64>,
+    pub importance: f64,
 }
 
-/// Review scheduling for preventing forgetting
-#[derive(Debug, Clone)]
-pub struct ReviewScheduler {
-    /// Scheduled reviews
-    pub scheduled_reviews: HashMap<String, Vec<ScheduledReview>>,
+impl ForgettingPrevention {
+    pub fn new(parameter_dim: usize, importance: f64) -> Self {
+        Self {
+            fisher_matrix: DMatrix::zeros(parameter_dim, parameter_dim),
+            importance,
+        }
+    }
 
-    /// Review intervals (in hours)
-    pub review_intervals: Vec<f32>,
+    pub fn update_fisher(&mut self, gradients: &DVector<f64>) {
+        let fisher_update = gradients * gradients.transpose();
+        self.fisher_matrix += &fisher_update;
+    }
 
-    /// Maximum reviews per day
-    pub max_reviews_per_day: u32,
-
-    /// Current review load
-    pub current_review_load: u32,
+    pub fn penalty(&self, parameters: &DVector<f64>, reference: &DVector<f64>) -> f64 {
+        let diff = parameters - reference;
+        diff.transpose() * &self.fisher_matrix * diff * self.importance
+    }
 }
 
-/// Scheduled review event
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScheduledReview {
-    /// Knowledge or skill to review
-    pub target_id: String,
-
-    /// Scheduled review time
-    pub review_time: SystemTime,
-
-    /// Review type (quick, deep, application)
-    pub review_type: ReviewType,
-
-    /// Priority level (1.0 = highest priority)
-    pub priority: f32,
-
-    /// Estimated review duration (minutes)
-    pub estimated_duration: u32,
-}
-
-/// Types of reviews
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ReviewType {
-    /// Quick recall test
-    QuickRecall,
-
-    /// Deep understanding review
-    DeepUnderstanding,
-
-    /// Application in new contexts
-    Application,
-
-    /// Integration with other knowledge
-    Integration,
-}
-
-/// Reinforcement strategy for specific knowledge
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReinforcementStrategy {
-    /// Strategy identifier
-    pub id: String,
-
-    /// Strategy type
-    pub strategy_type: ReinforcementType,
-
-    /// Frequency of reinforcement
-    pub frequency_hours: f32,
-
-    /// Effectiveness score (0.0 to 1.0)
-    pub effectiveness: f32,
-
-    /// Last reinforcement time
-    pub last_reinforcement: SystemTime,
-
-    /// Next reinforcement time
-    pub next_reinforcement: SystemTime,
-}
-
-/// Types of reinforcement strategies
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ReinforcementType {
-    /// Spaced repetition
-    SpacedRepetition,
-
-    /// Active recall questions
-    ActiveRecall,
-
-    /// Application exercises
-    ApplicationExercises,
-
-    /// Mnemonics and memory aids
-    Mnemonics,
-
-    /// Peer teaching simulation
-    PeerTeaching,
-
-    /// Real-world application
-    RealWorldApplication,
-}
-
-/// Forgetting curve modeling
-#[derive(Debug, Clone)]
-pub struct ForgettingCurve {
-    /// Forgetting rate parameter
-    pub forgetting_rate: f32,
-
-    /// Memory strength decay function
-    pub decay_function: DecayFunction,
-
-    /// Interference factors
-    pub interference_factors: HashMap<String, f32>,
-
-    /// Optimal review timing calculation
-    pub optimal_review_timing: Vec<f32>,
-}
-
-/// Decay function for modeling forgetting
-#[derive(Debug, Clone)]
-pub struct DecayFunction {
-    /// Function type (exponential, power_law, etc.)
-    pub function_type: DecayFunctionType,
-
-    /// Function parameters
-    pub parameters: HashMap<String, f32>,
-
-    /// Accuracy of the model
-    pub accuracy: f32,
-}
-
-/// Types of decay functions
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DecayFunctionType {
-    /// Exponential decay: e^(-kt)
-    Exponential,
-
-    /// Power law decay: t^(-k)
-    PowerLaw,
-
-    /// Hyperbolic decay: 1/(1 + kt)
-    Hyperbolic,
-
-    /// Custom decay function
-    Custom(String),
-}
-
-/// Recall trigger for active recall
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecallTrigger {
-    /// Trigger identifier
-    pub id: String,
-
-    /// Trigger condition
-    pub condition: TriggerCondition,
-
-    /// Knowledge to recall
-    pub target_knowledge: Vec<String>,
-
-    /// Trigger frequency
-    pub frequency_hours: f32,
-
-    /// Last trigger time
-    pub last_triggered: SystemTime,
-
-    /// Trigger effectiveness
-    pub effectiveness: f32,
-}
-
-/// Conditions that trigger recall
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TriggerCondition {
-    /// Time-based trigger
-    TimeBased { interval_hours: f32 },
-
-    /// Context-based trigger (similar situations)
-    ContextBased { context_keywords: Vec<String> },
-
-    /// Performance-based trigger (when struggling)
-    PerformanceBased { threshold: f32 },
-
-    /// Random trigger for surprise testing
-    Random { probability: f32 },
-
-    /// Emotion-based trigger
-    EmotionBased { emotion_type: EmotionType, intensity_threshold: f32 },
-}
-
-/// Spaced repetition configuration
-#[derive(Debug, Clone)]
-pub struct SpacedRepetitionConfig {
-    /// Initial review intervals (hours)
-    pub initial_intervals: Vec<f32>,
-
-    /// Difficulty adjustment factor
-    pub difficulty_factor: f32,
-
-    /// Maximum interval (days)
-    pub max_interval_days: f32,
-
-    /// Minimum interval (hours)
-    pub min_interval_hours: f32,
-
-    /// Easiness factor calculation
-    pub easiness_calculation: EasinessCalculation,
-}
-
-/// Easiness factor calculation method
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum EasinessCalculation {
-    /// Standard SM-2 algorithm
-    SM2,
-
-    /// Modified easiness calculation
-    Modified,
-
-    /// Adaptive based on performance
-    Adaptive,
+pub fn compute_forgetting_rate(current_loss: f64, previous_loss: f64) -> f64 {
+    if previous_loss.abs() < f64::EPSILON {
+        return 0.0;
+    }
+    ((current_loss - previous_loss) / previous_loss).max(0.0)
 }
 
 /// Learning parameters
@@ -778,7 +747,7 @@ impl ContinualLearningPipeline {
             knowledge_base: HashMap::new(),
             learning_experiences: VecDeque::new(),
             active_sessions: HashMap::new(),
-            forgetting_prevention: ForgettingPrevention::new(),
+            forgetting_prevention: ForgettingPrevention::new(1000.0), // High lambda for retention
             metacognition_engine: None,
             consciousness_state: None,
             config,
@@ -1283,16 +1252,16 @@ impl ContinualLearningMetrics {
 
 impl Default for ForgettingPrevention {
     fn default() -> Self {
-        Self::new()
+        Self::new(1000.0)
     }
 }
 
 impl ForgettingPrevention {
-    pub fn new() -> Self {
+    pub fn new(lambda: f64) -> Self {
         Self {
             review_scheduler: ReviewScheduler {
                 scheduled_reviews: HashMap::new(),
-                review_intervals: vec![1.0, 6.0, 24.0, 72.0, 168.0], // Hours
+                review_intervals: vec![1.0, 6.0, 24.0, 72.0, 168.0],
                 max_reviews_per_day: 10,
                 current_review_load: 0,
             },
@@ -1315,7 +1284,24 @@ impl ForgettingPrevention {
                 min_interval_hours: 1.0,
                 easiness_calculation: EasinessCalculation::SM2,
             },
+            components: Vec::new(),
+            lambda,
         }
+    }
+
+    pub fn add_task(&mut self, prev_model: &Model, fisher: f64) {
+        self.components.push(EWCComponent {
+            prev_w: prev_model.w,
+            fisher,
+        });
+    }
+
+    pub fn penalty_grad(&self, current_w: f64) -> f64 {
+        let mut grad = 0.0;
+        for comp in &self.components {
+            grad += self.lambda * comp.fisher * (current_w - comp.prev_w);
+        }
+        grad
     }
 }
 
@@ -1426,5 +1412,41 @@ mod tests {
         assert!(!insights.insights.is_empty());
         assert!(!insights.recommended_actions.is_empty());
         assert_eq!(pipeline.performance_metrics.completed_sessions, 1);
+    }
+
+    #[test]
+    fn test_ewc_retention() {
+        let mut model = Model::new();
+        let mut ewc = ForgettingPrevention::new(1000.0); // High lambda for retention
+        let num_tasks = 3;
+        let mut initial_mses = Vec::new();
+        let mut test_datas = Vec::new();
+
+        for task in 0..num_tasks {
+            let train_data = mock_data(task);
+            let test_data = mock_data(task);
+            test_datas.push(test_data.clone());
+
+            train(&mut model, &train_data, 50, 0.0001, &ewc);
+
+            let initial_mse = compute_mse(&model, &test_data);
+            initial_mses.push(initial_mse);
+
+            let fisher = compute_fisher(&model, &train_data);
+            ewc.add_task(&model, fisher);
+        }
+
+        // Compute retention in a loop
+        let mut retentions = Vec::new();
+        for i in 0..num_tasks {
+            let current_mse = compute_mse(&model, &test_datas[i]);
+            let retention = compute_retention(initial_mses[i], current_mse);
+            retentions.push(retention);
+        }
+
+        // Assert each retention > 0.8
+        for r in retentions {
+            assert!(r > 0.8);
+        }
     }
 }

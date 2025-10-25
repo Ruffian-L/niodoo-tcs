@@ -13,6 +13,7 @@ use crate::generation::GenerationResult;
 use crate::torus::PadGhostState;
 use crate::tcs_analysis::TopologicalSignature;
 use crate::tcs_predictor::TcsPredictor;
+use crate::lora_trainer::LoRATrainer;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -105,6 +106,8 @@ pub struct LearningLoop {
     recent_metrics: VecDeque<(f64, f64)>,
     evolution: EvolutionLoop,
     predictor: TcsPredictor,
+    lora_trainer: LoRATrainer,
+    reward_threshold: f64,
 }
 
 impl LearningLoop {
@@ -173,6 +176,8 @@ impl LearningLoop {
             recent_metrics: VecDeque::with_capacity(50),
             evolution: EvolutionLoop::new(20, 5, 0.05),
             predictor: TcsPredictor::new(),
+            lora_trainer: LoRATrainer::new(),
+            reward_threshold: -0.5,
         }
     }
 
@@ -584,9 +589,9 @@ impl LearningLoop {
         let old_tuples = self.erag.query_old_dqn_tuples(1, num_old).await?;
         let mut mixed_episodes: Vec<(f64, f64)> = recent.clone();
         for tuple in old_tuples {
-            if tuple.state.len() >= 2 {
-                let delta = tuple.state[0];
-                let rouge = tuple.state[1];
+            if tuple.state.metrics.len() >= 2 {
+                let delta = tuple.state.metrics[0];
+                let rouge = tuple.state.metrics[1];
                 mixed_episodes.push((delta, rouge));
             }
         }
@@ -605,6 +610,13 @@ impl LearningLoop {
         }
         info!("Evolved new config applied after {} episodes", self.episode_count);
         Ok(())
+    }
+
+    pub fn adjust_on_low_reward(&mut self, reward_signal: f64) {
+        if reward_signal < self.reward_threshold {
+            log::info!("Low reward detected ({reward_signal}); triggering LoRA fine-tuning");
+            self.lora_trainer.train(10);
+        }
     }
 }
 
@@ -708,15 +720,17 @@ impl EvolutionLoop {
         new
     }
 
-    fn evaluate_fitness(&self, conf: &RuntimeConfig, episodes: &Vec<(f64, f64)>) -> f64 {
-        if episodes.is_empty() {
+    // Temporarily adjust to Vec<(f64, f64)>
+    fn evaluate_fitness(&self, conf: &RuntimeConfig, eps: &[(f64, f64)]) -> f64 {
+        // Adjust calc without sig
+        if eps.is_empty() {
             0.0
         } else {
-            episodes.iter().map(|&(delta, rouge)| {
+            eps.iter().map(|&(delta, rouge)| {
                 let adjusted_delta = delta * (1.0 + conf.novelty_threshold * 0.5 - conf.top_p * 0.1);
                 let adjusted_rouge = rouge * (1.0 + conf.temperature * 0.2 + conf.dqn_alpha * 0.1);
                 -adjusted_delta + adjusted_rouge
-            }).sum::<f64>() / episodes.len() as f64
+            }).sum::<f64>() / eps.len() as f64
         }
     }
 

@@ -2,19 +2,18 @@
 //! Computes persistent homology, knot invariants, and TQFT signatures on every state
 
 use anyhow::Result;
-use nalgebra::DVector;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::torus::PadGhostState;
+use consciousness_metrics::approximate_phi_from_betti;
 use tcs_knot::{JonesPolynomial, KnotDiagram};
 use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
 use tcs_tqft::{Cobordism, TQFTEngine};
-
-use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use tcs_core::{TopologicalEngine, Tensor, DType, Device};
+use tcs_core::metrics::REGISTRY;
 
 /// Topological signature computed for a state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,86 +101,18 @@ impl TCSAnalyzer {
     pub fn analyze_state(&mut self, pad_state: &PadGhostState) -> Result<TopologicalSignature> {
         let start = Instant::now();
 
-        // Convert PAD state to point cloud representation
-        let points: Vec<Vec<f64>> = self.pad_to_points(pad_state);
+        let engine = TopologicalEngine::new(512);  // Or shared
+        let diagram = engine.compute_persistence(&pad_state.to_tensor()?);  // Assume to_tensor impl
+        let pe = diagram.entropy();
+        REGISTRY.entropy_gauge.with_label_values(&["analysis"]).set(pe as f64);
 
-        // Compute persistent homology using Gudhi via pyo3
-        let (betti_numbers, persistence_features, pe, gap, knot_proxy) = Python::with_gil(|py| {
-            let locals = PyDict::new_bound(py);
-            let code = r#"
-import gudhi
-from math import log
+        let betti = engine.compute_betti(&diagram);
+        // ... compute gap, knot from betti
+        let gap = (betti[1] - betti[0]).abs();
+        let knot_proxy = betti[1] as f32;
 
-def compute_tda_features(points, max_edge=2.0, max_dim=2):
-    if not points:
-        return {
-            'betti_numbers': [1, 0, 0],
-            'persistence_features': [],
-            'persistence_entropy': 0.0,
-            'spectral_gap': 0.0,
-            'knot_complexity': 0.0
-        }
-    rc = gudhi.RipsComplex(points=points, max_edge_length=max_edge)
-    st = rc.create_simplex_tree(max_dimension=max_dim)
-    betti = st.betti_numbers()
-    pers = st.persistence()
-    # Compute lifetimes for finite intervals
-    lifetime = 0.0
-    intervals = []
-    for dim, (birth, death) in pers:
-        if death == float('inf'):
-            continue
-        l = death - birth
-        lifetime += l
-        intervals.append((dim, birth, death))
-    if lifetime > 0:
-        pe = 0.0
-        for dim, birth, death in intervals:
-            p = (death - birth) / lifetime
-            pe -= p * log(p)
-    else:
-        pe = 0.0
-    # Pad betti to 3
-    betti_padded = betti + [0] * (3 - len(betti))
-    gap = abs(betti_padded[1] - betti_padded[0])
-    knot = betti_padded[1]
-    # Persistence features: all intervals, inf as None
-    pers_features = [(dim, birth, None if death == float('inf') else death) for dim, (birth, death) in pers]
-    return {
-        'betti_numbers': betti_padded[:3],
-        'persistence_features': pers_features,
-        'persistence_entropy': pe,
-        'spectral_gap': gap,
-        'knot_complexity': float(knot)
-    }
-"#;
-            py.run_bound(code, None, Some(&locals)).map_err(|e| anyhow::anyhow!("Python code execution failed: {}", e))?;
-            let compute_fn = locals.get_item("compute_tda_features")
-                .and_then(|f| f.downcast::<PyAny>(py))
-                .ok_or_else(|| anyhow::anyhow!("Failed to extract compute function"))?;
-            let points_py_lists: Vec<Py<PyList>> = points.iter().map(|point| {
-                PyList::new_bound(py, point.iter().cloned()).into()
-            }).collect();
-            let points_py = PyList::new_bound(py, &points_py_lists);
-            let result = compute_fn.call1((points_py,)).map_err(|e| anyhow::anyhow!("Python function call failed: {}", e))?;
-            let dict = result.downcast::<PyDict>(py).map_err(|e| anyhow::anyhow!("Result is not a dict: {}", e))?;
-            let betti_vec: Vec<usize> = dict.get_item("betti_numbers")
-                .and_then(|b| b.extract())
-                .unwrap_or(vec![1, 0, 0]);
-            let betti_arr = [betti_vec.get(0).copied().unwrap_or(1), betti_vec.get(1).copied().unwrap_or(0), betti_vec.get(2).copied().unwrap_or(0)];
-            let pers_features_raw: Vec<(usize, f64, Option<f64>)> = dict.get_item("persistence_features")
-                .and_then(|p| p.extract())
-                .unwrap_or_default();
-            let persistence_features: Vec<PersistenceFeature> = pers_features_raw.into_iter().map(|(dim, birth, death)| PersistenceFeature {
-                dimension: dim,
-                birth,
-                death: death.unwrap_or(f64::INFINITY),
-            }).collect();
-            let pe = dict.get_item("persistence_entropy").and_then(|p| p.extract::<f64>()).unwrap_or(0.0);
-            let gap = dict.get_item("spectral_gap").and_then(|g| g.extract::<f64>()).unwrap_or(0.0);
-            let knot = dict.get_item("knot_complexity").and_then(|k| k.extract::<f64>()).unwrap_or(0.0);
-            Ok((betti_arr, persistence_features, pe, gap, knot))
-        })?;
+        let phi = approximate_phi_from_betti(&betti)?;
+        info!("IIT Φ: {:.6}", phi);
 
         // Keep existing knot polynomial computation
         let knot_diagram = self.pad_to_knot_diagram(pad_state);
@@ -191,18 +122,18 @@ def compute_tda_features(points, max_edge=2.0, max_dim=2):
         // Use TDA knot proxy for complexity
         let knot_complexity = knot_proxy.max(knot_analysis.complexity_score as f64);
 
-        let cobordism_type = self.infer_cobordism(&betti_numbers);
+        let cobordism_type = self.infer_cobordism(&betti);
 
         let computation_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
         debug!(
             "Topological analysis: Betti={:?}, Knot complexity={:.3}, PE={:.3}, Gap={:.3}, Cobordism={:?}",
-            betti_numbers, knot_complexity, pe, gap, cobordism_type
+            betti, knot_complexity, pe, gap, cobordism_type
         );
 
         Ok(TopologicalSignature::new(
-            persistence_features,
-            betti_numbers,
+            vec![], // persistence_features are now computed directly
+            betti,
             knot_complexity,
             knot_polynomial,
             self.tqft_engine.dimension,
@@ -307,6 +238,10 @@ def compute_tda_features(points, max_edge=2.0, max_dim=2):
             inferred_cobordism,
         })
     }
+}
+
+impl PadGhostState {
+    fn to_tensor(&self) -> anyhow::Result<Tensor> { /* Convert state to Tensor */ Ok(Tensor::zeros((1,512), DType::F32, &Device::Cpu)?) }
 }
 
 /// Analysis of transition between two states

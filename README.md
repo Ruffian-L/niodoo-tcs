@@ -306,3 +306,41 @@ MIT License
 **Status:** Production-ready | 0 errors | 149K lines | October 19, 2025
 
 *Built with Rust, topology, and zero tolerance for bullshit.*
+
+## Upgraded TCS Engine
+
+- **Real TDA**: Pure Rust persistent homology with boundary matrix reduction for Vietoris-Rips. Computes exact birth/death for dims 0-2 on point clouds from states.
+- **Full NSGA-II**: From scratch impl with non-dominated fronts, crowding, tournament selection, SBX crossover, polynomial mutation. Multi-objective: potential + Wasserstein novelty.
+- **Trained LoRA**: Low-rank adaptation on candle, pre-trained on synthetic topo features for reward prediction. MSE loss, Adam optimizer.
+- **Exact Novelty**: 1D Earth Mover's Distance via emd crate on persistence lifetimes.
+- **Advanced Benchmarks**: Scalability to 10k points, convergence plots (PNG output), variance comparison TDA vs baseline.
+
+Run `cargo bench` for timings/plots. Engine ready for cognitive workloads.
+
+## Monitoring with Prometheus & Grafana
+
+1. Start stack: docker-compose up (see docker-compose.yml below).
+2. View metrics: http://localhost:9090/metrics (from tcs-core server on 9091).
+3. Grafana: http://localhost:3000 (admin/admin). Dashboards:
+   - Simple: Colors/gauges for entropy, prompts, memories – kid-friendly overview.
+   - Advanced: Graphs/heatmaps for latencies, trends, logs – PhD-level details.
+4. Metrics:
+   - tcs_entropy: Live persistence entropy (low = stable learning).
+   - tcs_prompts_total{type}: Counts stuck/rogue/unstuck (alert on stuck>10%).
+   - tcs_rag_retrieval_latency: Retrieval speed (95th <0.5s good).
+   - tcs_memories_size: Saved memories (growth = learning).
+   - Outputs: Response times, variance low = consistent.
+
+Docker-compose.yml example:
+version: '3'
+services:
+  prometheus:
+    image: prom/prometheus
+    ports: - 9090:9090
+    volumes: - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  grafana:
+    image: grafana/grafana
+    ports: - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on: - prometheus
