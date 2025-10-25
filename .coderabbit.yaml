@@ -13,8 +13,8 @@ reviews:
     - "**/*.toml"
     - "**/*.md"
 
-  # Auto reviews on all PRs (not just default branch)
+  # Auto reviews on all PRs (fixed regex)
   auto_review:
     enabled: true
     base_branches:
-      - "*"
+      - ".*"
