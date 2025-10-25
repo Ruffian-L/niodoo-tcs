@@ -1,0 +1,51 @@
+{
+  "uid": "niodoo-overview",
+  "title": "Niodoo Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Entropy",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "niodoo_entropy_bits", "legendFormat": "entropy" }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Latency (ms)",
+      "gridPos": { "x": 6, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(niodoo_latency_ms_bucket[5m])) by (le))", "legendFormat": "p95" },
+        { "expr": "rate(niodoo_latency_ms_sum[5m]) / rate(niodoo_latency_ms_count[5m])", "legendFormat": "avg" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "ROUGE-L",
+      "gridPos": { "x": 0, "y": 4, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "niodoo_rouge_l", "legendFormat": "rouge" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Threats",
+      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "increase(niodoo_threat_cycles_total[5m])", "legendFormat": "threats" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Healings",
+      "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+      "targets": [
+        { "expr": "increase(niodoo_healing_cycles_total[5m])", "legendFormat": "healings" }
+      ]
+    }
+  ]
+}

@@ -32,9 +32,15 @@ impl PipelineMetrics {
             "ROUGE-L similarity between baseline and hybrid responses"
         )
         .map_err(Error::from)?;
-        let threats_counter =
-            register_counter!("niodoo_threat_cycles", "Threat detections").map_err(Error::from)?;
-        let healings_counter = register_counter!("niodoo_healing_cycles", "Healing detections")
+        let threats_counter = register_counter!(
+            "niodoo_threat_cycles_total",
+            "Threat detections"
+        )
+        .map_err(Error::from)?;
+        let healings_counter = register_counter!(
+            "niodoo_healing_cycles_total",
+            "Healing detections"
+        )
             .map_err(Error::from)?;
 
         Ok(Self {
