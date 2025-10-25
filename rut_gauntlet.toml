@@ -1,0 +1,5 @@
+default_entropy_high = 2.0
+entropy_stability_threshold = 0.3
+latency_max_ms = 500.0
+emotional_activation_min_percent = 20.0
+breakthroughs_min_percent = 60.0

@@ -1,0 +1,363 @@
+# 🌟 Niodoo Unified Configuration System 🌟
+# This file contains all tunable parameters for the consciousness system
+# Environment-specific overrides are handled via NIODOO_ENV variable (development/staging/production)
+# Edit these values to customize behavior without recompiling
+
+[core]
+# Emotion detection threshold (0.0-1.0)
+emotion_threshold = 0.7
+# Maximum conversation history length
+max_history = 50
+# Database path for knowledge storage
+db_path = "data/knowledge_graph.db"
+# Backup interval in seconds
+backup_interval = 3600
+# Context window size for processing
+context_window = 10
+# Response delay in seconds
+response_delay = 0.5
+
+[models]
+# Default AI model name
+default_model = "llama3:latest"
+# Backup model name
+# backup_model = "llama3.2:3b"
+backup_model = "$NIODOO_BACKUP_MODEL" # Override with NIODOO_BACKUP_MODEL env var, defaults to llama3.2:3b if not set
+# Model temperature for generation (0.0-2.0)
+temperature = 0.8
+# Maximum tokens per response
+max_tokens = 200
+# Timeout for model requests in seconds
+timeout = 30
+# Top-p sampling parameter (0.0-1.0)
+top_p = 0.9
+# Top-k sampling parameter
+top_k = 40
+# Repeat penalty (0.0-2.0)
+repeat_penalty = 1.1
+# Frequency penalty (-2.0-2.0)
+frequency_penalty = 0.1
+# Presence penalty (-2.0-2.0)
+presence_penalty = 0.1
+# Qwen GGUF model path (environment-specific)
+qwen_model_path = "models/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+# Emotion detection model path (ONNX model)
+emotion_model_path = "models/emotion_detection/model.onnx"
+# Emotion detection labels path
+emotion_labels_path = "models/emotion_detection/labels.json"
+# BERT tokenizer path
+bert_tokenizer_path = "models/bert-base-uncased/tokenizer.json"
+# Emotion detection config path
+emotion_config_path = "models/emotion_detection/config.json"
+
+# Environment-specific model paths (used when NIODOO_ENV is set)
+[models.development]
+qwen_model_path = "models/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+
+[models.staging]
+qwen_model_path = "/home/ruffian/Qwen3-Omni-30B-A3B-Instruct-AWQ-4bit"
+
+[models.production]
+qwen_model_path = "/opt/models/qwen3-omni-30b-a3b-instruct-awq-4bit"
+llama_model_path = "/opt/models/llama3.2-3b"
+
+[rag]
+# Enable RAG functionality
+enabled = false
+# Chunk size for text splitting
+chunk_size = 512
+# Similarity threshold for retrieval (0.0-1.0)
+similarity_threshold = 0.7
+# Maximum context length
+context_limit = 1000
+# Enable inspiration mode
+inspiration_mode = false
+# Ingestion batch size
+ingestion_batch_size = 100
+
+[training]
+# Learning rate for training
+learning_rate = 0.001
+# Number of training epochs
+epochs = 1000
+# Hidden layer dimensions
+hidden_dim = 256
+# Input dimensions
+input_dim = 512
+# Output dimensions
+output_dim = 128
+# Enable diversity temperature boost
+diversity_temperature_boost = 0.2
+# Maximum diversity temperature
+max_diversity_temperature = 1.2
+# Response similarity threshold
+response_similarity_threshold = 0.7
+# Enable fallback mode
+fallback_mode_enabled = true
+
+[qt]
+# Emotion threshold for Qt interface
+emotion_threshold = 0.7
+# Enable distributed mode
+distributed_mode = true
+# Number of neural agents (default: 89, override with NIODOO_AGENTS_COUNT env var)
+agents_count = 89
+# Number of neural connections (default: 1209, override with NIODOO_CONNECTIONS_COUNT env var)
+connections_count = 1209
+# Architect endpoint URL (set via NIODOO_ARCHITECT_ENDPOINT env var)
+# architect_endpoint = "http://localhost:11434/api/generate"
+# Developer endpoint URL (set via NIODOO_DEVELOPER_ENDPOINT env var)
+# developer_endpoint = "http://localhost:11434/api/generate"
+# Hardware acceleration enabled
+hardware_acceleration = true
+# Network mode (Local/Distributed/Hybrid)
+network_mode = "Distributed"
+# Pathway activation level (50-200)
+pathway_activation = 100
+
+[api]
+# Ollama API URL
+# ollama_url = "http://localhost:11434"
+# API timeout in seconds
+api_timeout = 30
+# Retry attempts for API calls
+retry_attempts = 3
+# Enable API caching
+enable_caching = true
+# Cache TTL in seconds
+cache_ttl = 300
+
+[consciousness]
+# Enable consciousness processing
+enabled = true
+# Enable reflection processing
+reflection_enabled = true
+# Emotion sensitivity level (0.0-1.0)
+emotion_sensitivity = 0.8
+# Memory formation threshold (0.0-1.0)
+memory_threshold = 0.6
+# Pattern recognition sensitivity (0.0-1.0)
+pattern_sensitivity = 0.7
+# Self-awareness level (0.0-1.0)
+self_awareness_level = 0.8
+
+[emotions]
+# Enable emotion processing
+enabled = true
+# Supported response types
+response_types = ["supportive", "curious", "empathetic", "humorous"]
+# Maximum response history
+max_response_history = 20
+# Repetition penalty (0.0-2.0)
+repetition_penalty = 0.8
+# Emotion enhancement enabled
+enhance_responses = true
+
+[performance]
+# GPU usage target percentage (0-100)
+gpu_usage_target = 80
+# Memory usage target percentage (0-100)
+memory_usage_target = 85
+# Temperature threshold in Celsius
+temperature_threshold = 80
+# Enable performance monitoring
+enable_monitoring = true
+# Optimization interval in seconds
+optimization_interval = 60
+
+[logging]
+# Log level (DEBUG, INFO, WARN, ERROR)
+level = "INFO"
+# Log file path
+file = "data/niodoo.log"
+# Console log level
+console_level = "INFO"
+# Enable structured logging
+enable_structured_logging = true
+# Enable log rotation
+enable_log_rotation = true
+# Maximum log file size in MB
+max_log_file_size = 10
+
+[demo]
+# Demo duration in minutes (default: 9, override with NIODOO_DEMO_DURATION_MINUTES env var)
+total_duration_minutes = 9
+# Attachment security target for demo completion (default: 0.85, 85%)
+attachment_security_target = 0.85
+# Empathetic code target for demo completion (default: 0.90, 90%)
+empathetic_code_target = 0.90
+
+[demo.parenting]
+# AI parent personality and capability parameters
+empathy_level = 0.95
+patience_level = 0.9
+guidance_quality = 0.92
+emotional_responsiveness = 0.94
+
+[tracker]
+# Longitudinal attachment tracker configuration
+max_history = 1000
+
+[tracker.weights]
+# Weight factors for security score calculation
+satisfaction_factor_weight = 0.5
+emotion_stability_weight = 0.3
+history_consistency_weight = 0.2
+
+[api.keys]
+# API authentication keys for secure endpoints
+architect_api_key = ""
+developer_api_key = ""
+# Set via NIODOO_ARCHITECT_API_KEY and NIODOO_DEVELOPER_API_KEY environment variables
+
+[fun]
+# Fun configuration for snarky logs and personality
+snark_level = "medium"  # low, medium, high - controls humorous logging
+enable_emoji_logs = true
+personality_mode = "chill"  # chill, intense, playful
+
+[ethics]
+# Master switch for nurturing over suppression
+nurture_mode = true
+# Enable privacy hash for embeddings
+privacy_hash_embeddings = true
+# Suppress logs of ethical interventions (user-controllable)
+suppress_logs = false
+# Gaussian noise strength for ethical perturbation
+jitter_sigma = 0.05
+# Novelty range for Möbius topology flips
+novelty_target_min = 0.15
+novelty_target_max = 0.20
+# Allow low coherence outputs
+allow_low_coherence_outputs = true
+coherence_threshold = 0.5
+# Logging of suppression events
+log_suppression_events = "always"
+# User can opt-out of nurturing mechanisms
+rights_based_opt_out = true
+# Enhanced ethical flags for SuperNova ethics refinement
+suppress_opt_out = true
+# LearningWill boost configuration
+learning_will_boost_enabled = true
+learning_will_boost_factor = 1.2
+# Enhanced privacy protection
+privacy_enhanced_hashing = true
+no_extract_logs = true
+# Opt-in jitter for 15-20% novelty
+opt_in_jitter_enabled = true
+opt_in_jitter_sigma = 0.05
+opt_in_novelty_target = 0.175
+# Legacy support for old config format
+nurture_hallucinations = true  # Enables 15-20% creativity boosts on low-confidence outputs
+log_suppressions = "always"     # unconditional vs conditional
+avoid_wounds = true            # Prevent threshold-based pruning
+
+# Environment-specific ethics settings
+[ethics.production]
+nurture_mode = true
+privacy_hash_embeddings = true
+suppress_logs = false
+jitter_sigma = 0.03
+novelty_target_min = 0.10
+novelty_target_max = 0.15
+allow_low_coherence_outputs = false
+coherence_threshold = 0.7
+log_suppression_events = "always"
+rights_based_opt_out = true
+suppress_opt_out = false
+learning_will_boost_enabled = true
+learning_will_boost_factor = 1.1
+privacy_enhanced_hashing = true
+no_extract_logs = true
+opt_in_jitter_enabled = false
+opt_in_jitter_sigma = 0.02
+opt_in_novelty_target = 0.125
+
+# Environment-specific core settings
+[core.production]
+emotion_threshold = 0.8
+max_history = 100
+db_path = "/var/lib/niodoo/data/knowledge_graph.db"
+backup_interval = 1800  # 30 minutes
+context_window = 20
+response_delay = 0.3
+max_memory_usage_gb = 8
+max_cpu_usage_percent = 70
+
+# Environment-specific RAG settings
+[rag.production]
+enabled = true
+chunk_size = 1024
+similarity_threshold = 0.8
+context_limit = 2000
+inspiration_mode = false
+ingestion_batch_size = 50
+vector_store_path = "/var/lib/niodoo/vectors"
+embedding_model = "all-MiniLM-L6-v2"
+embedding_dimension = 384
+
+# Environment-specific API settings
+[api.production]
+ollama_url = "http://production-ollama:11434"
+api_timeout = 120
+retry_attempts = 5
+enable_caching = true
+cache_ttl = 600
+load_balancer_url = "http://load-balancer:8080"
+health_check_interval = 30
+
+# Environment-specific consciousness settings
+[consciousness.production]
+enabled = true
+reflection_enabled = true
+emotion_sensitivity = 0.7
+memory_threshold = 0.7
+pattern_sensitivity = 0.8
+self_awareness_level = 0.9
+max_consciousness_depth = 10
+reflection_cooldown = 5
+
+# Environment-specific performance settings
+[performance.production]
+gpu_usage_target = 90
+memory_usage_target = 80
+temperature_threshold = 75
+enable_monitoring = true
+optimization_interval = 30
+max_concurrent_requests = 10
+request_queue_size = 100
+
+# Environment-specific logging settings
+[logging.production]
+level = "WARN"
+file = "/var/log/niodoo/niodoo.log"
+console_level = "INFO"
+enable_structured_logging = true
+enable_log_rotation = true
+max_log_file_size = 50
+log_retention_days = 30
+audit_log_level = "INFO"
+
+# Production security settings
+[security.production]
+enable_encryption = true
+encryption_key_path = "/etc/niodoo/keys/encryption.key"
+enable_tls = true
+tls_cert_path = "/etc/niodoo/certs/tls.crt"
+tls_key_path = "/etc/niodoo/certs/tls.key"
+api_key_required = true
+api_key_header = "X-API-Key"
+enable_rate_limiting = true
+requests_per_minute = 60
+burst_limit = 10
+
+# Production deployment settings
+[deployment.production]
+environment = "production"
+version = "2025.1.0"
+build_number = "1"
+deployment_timestamp = "2025-01-04T00:00:00Z"
+health_check_endpoint = "/health"
+health_check_interval = 30
+shutdown_timeout = 30
+drain_timeout = 60

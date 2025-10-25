@@ -1,0 +1,52 @@
+[
+  {
+    "text": "Frustration rut #1: Stuck in the same problem loop",
+    "pad_vector": [0.2, 0.8, -0.3, 0.1, -0.2, 0.05, -0.1],
+    "entropy": 1.8
+  },
+  {
+    "text": "Grind mode #21: Repetitive task exhaustion",
+    "pad_vector": [-0.1, 0.6, -0.2, 0.05, 0.1, -0.05, 0.08],
+    "entropy": 1.5
+  },
+  {
+    "text": "Breakthrough moment: Sudden insight",
+    "pad_vector": [0.9, -0.1, 0.8, 0.2, -0.1, 0.15, 0.05],
+    "entropy": 2.2
+  },
+  {
+    "text": "Anxiety spike: Overwhelming complexity",
+    "pad_vector": [-0.8, 0.9, -0.7, -0.1, 0.2, -0.08, 0.12],
+    "entropy": 2.5
+  },
+  {
+    "text": "Flow state: Deep concentration",
+    "pad_vector": [0.7, -0.2, 0.6, 0.08, -0.05, 0.1, -0.03],
+    "entropy": 1.9
+  },
+  {
+    "text": "Creative inspiration: Novel connections",
+    "pad_vector": [0.8, 0.3, 0.5, 0.12, 0.08, -0.1, 0.06],
+    "entropy": 2.1
+  },
+  {
+    "text": "Mental fatigue: Cognitive overload",
+    "pad_vector": [-0.3, 0.7, -0.4, 0.02, 0.15, -0.07, 0.09],
+    "entropy": 1.7
+  },
+  {
+    "text": "Eureka moment: Solution breakthrough",
+    "pad_vector": [0.95, -0.05, 0.9, 0.18, -0.08, 0.12, 0.04],
+    "entropy": 2.8
+  },
+  {
+    "text": "Confusion rut: Lost in complexity",
+    "pad_vector": [-0.2, 0.8, -0.6, -0.05, 0.18, -0.09, 0.11],
+    "entropy": 2.0
+  },
+  {
+    "text": "Motivation surge: Purpose rediscovered",
+    "pad_vector": [0.85, 0.1, 0.75, 0.14, -0.06, 0.08, 0.02],
+    "entropy": 2.3
+  }
+]

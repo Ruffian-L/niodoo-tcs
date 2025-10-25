@@ -1,0 +1,18 @@
+[package]
+name = "tcs-tda"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Topology Team <niodoo@dev>"]
+description = "Topological data analysis primitives for the Topological Cognitive System"
+license = "MIT"
+
+[dependencies]
+anyhow = { workspace = true }
+ndarray = { workspace = true }
+ndarray-linalg = { workspace = true }
+nalgebra = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+phlite = "0.1.0"

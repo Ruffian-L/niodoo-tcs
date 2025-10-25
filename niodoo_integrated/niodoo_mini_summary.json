@@ -1,0 +1,19 @@
+{
+  "total_cycles": 10,
+  "avg_entropy": null,
+  "entropy_std": null,
+  "threat_percentage": 0.0,
+  "healing_percentage": 0.0,
+  "avg_latency_ms": 27.0,
+  "max_latency_ms": 28.0,
+  "min_latency_ms": 26.0,
+  "breakthroughs": 0,
+  "breakthrough_percentage": 0.0,
+  "verdict": "Fix required: entropy_unstable, emotional_inactive, breakthroughs_low",
+  "optimization_flags": [
+    "hyperspherical_norm",
+    "context_injection",
+    "async_batching",
+    "rtx_5080q_config"
+  ]
+}

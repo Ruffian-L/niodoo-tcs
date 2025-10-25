@@ -1,0 +1,71 @@
+# GitHub Pages configuration for Niodoo-Feeling Documentation
+# Created by Jason Van Pham | Niodoo Framework | 2025
+
+title: "Niodoo-Feeling Documentation"
+description: "Revolutionary consciousness-enhanced AI framework documentation"
+author: "Jason Van Pham"
+url: "https://niodoo.github.io"
+baseurl: "/niodoo-feeling"
+
+# Theme settings
+theme: minima
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+# Markdown settings
+markdown: kramdown
+kramdown:
+  syntax_highlighter: rouge
+  input: GFM
+  auto_ids: true
+  hard_wrap: false
+
+# Collections
+collections:
+  architecture:
+    output: true
+    permalink: /:collection/:name/
+  api:
+    output: true
+    permalink: /:collection/:name/
+  user-guides:
+    output: true
+    permalink: /:collection/:name/
+  mathematics:
+    output: true
+    permalink: /:collection/:name/
+  troubleshooting:
+    output: true
+    permalink: /:collection/:name/
+
+# Navigation
+header_pages:
+  - README.md
+  - architecture/system-overview.md
+  - api/rust-api-reference.md
+  - user-guides/getting-started.md
+  - mathematics/mobius-topology.md
+  - troubleshooting/common-issues.md
+
+# SEO and metadata
+social:
+  name: Jason Van Pham
+  links:
+    - https://github.com/niodoo/niodoo-feeling
+
+# Enable syntax highlighting
+highlighter: rouge
+
+# Exclude from processing
+exclude:
+  - Cargo.toml
+  - Cargo.lock
+  - target/
+  - .gitignore
+  - .github/
+  - scripts/
+  - src/
+  - embeddings-system/
+  - candle-feeling-core/

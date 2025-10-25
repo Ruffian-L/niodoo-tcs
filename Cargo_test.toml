@@ -1,0 +1,13 @@
+[package]
+name = "test_qwen_integration"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tcs-ml = { path = "./tcs-ml", features = ["onnx", "tokenizers"] }
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+
+[[bin]]
+name = "test_qwen_integration"
+path = "test_qwen_integration.rs"

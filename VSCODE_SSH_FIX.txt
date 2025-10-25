@@ -1,0 +1,30 @@
+🚨 COPY THIS INTO YOUR VS CODE SETTINGS.JSON 🚨
+
+Location: ~/.config/Code/User/settings.json
+
+ADD THESE LINES AT THE TOP (after the opening {):
+
+  "remote.SSH.configFile": "/home/ruffian/.ssh/config",
+  "remote.SSH.showLoginTerminal": true,
+  "remote.SSH.useLocalServer": false,
+  "remote.SSH.connectTimeout": 30,
+  "remote.SSH.remotePlatform": {
+    "beelink": "linux",
+    "beelink-remote": "linux",
+    "beelink-local": "linux",
+    "architect": "linux"
+  },
+
+THEN:
+1. Save the file
+2. Ctrl+Shift+P → "Developer: Reload Window"
+3. Ctrl+Shift+P → "Remote-SSH: Connect to Host"
+4. Select "beelink"
+5. When it connects, click "Open Folder"
+6. Type: /home/beelink/Niodoo-Final
+7. DONE!!
+
+IF IT STILL FAILS - TRY THIS IN TERMINAL:
+ssh beelink "cd /home/beelink/Niodoo-Final && ls -la"
+
+If that works, VS Code SHOULD work too!
