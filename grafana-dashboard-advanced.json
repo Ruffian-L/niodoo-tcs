@@ -1,0 +1,128 @@
+{
+  "dashboard": {
+    "title": "TCS Advanced Dashboard (PhD-Level)",
+    "panels": [
+      {
+        "id": 1,
+        "title": "RAG Similarity Heatmap",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(tcs_rag_similarity_bucket[5m])) by (le, component))",
+            "legendFormat": "{{component}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Entropy Delta Over Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "tcs_learning_entropy_delta{component=\"lora\"}",
+            "legendFormat": "Entropy Delta"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "alert": {
+          "conditions": [
+            {
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "type": "avg"
+              },
+              "evaluator": {
+                "params": [0.5],
+                "type": "gt"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Output Variance",
+        "type": "histogram",
+        "targets": [
+          {
+            "expr": "rate(tcs_output_var_bucket[5m])",
+            "legendFormat": "{{component}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "RAG Latency Breakdown",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(tcs_rag_latency_seconds_bucket[5m])) by (le, success))",
+            "legendFormat": "p50 {{success}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(tcs_rag_latency_seconds_bucket[5m])) by (le, success))",
+            "legendFormat": "p95 {{success}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Memory Size by Type",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "tcs_memories_size_bytes",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Memory Save Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(tcs_memories_saved_total[5m])",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "RAG Hits vs Misses",
+        "type": "bargauge",
+        "targets": [
+          {
+            "expr": "sum by (component) (rate(tcs_rag_hits_total[5m]))",
+            "legendFormat": "{{component}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Correlation: High Rogue + Low RAG Hits",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(tcs_llm_prompts_total{type=\"rogue\"}[5m]) / rate(tcs_rag_hits_total[5m])",
+            "legendFormat": "Rogue/RAG Ratio"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16}
+      }
+    ],
+    "refresh": "15s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    }
+  }
+}

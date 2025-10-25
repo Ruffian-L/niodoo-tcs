@@ -1,0 +1,84 @@
+{
+  "dashboard": {
+    "title": "TCS Simple Dashboard (Kid-Friendly)",
+    "panels": [
+      {
+        "id": 1,
+        "title": "AI Happiness (Entropy)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "tcs_entropy{component=\"tda\"}",
+            "legendFormat": "Entropy"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1.5, "color": "yellow"},
+                {"value": 2.0, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Prompt Types",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (type) (rate(tcs_prompts_total[5m]))",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "RAG Speed",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "rate(tcs_rag_latency_seconds[5m])",
+            "legendFormat": "Speed"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Memory Growth",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "tcs_memories_size_bytes{type=\"rag\"}",
+            "legendFormat": "RAG Memory"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Learning Progress",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "tcs_learning_entropy_delta{component=\"lora\"}",
+            "legendFormat": "Entropy Delta"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ],
+    "refresh": "5s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}

@@ -1,0 +1,65 @@
+# ============================================================================
+# Niodoo-TCS: H200 RunPod Optimized Requirements (2025)
+# ============================================================================
+# Production dependencies for Niodoo consciousness engine on H200 GPU
+# Stripped of old EchoMemoria cruft - fresh stack for maximum performance
+
+# Core ML & Numerical Computing
+torch==2.3.1+cu121
+torchvision==0.18.1+cu121
+torchaudio==2.3.1+cu121
+numpy==1.26.4
+scipy==1.14.1
+
+# Transformers & Embeddings (Qwen integration)
+transformers==4.45.2
+sentence-transformers==2.7.1
+tokenizers==0.15.2
+
+# Vector Database & RAG
+qdrant-client==1.10.1
+pinecone-client==5.0.1
+faiss-gpu==1.8.0
+
+# API & Async
+fastapi==0.115.1
+uvicorn==0.30.0
+pydantic==2.8.2
+pydantic-core==2.20.1
+aiohttp==3.10.11
+asyncio-contextmanager==1.0.0
+requests==2.32.3
+
+# Config & Serialization
+pyyaml==6.0.2
+python-dotenv==1.0.1
+json5==0.10.0
+toml==0.10.2
+
+# Monitoring & Logging
+prometheus-client==0.21.0
+structlog==24.4.0
+python-json-logger==2.0.8
+
+# Development & Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-cov==5.0.0
+black==24.10.0
+ruff==0.7.4
+mypy==1.14.1
+
+# CLI & Utilities
+click==8.1.8
+typer==0.12.5
+rich==13.9.2
+tqdm==4.66.6
+
+# Optional: vLLM for faster inference (if using)
+vllm==0.6.5
+
+# Optional: ONNX Runtime (CPU/GPU support)
+onnx==1.17.0
+onnxruntime==1.19.0
+onnxruntime-gpu==1.19.0
+
