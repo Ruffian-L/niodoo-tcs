@@ -5,7 +5,6 @@ use std::time::{Instant, SystemTime};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use csv::Writer;
 use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::prelude::*;

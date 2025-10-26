@@ -4,9 +4,9 @@ use rand::{thread_rng, Rng};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
-use std::time::Duration;
-use tracing::{info, instrument, warn};
 use std::sync::Arc;
+use std::time::Duration;
+use tracing::{info, instrument};
 
 use crate::compass::CompassOutcome;
 use crate::torus::PadGhostState;
@@ -15,8 +15,6 @@ use crate::learning::{DqnState, DqnAction, ReplayTuple};
 use crate::metrics::PipelineMetrics;
 use uuid::Uuid;
 use qdrant_client::Qdrant;
-use serde_json::Value;
-use qdrant_client::qdrant::ScoredPoint;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmotionalVector {
@@ -160,23 +158,12 @@ impl EragClient {
                     match resp.json::<SearchResponse>().await {
                         Ok(parsed) => {
                             for hit in parsed.result {
-                                if let Some(payload) = hit.payload {
-                                    // Convert payload to serde_json::Map
-                                    let json_payload: serde_json::Map<String, serde_json::Value> = payload.into_iter().map(|(k, v)| (k, match v.kind {
-                                        Some(kind) => match kind {
-                                            qdrant_client::qdrant::value::Kind::NullValue(_) => JsonValue::Null,
-                                            qdrant_client::qdrant::value::Kind::BoolValue(b) => JsonValue::Bool(b),
-                                            qdrant_client::qdrant::value::Kind::DoubleValue(d) => JsonValue::Number(serde_json::Number::from_f64(d).unwrap()),
-                                            qdrant_client::qdrant::value::Kind::IntegerValue(i) => JsonValue::Number(serde_json::Number::from(i)),
-                                            qdrant_client::qdrant::value::Kind::StringValue(s) => JsonValue::String(s),
-                                            qdrant_client::qdrant::value::Kind::ListValue(l) => JsonValue::Array(l.values.into_iter().map(|val| /* recursive convert */).collect()),
-                                            qdrant_client::qdrant::value::Kind::StructValue(s) => JsonValue::Object(s.fields.into_iter().map(|(fk, fv)| (fk, /* convert fv */)).collect()),
-                                        },
-                                        None => JsonValue::Null,
-                                    })).collect();
-                                    memories.push(deserialize_memory(&json_payload));
-                                    sims.push(hit.score);
+                                if hit.payload.is_empty() {
+                                    continue;
                                 }
+                                let memory = deserialize_memory(&hit.payload);
+                                sims.push(hit.score);
+                                memories.push(memory);
                             }
                         }
                         Err(err) => {
@@ -238,15 +225,22 @@ impl EragClient {
             }
         }
 
-        if aggregated_context.len() > 1000 {
+        if aggregated_context.is_empty() {
+            aggregated_context = "No relevant ERAG context retrieved.".to_string();
+        } else if aggregated_context.len() > 1000 {
             aggregated_context.truncate(1000);
         }
+
+        let curator_quality = memories
+            .iter()
+            .filter_map(|m| m.quality_score)
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(CollapseResult {
             top_hits: memories,
             aggregated_context,
             average_similarity,
-            curator_quality: Some(average_similarity as f32),
+            curator_quality,
             failure_type: None,
             failure_details: None,
         })
@@ -349,7 +343,7 @@ impl EragClient {
         }
     }
 
-    pub async fn search(&self, query: &str, k: usize, filter: Option<Value>) -> Result<Vec<SearchHit>> {
+    pub async fn search(&self, query: &str, k: usize, filter: Option<JsonValue>) -> Result<Vec<SearchHit>> {
         let embedding = self.embedder.embed(query).await?;
         
         // Build search request manually
@@ -482,17 +476,18 @@ impl EragClient {
         Ok(tuples)
     }
 
-    pub async fn query_old_dqn_tuples(&self, _age_threshold: u32, num: usize) -> Result<Vec<DqnTuple>> {
+    pub async fn query_old_dqn_tuples(&self, _batch_id: u32, _num: usize) -> Result<Vec<DqnTuple>> {
         // Placeholder: implement age-based query later
         Ok(vec![])
     }
 
-    pub async fn query_tough_knots(&self, num: usize) -> Result<Vec<EragMemory>> {
+    pub async fn query_tough_knots(&self, _num: usize) -> Result<Vec<EragMemory>> {
         // Placeholder: query memories with high topology_knot_complexity > 0.4
         Ok(vec![])
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct SearchRequest {
     vector: Vec<f32>,

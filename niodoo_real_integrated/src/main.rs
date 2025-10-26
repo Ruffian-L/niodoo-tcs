@@ -18,8 +18,6 @@ use tracing_subscriber::{
 use niodoo_real_integrated::config::{CliArgs, OutputFormat};
 use niodoo_real_integrated::metrics::metrics;
 use niodoo_real_integrated::pipeline::{Pipeline, PipelineCycle};
-use tcs_core::{init_metrics, TopologicalEngine, metrics_server::start_server, REGISTRY};
-use tokio;
 
 #[derive(Serialize)]
 struct CsvRecord {
@@ -36,9 +34,7 @@ struct CsvRecord {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_metrics();
-    let engine = TopologicalEngine::new(128);
-    tokio::spawn(start_server(REGISTRY.clone()));
+    tcs_core::metrics::init_metrics();
 
     let args = CliArgs::parse();
     // Load env files early so RuntimeConfig can pick up `.env.production` or `.env`

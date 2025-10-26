@@ -6,6 +6,12 @@ authors = ["Niodoo Topology Team <niodoo@dev>"]
 description = "Core cognitive state machines and embeddings for the Topological Cognitive System"
 license = "MIT"
 
+[features]
+default = ["tda_rust"]
+tda_rust = []
+tda_gudhi = []
+legacy_e2e = []
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }

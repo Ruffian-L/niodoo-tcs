@@ -313,38 +313,6 @@ path = "../tests/bin_test_integration.rs"
 # NOTE: embed_codebase binary is defined in embeddings-system/Cargo.toml
 # It belongs to the embeddings-system workspace member, not the main src package
 
-[[bench]]
-name = "toroidal_benchmarks"
-harness = false
-
-[[bench]]
-name = "memory_benchmarks"
-harness = false
-
-[[bench]]
-name = "end_to_end_performance"
-harness = false
-
-[[bench]]
-name = "consciousness_engine_benchmark"
-harness = false
-
-[[bench]]
-name = "minimal_performance_benchmark"
-harness = false
-
-[[bench]]
-name = "optimized_consciousness_benchmark"
-harness = false
-
-[[bench]]
-name = "advanced_performance_benchmark"
-harness = false
-
-[[bench]]
-name = "comprehensive_optimization_benchmark"
-harness = false
-
 [[test]]
 name = "unit_tests"
 path = "tests/unit_tests.rs"

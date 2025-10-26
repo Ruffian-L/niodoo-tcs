@@ -1,3 +1,6 @@
+#![cfg(feature = "legacy_e2e")]
+// Legacy integration benchmark (requires legacy TopologicalEngine).
+
 //! E2E benchmark suite for TCS with continuous testing and CSV output
 
 use csv::Writer;

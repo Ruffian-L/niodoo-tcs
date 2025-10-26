@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use rand::prelude::*;
-use tracing::info;
+use tracing::{info, warn};
 use rayon::prelude::*;
 
 use crate::compass::CompassOutcome;
@@ -105,7 +105,7 @@ pub struct LearningLoop {
     initial_alpha: f64,
     recent_metrics: VecDeque<(f64, f64)>,
     evolution: EvolutionLoop,
-    predictor: TcsPredictor,
+    _predictor: TcsPredictor,
     lora_trainer: LoRATrainer,
     reward_threshold: f64,
 }
@@ -158,6 +158,12 @@ impl LearningLoop {
             DqnAction { param: "self_awareness_level".to_string(), delta: -0.1 },
             DqnAction { param: "self_awareness_level".to_string(), delta: 0.1 },
         ];
+
+        let lora_trainer = LoRATrainer::new().unwrap_or_else(|err| {
+            warn!(error = %err, "Failed to initialise LoRA trainer, using default adapter");
+            LoRATrainer::default()
+        });
+
         Self {
             entropy_history: VecDeque::with_capacity(window),
             window,
@@ -175,8 +181,8 @@ impl LearningLoop {
             initial_alpha: alpha,
             recent_metrics: VecDeque::with_capacity(50),
             evolution: EvolutionLoop::new(20, 5, 0.05),
-            predictor: TcsPredictor::new(),
-            lora_trainer: LoRATrainer::new(),
+            _predictor: TcsPredictor::new(),
+            lora_trainer,
             reward_threshold: -0.5,
         }
     }
@@ -589,9 +595,9 @@ impl LearningLoop {
         let old_tuples = self.erag.query_old_dqn_tuples(1, num_old).await?;
         let mut mixed_episodes: Vec<(f64, f64)> = recent.clone();
         for tuple in old_tuples {
-            if tuple.state.metrics.len() >= 2 {
-                let delta = tuple.state.metrics[0];
-                let rouge = tuple.state.metrics[1];
+            if tuple.state.len() >= 2 {
+                let delta = tuple.state[0];
+                let rouge = tuple.state[1];
                 mixed_episodes.push((delta, rouge));
             }
         }
@@ -614,8 +620,41 @@ impl LearningLoop {
 
     pub fn adjust_on_low_reward(&mut self, reward_signal: f64) {
         if reward_signal < self.reward_threshold {
-            log::info!("Low reward detected ({reward_signal}); triggering LoRA fine-tuning");
-            self.lora_trainer.train(10);
+            info!(reward_signal, "Low reward detected; triggering LoRA fine-tuning");
+
+            let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
+                .replay_buffer
+                .iter()
+                .rev()
+                .take(32)
+                .map(|tuple| {
+                    let input = tuple
+                        .state
+                        .metrics
+                        .iter()
+                        .map(|value| *value as f32)
+                        .collect::<Vec<f32>>();
+                    let target = tuple
+                        .next_state
+                        .metrics
+                        .iter()
+                        .map(|value| *value as f32)
+                        .collect::<Vec<f32>>();
+                    (input, target)
+                })
+                .collect();
+
+            if training_samples.is_empty() {
+                warn!(
+                    "Skipping LoRA fine-tuning because replay buffer does not contain enough data"
+                );
+                return;
+            }
+
+            match self.lora_trainer.train(&training_samples, 10, 1e-3_f32) {
+                Ok(loss) => info!(loss, "LoRA fine-tuning completed"),
+                Err(error) => warn!(%error, "LoRA fine-tuning failed"),
+            }
         }
     }
 }

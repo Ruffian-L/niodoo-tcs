@@ -8,7 +8,16 @@
 
 use std::time::{Duration, Instant};
 
+pub mod counter_current;
 pub mod metrics;
+pub mod topology;
+
+#[cfg(feature = "tda_rust")]
+pub use topology::RustVREngine;
+#[cfg(feature = "tda_gudhi")]
+pub use topology::GudhiEngine;
+pub use topology::{PersistenceFeature, Point, TopologyEngine, TopologyParams, PersistentFeature};
+pub use counter_current::{CounterCurrentScheduler, Observation, ProbabilisticBelief};
 
 pub mod events {
     //! Event types emitted by the orchestrator when notable topological
@@ -143,19 +152,6 @@ pub mod embeddings {
     }
 }
 
-/// Persistent homology feature summary used throughout the pipeline.
-#[derive(Debug, Clone)]
-pub struct PersistentFeature {
-    pub birth: f32,
-    pub death: f32,
-    pub dimension: usize,
-}
-
-impl PersistentFeature {
-    pub fn persistence(&self) -> f32 {
-        (self.death - self.birth).abs()
-    }
-}
 
 /// Lightweight snapshot used to broadcast current state to observers.
 #[derive(Debug, Clone)]

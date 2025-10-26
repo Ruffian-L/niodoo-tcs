@@ -517,14 +517,14 @@ pub mod qwen_error;
 #[cfg(feature = "onnx")]
 pub use qwen_embedder::QwenEmbedder;
 
-mod exploration_agent;
-mod policies;
-mod sampling;
-mod search;
-mod tasks;
-mod utils;
+// mod exploration_agent;
+// mod policies;
+// mod sampling;
+// mod search;
+// mod tasks;
+// mod utils;
 
-pub use exploration_agent::ExplorationAgent;
+// pub use exploration_agent::ExplorationAgent;
 
 /// Simple exploration agent that perturbs cognitive knots with stochastic moves.
 #[derive(Debug)]

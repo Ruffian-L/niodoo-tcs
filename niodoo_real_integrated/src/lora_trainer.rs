@@ -7,8 +7,6 @@ use candle_core::{Device, Shape, Tensor};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use nalgebra::{DMatrix, DVector};
-use rand::prelude::*;
 
 /// Configuration for LoRA adapter
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -494,7 +492,7 @@ impl LoRATrainer {
                         device,
                     )?;
                     
-                    let new_lora_a = self.adapter.lora_a().sub(&lora_a_grad)?;
+                    let _ = self.adapter.lora_a().sub(&lora_a_grad)?;
                     // Note: Full tensor update would require mut access to adapter
                     // This is a simplified version
                 }

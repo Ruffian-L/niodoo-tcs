@@ -9,7 +9,7 @@ use prometheus::{
 use rand::Rng;
 use std::time::Duration;
 use std::collections::VecDeque;
-use std::sync::{Mutex, Once, LazyLock};
+use std::sync::{Mutex, LazyLock};
 
 static METRICS: Lazy<PipelineMetrics> =
     Lazy::new(|| PipelineMetrics::new().expect("failed to initialise Prometheus metrics"));
@@ -202,7 +202,6 @@ impl FailureSignals {
     }
 }
 
-static INIT: Once = Once::new();
 static AGG: LazyLock<Mutex<FailureAggregator>> = LazyLock::new(|| Mutex::new(FailureAggregator::new(10)));
 
 pub fn failure_aggregator() -> &'static Mutex<FailureAggregator> {

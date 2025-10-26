@@ -2,18 +2,19 @@
 //! Computes persistent homology, knot invariants, and TQFT signatures on every state
 
 use anyhow::Result;
+use candle_core::{Device, Tensor};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::time::Instant;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::torus::PadGhostState;
-use consciousness_metrics::approximate_phi_from_betti;
+use tcs_core::metrics::record_topology_metrics;
+use tcs_core::topology::{PersistenceFeature, PersistenceResult, Point, TopologyParams};
+use tcs_core::{RustVREngine, TopologyEngine};
 use tcs_knot::{JonesPolynomial, KnotDiagram};
-use tcs_tda::{PersistenceFeature, PersistentHomology, TakensEmbedding};
 use tcs_tqft::{Cobordism, TQFTEngine};
-use tcs_core::{TopologicalEngine, Tensor, DType, Device};
-use tcs_core::metrics::REGISTRY;
 
 /// Topological signature computed for a state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,27 +73,24 @@ impl TopologicalSignature {
 
 /// TCS Analysis Engine
 pub struct TCSAnalyzer {
-    homology: PersistentHomology,
+    topology_engine: RustVREngine,
     knot_analyzer: JonesPolynomial,
     tqft_engine: TQFTEngine,
-    takens: TakensEmbedding,
 }
 
 impl TCSAnalyzer {
     /// Initialize TCS analyzer
     pub fn new() -> Result<Self> {
-        let homology = PersistentHomology::new(2, 1.0); // Max dimension 2, max edge length 1.0
+        let topology_engine = RustVREngine::new();
         let knot_analyzer = JonesPolynomial::new(64);
         let tqft_engine = TQFTEngine::new(2)
             .map_err(|e| anyhow::anyhow!("Failed to initialize TQFT engine: {}", e))?;
-        let takens = TakensEmbedding::new(3, 1, 7); // dim=3, delay=1, data_dim=7 (PAD+ghost)
 
         info!("TCS Analyzer initialized");
         Ok(Self {
-            homology,
+            topology_engine,
             knot_analyzer,
             tqft_engine,
-            takens,
         })
     }
 
@@ -101,18 +99,31 @@ impl TCSAnalyzer {
     pub fn analyze_state(&mut self, pad_state: &PadGhostState) -> Result<TopologicalSignature> {
         let start = Instant::now();
 
-        let engine = TopologicalEngine::new(512);  // Or shared
-        let diagram = engine.compute_persistence(&pad_state.to_tensor()?);  // Assume to_tensor impl
-        let pe = diagram.entropy();
-        REGISTRY.entropy_gauge.with_label_values(&["analysis"]).set(pe as f64);
+        let points = self.pad_to_points(pad_state);
+        let params = TopologyParams {
+            k: 16,
+            max_filtration_value: Some(1.5),
+            ..TopologyParams::default()
+        };
+        let result = self
+            .topology_engine
+            .compute_persistence(&points, 2, &params)?;
+        record_topology_metrics(&result);
 
-        let betti = engine.compute_betti(&diagram);
-        // ... compute gap, knot from betti
-        let gap = (betti[1] - betti[0]).abs();
-        let knot_proxy = betti[1] as f32;
+        let persistence_entropy = result
+            .entropy
+            .iter()
+            .map(|(_, value)| f64::from(*value))
+            .sum::<f64>();
 
-        let phi = approximate_phi_from_betti(&betti)?;
-        info!("IIT Φ: {:.6}", phi);
+        let spectral_gap = Self::compute_spectral_gap(&result);
+
+        let betti = self.compute_betti_numbers(&result);
+        let gap = (betti[1] as f64 - betti[0] as f64).abs();
+        let knot_proxy = betti[1] as f64;
+
+        let phi = Self::approximate_phi_from_betti(&betti);
+        info!("IIT Φ (approx): {:.6}", phi);
 
         // Keep existing knot polynomial computation
         let knot_diagram = self.pad_to_knot_diagram(pad_state);
@@ -128,24 +139,26 @@ impl TCSAnalyzer {
 
         debug!(
             "Topological analysis: Betti={:?}, Knot complexity={:.3}, PE={:.3}, Gap={:.3}, Cobordism={:?}",
-            betti, knot_complexity, pe, gap, cobordism_type
+            betti, knot_complexity, persistence_entropy, gap, cobordism_type
         );
 
+        let persistence_features = Self::collect_persistence_features(&result);
+
         Ok(TopologicalSignature::new(
-            vec![], // persistence_features are now computed directly
+            persistence_features,
             betti,
             knot_complexity,
             knot_polynomial,
             self.tqft_engine.dimension,
             cobordism_type,
             computation_time_ms,
-            pe,
-            gap,
+            persistence_entropy,
+            spectral_gap,
         ))
     }
 
     /// Convert PAD state to point cloud for homology computation
-    fn pad_to_points(&self, pad_state: &PadGhostState) -> Vec<Vec<f64>> {
+    fn pad_to_points(&self, pad_state: &PadGhostState) -> Vec<Point> {
         let mut points = Vec::new();
         for i in 0..7 {
             // Create point from PAD coordinates with mu/sigma as extra dimensions
@@ -157,21 +170,20 @@ impl TCSAnalyzer {
             while coords.len() < 7 {
                 coords.push(0.0);
             }
-            points.push(coords);
+            let point = coords.into_iter().map(|v| v as f32).collect::<Vec<_>>();
+            points.push(Point::new(point));
         }
         points
     }
 
     /// Compute Betti numbers from persistence features
-    fn compute_betti_numbers(&self, features: &[PersistenceFeature]) -> [usize; 3] {
+    fn compute_betti_numbers(&self, result: &PersistenceResult) -> [usize; 3] {
         let mut betti = [0usize; 3];
-
-        for feature in features {
-            if feature.dimension < 3 {
-                betti[feature.dimension] += 1;
+        for diagram in &result.diagrams {
+            if diagram.dimension < 3 {
+                betti[diagram.dimension] = diagram.features.len();
             }
         }
-
         betti
     }
 
@@ -209,6 +221,44 @@ impl TCSAnalyzer {
         }
     }
 
+    fn collect_persistence_features(result: &PersistenceResult) -> Vec<PersistenceFeature> {
+        result
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.features.iter().cloned())
+            .collect()
+    }
+
+    fn compute_spectral_gap(result: &PersistenceResult) -> f64 {
+        let mut values: Vec<f64> = result
+            .entropy
+            .iter()
+            .map(|(_, value)| f64::from(*value))
+            .collect();
+
+        if values.len() < 2 {
+            return values.first().copied().unwrap_or(0.0);
+        }
+
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
+        let min = values.first().copied().unwrap_or(0.0);
+        let max = values.last().copied().unwrap_or(0.0);
+        (max - min).max(0.0)
+    }
+
+    fn approximate_phi_from_betti(betti: &[usize; 3]) -> f64 {
+        let total: f64 = betti.iter().map(|&b| b as f64).sum();
+        if total <= f64::EPSILON {
+            return 0.0;
+        }
+
+        let weights = [0.5_f64, 0.3, 0.2];
+        betti
+            .iter()
+            .zip(weights.iter())
+            .map(|(&b, &w)| w * (b as f64 / total))
+            .sum()
+    }
     /// Analyze transition between two states
     pub fn analyze_transition(
         &mut self,
@@ -241,7 +291,21 @@ impl TCSAnalyzer {
 }
 
 impl PadGhostState {
-    fn to_tensor(&self) -> anyhow::Result<Tensor> { /* Convert state to Tensor */ Ok(Tensor::zeros((1,512), DType::F32, &Device::Cpu)?) }
+    #[allow(dead_code)]
+    fn to_tensor(&self) -> anyhow::Result<Tensor> {
+        let mut values: Vec<f32> = Vec::with_capacity(512);
+        values.extend(self.pad.iter().map(|v| *v as f32));
+        values.extend(self.mu.iter().map(|v| *v as f32));
+        values.extend(self.sigma.iter().map(|v| *v as f32));
+
+        // Pad to the expected embedding width
+        if values.len() < 512 {
+            values.resize(512, 0.0);
+        }
+
+        let tensor = Tensor::from_vec(values, (1, 512), &Device::Cpu)?;
+        Ok(tensor)
+    }
 }
 
 /// Analysis of transition between two states
