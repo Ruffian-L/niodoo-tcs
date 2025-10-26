@@ -263,6 +263,10 @@ name = "emotional_influence"
 path = "bin/emotional_influence.rs"
 
 [[bin]]
+name = "emotion_bench"
+path = "bin/emotion_bench.rs"
+
+[[bin]]
 name = "consciousness_stack_probe"
 path = "bin/consciousness_stack_probe.rs"
 

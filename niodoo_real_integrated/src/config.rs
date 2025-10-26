@@ -575,7 +575,10 @@ impl RuntimeConfig {
             .unwrap_or_else(default_consistency_variance_threshold);
 
         let repetition_penalty = env_with_fallback(&["REPETITION_PENALTY"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_repetition_penalty);
-        let lens_snippet_chars = env_with_fallback(&["LENS_SNIPPET_CHARS"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_lens_snippet_chars);
+        let lens_snippet_chars = env_with_fallback(&["LENS_SNIPPET_CHARS"])
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|n| n.clamp(100, 500))
+            .unwrap_or_else(default_lens_snippet_chars);
         let cot_temp_increment = env_with_fallback(&["COT_TEMP_INCREMENT"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cot_temp_increment);
         let reflexion_top_p_step = env_with_fallback(&["REFLEXION_TOP_P_STEP"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_reflexion_top_p_step);
         let cot_success_rouge_threshold = env_with_fallback(&["COT_SUCCESS_ROUGE_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cot_success_rouge_threshold);

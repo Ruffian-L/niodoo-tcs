@@ -810,6 +810,8 @@ impl GenerationEngine {
     fn format_lens_prompt(&self, prompt: &str, directive: &str, compass: &CompassOutcome) -> String {
         let clipped = self.clamp_prompt(prompt);
         let pulse = snippet(&clipped, self.lens_snippet_chars);
+        let pulse_len = pulse.chars().count();
+        tracing::debug!(pulse_len, "Pulse snippet length");
         format!(
             "Quadrant {:?} | threat={} healing={}\nDirective: {}\nPulse: {}",
             compass.quadrant, compass.is_threat, compass.is_healing, directive, pulse
