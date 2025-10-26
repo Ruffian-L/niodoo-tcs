@@ -26,11 +26,9 @@ members = [
     "tcs-ml",
     "tcs-consensus",
     "tcs-pipeline",
-    "niodoo-core",
-    "constants_core",
     "niodoo_real_integrated",
-    # Transitional member until all modules migrate
-    "src",
+    # Transitional monolith excluded from default workspace build to avoid broken deps
+    # "src",
 ]
 exclude = [
     "candle-feeling-core-v2",
@@ -40,6 +38,10 @@ exclude = [
     "demo_advanced_memory",
     "Niodoo-Feeling-Alpha",
     "deployment",  # Has own workspace definition - excluded to prevent conflicts
+    # Exclude crates that reference removed legacy core
+    "niodoo-core",
+    "constants_core",
+    "niodoo-tcs-bridge",
 ]
 resolver = "2"
 
@@ -210,3 +212,5 @@ performance_targets = [
 ]
 
 # Dependencies are in the src/Cargo.toml file
+
+

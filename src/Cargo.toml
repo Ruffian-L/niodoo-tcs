@@ -13,8 +13,7 @@ tokio-stream = "0.1"
 lazy_static = "1.4.0"
 parking_lot = "0.12"
 
-# Workspace dependencies (member package)
-niodoo-core = { path = "../niodoo-core" }
+# Legacy "niodoo-core" is not present; use local modules instead
 
 # Data structures and serialization
 serde = { workspace = true }
@@ -106,7 +105,7 @@ clap = { version = "4.0", features = ["derive"] }
 # Qt framework integration (more complete Qt bindings) - conditional
 qmetaobject = { version = "0.2", optional = true }
 
-# Real AI inference dependencies
+# Real AI inference dependencies (kept optional)
 ort = { version = "1.16.3", features = ["cuda"], optional = true }
 hf-hub = { version = "0.3", optional = true }
 # ring = "=0.16.20"  # Pin to working version to avoid linking issues with 0.17.14
@@ -114,15 +113,14 @@ hf-hub = { version = "0.3", optional = true }
 llama-cpp-2 = "0.1"  # Keep as is
 # TODO: Restore ORT once the pipeline uses the new crate-based ONNX wrapper.
 
-# Local constants module
-# constants_core = { path = "../Niodoo-Bullshit-MCP/constants_core" }
+# Local constants module removed; use `consciousness_constants` instead
 
 # Additional missing dependencies for compilation
 # candle-datasets = { workspace = true } # Not defined in workspace
 # candle-lora and candle-vllm removed - packages not available
 # Using stub implementations for LoRA functionality
 sha2 = "0.10"  # For hashing in similarity cache
-ed25519-dalek = "2.1"  # For consensus signatures in token promotion
+ed25519-dalek = { version = "1.0", default-features = false, features = ["std"] }  # Avoid base64ct 1.8 (edition2024)
 
 # For hive join_all
 futures = "0.3"
