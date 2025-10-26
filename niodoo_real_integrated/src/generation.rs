@@ -65,6 +65,7 @@ pub struct GenerationEngine {
     model: String,
     temperature: f64,
     top_p: f64,
+    repetition_penalty: f64,  // Added field for repetition penalty
     max_tokens: usize,
     client: Arc<Client>,
     // Optional API clients for cascading generation
@@ -150,6 +151,7 @@ impl GenerationEngine {
             model: model.into(),
             temperature: 0.5,
             top_p: 0.6,
+            repetition_penalty: 1.2,  // Default repetition penalty
             max_tokens,
             client: Arc::new(client),
             claude: None,
@@ -167,6 +169,7 @@ impl GenerationEngine {
     pub fn apply_runtime_from_config(&mut self, cfg: &crate::config::RuntimeConfig) {
         self.temperature = cfg.temperature;
         self.top_p = cfg.top_p;
+        self.repetition_penalty = cfg.repetition_penalty;
         self.prompt_max_chars = cfg.prompt_max_chars;
         self.consistency_variance_threshold = cfg.consistency_variance_threshold;
     }
@@ -179,8 +182,7 @@ impl GenerationEngine {
     pub fn update_params(&mut self, temperature: f64, top_p: f64, repetition_penalty: f64) {
         self.temperature = temperature.clamp(0.1, 1.0);
         self.top_p = top_p.clamp(0.1, 1.0);
-        // Note: repetition_penalty is used in send_chat but not stored as a field
-        // We'll need to pass it through to send_chat calls
+        self.repetition_penalty = repetition_penalty.clamp(1.0, 2.0);  // Now stored as field
     }
 
     fn compose_system_prompt(&self, compass: Option<&CompassOutcome>) -> String {
@@ -585,7 +587,7 @@ impl GenerationEngine {
                 messages,
                 temperature: self.temperature,
                 top_p: self.top_p,
-                repetition_penalty: 1.2, // TODO: wire from config
+                repetition_penalty: self.repetition_penalty,
                 max_tokens: self.max_tokens,
                 logprobs: None,
                 top_logprobs: None,
@@ -624,7 +626,7 @@ impl GenerationEngine {
             messages,
             temperature: self.temperature,
             top_p: self.top_p,
-            repetition_penalty: 1.2,
+            repetition_penalty: self.repetition_penalty,
             max_tokens: dynamic_max_tokens.max(self.max_tokens), // Use at least the configured minimum
             logprobs: if enable_logprobs { Some(true) } else { None },
             top_logprobs: if enable_logprobs { Some(0) } else { None },
@@ -696,7 +698,7 @@ impl GenerationEngine {
             ],
             temperature: self.temperature,
             top_p: self.top_p,
-            repetition_penalty: 1.2,
+            repetition_penalty: self.repetition_penalty,
             max_tokens: 1,
             logprobs: None,
             top_logprobs: None,
@@ -1050,7 +1052,7 @@ impl GenerationEngine {
             messages,
             temperature: temp,
             top_p,
-            repetition_penalty: 1.2,
+            repetition_penalty: self.repetition_penalty,
             max_tokens: dynamic_max_tokens.max(self.max_tokens),
             logprobs: if enable_logprobs { Some(true) } else { None },
             top_logprobs: if enable_logprobs { Some(0) } else { None },
