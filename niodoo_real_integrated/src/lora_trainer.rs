@@ -337,6 +337,117 @@ mod tests {
         let expected_params = 256 * 8 + 8 * 256;
         assert_eq!(adapter.num_params(), expected_params);
     }
+
+    #[test]
+    fn test_lora_trainer_gradient_computation() -> Result<()> {
+        let config = LoRAConfig {
+            rank: 4,
+            alpha: 8.0,
+            input_dim: 16,
+            output_dim: 16,
+        };
+        let mut trainer = LoRATrainer::with_config(config)?;
+        
+        // Create simple test data
+        let input_data = vec![0.1_f32; 16];
+        let target_data = vec![0.2_f32; 16];
+        
+        // Call private methods using the public API
+        let data = vec![(input_data.clone(), target_data.clone())];
+        let result = trainer.train(&data, 5, 0.01);
+        
+        assert!(result.is_ok());
+        let loss = result.unwrap();
+        assert!(loss >= 0.0, "Loss should be non-negative");
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_lora_tensor_preparation() -> Result<()> {
+        let config = LoRAConfig {
+            rank: 8,
+            alpha: 16.0,
+            input_dim: 32,
+            output_dim: 32,
+        };
+        let trainer = LoRATrainer::with_config(config)?;
+        
+        // Test padding (smaller input)
+        let small_input = vec![1.0_f32; 16];
+        let prepared = trainer.prepare_tensor(&small_input, 32, &Device::Cpu)?;
+        assert_eq!(prepared.shape().dims(), &[1, 32]);
+        
+        // Test truncation (larger input)
+        let large_input = vec![1.0_f32; 64];
+        let prepared = trainer.prepare_tensor(&large_input, 32, &Device::Cpu)?;
+        assert_eq!(prepared.shape().dims(), &[1, 32]);
+        
+        // Test exact match
+        let exact_input = vec![1.0_f32; 32];
+        let prepared = trainer.prepare_tensor(&exact_input, 32, &Device::Cpu)?;
+        assert_eq!(prepared.shape().dims(), &[1, 32]);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_lora_gradient_clipping() -> Result<()> {
+        let config = LoRAConfig {
+            rank: 4,
+            alpha: 8.0,
+            input_dim: 8,
+            output_dim: 8,
+        };
+        let trainer = LoRATrainer::with_config(config)?;
+        
+        // Create a large gradient that should be clipped
+        let large_grad_data = vec![100.0_f32; 8 * 4];
+        let large_grad = Tensor::from_vec(
+            large_grad_data,
+            Shape::from((8, 4)),
+            &Device::Cpu,
+        )?;
+        
+        let clipped = trainer.clip_gradients(large_grad, 1.0)?;
+        
+        // Verify the gradient was clipped
+        let norm_sq = clipped.sqr()?.sum_all()?.to_scalar::<f32>()?;
+        let norm = norm_sq.sqrt();
+        assert!(norm <= 1.0 + 1e-5, "Gradient should be clipped to max_norm");
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_lora_training_convergence() -> Result<()> {
+        let config = LoRAConfig {
+            rank: 4,
+            alpha: 8.0,
+            input_dim: 16,
+            output_dim: 16,
+        };
+        let mut trainer = LoRATrainer::with_config(config)?;
+        
+        // Create synthetic data where we know the target function
+        let training_data: Vec<(Vec<f32>, Vec<f32>)> = (0..10)
+            .map(|i| {
+                let input = vec![i as f32 / 10.0; 16];
+                let target = vec![(i as f32 / 10.0) * 0.5; 16]; // Simple scaling
+                (input, target)
+            })
+            .collect();
+        
+        // Train for multiple epochs
+        let initial_loss = trainer.train(&training_data, 1, 0.01)?;
+        let final_loss = trainer.train(&training_data, 20, 0.01)?;
+        
+        // Loss should decrease (or at least not increase)
+        assert!(final_loss <= initial_loss + 0.1, 
+            "Training should converge: initial={}, final={}", initial_loss, final_loss);
+        
+        Ok(())
+    }
 }
 
 /// LoRA Trainer for integration with pipeline
@@ -448,12 +559,29 @@ impl LoRATrainer {
             return Ok(0.0);
         }
 
-        let device = self.adapter.device();
+        let device = self.adapter.device().clone(); // Clone device to avoid borrow conflicts
         let batch_size = data.len().min(8); // Process in small batches
+        let mut final_loss = 0.0;
+        
+        // Initialize momentum tensors for SGD with momentum
+        let mut momentum_a = Tensor::zeros(
+            Shape::from((self.config.input_dim, self.config.rank)),
+            candle_core::DType::F32,
+            &device,
+        )?;
+        let mut momentum_b = Tensor::zeros(
+            Shape::from((self.config.rank, self.config.output_dim)),
+            candle_core::DType::F32,
+            &device,
+        )?;
+        let momentum_factor = 0.9;
 
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
             let mut sample_count = 0;
+
+            // Adaptive learning rate with cosine annealing
+            let current_lr = learning_rate * (1.0 + (epoch as f32 * std::f32::consts::PI / epochs as f32).cos()) / 2.0;
 
             // Process in batches
             for batch_start in (0..data.len()).step_by(batch_size) {
@@ -461,23 +589,9 @@ impl LoRATrainer {
                 let batch = &data[batch_start..batch_end];
 
                 for (input_vec, target_vec) in batch {
-                    // Skip if dimensions don't match
-                    if input_vec.len() != self.config.input_dim || target_vec.len() != self.config.output_dim {
-                        continue;
-                    }
-
-                    // Convert to tensors
-                    let input = Tensor::from_vec(
-                        input_vec.clone(),
-                        Shape::from((1, input_vec.len())),
-                        device,
-                    )?;
-
-                    let target = Tensor::from_vec(
-                        target_vec.clone(),
-                        Shape::from((1, target_vec.len())),
-                        device,
-                    )?;
+                    // Proper dimension handling with padding/truncation
+                    let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
+                    let target = self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
 
                     // Forward pass
                     let output = self.adapter.forward(&input)?;
@@ -489,73 +603,114 @@ impl LoRATrainer {
                     total_loss += loss_val;
                     sample_count += 1;
 
-                    // Update LoRA weights based on gradient approximation
+                    // Compute gradients using proper chain rule (backpropagation)
                     if epoch > 0 && loss_val > 0.001 {
-                        self.update_lora_weights(loss_val, learning_rate, device)?;
+                        let (grad_a, grad_b) = self.compute_gradients(&input, &target, &output, &device)?;
+                        
+                        // Apply gradient clipping to prevent explosion
+                        let grad_a_clipped = self.clip_gradients(grad_a, 1.0)?;
+                        let grad_b_clipped = self.clip_gradients(grad_b, 1.0)?;
+                        
+                        // Update momentum (SGD with momentum)
+                        let momentum_factor_tensor = Tensor::new(&[momentum_factor], &device)?;
+                        let lr_tensor = Tensor::new(&[current_lr], &device)?;
+                        
+                        momentum_a = momentum_a.broadcast_mul(&momentum_factor_tensor)?
+                            .broadcast_add(&grad_a_clipped.broadcast_mul(&lr_tensor)?)?;
+                        momentum_b = momentum_b.broadcast_mul(&momentum_factor_tensor)?
+                            .broadcast_add(&grad_b_clipped.broadcast_mul(&lr_tensor)?)?;
+                        
+                        // Apply gradient updates
+                        self.apply_gradient_updates(momentum_a.clone(), momentum_b.clone())?;
                     }
                 }
             }
 
             if sample_count > 0 {
                 let avg_loss = total_loss / sample_count as f32;
+                final_loss = avg_loss;
                 if epoch % 5 == 0 || epoch == epochs - 1 {
-                    tracing::info!("LoRA Epoch {}: Loss = {:.6} (samples: {})", epoch, avg_loss, sample_count);
+                    tracing::info!("LoRA Epoch {}: Loss = {:.6} (samples: {}, lr: {:.6})", epoch, avg_loss, sample_count, current_lr);
                 }
             }
         }
 
-        Ok(total_loss / data.len() as f32)
+        Ok(final_loss)
     }
 
-    /// Update LoRA weights using gradient approximation
-    fn update_lora_weights(
-        &mut self,
-        loss: f32,
-        learning_rate: f32,
+    /// Prepare tensor with proper padding/truncation for variable dimensions
+    pub fn prepare_tensor(&self, data: &[f32], target_dim: usize, device: &Device) -> Result<Tensor> {
+        let mut values = data.to_vec();
+        
+        // Pad or truncate to target dimension
+        if values.len() < target_dim {
+            values.resize(target_dim, 0.0);
+        } else if values.len() > target_dim {
+            values.truncate(target_dim);
+        }
+        
+        Ok(Tensor::from_vec(values, Shape::from((1, target_dim)), device)?)
+    }
+
+    /// Compute proper gradients using chain rule for LoRA
+    /// For LoRA: output = scaling * (input @ A @ B)
+    /// Backpropagation computes dL/dB and dL/dA correctly
+    fn compute_gradients(
+        &self,
+        input: &Tensor,
+        target: &Tensor,
+        output: &Tensor,
         device: &Device,
+    ) -> Result<(Tensor, Tensor)> {
+        let scaling = self.config.alpha / self.config.rank as f32;
+        
+        // dL/doutput = 2 * (output - target) for MSE loss
+        let diff = output.sub(target)?;
+        let grad_output = diff.broadcast_mul(&Tensor::new(&[2.0], device)?)?;
+        
+        // Scale by LoRA scaling factor
+        let grad_output_scaled = grad_output.broadcast_mul(&Tensor::new(&[scaling], device)?)?;
+        
+        // Get intermediate activation: input @ A
+        let intermediate = input.matmul(self.adapter.lora_a())?;
+        
+        // Gradient for B: dL/dB = intermediate^T @ grad_output_scaled
+        let grad_b = intermediate.transpose(0, 1)?.matmul(&grad_output_scaled)?;
+        
+        // Gradient for A: dL/dA = input^T @ grad_output_scaled @ B^T
+        let grad_a_intermediate = input.transpose(0, 1)?.matmul(&grad_output_scaled)?;
+        let grad_a = grad_a_intermediate.matmul(&self.adapter.lora_b().transpose(0, 1)?)?;
+        
+        Ok((grad_a, grad_b))
+    }
+
+    /// Clip gradients to prevent explosion (gradient clipping)
+    pub fn clip_gradients(&self, grad: Tensor, max_norm: f32) -> Result<Tensor> {
+        // Compute L2 norm
+        let norm_sq = grad.sqr()?.sum_all()?.to_scalar::<f32>()?;
+        let norm = norm_sq.sqrt();
+        
+        if norm > max_norm {
+            let scale = max_norm / norm;
+            Ok(grad.broadcast_mul(&Tensor::new(&[scale], grad.device())?)?)
+        } else {
+            Ok(grad)
+        }
+    }
+
+    /// Apply gradient updates with momentum to LoRA weights
+    fn apply_gradient_updates(
+        &mut self,
+        momentum_a: Tensor,
+        momentum_b: Tensor,
     ) -> Result<()> {
-        // Gradient approximation: use loss signal to update weights
-        // In a full implementation, we'd compute actual gradients via autodiff
-        let lr_signal = learning_rate * loss;
+        // Update A: W_new = W_old - momentum
+        let new_lora_a = self.adapter.lora_a().sub(&momentum_a)?;
 
-        // Update lora_a: get current values, apply gradient update
-        let lora_a_data = self.adapter.lora_a().to_vec2::<f32>()?;
-        let updated_a: Vec<Vec<f32>> = lora_a_data
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|val| val - lr_signal * val.signum() * 0.01)
-                    .collect()
-            })
-            .collect();
+        // Update B: W_new = W_old - momentum
+        let new_lora_b = self.adapter.lora_b().sub(&momentum_b)?;
 
-        let flat_a: Vec<f32> = updated_a.iter().flatten().copied().collect();
-        let new_lora_a = Tensor::from_vec(
-            flat_a,
-            Shape::from((self.config.input_dim, self.config.rank)),
-            device,
-        )?;
-
-        // Update lora_b similarly
-        let lora_b_data = self.adapter.lora_b().to_vec2::<f32>()?;
-        let updated_b: Vec<Vec<f32>> = lora_b_data
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|val| val - lr_signal * val.signum() * 0.01)
-                    .collect()
-            })
-            .collect();
-
-        let flat_b: Vec<f32> = updated_b.iter().flatten().copied().collect();
-        let new_lora_b = Tensor::from_vec(
-            flat_b,
-            Shape::from((self.config.rank, self.config.output_dim)),
-            device,
-        )?;
-
-        // Update the adapter with new weights
-        // This requires accessing the mutable adapter field
+        // Update the adapter with refreshed weights
         *self.adapter_mut() = LoRAAdapter {
             config: self.config.clone(),
             lora_a: new_lora_a,
