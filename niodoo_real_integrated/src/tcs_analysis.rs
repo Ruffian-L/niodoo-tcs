@@ -127,9 +127,15 @@ impl TCSAnalyzer {
         let start = Instant::now();
 
         let points = self.pad_to_points(pad_state);
+        // Scaling guards: cap KNN and filtration for performance with configurable defaults
+        let k = std::env::var("TCS_KNN_K").ok().and_then(|v| v.parse().ok()).unwrap_or(16);
+        let max_filtration = std::env::var("TCS_MAX_FILTRATION")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(1.5);
         let params = TopologyParams {
-            k: 16,
-            max_filtration_value: Some(1.5),
+            k: k.max(1).min(128),
+            max_filtration_value: Some(max_filtration.max(0.1).min(10.0)),
             ..TopologyParams::default()
         };
         let result = self

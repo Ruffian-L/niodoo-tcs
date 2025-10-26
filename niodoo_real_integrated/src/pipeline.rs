@@ -634,6 +634,29 @@ impl Pipeline {
             compass.is_healing,
         );
 
+        // Emit per-cycle WebSocket event (best-effort)
+        if let Ok(ws_url) = std::env::var("NIODOO_WS_ENDPOINT") {
+            let _ = tokio::spawn({
+                let ws_url = ws_url.clone();
+                let event = serde_json::json!({
+                    "event": "cycle",
+                    "entropy": pad_state.entropy,
+                    "knot": topology.knot_complexity,
+                    "betti": topology.betti_numbers,
+                    "ucb1": compass.ucb1_score,
+                    "retries": self.retry_count.load(Ordering::Relaxed),
+                    "latency_ms": final_generation.latency_ms,
+                });
+                async move {
+                    let _ = reqwest::Client::new()
+                        .post(format!("{}/events", ws_url.trim_end_matches('/')))
+                        .json(&event)
+                        .send()
+                        .await;
+                }
+            });
+        }
+
         // learning_ms already set above
 
         Ok(PipelineCycle {

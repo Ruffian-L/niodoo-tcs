@@ -81,6 +81,7 @@ pub struct GenerationEngine {
     // Configurable limits/thresholds
     prompt_max_chars: usize,
     consistency_variance_threshold: f64,
+    lens_snippet_chars: usize,
 }
 
 static GLOBAL_CLIENT: OnceCell<Client> = OnceCell::new();
@@ -163,6 +164,7 @@ impl GenerationEngine {
             system_prompt: default_system_prompt(),
             prompt_max_chars,
             consistency_variance_threshold,
+            lens_snippet_chars: 180,
         })
     }
 
@@ -172,6 +174,7 @@ impl GenerationEngine {
         self.repetition_penalty = cfg.repetition_penalty;
         self.prompt_max_chars = cfg.prompt_max_chars;
         self.consistency_variance_threshold = cfg.consistency_variance_threshold;
+        self.lens_snippet_chars = cfg.lens_snippet_chars;
     }
 
     pub fn set_system_prompt(&mut self, prompt: impl Into<String>) {
@@ -806,7 +809,7 @@ impl GenerationEngine {
 
     fn format_lens_prompt(&self, prompt: &str, directive: &str, compass: &CompassOutcome) -> String {
         let clipped = self.clamp_prompt(prompt);
-        let pulse = snippet(&clipped, 180);
+        let pulse = snippet(&clipped, self.lens_snippet_chars);
         format!(
             "Quadrant {:?} | threat={} healing={}\nDirective: {}\nPulse: {}",
             compass.quadrant, compass.is_threat, compass.is_healing, directive, pulse
