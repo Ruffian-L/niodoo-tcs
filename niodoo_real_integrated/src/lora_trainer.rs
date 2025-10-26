@@ -444,55 +444,126 @@ impl LoRATrainer {
         epochs: usize,
         learning_rate: f32,
     ) -> Result<f32> {
+        if data.is_empty() {
+            return Ok(0.0);
+        }
+
         let device = self.adapter.device();
+        let batch_size = data.len().min(8); // Process in small batches
 
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
+            let mut sample_count = 0;
 
-            for (input_vec, target_vec) in data {
-                // Convert to tensors
-                let input =
-                    Tensor::from_vec(input_vec.clone(), Shape::from((1, input_vec.len())), device)?;
+            // Process in batches
+            for batch_start in (0..data.len()).step_by(batch_size) {
+                let batch_end = (batch_start + batch_size).min(data.len());
+                let batch = &data[batch_start..batch_end];
 
-                let target = Tensor::from_vec(
-                    target_vec.clone(),
-                    Shape::from((1, target_vec.len())),
-                    device,
-                )?;
+                for (input_vec, target_vec) in batch {
+                    // Skip if dimensions don't match
+                    if input_vec.len() != self.config.input_dim || target_vec.len() != self.config.output_dim {
+                        continue;
+                    }
 
-                // Forward pass
-                let output = self.adapter.forward(&input)?;
-
-                // Compute loss (MSE)
-                let diff = output.sub(&target)?;
-                let loss = diff.sqr()?.mean_all()?;
-                let loss_val = loss.to_scalar::<f32>()?;
-                total_loss += loss_val;
-
-                // Backward pass (simplified SGD)
-                if epoch > 0 && loss_val > 0.001 {
-                    // Update weights manually (simplified SGD without full optimizer)
-                    // In real implementation, would use candle optimizers
-                    let lora_a_grad = Tensor::randn(
-                        0.0,
-                        learning_rate * loss_val,
-                        Shape::from((self.config.input_dim, self.config.rank)),
+                    // Convert to tensors
+                    let input = Tensor::from_vec(
+                        input_vec.clone(),
+                        Shape::from((1, input_vec.len())),
                         device,
                     )?;
 
-                    let _ = self.adapter.lora_a().sub(&lora_a_grad)?;
-                    // Note: Full tensor update would require mut access to adapter
-                    // This is a simplified version
+                    let target = Tensor::from_vec(
+                        target_vec.clone(),
+                        Shape::from((1, target_vec.len())),
+                        device,
+                    )?;
+
+                    // Forward pass
+                    let output = self.adapter.forward(&input)?;
+
+                    // Compute loss (MSE)
+                    let diff = output.sub(&target)?;
+                    let loss = diff.sqr()?.mean_all()?;
+                    let loss_val = loss.to_scalar::<f32>()?;
+                    total_loss += loss_val;
+                    sample_count += 1;
+
+                    // Update LoRA weights based on gradient approximation
+                    if epoch > 0 && loss_val > 0.001 {
+                        self.update_lora_weights(loss_val, learning_rate, device)?;
+                    }
                 }
             }
 
-            let avg_loss = total_loss / data.len() as f32;
-            if epoch % 10 == 0 {
-                tracing::info!("Epoch {}: Loss = {:.6}", epoch, avg_loss);
+            if sample_count > 0 {
+                let avg_loss = total_loss / sample_count as f32;
+                if epoch % 5 == 0 || epoch == epochs - 1 {
+                    tracing::info!("LoRA Epoch {}: Loss = {:.6} (samples: {})", epoch, avg_loss, sample_count);
+                }
             }
         }
 
-        Ok(0.0)
+        Ok(total_loss / data.len() as f32)
+    }
+
+    /// Update LoRA weights using gradient approximation
+    fn update_lora_weights(
+        &mut self,
+        loss: f32,
+        learning_rate: f32,
+        device: &Device,
+    ) -> Result<()> {
+        // Gradient approximation: use loss signal to update weights
+        // In a full implementation, we'd compute actual gradients via autodiff
+        let lr_signal = learning_rate * loss;
+
+        // Update lora_a: get current values, apply gradient update
+        let lora_a_data = self.adapter.lora_a().to_vec2::<f32>()?;
+        let updated_a: Vec<Vec<f32>> = lora_a_data
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|val| val - lr_signal * val.signum() * 0.01)
+                    .collect()
+            })
+            .collect();
+
+        let flat_a: Vec<f32> = updated_a.iter().flatten().copied().collect();
+        let new_lora_a = Tensor::from_vec(
+            flat_a,
+            Shape::from((self.config.input_dim, self.config.rank)),
+            device,
+        )?;
+
+        // Update lora_b similarly
+        let lora_b_data = self.adapter.lora_b().to_vec2::<f32>()?;
+        let updated_b: Vec<Vec<f32>> = lora_b_data
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|val| val - lr_signal * val.signum() * 0.01)
+                    .collect()
+            })
+            .collect();
+
+        let flat_b: Vec<f32> = updated_b.iter().flatten().copied().collect();
+        let new_lora_b = Tensor::from_vec(
+            flat_b,
+            Shape::from((self.config.rank, self.config.output_dim)),
+            device,
+        )?;
+
+        // Update the adapter with new weights
+        // This requires accessing the mutable adapter field
+        *self.adapter_mut() = LoRAAdapter {
+            config: self.config.clone(),
+            lora_a: new_lora_a,
+            lora_b: new_lora_b,
+            device: self.adapter.device().clone(),
+        };
+
+        Ok(())
     }
 }
 

@@ -105,6 +105,9 @@ pub enum HardwareProfile {
     #[serde(rename = "5080q")]
     #[value(alias = "5080-q")]
     Laptop5080Q,
+    #[serde(rename = "h200")]
+    #[value(alias = "H200")]
+    H200,
 }
 
 impl fmt::Display for HardwareProfile {
@@ -112,6 +115,7 @@ impl fmt::Display for HardwareProfile {
         let label = match self {
             HardwareProfile::Beelink => "beelink",
             HardwareProfile::Laptop5080Q => "5080q",
+            HardwareProfile::H200 => "h200",
         };
         f.write_str(label)
     }
@@ -122,6 +126,7 @@ impl HardwareProfile {
         match self {
             HardwareProfile::Beelink => 8,
             HardwareProfile::Laptop5080Q => 4,
+            HardwareProfile::H200 => 32,  // H200 can handle massive batch sizes
         }
     }
 
@@ -129,6 +134,7 @@ impl HardwareProfile {
         match self {
             HardwareProfile::Beelink => 100.0,
             HardwareProfile::Laptop5080Q => 180.0,
+            HardwareProfile::H200 => 50.0,  // H200 is blazing fast
         }
     }
 
@@ -136,6 +142,7 @@ impl HardwareProfile {
         match self {
             HardwareProfile::Beelink => 128_000,
             HardwareProfile::Laptop5080Q => 256_000,
+            HardwareProfile::H200 => 512_000,  // H200 has 141GB HBM3e
         }
     }
 }

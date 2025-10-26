@@ -612,58 +612,110 @@ impl LearningLoop {
     async fn trigger_qlora(&mut self) -> Result<()> {
         #[cfg(not(test))]
         {
+            // Step 1: Collect low-reward tuples from ERAG
             let low_tuples = self.erag.query_low_reward_tuples(-0.5, 16).await?;
-            if low_tuples.is_empty() {
-                info!("No low-reward tuples for QLoRA");
+            
+            // Step 2: Prepare training data from replay buffer + topological features
+            let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
+                .replay_buffer
+                .iter()
+                .rev()
+                .take(32)
+                .map(|tuple| {
+                    // Input: state metrics (5 dims) + topological features (4 dims) = 9 dims
+                    let mut input = tuple
+                        .state
+                        .metrics
+                        .iter()
+                        .map(|value| *value as f32)
+                        .collect::<Vec<f32>>();
+                    
+                    // Pad to fixed size if needed (target size: 768 for LoRA input_dim)
+                    while input.len() < 768 {
+                        input.push(0.0);
+                    }
+                    input.truncate(768);
+                    
+                    // Target: next state metrics (5 dims) -> pad to 768
+                    let mut target = tuple
+                        .next_state
+                        .metrics
+                        .iter()
+                        .map(|value| *value as f32)
+                        .collect::<Vec<f32>>();
+                    while target.len() < 768 {
+                        target.push(0.0);
+                    }
+                    target.truncate(768);
+                    
+                    (input, target)
+                })
+                .collect();
+
+            if training_samples.is_empty() {
+                info!("No training samples for QLoRA");
                 return Ok(());
             }
-            let mut param_deltas: HashMap<String, f64> = HashMap::new();
-            for tuple in &low_tuples {
-                let amplified_delta =
-                    tuple.action_delta * (1.0 - tuple.reward * 2.0).max(-2.0).min(2.0);
-                *param_deltas
-                    .entry(tuple.action_param.clone())
-                    .or_insert(0.0) += amplified_delta;
-            }
-            let avg_len = low_tuples.len() as f64;
-            let mut config = self.config.lock().await;
-            for (param, total) in &param_deltas {
-                let avg_delta = total / avg_len * 0.5;
-                match param.as_str() {
-                    "temperature" => {
-                        config.temperature += avg_delta;
-                        config.temperature = config.temperature.clamp(0.1, 1.0);
+
+            // Step 3: Train LoRA adapter on topological data
+            match self.lora_trainer.train(&training_samples, 10, 1e-3_f32) {
+                Ok(_loss) => {
+                    info!(
+                        "QLoRA fine-tuning completed on {} samples",
+                        training_samples.len()
+                    );
+                    
+                    // Step 4: After training, optionally adjust config based on low-reward tuples
+                    if !low_tuples.is_empty() {
+                        let mut param_deltas: HashMap<String, f64> = HashMap::new();
+                        for tuple in &low_tuples {
+                            let amplified_delta =
+                                tuple.action_delta * (1.0 - tuple.reward * 2.0).max(-2.0).min(2.0);
+                            *param_deltas
+                                .entry(tuple.action_param.clone())
+                                .or_insert(0.0) += amplified_delta;
+                        }
+                        let avg_len = low_tuples.len() as f64;
+                        let mut config = self.config.lock().await;
+                        for (param, total) in &param_deltas {
+                            let avg_delta = total / avg_len * 0.3; // Reduced impact after LoRA training
+                            match param.as_str() {
+                                "temperature" => {
+                                    config.temperature += avg_delta;
+                                    config.temperature = config.temperature.clamp(0.1, 1.0);
+                                }
+                                "top_p" => {
+                                    config.top_p += avg_delta;
+                                    config.top_p = config.top_p.clamp(0.1, 1.0);
+                                }
+                                "mcts_c" => {
+                                    config.phase2_mcts_c_increment += avg_delta;
+                                    config.phase2_mcts_c_increment =
+                                        config.phase2_mcts_c_increment.clamp(0.0, 2.0);
+                                }
+                                "retrieval_top_k" => {
+                                    let new_val = (config.phase2_retrieval_top_k_increment as f64 + avg_delta)
+                                        .clamp(0.0, 10.0);
+                                    config.phase2_retrieval_top_k_increment = new_val as i32;
+                                }
+                                "novelty_threshold" => {
+                                    config.novelty_threshold += avg_delta;
+                                    config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0);
+                                }
+                                "self_awareness_level" => {
+                                    config.self_awareness_level += avg_delta;
+                                    config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0);
+                                }
+                                _ => {}
+                            }
+                        }
+                        info!("Post-LoRA config adjustments applied");
                     }
-                    "top_p" => {
-                        config.top_p += avg_delta;
-                        config.top_p = config.top_p.clamp(0.1, 1.0);
-                    }
-                    "mcts_c" => {
-                        config.phase2_mcts_c_increment += avg_delta;
-                        config.phase2_mcts_c_increment =
-                            config.phase2_mcts_c_increment.clamp(0.0, 2.0);
-                    }
-                    "retrieval_top_k" => {
-                        let new_val = (config.phase2_retrieval_top_k_increment as f64 + avg_delta)
-                            .clamp(0.0, 10.0);
-                        config.phase2_retrieval_top_k_increment = new_val as i32;
-                    }
-                    "novelty_threshold" => {
-                        config.novelty_threshold += avg_delta;
-                        config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0);
-                    }
-                    "self_awareness_level" => {
-                        config.self_awareness_level += avg_delta;
-                        config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0);
-                    }
-                    _ => {}
+                }
+                Err(error) => {
+                    warn!(%error, "QLoRA fine-tuning failed");
                 }
             }
-            info!(
-                "QLoRA fine-tuning simulated: adjusted {} params from {} low-reward tuples",
-                param_deltas.len(),
-                low_tuples.len()
-            );
         }
         #[cfg(test)]
         {

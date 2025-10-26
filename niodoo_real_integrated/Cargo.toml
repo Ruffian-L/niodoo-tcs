@@ -80,3 +80,7 @@ path = "src/bin/topology_spider.rs"
 [[bin]]
 name = "test_healing_integration"
 path = "src/bin/test_healing_integration.rs"
+
+[[bin]]
+name = "million_cycle_test"
+path = "src/bin/million_cycle_test.rs"
