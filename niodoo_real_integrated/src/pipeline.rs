@@ -1,12 +1,11 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use anyhow::Result;
-use futures::FutureExt;
 
 use crate::compass::{CompassEngine, CompassOutcome};
 use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
@@ -26,6 +25,7 @@ use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
+use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::spawn_blocking;
 use tracing::{info, warn};
 
@@ -64,6 +64,7 @@ pub struct PipelineCycle {
     pub stage_timings: StageTimings,
     pub last_entropy: f64,
     pub failure: String, // "soft", "hard", "none"
+    pub pad_state: PadGhostState,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -79,14 +80,21 @@ pub struct StageTimings {
     pub threat_cycle_ms: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum TorusSeedStrategy {
+    Fixed(u64),
+    Random,
+}
+
 pub struct Pipeline {
     pub config: RuntimeConfig,
-    config_arc: Arc<Mutex<RuntimeConfig>>,
+    config_arc: Arc<AsyncMutex<RuntimeConfig>>,
     pub args: CliArgs,
     pub thresholds: Thresholds,
     pub dataset_stats: DatasetStats,
     embedder: QwenStatefulEmbedder,
-    torus: TorusPadMapper,
+    torus_strategy: TorusSeedStrategy,
+    torus_counter: AtomicU64,
     compass: Arc<Mutex<CompassEngine>>,
     erag: Arc<EragClient>,
     tokenizer: TokenizerEngine,
@@ -97,28 +105,34 @@ pub struct Pipeline {
     embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
     collapse_cache: LruCache<u64, CacheEntry<CollapseResult>>,
     retry_count: Arc<AtomicU32>,
-    retry_context: Arc<Mutex<RetryContext>>,
+    retry_context: Arc<AsyncMutex<RetryContext>>,
 }
 
 impl Pipeline {
     pub async fn initialise(args: CliArgs) -> Result<Self> {
         let config = RuntimeConfig::load(&args)?;
-        let samples = load_emotional_dataset(&config.training_data_path, Some(20_000))?;
+        let samples = load_emotional_dataset(&config.training_data_path, config.training_data_sample_cap)?;
         let stats = compute_dataset_stats(&samples);
 
         let thresholds = Thresholds {
             entropy_mean: stats.entropy_mean,
             entropy_high: stats.entropy_mean + stats.entropy_std,
-            variance_stagnation: 0.05,
-            variance_spike: stats.variance_std.max(0.3),
-            mirage_sigma: 0.1 * stats.entropy_mean,
-            mcts_c: stats.entropy_std.max(0.1) * 0.25,
+            variance_stagnation: config.variance_stagnation_default,
+            variance_spike: stats
+                .variance_std
+                .max(config.variance_spike_min),
+            mirage_sigma: config.mirage_sigma_factor * stats.entropy_mean,
+            mcts_c: stats
+                .entropy_std
+                .max(config.mcts_c_min_std)
+                * config.mcts_c_scale,
         };
 
         let embedder = QwenStatefulEmbedder::new(
             &config.ollama_endpoint,
             &config.embedding_model_name,
             config.qdrant_vector_dim,
+            config.embedding_max_chars,
         )?;
         info!(
             endpoint = %config.ollama_endpoint,
@@ -126,7 +140,22 @@ impl Pipeline {
             "Initialized Ollama embedding client"
         );
         let embedder_arc = Arc::new(embedder.clone());
-        let torus = TorusPadMapper::new(42);
+        let torus_strategy = match std::env::var("TORUS_SEED") {
+            Ok(value) => match value.parse::<u64>() {
+                Ok(seed) => {
+                    info!(seed, "Initializing torus pad mapper with fixed seed");
+                    TorusSeedStrategy::Fixed(seed)
+                }
+                Err(_) => {
+                    warn!(value = %value, "Invalid TORUS_SEED value; using entropy seeding");
+                    TorusSeedStrategy::Random
+                }
+            },
+            Err(_) => {
+                info!("Initializing torus pad mapper with entropy seed");
+                TorusSeedStrategy::Random
+            }
+        };
         let compass = Arc::new(Mutex::new(CompassEngine::new(
             thresholds.mcts_c,
             thresholds.variance_spike,
@@ -141,19 +170,23 @@ impl Pipeline {
         )
         .await?;
         let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
-        let generator = GenerationEngine::new_with_config(
+        let mut generator = GenerationEngine::new_with_config(
             &config.vllm_endpoint,
             &config.vllm_model,
             config.generation_timeout_secs,
             config.generation_max_tokens,
             config.dynamic_token_min,
             config.dynamic_token_max,
+            config.prompt_max_chars,
+            config.consistency_variance_threshold,
         )?;
+        generator.set_system_prompt(config.system_prompt.clone());
         if let Err(error) = generator.warmup().await {
             warn!(?error, "vLLM warmup failed");
         }
-        let config_arc = Arc::new(Mutex::new(config.clone()));
+        let config_arc = Arc::new(AsyncMutex::new(config.clone()));
         let erag_arc = Arc::new(erag.clone());
+        let config_sync = Arc::new(AsyncMutex::new(config.clone()));
         let learning = LearningLoop::new(
             config.learning_window,
             config.breakthrough_threshold,
@@ -161,7 +194,7 @@ impl Pipeline {
             config.dqn_gamma,
             config.dqn_alpha,
             erag_arc.clone(),
-            config_arc.clone(),
+            config_sync.clone(),
         );
 
         // Initialize TCS analyzer
@@ -192,7 +225,7 @@ impl Pipeline {
             None
         };
 
-        let cache_capacity = NonZeroUsize::new(256).unwrap();
+        let cache_capacity = NonZeroUsize::new(config.cache_capacity).unwrap_or(NonZeroUsize::new(256).unwrap());
 
         Ok(Self {
             config: config.clone(),
@@ -201,7 +234,8 @@ impl Pipeline {
             thresholds,
             dataset_stats: stats,
             embedder,
-            torus,
+            torus_strategy,
+            torus_counter: AtomicU64::new(0),
             compass,
             erag: erag_arc.clone(),
             tokenizer,
@@ -212,7 +246,7 @@ impl Pipeline {
             embedding_cache: LruCache::new(cache_capacity),
             collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
-            retry_context: Arc::new(Mutex::new(RetryContext {
+            retry_context: Arc::new(AsyncMutex::new(RetryContext {
                 soft_retries: 0,
                 hard_retries: 0,
                 total_retries: 0,
@@ -220,6 +254,36 @@ impl Pipeline {
                 rng_seed: 42,
             })),
         })
+    }
+
+    fn next_torus_mapper(&self) -> TorusPadMapper {
+        // Derive a fresh mapper each request to avoid locking entropy across iterations.
+        match self.torus_strategy {
+            TorusSeedStrategy::Fixed(seed) => {
+                let counter = self.torus_counter.fetch_add(1, Ordering::Relaxed) + 1;
+                let derived_seed = seed ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+                TorusPadMapper::new(derived_seed)
+            }
+            TorusSeedStrategy::Random => TorusPadMapper::from_entropy(),
+        }
+    }
+
+    /// Recompute thresholds from updated config (called after learning updates)
+    fn recompute_thresholds(&mut self) {
+        let updated_thresholds = Thresholds {
+            entropy_mean: self.thresholds.entropy_mean, // Keep static
+            entropy_high: self.thresholds.entropy_high, // Keep static
+            variance_stagnation: self.config.variance_stagnation_default,
+            variance_spike: self.dataset_stats
+                .variance_std
+                .max(self.config.variance_spike_min),
+            mirage_sigma: self.config.mirage_sigma_factor * self.dataset_stats.entropy_mean,
+            mcts_c: self.dataset_stats
+                .entropy_std
+                .max(self.config.mcts_c_min_std)
+                * self.config.mcts_c_scale,
+        };
+        self.thresholds = updated_thresholds;
     }
 
     pub fn rut_prompts(&self) -> Vec<RutPrompt> {
@@ -234,8 +298,10 @@ impl Pipeline {
 
         // Stage 1: Embedding (with cache)
         let embedding_start = Instant::now();
+        let embedding_ttl = Duration::from_secs(self.config.embedding_cache_ttl_secs);
+        let collapse_ttl = Duration::from_secs(self.config.collapse_cache_ttl_secs);
         let embedding = match self.embedding_cache.get(&cache_key) {
-            Some(entry) if !entry.is_expired(now, EMBEDDING_TTL) => entry.value.clone(),
+            Some(entry) if !entry.is_expired(now, embedding_ttl) => entry.value.clone(),
             _ => {
                 self.embedding_cache.pop(&cache_key);
                 let emb = self.embedder.embed(prompt).await?;
@@ -252,7 +318,8 @@ impl Pipeline {
 
         // Stage 2: Torus projection
         let torus_start = Instant::now();
-        let pad_state = self.torus.project(&embedding)?;
+    let mut torus_mapper = self.next_torus_mapper();
+    let pad_state = torus_mapper.project(&embedding)?;
         timings.torus_ms = torus_start.elapsed().as_secs_f64() * 1000.0;
 
         let tcs_start = Instant::now();
@@ -264,7 +331,13 @@ impl Pipeline {
         );
 
         // Phase 5.3: Check if predictor should trigger (knot > 0.4)
-        let _topology_json = serde_json::to_string(&topology).unwrap_or_default();
+        let _topology_json = match serde_json::to_string(&topology) {
+            Ok(json) => json,
+            Err(e) => {
+                warn!(error = %e, "Failed to serialize topology to JSON");
+                String::new()
+            }
+        };
         info!(
             "Topological signature: knot={:.3}, betti={:?}, pe={:.3}, gap={:.3}",
             topology.knot_complexity,
@@ -274,22 +347,31 @@ impl Pipeline {
         );
 
         // Pass topology to compass - ACTUAL INTEGRATION
+        let compass_task = spawn_blocking({
+            let compass_engine = self.compass.clone();
+            let pad_state = pad_state.clone();
+            let topology = topology.clone();
+            move || {
+                compass_engine
+                    .lock()
+                    .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?
+                    .evaluate(&pad_state, Some(&topology))
+            }
+        });
+
         let (compass, collapse) = tokio::try_join!(
-            spawn_blocking({
-                let compass_engine = self.compass.clone();
-                let pad_state = pad_state.clone();
-                let topology = topology.clone();
-                move || {
-                    compass_engine
-                        .lock()
-                        .unwrap()
-                        .evaluate(&pad_state, Some(&topology))
+            async {
+                match compass_task.await {
+                    Ok(inner) => inner,
+                    Err(e) => Err(anyhow::anyhow!(format!(
+                        "compass evaluation panicked: {}",
+                        e
+                    ))),
                 }
-            })
-            .map(|res| res.expect("compass evaluation task panicked")),
+            },
             async {
                 match self.collapse_cache.get(&cache_key) {
-                    Some(entry) if !entry.is_expired(now, COLLAPSE_TTL) => Ok(entry.value.clone()),
+                    Some(entry) if !entry.is_expired(now, collapse_ttl) => Ok(entry.value.clone()),
                     _ => {
                         self.collapse_cache.pop(&cache_key);
                         let collapse = self.erag.collapse(&embedding).await?;
@@ -317,8 +399,34 @@ impl Pipeline {
                 .process(prompt, &collapse, &pad_state, self.thresholds.entropy_mean)?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
+        // Update generation engine with latest config params (before generation)
+        let current_config = self.config_arc.lock().await.clone();
+        self.generator.apply_runtime_from_config(&current_config);
+        self.generator.update_params(
+            current_config.temperature,
+            current_config.top_p,
+            current_config.repetition_penalty,
+        );
+        
+        // Recompute thresholds from updated config and update compass
+        self.recompute_thresholds();
+        {
+            let mut compass_guard = self.compass.lock().unwrap();
+            compass_guard.update_params(
+                self.thresholds.mcts_c,
+                self.thresholds.variance_spike,
+                self.thresholds.variance_stagnation,
+            );
+        }
+
         // Stage 6: Generation
         let generation_start = Instant::now();
+        // Apply latest runtime parameters before generation
+        {
+            let cfg = self.config_arc.lock().await.clone();
+            self.generator.apply_runtime_from_config(&cfg);
+            self.recompute_thresholds();
+        }
         let generation = if self.config.enable_consistency_voting {
             let voting = self
                 .generator
@@ -354,7 +462,7 @@ impl Pipeline {
                 failure_details: None,
             }
         } else {
-            self.generator.generate(&tokenizer_output, &compass).await?
+            self.generator.generate_with_topology(&tokenizer_output, &compass, Some(&topology)).await?
         };
         timings.generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
         info!(
@@ -362,7 +470,7 @@ impl Pipeline {
             timings.generation_ms
         );
 
-        // NEW: Phase 2 Integration - Call curator after generation
+        // NEW: Phase 2 Integration - Call curator after generation WITH TOPOLOGY
         let curated_experience = self
             .integrate_curator(
                 prompt,
@@ -370,6 +478,7 @@ impl Pipeline {
                 &pad_state,
                 &compass,
                 &collapse.aggregated_context,
+                &topology,  // INTEGRATION FIX: Pass topology to curator
             )
             .await?;
 
@@ -392,7 +501,7 @@ impl Pipeline {
             ucb1_score,
         );
 
-        // Phase 2: Handle retries with Reflection and CoT
+        // Phase 2: Handle retries with Reflection and CoT with topology awareness
         let (final_generation, final_failure, threat_cycle_ms) = self
             .handle_retry_with_reflection(
                 prompt,
@@ -405,6 +514,7 @@ impl Pipeline {
                 entropy_delta,
                 curator_quality,
                 ucb1_score,
+                &topology,  // TOPOLOGY INTEGRATION: Pass topology to retry logic
             )
             .await?;
 
@@ -443,27 +553,7 @@ impl Pipeline {
 
         timings.learning_ms = learning_start.elapsed().as_secs_f64() * 1000.0;
 
-        // Store CURATED memory instead of raw
-        if curated_experience.quality_score > 0.65 {
-            let solution_path =
-                crate::data::extract_code_blocks(&curated_experience.refined_response);
-            self.erag
-                .upsert_memory(
-                    &embedding,
-                    &pad_state,
-                    &compass,
-                    prompt,
-                    &curated_experience.refined_response,
-                    &[curated_experience.refined_response.clone()], // context
-                    pad_state.entropy,
-                    Some(curated_experience.quality_score as f32),
-                    None, // topology
-                    solution_path,
-                    0, // iteration_count - will be tracked later
-                )
-                .await
-                .ok();
-        }
+        // Remove double-storage: defer storage decision to final gate below
 
         // Create Experience from pipeline
         let aggregated_context_lines: Vec<String> = collapse
@@ -485,50 +575,32 @@ impl Pipeline {
             experience_context.clone(),
         );
 
-        // Stage 7.5: Curator Quality Gate
-        let (response_to_store, final_quality_score) = if let Some(ref curator) = self.curator {
-            match curator.curate_response(experience.clone()).await {
-                Ok(curated) => {
-                    if curated.should_store.unwrap_or(true) {
-                        info!(
-                            "Curator approved memory (quality: {:.3?}, latency: {:.2?}ms)",
-                            curated.quality_score, curated.processing_time_ms
-                        );
-                        let response = curated.refined_output.clone().unwrap_or(curated.output);
-                        (response, curated.quality_score)
-                    } else {
-                        warn!(
-                            "Curator rejected memory (quality: {:.3?} < threshold)",
-                            curated.quality_score
-                        );
-                        // Don't store low-quality memories, but return cycle
-                        return Ok(PipelineCycle {
-                            prompt: prompt.to_string(),
-                            baseline_response: final_generation.baseline_response.clone(),
-                            hybrid_response: final_generation.hybrid_response.clone(),
-                            entropy: pad_state.entropy,
-                            rouge: final_generation.rouge_to_baseline,
-                            latency_ms: final_generation.latency_ms,
-                            compass: compass.clone(),
-                            generation: final_generation.clone(),
-                            tokenizer: tokenizer_output.clone(),
-                            collapse: collapse.clone(),
-                            learning: learning.clone(),
-                            stage_timings: timings.clone(),
-                            last_entropy: pad_state.entropy,
-                            failure: final_failure.clone(),
-                        });
-                    }
-                }
-                Err(e) => {
-                    warn!("Curator failed: {}, storing raw response", e);
-                    (experience.output.clone(), None)
-                }
-            }
-        } else {
-            // No curator - store raw response
-            (experience.output.clone(), None)
-        };
+        // Stage 7.5: Curator Quality Gate (single source of truth)
+        let response_to_store = curated_experience.refined_response.clone();
+        let final_quality_score = Some(curated_experience.quality_score);
+        if curated_experience.quality_score < self.config.curator_minimum_threshold {
+            warn!(
+                quality = curated_experience.quality_score,
+                min = self.config.curator_minimum_threshold,
+                "Curated quality below minimum; skipping memory store"
+            );
+            return Ok(PipelineCycle {
+                prompt: prompt.to_string(),
+                baseline_response: final_generation.baseline_response.clone(),
+                hybrid_response: final_generation.hybrid_response.clone(),
+                entropy: pad_state.entropy,
+                rouge: final_generation.rouge_to_baseline,
+                latency_ms: overall_start.elapsed().as_secs_f64() * 1000.0,
+                compass,
+                generation: final_generation,
+                tokenizer: tokenizer_output,
+                collapse,
+                learning,
+                stage_timings: timings,
+                last_entropy: pad_state.entropy,
+                failure: final_failure,
+            });
+        }
 
         let solution_path = experience.solution_path.clone();
         self.erag
@@ -572,6 +644,7 @@ impl Pipeline {
             stage_timings: timings,
             last_entropy: pad_state.entropy,
             failure: final_failure,
+            pad_state,
         })
     }
 
@@ -579,21 +652,43 @@ impl Pipeline {
         self.args.hardware
     }
 
-    /// Phase 2: Handle retries with Reflection and CoT self-correction
+    /// Phase 2: Handle retries with Reflection and CoT self-correction with topology awareness
     async fn handle_retry_with_reflection(
         &self,
         prompt: &str,
         initial_failure: &str,
         details: &str,
         generation: &GenerationResult,
-        _compass: &CompassOutcome,
+        compass: &CompassOutcome,
         _collapse: &CollapseResult,
         _curated: &CuratedExperience,
         entropy_delta: f64,
         curator_quality: f64,
         ucb1_score: f64,
+        topology: &crate::tcs_analysis::TopologicalSignature,
     ) -> Result<(GenerationResult, String, f64)> {
-        // No failure, return original with zero threat cycle time
+        // INTEGRATION FIX: Handle healing state specially - enhance instead of retry
+        if initial_failure == "none" && compass.is_healing {
+            // In healing state with good topology - apply enhancement strategies
+            if topology.knot_complexity < 0.4 && topology.spectral_gap > 0.6 {
+                info!("Healing state detected with good topology - applying enhancement");
+                
+                // Generate an enhanced version leveraging the good state
+                let enhancement_prompt = format!(
+                    "{}\n\n[System is in optimal healing state. Enhance clarity and depth.]",
+                    prompt
+                );
+                
+                if let Ok(enhanced) = self.generator
+                    .generate_with_params(&enhancement_prompt, 0.3, 0.95)  // Low temp for stability
+                    .await {
+                    return Ok((enhanced, "none".to_string(), 0.0));
+                }
+            }
+            return Ok((generation.clone(), "none".to_string(), 0.0));
+        }
+        
+        // No failure and not healing, return original
         if initial_failure == "none" {
             return Ok((generation.clone(), "none".to_string(), 0.0));
         }
@@ -646,30 +741,43 @@ impl Pipeline {
 
             // Determine retry strategy based on failure type
             let retry_response = if current_failure == "hard" {
-                // Meso: Reflexion for hard failures
-                self.generator
+                // Meso: Reflexion for hard failures, but fallback to baseline if worse
+                let reflexion_response = self
+                    .generator
                     .reflexion_retry(prompt, current_gen.rouge_score, details)
-                    .await?
+                    .await?;
+                
+                // Compare with baseline and keep the better one
+                let baseline_rouge = rouge_l(&current_gen.baseline_response, prompt);
+                let reflexion_rouge = rouge_l(&reflexion_response, prompt);
+                
+                if reflexion_rouge > baseline_rouge {
+                    info!("Reflexion improved from {:.3} to {:.3}", baseline_rouge, reflexion_rouge);
+                    reflexion_response
+                } else {
+                    info!("Baseline better than reflexion ({:.3} vs {:.3}), using baseline", baseline_rouge, reflexion_rouge);
+                    current_gen.baseline_response.clone()
+                }
             } else {
-                // Micro: CoT for soft failures (2-3 iterations)
+                // Micro: Topology-aware CoT for soft failures (2-3 iterations)
                 let mut best_response = current_gen.hybrid_response.clone();
                 let mut best_rouge = current_gen.rouge_score;
 
                 for cot_iter in 0..3 {
-                    let cot_response = self
+                    let cot_result = self
                         .generator
-                        .cot_self_correct(prompt, "low-confidence reasoning")
+                        .apply_cot_repair_with_topology(prompt, details, cot_iter, Some(topology))
                         .await?;
 
                     // Recompute ROUGE
-                    let new_rouge = rouge_l(&cot_response, &best_response);
+                    let new_rouge = rouge_l(&cot_result.hybrid_response, &best_response);
                     if new_rouge > best_rouge {
-                        best_response = cot_response;
+                        best_response = cot_result.hybrid_response;
                         best_rouge = new_rouge;
                     }
 
-                    if best_rouge > 0.5 {
-                        info!("CoT iteration {} achieved ROUGE > 0.5", cot_iter + 1);
+                    if best_rouge > 0.4 {
+                        info!("Topology-aware CoT iteration {} achieved ROUGE > 0.4", cot_iter + 1);
                         break;
                     }
                 }
@@ -722,17 +830,17 @@ impl Pipeline {
         }
 
         if current_failure != "none" {
-            warn!("Failed after {} retry attempts", retry_count);
+            warn!("Failed after {} retry attempts, using degraded response", retry_count);
 
-            // Circuit breaker: If max retries exceeded, escalate to Phase 3
+            // Graceful degradation: Instead of terminating, mark as degraded but continue
             if retry_count >= max_retries {
-                warn!("Circuit breaker triggered: Escalating to Phase 3 (threat->healing cycle)");
-                // Phase 3 would handle long-term recovery (e.g., threat cycle activation)
-                // Return error to prevent further processing
-                anyhow::bail!(
-                    "Circuit breaker escalated: retry_count={} >= max_retries={}, failure={}, details={}",
-                    retry_count, max_retries, current_failure, details
-                );
+                warn!("Circuit breaker triggered: Using degraded response mode");
+                // Add degraded marker to generation result
+                current_gen.failure_type = Some("degraded".to_string());
+                current_gen.failure_details = Some(format!(
+                    "Max retries exceeded ({}), using best available response",
+                    retry_count
+                ));
             }
         }
 
@@ -748,6 +856,7 @@ impl Pipeline {
         pad_state: &PadGhostState,
         compass: &CompassOutcome,
         context: &str,
+        topology: &crate::tcs_analysis::TopologicalSignature,
     ) -> Result<CuratedExperience> {
         // Call curator_executor logic here
         // (either spawn as subprocess or integrate as library)
@@ -761,10 +870,9 @@ impl Pipeline {
             0.5, // Initial score, will be updated
         );
 
-        // Analyze quality if curator is available
+        // TOPOLOGY INTEGRATION: Analyze quality with topological insights
         let quality_score = if let Some(ref curator) = self.curator {
-            // Calculate quality based on actual curator metrics
-            // Use compass quadrant from context if available
+            // Calculate quality based on actual curator metrics + topology
             let compass_quadrant_str = if compass.quadrant == crate::compass::CompassQuadrant::Panic
             {
                 "Panic"
@@ -780,43 +888,92 @@ impl Pipeline {
                 .assess_quality(input, output, pad_state.entropy, compass_quadrant_str)
                 .await
             {
-                Ok(q) => q as f32,
-                Err(e) => {
-                    warn!("Curator quality assessment failed: {}, using fallback", e);
-                    // Fallback quality score based on heuristics
-                    let length_score = (output.len().min(1000) as f32 / 1000.0) * 0.3;
-                    let content_score =
-                        if output.contains("solution") || output.contains("implementation") {
-                            0.4
+                Ok(base_quality) => {
+                    // TOPOLOGY ENHANCEMENT: Adjust quality based on topological features
+                    let mut adjusted_quality = base_quality;
+                    
+                    // High knot complexity indicates tangled/complex reasoning - slight quality penalty
+                    if topology.knot_complexity > 0.6 {
+                        adjusted_quality *= 0.9;
+                        info!("High knot complexity {:.3} - reducing quality", topology.knot_complexity);
+                    }
+                    
+                    // High spectral gap indicates good exploration - quality bonus
+                    if topology.spectral_gap > 0.7 {
+                        adjusted_quality *= 1.1;
+                        info!("High spectral gap {:.3} - boosting quality", topology.spectral_gap);
+                    }
+                    
+                    // High Betti-1 indicates many loops/cycles - check if intentional
+                    if topology.betti_numbers[1] > 3 {
+                        // In Discover quadrant, loops are good (exploration)
+                        if compass.quadrant == crate::compass::CompassQuadrant::Discover {
+                            adjusted_quality *= 1.05;
                         } else {
-                            0.2
-                        };
-                    (length_score + content_score).min(1.0)
+                            // In other quadrants, too many loops might indicate confusion
+                            adjusted_quality *= 0.95;
+                        }
+                        info!("Betti-1={} affecting quality in {:?} quadrant", 
+                            topology.betti_numbers[1], compass.quadrant);
+                    }
+                    
+                    // Persistence entropy indicates structural stability
+                    if topology.persistence_entropy < 0.3 {
+                        // Low entropy = stable structure = good quality
+                        adjusted_quality *= 1.05;
+                    }
+                    
+                    adjusted_quality.min(1.0).max(0.0)
+                }
+                Err(e) => {
+                    warn!("Curator quality assessment failed: {}, using topology fallback", e);
+                    // Topology-based fallback quality score
+                    let base = 0.5f32;
+                    let knot_penalty = (topology.knot_complexity as f32) * 0.2;
+                    let gap_bonus = (topology.spectral_gap as f32) * 0.15;
+                    let stability_bonus = if topology.persistence_entropy < 0.5 { 0.1f32 } else { 0.0f32 };
+                    (base - knot_penalty + gap_bonus + stability_bonus).min(1.0).max(0.0)
                 }
             }
         } else {
-            // Fallback quality score based on heuristics
-            let length_score = (output.len().min(1000) as f32 / 1000.0) * 0.3;
-            let content_score = if output.contains("solution") || output.contains("implementation")
-            {
-                0.4
-            } else {
-                0.2
-            };
-            (length_score + content_score).min(1.0)
+            // Topology-based fallback quality score when no curator
+            let base = 0.5f32;
+            let knot_penalty = (topology.knot_complexity as f32) * 0.2;
+            let gap_bonus = (topology.spectral_gap as f32) * 0.15;
+            let stability_bonus = if topology.persistence_entropy < 0.5 { 0.1f32 } else { 0.0f32 };
+            (base - knot_penalty + gap_bonus + stability_bonus).min(1.0).max(0.0)
         };
 
-        // Refine if needed (use config threshold)
+        // TOPOLOGY-AWARE REFINEMENT: Refine if quality is low OR topology indicates issues
         let refinement_threshold = self.config.curator_quality_threshold;
+        
+        // Force refinement if topology shows problematic patterns
+        let topology_needs_refinement = topology.knot_complexity > 0.7  // Too tangled
+            || (topology.betti_numbers[1] > 5 && compass.quadrant != crate::compass::CompassQuadrant::Discover)  // Too many loops outside exploration
+            || topology.persistence_entropy > 0.8;  // Too chaotic structure
 
-        let refined = if quality_score < refinement_threshold {
-            // Attempt refinement for low-quality responses
+        let refined = if quality_score < refinement_threshold || topology_needs_refinement {
+            // Attempt refinement for low-quality or topologically problematic responses
             if let Some(ref curator) = self.curator {
-                match curator.refine_response(input, output).await {
-                    Ok(refined_output) => {
+                // Add topology context to refinement prompt
+                let topology_hint = format!(
+                    "\n[Topology: knot={:.2}, gap={:.2}, betti1={}, entropy={:.2}]",
+                    topology.knot_complexity, topology.spectral_gap, 
+                    topology.betti_numbers[1], topology.persistence_entropy
+                );
+                let output_with_context = format!("{}{}", output, topology_hint);
+                
+                match curator.refine_response(input, &output_with_context).await {
+                    Ok(mut refined_output) => {
+                        // Remove the topology hint from refined output if it was preserved
+                        if refined_output.contains("[Topology:") {
+                            refined_output = refined_output.split("[Topology:").next()
+                                .unwrap_or(&refined_output).to_string();
+                        }
+                        
                         info!(
-                            "Curator refined low-quality response ({} -> improved)",
-                            quality_score
+                            "Curator refined response (quality={:.3}, knot={:.3}, forced={})",
+                            quality_score, topology.knot_complexity, topology_needs_refinement
                         );
                         refined_output
                     }
@@ -857,14 +1014,14 @@ impl<T> CacheEntry<T> {
     }
 }
 
-const EMBEDDING_TTL: Duration = Duration::from_secs(300);
-const COLLAPSE_TTL: Duration = Duration::from_secs(300);
-
 fn cache_key(prompt: &str) -> u64 {
     let digest = blake3_hash(prompt.as_bytes());
-    let mut bytes = [0u8; 8];
-    bytes.copy_from_slice(&digest.as_bytes()[0..8]);
-    u64::from_le_bytes(bytes)
+    // Use full hash bytes instead of truncating to reduce collision risk
+    // Blake3 produces 32 bytes, we hash those again to get a 64-bit key
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    use std::hash::{Hash, Hasher};
+    digest.as_bytes().hash(&mut hasher);
+    hasher.finish()
 }
 
 fn locate_qwen_model() -> Result<PathBuf> {
@@ -920,12 +1077,6 @@ fn tokenizer_path() -> Result<PathBuf> {
         if path.exists() {
             return Ok(path);
         }
-    }
-
-    // Absolute fallback
-    let absolute_fallback = PathBuf::from("/workspace/Niodoo-Final/models/tokenizer.json");
-    if absolute_fallback.exists() {
-        return Ok(absolute_fallback);
     }
 
     anyhow::bail!("Tokenizer JSON not found; set TOKENIZER_JSON or QWEN_TOKENIZER")

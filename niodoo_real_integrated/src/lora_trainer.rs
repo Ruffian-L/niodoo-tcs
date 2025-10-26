@@ -165,23 +165,17 @@ impl LoRAAdapter {
         let lora_a_flat: Vec<f32> = lora_a_data.iter().flatten().copied().collect();
         let lora_b_flat: Vec<f32> = lora_b_data.iter().flatten().copied().collect();
 
-        // Convert f32 to bytes using unsafe slice cast for efficiency
-        // This is safe because f32 is plain-old-data (POD) and we maintain proper alignment
-        let lora_a_bytes = unsafe {
-            std::slice::from_raw_parts(
-                lora_a_flat.as_ptr() as *const u8,
-                lora_a_flat.len() * std::mem::size_of::<f32>(),
-            )
-            .to_vec()
-        };
-
-        let lora_b_bytes = unsafe {
-            std::slice::from_raw_parts(
-                lora_b_flat.as_ptr() as *const u8,
-                lora_b_flat.len() * std::mem::size_of::<f32>(),
-            )
-            .to_vec()
-        };
+        // Convert f32 to bytes safely using into_raw_parts and byte buffer
+        // This is safer than unsafe casting and maintains proper alignment
+        let lora_a_bytes: Vec<u8> = lora_a_flat
+            .iter()
+            .flat_map(|f| f.to_le_bytes())
+            .collect();
+        
+        let lora_b_bytes: Vec<u8> = lora_b_flat
+            .iter()
+            .flat_map(|f| f.to_le_bytes())
+            .collect();
 
         let mut tensors = std::collections::HashMap::new();
 

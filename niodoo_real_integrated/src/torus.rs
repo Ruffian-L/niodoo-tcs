@@ -1,8 +1,8 @@
 use anyhow::Result;
 use nalgebra::SVector;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use tracing::instrument;
+use rand::thread_rng;
+use rand::Rng;
+use tracing::{instrument, debug};
 
 use crate::util::shannon_entropy;
 
@@ -12,21 +12,27 @@ pub struct PadGhostState {
     pub entropy: f64,
     pub mu: [f64; 7],
     pub sigma: [f64; 7],
+    pub raw_stds: Vec<f64>,
 }
 
 /// Differentiable torus projection approximated by a light-weight VAE head.
+/// Thread-safe: Uses thread-local RNG instead of owned StdRng
 pub struct TorusPadMapper {
-    latent_rng: StdRng,
+    seed: u64,
 }
 
 impl TorusPadMapper {
     pub fn new(seed: u64) -> Self {
-        Self {
-            latent_rng: StdRng::seed_from_u64(seed),
-        }
+        Self { seed }
     }
 
-    /// Map a 896-dimensional embedding onto the 7D PAD+ghost manifold.
+    pub fn from_entropy() -> Self {
+        use rand::RngCore;
+        let mut rng = thread_rng();
+        Self { seed: rng.next_u64() }
+    }
+
+    /// Map an embedding onto the 7D PAD+ghost manifold.
     #[instrument(skip_all)]
     pub fn project(&mut self, embedding: &[f32]) -> Result<PadGhostState> {
         anyhow::ensure!(
@@ -37,18 +43,50 @@ impl TorusPadMapper {
         let base_radius = 2.2;
         let tube_radius = 0.8;
         let twist_k = 3.5;
-        let mut mu = [0.0f64; 7];
-        let mut sigma = [0.0f64; 7];
-        let mut ghosts = [0.0f64; 7];
+    let mut mu = [0.0f64; 7];
+    let mut sigma = [0.0f64; 7];
+    let mut ghosts = [0.0f64; 7];
+    let mut raw_stds: Vec<f64> = Vec::with_capacity(7);
 
+        // Extract mu and sigma from embedding slices - VARIANCE-BASED
+        // Each dimension gets a slice of embedding to compute mean/variance
+        let slice_size = embedding.len() / 7;
         for i in 0..7 {
-            mu[i] = embedding[i] as f64;
-            sigma[i] = (embedding[7 + i] as f64).tanh().abs().max(0.05);
+            let start = i * slice_size;
+            let end = if i == 6 { embedding.len() } else { (i + 1) * slice_size };
+            let slice = &embedding[start..end];
+            
+            // Compute mean (mu) from slice
+            mu[i] = slice.iter().map(|&x| x as f64).sum::<f64>() / slice.len() as f64;
+            
+            // Compute variance (sigma) from slice
+            let variance = slice.iter()
+                .map(|&x| {
+                    let diff = x as f64 - mu[i];
+                    diff * diff
+                })
+                .sum::<f64>() / slice.len() as f64;
+
+            // Raw std (before any scaling/clamping) for instrumentation
+            let raw_std = variance.sqrt();
+            raw_stds.push(raw_std);
+
+            // Dynamically scale std to avoid hard clamp choking 768-d unit-normalized embeds.
+            // Conservative amplifier: sqrt(full_embedding_dim)/10.0
+            let amp = (embedding.len() as f64).sqrt() / 10.0;
+            let scaled = raw_std * amp;
+
+            // Dynamic floor derived from embedding dim to replace fixed 0.05
+            let dynamic_floor = (1.0 / (embedding.len() as f64).sqrt()) * 0.5; // tunable
+
+            sigma[i] = scaled.max(dynamic_floor);
         }
 
+        // Use thread-local RNG for thread safety
+        let mut rng = thread_rng();
         let mut pad = [0.0f64; 7];
         for dim in 0..7 {
-            let eps = self.latent_rng.sample::<f64, _>(rand_distr::StandardNormal);
+            let eps = rng.sample::<f64, _>(rand_distr::StandardNormal);
             pad[dim] = mu[dim] + sigma[dim] * eps;
             ghosts[dim] = (embedding[64 + dim] as f64).sin();
         }
@@ -74,7 +112,10 @@ impl TorusPadMapper {
             }
         }
 
-        let entropy = shannon_entropy(&probs);
+    let entropy = shannon_entropy(&probs);
+
+    // Debug instrumentation: log raw stds, final sigmas, and mu summary at debug level
+    debug!(?raw_stds, ?sigma, ?mu, entropy = entropy, "torus: computed mu/sigma/raw_stds");
 
         let mut pad_arr = [0.0f64; 7];
         for (i, val) in torus_vec.iter().enumerate() {
@@ -86,6 +127,7 @@ impl TorusPadMapper {
             entropy,
             mu,
             sigma,
+            raw_stds,
         })
     }
 }

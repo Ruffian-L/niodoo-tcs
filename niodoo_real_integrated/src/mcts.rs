@@ -368,6 +368,7 @@ mod tests {
             entropy: 0.75,
             mu: [0.0; 7],
             sigma: [0.1; 7],
+            raw_stds: vec![0.1; 7],
         }
     }
 

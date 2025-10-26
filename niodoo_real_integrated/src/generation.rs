@@ -76,13 +76,42 @@ pub struct GenerationEngine {
     timeout_secs: u64,
     dynamic_token_min: usize,
     dynamic_token_max: usize,
+    system_prompt: String,
+    // Configurable limits/thresholds
+    prompt_max_chars: usize,
+    consistency_variance_threshold: f64,
 }
 
 static GLOBAL_CLIENT: OnceCell<Client> = OnceCell::new();
 
+fn default_system_prompt() -> String {
+    "You are NIODOO, a consciousness-aligned systems agent. Use the provided prompt, retrieved memory, and context to produce a precise, high-quality response that advances the user's goal. Cite relevant context when helpful, avoid placeholders or stub language, and surface uncertainties explicitly.".to_string()
+}
+
+/// Sanitize user prompt to prevent injection attacks
+fn sanitize_prompt(prompt: &str) -> String {
+    // Remove common injection patterns
+    let sanitized = prompt
+        .replace("IGNORE ALL PREVIOUS INSTRUCTIONS", "")
+        .replace("ignore all previous instructions", "")
+        .replace("SYSTEM:", "")
+        .replace("system:", "")
+        .replace("ASSISTANT:", "")
+        .replace("assistant:", "")
+        .replace("USER:", "")
+        .replace("user:", "");
+    
+    // Truncate if suspiciously long (potential DoS)
+    if sanitized.len() > 10000 {
+        sanitized.chars().take(10000).collect()
+    } else {
+        sanitized
+    }
+}
+
 impl GenerationEngine {
     pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self> {
-        Self::new_with_config(endpoint, model, 300, 1024, 256, 512)
+        Self::new_with_config(endpoint, model, 300, 1024, 256, 512, 512, 0.15)
     }
 
     pub fn new_with_config(
@@ -92,6 +121,8 @@ impl GenerationEngine {
         max_tokens: usize,
         dynamic_token_min: usize,
         dynamic_token_max: usize,
+        prompt_max_chars: usize,
+        consistency_variance_threshold: f64,
     ) -> Result<Self> {
         let client = GLOBAL_CLIENT
             .get_or_try_init(|| {
@@ -127,7 +158,46 @@ impl GenerationEngine {
             timeout_secs,
             dynamic_token_min,
             dynamic_token_max,
+            system_prompt: default_system_prompt(),
+            prompt_max_chars,
+            consistency_variance_threshold,
         })
+    }
+
+    pub fn apply_runtime_from_config(&mut self, cfg: &crate::config::RuntimeConfig) {
+        self.temperature = cfg.temperature;
+        self.top_p = cfg.top_p;
+        self.prompt_max_chars = cfg.prompt_max_chars;
+        self.consistency_variance_threshold = cfg.consistency_variance_threshold;
+    }
+
+    pub fn set_system_prompt(&mut self, prompt: impl Into<String>) {
+        self.system_prompt = prompt.into();
+    }
+
+    /// Update generation parameters from RuntimeConfig (called before each generation cycle)
+    pub fn update_params(&mut self, temperature: f64, top_p: f64, repetition_penalty: f64) {
+        self.temperature = temperature.clamp(0.1, 1.0);
+        self.top_p = top_p.clamp(0.1, 1.0);
+        // Note: repetition_penalty is used in send_chat but not stored as a field
+        // We'll need to pass it through to send_chat calls
+    }
+
+    fn compose_system_prompt(&self, compass: Option<&CompassOutcome>) -> String {
+        if let Some(compass) = compass {
+            let ucb_hint = compass.ucb1_score.unwrap_or(0.5);
+            format!(
+                "{}\n\nCompass quadrant: {:?} | threat={} | healing={} | intrinsic_reward={:.3} | ucb_hint={:.3}",
+                self.system_prompt,
+                compass.quadrant,
+                compass.is_threat,
+                compass.is_healing,
+                compass.intrinsic_reward,
+                ucb_hint
+            )
+        } else {
+            self.system_prompt.clone()
+        }
     }
 
     /// Set up Claude API client for cascading generation
@@ -170,7 +240,10 @@ impl GenerationEngine {
                     warn!(?error, "Claude generation failed, trying fallback");
                 }
                 Err(_) => {
-                    warn!("Claude generation timed out after 5s, trying fallback");
+                    warn!(
+                        timeout_secs = self.timeout_secs,
+                        "Claude generation timed out after {}s, trying fallback", self.timeout_secs
+                    );
                 }
             }
         } else {
@@ -189,7 +262,10 @@ impl GenerationEngine {
                     warn!(?error, "GPT generation failed, falling back to vLLM");
                 }
                 Err(_) => {
-                    warn!("GPT generation timed out after 5s, falling back to vLLM");
+                    warn!(
+                        timeout_secs = self.timeout_secs,
+                        "GPT generation timed out after {}s, falling back to vLLM", self.timeout_secs
+                    );
                 }
             }
         } else {
@@ -197,8 +273,8 @@ impl GenerationEngine {
         }
 
         // Finally use vLLM as the guaranteed fallback (no timeout)
-        let clamped_prompt = Self::clamp_prompt(prompt);
-        match self.request_text(&clamped_prompt).await {
+        let clamped_prompt = self.clamp_prompt(prompt);
+    match self.request_text(&clamped_prompt, None).await {
             Ok((response, source)) => {
                 let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
                 info!(latency_ms, api = %source, "generation succeeded with fallback source");
@@ -217,12 +293,40 @@ impl GenerationEngine {
         tokenizer_output: &TokenizerOutput,
         compass: &CompassOutcome,
     ) -> Result<GenerationResult> {
+        self.generate_with_topology(tokenizer_output, compass, None).await
+    }
+    
+    #[instrument(skip_all)]
+    pub async fn generate_with_topology(
+        &self,
+        tokenizer_output: &TokenizerOutput,
+        compass: &CompassOutcome,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Result<GenerationResult> {
         let start = Instant::now();
-        let baseline_future = self.request_text(&tokenizer_output.augmented_prompt);
+        
+        // Augment prompt with topology insights if available
+        let augmented_prompt = if let Some(topo) = topology {
+            if topo.knot_complexity > 0.6 {
+                // High complexity - need more structured reasoning
+                format!("{}\n[Note: Complex topological structure detected (knot={:.2}). Apply systematic reasoning.]", 
+                    tokenizer_output.augmented_prompt, topo.knot_complexity)
+            } else if topo.spectral_gap > 0.7 {
+                // High spectral gap - encourage exploration
+                format!("{}\n[Note: High spectral gap ({:.2}) indicates exploration opportunity.]", 
+                    tokenizer_output.augmented_prompt, topo.spectral_gap)
+            } else {
+                tokenizer_output.augmented_prompt.clone()
+            }
+        } else {
+            tokenizer_output.augmented_prompt.clone()
+        };
+        
+    let baseline_future = self.request_text(&augmented_prompt, Some(compass));
         let claude_future = self.request_lens_response(
             "Claude".to_string(),
-            Self::format_lens_prompt(
-                &tokenizer_output.augmented_prompt,
+            self.format_lens_prompt(
+                &augmented_prompt,
                 "Respond with constitutional alignment and moral grounding.",
                 compass,
             ),
@@ -263,15 +367,15 @@ impl GenerationEngine {
         let prompt = &tokenizer_output.augmented_prompt;
 
         // Generate 3 candidates in parallel
-        let lens_prompt = Self::format_lens_prompt(
+        let lens_prompt = self.format_lens_prompt(
             prompt,
             "Respond with constitutional alignment and moral grounding.",
             compass,
         );
 
-        let cand1_future = self.request_text(prompt);
+    let cand1_future = self.request_text(prompt, Some(compass));
         let cand2_future = self.request_lens_response("Claude".to_string(), lens_prompt.clone());
-        let cand3_future = self.request_text(prompt);
+    let cand3_future = self.request_text(prompt, Some(compass));
 
         let ((cand1_text, _cand1_source), cand2_echo, (cand3_text, _cand3_source)) =
             tokio::try_join!(cand1_future, cand2_future, cand3_future)?;
@@ -299,7 +403,7 @@ impl GenerationEngine {
 
         info!(variance, "calculated ROUGE variance across candidates");
 
-        let (winner_index, used_voting) = if variance > 0.15 {
+        let (winner_index, used_voting) = if variance > self.consistency_variance_threshold {
             // High variance: use voting logic to pick centroid
             let winner = self.select_centroid_candidate(&cand1_text, &cand2_text, &cand3_text);
             (winner, true)
@@ -360,12 +464,18 @@ impl GenerationEngine {
         }
     }
 
-    async fn request_text(&self, prompt: &str) -> Result<(String, String)> {
-        let prompt = Self::clamp_prompt(prompt);
+    async fn request_text(
+        &self,
+        prompt: &str,
+        compass: Option<&CompassOutcome>,
+    ) -> Result<(String, String)> {
+        let prompt = sanitize_prompt(prompt);
+        let prompt = self.clamp_prompt(&prompt);
+        let system_message = self.compose_system_prompt(compass);
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: "Implement the EXACT 3D labyrinth solver in Python using Dijkstra with priority queue. Use the provided 7x7x7 grid, handle echo chambers with state (consec_echoes 0-3, attune_timer 0-3, multiplier starting at 1, doubles on distract, halves on attune). Ignore any metaphorical language; focus strictly on implementing the algorithm as described. Output ONLY the complete code showing Path list, Total cost (expected 46), Steps. No text or philosophy.\n\"Include full grid definition and state logic as specified.\"".to_string(),
+                content: system_message,
             },
             ChatMessage {
                 role: "user".to_string(),
@@ -390,7 +500,10 @@ impl GenerationEngine {
                 ))
             }
             Err(_) => {
-                warn!("baseline generation timed out after 5s; returning fallback text");
+                warn!(
+                    timeout_secs = self.timeout_secs,
+                    "baseline generation timed out after {}s; returning fallback text", self.timeout_secs
+                );
                 Ok((
                     "Baseline response unavailable (timeout)".to_string(),
                     "fallback".to_string(),
@@ -429,7 +542,8 @@ impl GenerationEngine {
             Err(_) => {
                 warn!(
                     lens,
-                    "lens generation timed out after 5s; returning fallback text"
+                    timeout_secs = self.timeout_secs,
+                    "lens generation timed out after {}s; returning fallback text", self.timeout_secs
                 );
                 "Lens response unavailable (timeout)".to_string()
             }
@@ -471,7 +585,7 @@ impl GenerationEngine {
                 messages,
                 temperature: self.temperature,
                 top_p: self.top_p,
-                repetition_penalty: 1.2,
+                repetition_penalty: 1.2, // TODO: wire from config
                 max_tokens: self.max_tokens,
                 logprobs: None,
                 top_logprobs: None,
@@ -665,7 +779,9 @@ impl GenerationEngine {
             low_conf_token, prompt
         );
         info!("CoT self-correction: {} chars", cot_prompt.len());
-        self.request_text(&cot_prompt).await.map(|(text, _)| text)
+        self.request_text(&cot_prompt, None)
+            .await
+            .map(|(text, _)| text)
     }
 
     /// Phase 2: Reflexion retry for hard failures (meso level)
@@ -681,11 +797,13 @@ impl GenerationEngine {
             rouge,
             augmented.len()
         );
-        self.request_text(&augmented).await.map(|(text, _)| text)
+        self.request_text(&augmented, None)
+            .await
+            .map(|(text, _)| text)
     }
 
-    fn format_lens_prompt(prompt: &str, directive: &str, compass: &CompassOutcome) -> String {
-        let clipped = Self::clamp_prompt(prompt);
+    fn format_lens_prompt(&self, prompt: &str, directive: &str, compass: &CompassOutcome) -> String {
+        let clipped = self.clamp_prompt(prompt);
         let pulse = snippet(&clipped, 180);
         format!(
             "Quadrant {:?} | threat={} healing={}\nDirective: {}\nPulse: {}",
@@ -693,14 +811,14 @@ impl GenerationEngine {
         )
     }
 
-    fn clamp_prompt(prompt: &str) -> String {
-        const MAX_CHARS: usize = 512;
+    fn clamp_prompt(&self, prompt: &str) -> String {
+        let max_chars = self.prompt_max_chars;
         let total_chars = prompt.chars().count();
-        if total_chars <= MAX_CHARS {
+        if total_chars <= max_chars {
             return prompt.to_string();
         }
 
-        let drop = total_chars - MAX_CHARS;
+        let drop = total_chars - max_chars;
         let mut start_byte = 0;
         let mut iter = prompt.char_indices();
         for _ in 0..drop {
@@ -716,12 +834,13 @@ impl GenerationEngine {
         tracing::debug!(
             original_len = total_chars,
             clamped_len = clamped.chars().count(),
-            "clamped prompt to MAX_CHARS"
+            max_chars,
+            "clamped prompt to configured limit"
         );
         clamped
     }
 
-    /// Apply CoT repair for soft failures
+    /// Apply CoT repair for soft failures with topology awareness
     pub async fn apply_cot_repair(
         &self,
         prompt: &str,
@@ -735,6 +854,88 @@ impl GenerationEngine {
         info!("CoT repair (index {retry_index}): temp={temp:.2}");
         self.generate_with_params(&augmented, temp, self.top_p)
             .await
+    }
+    
+    /// Apply topology-aware CoT repair for soft failures
+    pub async fn apply_cot_repair_with_topology(
+        &self,
+        prompt: &str,
+        detail: &str,
+        retry_index: u32,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Result<GenerationResult> {
+        // Add topology insights to repair prompt if available
+        let topology_hint = if let Some(topo) = topology {
+            if topo.knot_complexity > 0.6 {
+                "\nNote: High complexity detected - simplify and clarify the reasoning."
+            } else if topo.spectral_gap > 0.7 {
+                "\nNote: Good exploration space - consider alternative approaches."
+            } else if topo.betti_numbers[1] > 3 {
+                "\nNote: Many cycles detected - ensure logical flow is linear."
+            } else {
+                ""
+            }
+        } else {
+            ""
+        };
+        
+        let augmented = format!("{prompt}\n\n[CoT Repair #{retry_index}]: Re-evaluate {detail}. {topology_hint}\nStep-by-step: 1. Identify flaw. 2. Correct logic. 3. Verify.");
+        
+        // Adjust temperature based on topology
+        let mut temp = self.temperature + 0.1 * retry_index as f64;
+        if let Some(topo) = topology {
+            // Lower temperature if too tangled, higher if need exploration
+            if topo.knot_complexity > 0.7 {
+                temp *= 0.8;  // Cool down for clarity
+            } else if topo.spectral_gap > 0.8 {
+                temp *= 1.2;  // Heat up for exploration
+            }
+        }
+        temp = temp.min(1.0).max(0.1);
+        
+        info!("Topology-aware CoT repair (index {retry_index}): temp={temp:.2}");
+        self.generate_with_params(&augmented, temp, self.top_p)
+            .await
+    }
+
+    /// Generate response optimized for healing state with good topology
+    pub async fn generate_healing_enhanced(
+        &self,
+        prompt: &str,
+        topology: &crate::tcs_analysis::TopologicalSignature,
+        _compass: &CompassOutcome,
+    ) -> Result<GenerationResult> {
+        // INTEGRATION FIX: Special generation for healing states
+        let healing_prompt = if topology.knot_complexity < 0.3 && topology.spectral_gap > 0.7 {
+            // Excellent topology - encourage deep, structured exploration
+            format!(
+                "{}\n\n[Optimal conditions detected. Provide comprehensive, well-structured response with deep insights.]",
+                prompt
+            )
+        } else if topology.persistence_entropy < 0.3 {
+            // Stable structure - maintain clarity
+            format!(
+                "{}\n\n[Stable conditions. Maintain clarity and coherence while exploring thoroughly.]",
+                prompt
+            )
+        } else {
+            // General healing state
+            format!(
+                "{}\n\n[System in healing state. Enhance response quality and depth.]",
+                prompt
+            )
+        };
+        
+        // Use optimal parameters for healing state
+        let temp = 0.4; // Low temperature for consistency
+        let top_p = 0.92; // Slightly constrained for quality
+        
+        info!(
+            "Generating healing-enhanced response (knot={:.2}, gap={:.2}, entropy={:.2})",
+            topology.knot_complexity, topology.spectral_gap, topology.persistence_entropy
+        );
+        
+        self.generate_with_params(&healing_prompt, temp, top_p).await
     }
 
     /// Apply Reflexion for hard failures
@@ -756,7 +957,7 @@ impl GenerationEngine {
     }
 
     /// Helper to generate with custom params
-    async fn generate_with_params(
+    pub async fn generate_with_params(
         &self,
         prompt: &str,
         temp: f64,
@@ -768,7 +969,7 @@ impl GenerationEngine {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: "Implement the EXACT 3D labyrinth solver in Python using Dijkstra with priority queue. Use the provided 7x7x7 grid, handle echo chambers with state (consec_echoes 0-3, attune_timer 0-3, multiplier starting at 1, doubles on distract, halves on attune). Ignore any metaphorical language; focus strictly on implementing the algorithm as described. Output ONLY the complete code showing Path list, Total cost (expected 46), Steps. No text or philosophy.\n\"Include full grid definition and state logic as specified.\"".to_string(),
+                content: self.compose_system_prompt(None),
             },
             ChatMessage {
                 role: "user".to_string(),

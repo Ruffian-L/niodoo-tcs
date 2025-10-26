@@ -72,3 +72,11 @@ path = "src/main.rs"
 [[bin]]
 name = "rut_gauntlet"
 path = "src/bin/rut_gauntlet.rs"
+
+[[bin]]
+name = "topology_spider"
+path = "src/bin/topology_spider.rs"
+
+[[bin]]
+name = "test_healing_integration"
+path = "src/bin/test_healing_integration.rs"

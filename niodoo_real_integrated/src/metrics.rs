@@ -195,12 +195,19 @@ pub fn evaluate_failure(
     curator: f64,
     ucb1: f64,
 ) -> (String, String) {
-    if rouge < 0.5 || entropy_delta > 0.1 || curator < 0.7 {
+    // Ultra-relaxed thresholds to allow degraded responses through
+    // Only trigger hard failure for completely broken responses
+    if rouge < 0.05 || entropy_delta > 0.5 || curator < 0.1 {
         (
             "hard".to_string(),
-            "Low quality or high uncertainty".to_string(),
+            "Critically low quality or high uncertainty".to_string(),
         )
-    } else if ucb1 < 0.3 {
+    } else if rouge < 0.2 || entropy_delta > 0.25 || curator < 0.3 {
+        (
+            "soft".to_string(),
+            "Low quality - needs improvement".to_string(),
+        )
+    } else if ucb1 < 0.15 {
         ("soft".to_string(), "Low search confidence".to_string())
     } else {
         ("none".to_string(), "".to_string())

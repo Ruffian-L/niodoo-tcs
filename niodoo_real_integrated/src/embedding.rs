@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, instrument};
-
-const MAX_EMBED_CHARS: usize = 4000;
+use futures::future;
 
 /// Wraps Ollama /api/embeddings API in an async-friendly interface.
 #[derive(Clone)]
@@ -11,6 +10,7 @@ pub struct QwenStatefulEmbedder {
     endpoint: String,
     model: String,
     expected_dim: usize,
+    max_chunk_chars: usize,
 }
 
 #[derive(Serialize)]
@@ -25,33 +25,56 @@ struct OllamaEmbeddingResponse {
 }
 
 impl QwenStatefulEmbedder {
-    pub fn new(endpoint: &str, model: &str, expected_dim: usize) -> Result<Self> {
+    pub fn new(
+        endpoint: &str,
+        model: &str,
+        expected_dim: usize,
+        max_chunk_chars: usize,
+    ) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .context("failed to create HTTP client for embeddings")?;
+
+        let chunk_limit = max_chunk_chars.max(1);
+        info!(chunk_limit, "initialized embedding client with chunk limit");
 
         Ok(Self {
             client,
             endpoint: endpoint.trim_end_matches('/').to_string(),
             model: model.to_string(),
             expected_dim,
+            max_chunk_chars: chunk_limit,
         })
     }
 
     #[instrument(skip_all, fields(chars = prompt.len()))]
     pub async fn embed(&self, prompt: &str) -> Result<Vec<f32>> {
-        let chunks = chunk_text(prompt, MAX_EMBED_CHARS);
+        let chunks = chunk_text(prompt, self.max_chunk_chars);
         let chunk_count = chunks.len();
         if chunk_count > 1 {
-            debug!(chunk_count, "embedding prompt split for Ollama context limits");
+            debug!(
+                chunk_count,
+                chunk_limit = self.max_chunk_chars,
+                "embedding prompt split due to configured chunk limit"
+            );
         }
 
+        // Process chunks in parallel for better performance
+        let embedding_results: Vec<Result<Vec<f32>, anyhow::Error>> = futures::future::join_all(
+            chunks.iter().map(|chunk| self.fetch_embedding(chunk))
+        ).await;
+        
+        let mut embeddings: Vec<Vec<f32>> = Vec::new();
+        for result in embedding_results {
+            embeddings.push(result?);
+        }
+        
+        // Accumulate embeddings
         let mut accum: Option<Vec<f32>> = None;
-        let mut count = 0f32;
-
-        for chunk in chunks {
-            let embedding = self.fetch_embedding(&chunk).await?;
+        let count = embeddings.len() as f32;
+        
+        for embedding in embeddings {
             if let Some(ref mut total) = accum {
                 for (sum, value) in total.iter_mut().zip(embedding.iter()) {
                     *sum += *value;
@@ -59,7 +82,6 @@ impl QwenStatefulEmbedder {
             } else {
                 accum = Some(embedding);
             }
-            count += 1.0;
         }
 
         let mut combined = accum.unwrap_or_else(|| vec![0.0; self.expected_dim]);
@@ -104,12 +126,13 @@ impl QwenStatefulEmbedder {
 
         let mut embedding = embed_response.embedding;
 
+        // Fail explicitly on dimension mismatch instead of silent truncation/padding
         if embedding.len() != self.expected_dim {
-            if embedding.len() < self.expected_dim {
-                embedding.resize(self.expected_dim, 0.0);
-            } else {
-                embedding.truncate(self.expected_dim);
-            }
+            anyhow::bail!(
+                "Embedding dimension mismatch: expected {}, got {}. This indicates a model configuration error.",
+                self.expected_dim,
+                embedding.len()
+            );
         }
 
         normalize(&mut embedding);

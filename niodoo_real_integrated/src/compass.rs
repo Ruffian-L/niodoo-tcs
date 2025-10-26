@@ -65,6 +65,13 @@ impl CompassEngine {
         }
     }
 
+    /// Update compass parameters from RuntimeConfig (called before each cycle)
+    pub fn update_params(&mut self, exploration_c: f64, variance_spike: f64, variance_stagnation: f64) {
+        self.exploration_c = exploration_c.max(0.0);
+        self.variance_spike = variance_spike.max(0.0);
+        self.variance_stagnation = variance_stagnation.max(0.0);
+    }
+
     #[instrument(skip_all)]
     pub fn evaluate(
         &mut self,
@@ -128,7 +135,24 @@ impl CompassEngine {
             }
         }
 
-        let is_healing = pleasure > healing_floor.0 && dominance > healing_floor.1;
+        // INTEGRATION FIX: Make healing detection topology-aware
+        let mut is_healing = pleasure > healing_floor.0 && dominance > healing_floor.1;
+        
+        // Enhance healing detection with topology signals
+        if let Some(topo) = topology {
+            // Low knot complexity indicates untangled, clear reasoning - healing state
+            if topo.knot_complexity < 0.3 && pleasure > 0.2 {
+                is_healing = true;
+            }
+            // High spectral gap with good emotional state is healing
+            if topo.spectral_gap > 0.7 && pleasure > 0.0 && dominance > 0.0 {
+                is_healing = true;
+            }
+            // Low persistence entropy indicates stable structure - healing
+            if topo.persistence_entropy < 0.3 && !is_threat {
+                is_healing = true;
+            }
+        }
 
         let quadrant = match (pleasure, arousal) {
             (p, a) if p < -0.1 && a > 0.2 => CompassQuadrant::Panic,
@@ -254,12 +278,13 @@ impl CompassEngine {
         let mut branches = Vec::with_capacity(3);
         let priors = [0.5 + state.pad[0], 0.5 + state.pad[1], 0.5 + state.pad[2]];
         let mut visit_counts = [1usize; 3];
-        let mut total_visits = 3usize;
+        let parent_visits = 10usize; // Fixed parent visit count for heuristic
 
         for idx in 0..3 {
             let reward_estimate = priors[idx].tanh() as f64;
+            // Fixed UCB1: c * sqrt(ln(N(parent)) / N(n))
             let exploration =
-                self.exploration_c * ((total_visits as f64).ln() / visit_counts[idx] as f64).sqrt();
+                self.exploration_c * ((parent_visits as f64).ln() / visit_counts[idx] as f64).sqrt();
             let score = reward_estimate + exploration;
             branches.push(MctsBranch {
                 label: format!("branch_{idx}"),
@@ -267,7 +292,6 @@ impl CompassEngine {
                 entropy_projection: state.entropy + reward_estimate,
             });
             visit_counts[idx] += 1;
-            total_visits += 1;
         }
 
         branches.sort_by(|a, b| {

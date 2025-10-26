@@ -235,10 +235,12 @@ fn apply_rut_mirage(
 
     let mut rng = thread_rng();
     let normal = Normal::new(entropy_mean, mirage_sigma.max(1e-3))?;
-    let jitter = normal.sample(&mut rng);
-    let shift = ((pad_state.entropy - jitter) * 7.0).round() as i64;
-
+    
+    // Apply per-token jitter instead of single jitter for all tokens
+    // This increases entropy diversity in tokenization
     for token in tokens.iter_mut() {
+        let jitter = normal.sample(&mut rng);
+        let shift = ((pad_state.entropy - jitter) * 7.0).round() as i64;
         let new_val = (*token as i64 + shift).max(0) as u32;
         *token = new_val;
     }

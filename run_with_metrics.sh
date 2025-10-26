@@ -97,6 +97,18 @@ export TOKENIZER_JSON="${TOKENIZER_JSON:-/workspace/Niodoo-Final/models/tokenize
 export MODELS_DIR="${MODELS_DIR:-/workspace/Niodoo-Final/models}"
 export RUST_LOG="${RUST_LOG:-info}"
 
+# Load runtime environment so vLLM/Ollama endpoints are available when the
+# binary spins up. Using set -a ensures plain KEY=VALUE lines get exported.
+if [ -f "tcs_runtime.env" ]; then
+    set -a
+    source "tcs_runtime.env"
+    set +a
+elif [ -f ".env" ]; then
+    set -a
+    source ".env"
+    set +a
+fi
+
 echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║            🚀 NIODOO TEST WITH METRICS 🚀                   ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"

@@ -198,9 +198,11 @@ impl EragClient {
             sims.iter().copied().sum::<f32>() / sims.len() as f32
         };
 
-        let mut aggregated_context = memories
+        // Collect context strings and join
+        let mut aggregated_context: String = memories
             .iter()
-            .flat_map(|m| m.erag_context.clone())
+            .flat_map(|m| m.erag_context.iter())
+            .cloned()
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -535,14 +537,97 @@ impl EragClient {
         Ok(tuples)
     }
 
-    pub async fn query_old_dqn_tuples(&self, _batch_id: u32, _num: usize) -> Result<Vec<DqnTuple>> {
-        // Placeholder: implement age-based query later
-        Ok(vec![])
+    pub async fn query_old_dqn_tuples(&self, batch_id: u32, num: usize) -> Result<Vec<DqnTuple>> {
+        // Query older DQN tuples for experience replay (anti-forgetting)
+        // Use batch_id as a seed for deterministic sampling
+        let offset = (batch_id as u64 * 100) % 1000;
+        
+        // Use HTTP API for scrolling through tuples
+        let request_json = json!({
+            "limit": num,
+            "offset": offset.to_string(),
+            "with_payload": true,
+            "with_vectors": false
+        });
+        
+        let url = format!("{}/collections/{}/points/scroll", self.base_url, self.collection);
+        let resp = self.client.post(&url).json(&request_json).send().await?;
+        
+        #[derive(Deserialize)]
+        struct ScrollResponse {
+            result: Vec<ScrollPoint>,
+        }
+        
+        let scroll_resp: ScrollResponse = resp.json().await?;
+        let mut tuples = Vec::new();
+        
+        for point in scroll_resp.result {
+            let payload = point.payload.unwrap_or_default();
+            if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
+                let state = tp["state"]
+                    .as_array()
+                    .map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect())
+                    .unwrap_or_default();
+                let action_param = tp["action_param"].as_str().unwrap_or("").to_string();
+                let action_delta = tp["action_delta"].as_f64().unwrap_or(0.0);
+                let reward = tp["reward"].as_f64().unwrap_or(0.0);
+                let next_state = tp["next_state"]
+                    .as_array()
+                    .map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect())
+                    .unwrap_or_default();
+                
+                tuples.push(DqnTuple {
+                    state,
+                    action_param,
+                    action_delta,
+                    reward,
+                    next_state,
+                });
+            }
+        }
+        
+        Ok(tuples)
     }
 
-    pub async fn query_tough_knots(&self, _num: usize) -> Result<Vec<EragMemory>> {
-        // Placeholder: query memories with high topology_knot_complexity > 0.4
-        Ok(vec![])
+    pub async fn query_tough_knots(&self, num: usize) -> Result<Vec<EragMemory>> {
+        // Query memories with high topology_knot_complexity > 0.4
+        // Use filter-based search via HTTP API
+        let filter_json = json!({
+            "must": [
+                {
+                    "key": "topology_knot_complexity",
+                    "range": {"gt": 0.4}
+                }
+            ]
+        });
+        
+        let request_json = json!({
+            "vector": vec![0.0f32; self.vector_dim], // Dummy vector for filter-only search
+            "limit": num,
+            "filter": filter_json,
+            "with_payload": true,
+            "with_vectors": false
+        });
+        
+        let url = format!("{}/collections/{}/points/search", self.base_url, self.collection);
+        let resp = self.client.post(&url).json(&request_json).send().await?;
+        
+        #[derive(Deserialize)]
+        struct SearchResponse {
+            result: Vec<SearchHit>,
+        }
+        
+        let search_resp: SearchResponse = resp.json().await?;
+        let mut memories = Vec::new();
+        
+        for hit in search_resp.result {
+            if !hit.payload.is_empty() {
+                let memory = deserialize_memory(&hit.payload);
+                memories.push(memory);
+            }
+        }
+        
+        Ok(memories)
     }
 }
 

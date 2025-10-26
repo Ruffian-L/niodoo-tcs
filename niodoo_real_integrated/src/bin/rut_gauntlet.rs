@@ -59,6 +59,7 @@ struct TestResult {
     rouge_l: f64,
     generation_source: String,
     quadrant: String,
+    raw_stds: Vec<f64>,
 }
 
 #[derive(Serialize)]
@@ -264,6 +265,7 @@ async fn run_100_prompt_test() -> Result<()> {
             rouge_l: cycle.rouge,
             generation_source: cycle.generation.source.clone(),
             quadrant: format!("{:?}", cycle.compass.quadrant),
+            raw_stds: cycle.pad_state.raw_stds.clone(),
         };
 
         first_20_results.push(test_result.clone());
@@ -319,6 +321,7 @@ async fn run_100_prompt_test() -> Result<()> {
             rouge_l: cycle.rouge,
             generation_source: cycle.generation.source.clone(),
             quadrant: format!("{:?}", cycle.compass.quadrant),
+            raw_stds: cycle.pad_state.raw_stds.clone(),
         };
 
         results.push(test_result);
@@ -509,6 +512,7 @@ fn export_csv(results: &[TestResult], path: &Path) -> Result<()> {
         "coherence_rouge",
         "rouge_l",
         "generation_source",
+        "raw_stds",
     ])?;
 
     for result in results {

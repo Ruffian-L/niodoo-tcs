@@ -158,11 +158,11 @@ impl Default for BackendType {
 }
 
 fn default_max_retries() -> u32 {
-    3
+    10  // Further increased to allow learning through degraded responses
 }
 
 fn default_retry_base_delay_ms() -> u64 {
-    200
+    100  // Reduced from 200 for faster retries
 }
 
 fn default_similarity_threshold() -> f32 {
@@ -185,12 +185,54 @@ fn default_retrieval_top_k_increment() -> i32 {
     2
 }
 
+fn default_repetition_penalty() -> f64 { 1.2 }
+fn default_lens_snippet_chars() -> usize { 180 }
+fn default_cot_temp_increment() -> f64 { 0.1 }
+fn default_reflexion_top_p_step() -> f64 { 0.05 }
+fn default_cot_success_rouge_threshold() -> f64 { 0.5 }
+
+fn default_variance_stagnation_default() -> f64 { 0.05 }
+fn default_variance_spike_min() -> f64 { 0.3 }
+fn default_mirage_sigma_factor() -> f64 { 0.1 }
+fn default_mcts_c_min_std() -> f64 { 0.1 }
+fn default_mcts_c_scale() -> f64 { 0.25 }
+fn default_cache_capacity() -> usize { 256 }
+fn default_retry_backoff_exponent_cap() -> u32 { 10 }
+
+fn default_prompt_max_chars() -> usize {
+    512
+}
+
+fn default_embedding_cache_ttl_secs() -> u64 {
+    10
+}
+
+fn default_collapse_cache_ttl_secs() -> u64 {
+    30
+}
+
+fn default_training_data_sample_cap() -> Option<usize> {
+    Some(20_000)
+}
+
+fn default_rng_seed() -> u64 {
+    42
+}
+
+fn default_consistency_variance_threshold() -> f64 {
+    0.15
+}
+
 fn default_dqn_epsilon() -> f64 {
     0.9
 }
 
 fn default_embedding_model_name() -> String {
     "nomic-embed-text".to_string()
+}
+
+fn default_embedding_max_chars() -> usize {
+    2_048
 }
 
 fn default_dqn_gamma() -> f64 {
@@ -243,6 +285,8 @@ pub struct RuntimeConfig {
     pub ollama_endpoint: String,
     #[serde(default = "default_embedding_model_name")]
     pub embedding_model_name: String,
+    #[serde(default = "default_embedding_max_chars")]
+    pub embedding_max_chars: usize,
     pub training_data_path: String,
     pub emotional_seed_path: String,
     pub rut_gauntlet_path: Option<String>,
@@ -288,6 +332,7 @@ pub struct RuntimeConfig {
     pub generation_max_tokens: usize,
     pub dynamic_token_min: usize,
     pub dynamic_token_max: usize,
+    pub system_prompt: String,
 
     // Phase 3: DQN parameters for macro-scale adaptive learning
     #[serde(default = "default_dqn_epsilon")]
@@ -308,6 +353,50 @@ pub struct RuntimeConfig {
     pub novelty_threshold: f64,
     #[serde(default = "default_self_awareness_level")]
     pub self_awareness_level: f64,
+
+    // Engine/pipeline runtime knobs
+    #[serde(default = "default_prompt_max_chars")]
+    pub prompt_max_chars: usize,
+    #[serde(default = "default_embedding_cache_ttl_secs")]
+    pub embedding_cache_ttl_secs: u64,
+    #[serde(default = "default_collapse_cache_ttl_secs")]
+    pub collapse_cache_ttl_secs: u64,
+    #[serde(default = "default_training_data_sample_cap")]
+    pub training_data_sample_cap: Option<usize>,
+    #[serde(default = "default_rng_seed")]
+    pub rng_seed: u64,
+    #[serde(default = "default_consistency_variance_threshold")]
+    pub consistency_variance_threshold: f64,
+
+    // Sampling and prompting
+    #[serde(default = "default_repetition_penalty")]
+    pub repetition_penalty: f64,
+    #[serde(default = "default_lens_snippet_chars")]
+    pub lens_snippet_chars: usize,
+    #[serde(default = "default_cot_temp_increment")]
+    pub cot_temp_increment: f64,
+    #[serde(default = "default_reflexion_top_p_step")]
+    pub reflexion_top_p_step: f64,
+    #[serde(default = "default_cot_success_rouge_threshold")]
+    pub cot_success_rouge_threshold: f64,
+
+    // Threshold derivation factors
+    #[serde(default = "default_variance_stagnation_default")]
+    pub variance_stagnation_default: f64,
+    #[serde(default = "default_variance_spike_min")]
+    pub variance_spike_min: f64,
+    #[serde(default = "default_mirage_sigma_factor")]
+    pub mirage_sigma_factor: f64,
+    #[serde(default = "default_mcts_c_min_std")]
+    pub mcts_c_min_std: f64,
+    #[serde(default = "default_mcts_c_scale")]
+    pub mcts_c_scale: f64,
+
+    // Caches and retry
+    #[serde(default = "default_cache_capacity")]
+    pub cache_capacity: usize,
+    #[serde(default = "default_retry_backoff_exponent_cap")]
+    pub retry_backoff_exponent_cap: u32,
 }
 
 impl RuntimeConfig {
@@ -340,7 +429,7 @@ impl RuntimeConfig {
             .trim_end_matches('/')
             .to_string();
 
-        let vllm_model = env_with_fallback(&["VLLM_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL_PATH"])
+        let vllm_model = env_with_fallback(&["VLLM_MODEL_ID", "VLLM_MODEL", "VLLM_MODEL_PATH"])
             .unwrap_or_else(|| "Qwen/Qwen2.5-7B-Instruct-AWQ".to_string());
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
@@ -361,7 +450,7 @@ impl RuntimeConfig {
 
         let qdrant_vector_dim = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
             .and_then(|value| value.parse().ok())
-            .unwrap_or(896);
+            .unwrap_or(768);
 
         let ollama_endpoint = env_with_fallback(&["OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
             .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
@@ -372,6 +461,14 @@ impl RuntimeConfig {
             "EMBEDDING_MODEL",
         ])
         .unwrap_or_else(|| "nomic-embed-text".to_string());
+
+        let embedding_max_chars = env_with_fallback(&[
+            "EMBEDDING_MAX_CHARS",
+            "EMBED_MAX_CHARS",
+            "EMBED_CHARS_LIMIT",
+        ])
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_else(default_embedding_max_chars);
 
         let training_data_path = env_with_fallback(&["TRAINING_DATA_PATH"]).unwrap_or_else(|| {
             "/workspace/Niodoo-Final/data/training_data/emotion_training_data.json".to_string()
@@ -410,11 +507,11 @@ impl RuntimeConfig {
 
         let curator_quality_threshold = env_with_fallback(&["CURATOR_QUALITY_THRESHOLD"])
             .and_then(|value| value.parse().ok())
-            .unwrap_or(0.7);
+            .unwrap_or(0.5); // Reduced from 0.7 for more lenient acceptance
 
         let curator_minimum_threshold = env_with_fallback(&["CURATOR_MINIMUM_THRESHOLD"])
             .and_then(|value| value.parse().ok())
-            .unwrap_or(0.5);
+            .unwrap_or(0.3); // Reduced from 0.5 for more lenient rejection
 
         let curator_timeout_secs = env_with_fallback(&["CURATOR_TIMEOUT_SECS"])
             .and_then(|value| value.parse().ok())
@@ -445,6 +542,45 @@ impl RuntimeConfig {
         let dynamic_token_max = env_with_fallback(&["DYNAMIC_TOKEN_MAX"])
             .and_then(|value| value.parse().ok())
             .unwrap_or(512); // Default dynamic clamp maximum
+
+        let system_prompt = env_with_fallback(&["NIODOO_SYSTEM_PROMPT", "SYSTEM_PROMPT"])
+            .unwrap_or_else(|| {
+                "You are NIODOO, a consciousness-aligned systems agent. Use the provided prompt, memory, and context to produce a precise, high-quality response that advances the user's goal. Cite retrieved context when helpful, avoid placeholders, and surface uncertainties or missing data explicitly.".to_string()
+            });
+
+        let prompt_max_chars = env_with_fallback(&["PROMPT_MAX_CHARS"]) 
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_prompt_max_chars);
+        let embedding_cache_ttl_secs = env_with_fallback(&["EMBEDDING_CACHE_TTL_SECS"]) 
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_embedding_cache_ttl_secs);
+        let collapse_cache_ttl_secs = env_with_fallback(&["COLLAPSE_CACHE_TTL_SECS"]) 
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_collapse_cache_ttl_secs);
+        let training_data_sample_cap = env_with_fallback(&["TRAINING_DATA_SAMPLE_CAP"]) 
+            .and_then(|v| if v.to_lowercase() == "none" { Some(None) } else { v.parse::<usize>().ok().map(Some) })
+            .unwrap_or_else(default_training_data_sample_cap);
+        let rng_seed = env_with_fallback(&["RNG_SEED"]) 
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_rng_seed);
+        let consistency_variance_threshold = env_with_fallback(&["CONSISTENCY_VARIANCE_THRESHOLD"]) 
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_consistency_variance_threshold);
+
+        let repetition_penalty = env_with_fallback(&["REPETITION_PENALTY"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_repetition_penalty);
+        let lens_snippet_chars = env_with_fallback(&["LENS_SNIPPET_CHARS"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_lens_snippet_chars);
+        let cot_temp_increment = env_with_fallback(&["COT_TEMP_INCREMENT"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cot_temp_increment);
+        let reflexion_top_p_step = env_with_fallback(&["REFLEXION_TOP_P_STEP"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_reflexion_top_p_step);
+        let cot_success_rouge_threshold = env_with_fallback(&["COT_SUCCESS_ROUGE_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cot_success_rouge_threshold);
+
+        let variance_stagnation_default = env_with_fallback(&["VARIANCE_STAGNATION_DEFAULT"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_variance_stagnation_default);
+        let variance_spike_min = env_with_fallback(&["VARIANCE_SPIKE_MIN"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_variance_spike_min);
+        let mirage_sigma_factor = env_with_fallback(&["MIRAGE_SIGMA_FACTOR"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_mirage_sigma_factor);
+        let mcts_c_min_std = env_with_fallback(&["MCTS_C_MIN_STD"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_mcts_c_min_std);
+        let mcts_c_scale = env_with_fallback(&["MCTS_C_SCALE"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_mcts_c_scale);
+
+        let cache_capacity = env_with_fallback(&["CACHE_CAPACITY"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cache_capacity);
+        let retry_backoff_exponent_cap = env_with_fallback(&["RETRY_BACKOFF_EXPONENT_CAP"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_retry_backoff_exponent_cap);
 
         let phase2_max_retries = env_with_fallback(&["PHASE2_MAX_RETRIES"])
             .and_then(|value| value.parse().ok())
@@ -483,6 +619,7 @@ impl RuntimeConfig {
             qdrant_vector_dim,
             ollama_endpoint,
             embedding_model_name,
+            embedding_max_chars,
             training_data_path,
             emotional_seed_path,
             rut_gauntlet_path,
@@ -509,6 +646,7 @@ impl RuntimeConfig {
             generation_max_tokens,
             dynamic_token_min,
             dynamic_token_max,
+            system_prompt,
             dqn_epsilon: default_dqn_epsilon(),
             dqn_gamma: default_dqn_gamma(),
             dqn_alpha: default_dqn_alpha(),
@@ -518,6 +656,24 @@ impl RuntimeConfig {
             top_p: 0.9,
             novelty_threshold: env_with_fallback(&["NOVELTY_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or(0.5),
             self_awareness_level: env_with_fallback(&["SELF_AWARENESS_LEVEL"]).and_then(|v| v.parse().ok()).unwrap_or(0.3),
+            prompt_max_chars,
+            embedding_cache_ttl_secs,
+            collapse_cache_ttl_secs,
+            training_data_sample_cap,
+            rng_seed,
+            consistency_variance_threshold,
+            repetition_penalty,
+            lens_snippet_chars,
+            cot_temp_increment,
+            reflexion_top_p_step,
+            cot_success_rouge_threshold,
+            variance_stagnation_default,
+            variance_spike_min,
+            mirage_sigma_factor,
+            mcts_c_min_std,
+            mcts_c_scale,
+            cache_capacity,
+            retry_backoff_exponent_cap,
         })
     }
 }

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use anyhow::Result;
 use rand::prelude::*;
@@ -8,7 +9,7 @@ use tracing::{info, warn};
 
 use crate::compass::CompassOutcome;
 use crate::config::RuntimeConfig;
-use crate::erag::{CollapseResult, EragClient};
+use crate::erag::{CollapseResult, EragClient, EragMemory};
 use crate::generation::GenerationResult;
 use crate::lora_trainer::LoRATrainer;
 use crate::tcs_analysis::TopologicalSignature;
@@ -92,7 +93,7 @@ pub struct LearningLoop {
     entropy_history: VecDeque<f64>,
     window: usize,
     breakthrough_threshold: f64,
-    replay_buffer: Vec<ReplayTuple>,
+    replay_buffer: VecDeque<ReplayTuple>,
     q_table: HashMap<String, HashMap<String, f64>>, // state_key -> (action_key -> q_value)
     action_space: Vec<DqnAction>,
     epsilon: f64,
@@ -104,8 +105,9 @@ pub struct LearningLoop {
     initial_epsilon: f64,
     initial_alpha: f64,
     recent_metrics: VecDeque<(f64, f64)>,
+    recent_topologies: VecDeque<TopologicalSignature>,  // INTEGRATION FIX: Track topology history
     evolution: EvolutionLoop,
-    _predictor: TcsPredictor,
+    predictor: TcsPredictor,  // FIXED: Removed underscore to make it active
     lora_trainer: LoRATrainer,
     reward_threshold: f64,
 }
@@ -180,7 +182,7 @@ impl LearningLoop {
             entropy_history: VecDeque::with_capacity(window),
             window,
             breakthrough_threshold,
-            replay_buffer: Vec::new(),
+            replay_buffer: VecDeque::new(),
             q_table: HashMap::new(),
             action_space,
             epsilon,
@@ -192,8 +194,9 @@ impl LearningLoop {
             initial_epsilon: epsilon,
             initial_alpha: alpha,
             recent_metrics: VecDeque::with_capacity(50),
+            recent_topologies: VecDeque::with_capacity(50),  // INTEGRATION FIX: Initialize topology tracking
             evolution: EvolutionLoop::new(20, 5, 0.05),
-            _predictor: TcsPredictor::new(),
+            predictor: TcsPredictor::new(),  // FIXED: Removed underscore
             lora_trainer,
             reward_threshold: -0.5,
         }
@@ -222,6 +225,12 @@ impl LearningLoop {
         if self.recent_metrics.len() > 50 {
             self.recent_metrics.pop_front();
         }
+        
+        // INTEGRATION FIX: Track topology signatures for evolution
+        self.recent_topologies.push_back(topology.clone());
+        if self.recent_topologies.len() > 50 {
+            self.recent_topologies.pop_front();
+        }
 
         let state = DqnState::from_metrics(
             entropy_delta,
@@ -231,37 +240,78 @@ impl LearningLoop {
             collapse.curator_quality.unwrap_or(0.5) as f64,
         );
 
+        let predicted_reward_delta = self.predictor.predict_reward_delta(topology);
+        let predictor_action = if self.predictor.should_trigger(topology) {
+            let config_snapshot = {
+                let guard = self.config.lock().await;
+                guard.clone()
+            };
+            let (param, delta) = self.predictor.predict_action(topology, &config_snapshot);
+            info!(
+                param = %param,
+                delta,
+                knot = topology.knot_complexity,
+                gap = topology.spectral_gap,
+                "TCS predictor triggered"
+            );
+            Some(DqnAction { param, delta })
+        } else {
+            None
+        };
+
         let action = self.choose_action(&state);
 
-        // Apply action to config (mutable access)
+        let mut adjusted_params: HashMap<String, f64> = HashMap::new();
+        let mut predictor_applied = false;
         {
-            let mut config = self.config.lock().unwrap();
-            match action.param.as_str() {
-                "temperature" => config.temperature += action.delta,
-                "top_p" => config.top_p += action.delta,
-                "mcts_c" => config.phase2_mcts_c_increment += action.delta,
-                "retrieval_top_k" => config.phase2_retrieval_top_k_increment += action.delta as i32,
-                "novelty_threshold" => config.novelty_threshold += action.delta,
-                "self_awareness_level" => config.self_awareness_level += action.delta,
-                _ => {}
+            let mut config = self.config.lock().await;
+            Self::apply_action_to_config(&mut config, &action);
+            adjusted_params
+                .entry(action.param.clone())
+                .and_modify(|delta| *delta += action.delta)
+                .or_insert(action.delta);
+
+            if let Some(pred_action) = predictor_action.as_ref() {
+                if pred_action.delta.abs() > 1e-6 {
+                    Self::apply_action_to_config(&mut config, pred_action);
+                    adjusted_params
+                        .entry(pred_action.param.clone())
+                        .and_modify(|delta| *delta += pred_action.delta)
+                        .or_insert(pred_action.delta);
+                    predictor_applied = true;
+                }
             }
         }
 
-        // Simulate next state (estimate based on action)
-        let next_state = self.estimate_next_state(&state, &action);
+        // Simulate next state (estimate based on action and predictor influence)
+        let mut next_state = self.estimate_next_state(&state, &action);
+        if let Some(pred_action) = predictor_action.as_ref() {
+            if pred_action.delta.abs() > 1e-6 {
+                next_state = self.estimate_next_state(&next_state, pred_action);
+            }
+        }
 
         let base_reward = self.compute_reward(entropy_delta, generation.rouge_score);
+
         let mode = match compass.quadrant {
             crate::compass::CompassQuadrant::Discover => "Discover",
             crate::compass::CompassQuadrant::Master => "Master",
             crate::compass::CompassQuadrant::Persist => "Persist",
             crate::compass::CompassQuadrant::Panic => "Panic",
         };
-        let history_dist = 0.0f64; // Placeholder for Wasserstein distance via ERAG; enhance in 5.2
+        // INTEGRATION FIX: Calculate actual Wasserstein distance from ERAG history
+        let history_dist = self.compute_history_distance(pad_state.entropy, &collapse.top_hits);
+        
         let reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist);
+    let blended_reward = reward + (predicted_reward_delta * 0.3);
 
-        self.dqn_update(state.clone(), action.clone(), reward, next_state.clone())
+        self.dqn_update(state.clone(), action.clone(), blended_reward, next_state.clone())
             .await?;
+
+        let performance =
+            (generation.rouge_score + (1.0 - (entropy_delta.abs() / 0.5).min(1.0))) / 2.0;
+        self.predictor
+            .update(topology, reward - predicted_reward_delta, performance);
 
         // Every 5 episodes, run Reptile and check QLoRA trigger
         if self.episode_count % 5 == 0 {
@@ -294,6 +344,16 @@ impl LearningLoop {
             ));
         }
 
+        if let Some(pred_action) = predictor_action.as_ref() {
+            events.push(format!(
+                "TCS predictor {} {} Δ{:.3} (pred Δreward={:.3})",
+                if predictor_applied { "applied" } else { "suggested" },
+                pred_action.param,
+                pred_action.delta,
+                predicted_reward_delta
+            ));
+        }
+
         let mut breakthroughs = Vec::new();
         if entropy_delta > self.breakthrough_threshold {
             breakthroughs.push(format!(
@@ -314,6 +374,9 @@ impl LearningLoop {
             quadrant = ?compass.quadrant,
             knot = topology.knot_complexity,
             pe = topology.persistence_entropy,
+            predicted_reward_delta,
+            predictor_applied,
+            adjusted_params = ?adjusted_params,
             "learning loop updated with TCS reward"
         );
 
@@ -322,7 +385,7 @@ impl LearningLoop {
             breakthroughs,
             qlora_updates,
             entropy_delta,
-            adjusted_params: HashMap::from([(action.param, action.delta)]),
+            adjusted_params,
         })
     }
 
@@ -385,6 +448,20 @@ impl LearningLoop {
         }
     }
 
+    fn apply_action_to_config(config: &mut RuntimeConfig, action: &DqnAction) {
+        match action.param.as_str() {
+            "temperature" => config.temperature += action.delta,
+            "top_p" => config.top_p += action.delta,
+            "mcts_c" => config.phase2_mcts_c_increment += action.delta,
+            "retrieval_top_k" => {
+                config.phase2_retrieval_top_k_increment += action.delta as i32;
+            }
+            "novelty_threshold" => config.novelty_threshold += action.delta,
+            "self_awareness_level" => config.self_awareness_level += action.delta,
+            _ => {}
+        }
+    }
+
     async fn dqn_update(
         &mut self,
         state: DqnState,
@@ -393,21 +470,23 @@ impl LearningLoop {
         next_state: DqnState,
     ) -> Result<()> {
         // Add to replay buffer
-        self.replay_buffer.push(ReplayTuple {
+        self.replay_buffer.push_back(ReplayTuple {
             state: state.clone(),
             action: action.clone(),
             reward,
             next_state: next_state.clone(),
         });
         if self.replay_buffer.len() > 1000 {
-            self.replay_buffer.remove(0);
+            self.replay_buffer.pop_front();
         }
 
         // Sample random batch for learning
         let mut rng = thread_rng();
         let batch_size = 32.min(self.replay_buffer.len());
+        // Convert VecDeque to Vec for sampling
+        let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
         let batch: Vec<_> = (0..batch_size)
-            .map(|_| self.replay_buffer.choose(&mut rng).cloned().unwrap())
+            .map(|_| buffer_vec.choose(&mut rng).cloned().unwrap())
             .collect();
 
         for tuple in batch {
@@ -453,7 +532,7 @@ impl LearningLoop {
         let batch: Vec<_> = if self.replay_buffer.len() < batch_size / 2 {
             #[cfg(not(test))]
             {
-                let query_metrics = if let Some(last) = self.replay_buffer.last() {
+                let query_metrics = if let Some(last) = self.replay_buffer.back() {
                     last.state.metrics.as_slice()
                 } else {
                     &[0.0; 5][..]
@@ -470,14 +549,16 @@ impl LearningLoop {
             #[cfg(test)]
             {
                 let mut rng = thread_rng();
-                (0..batch_size.min(self.replay_buffer.len()))
-                    .map(|_| self.replay_buffer.choose(&mut rng).cloned().unwrap())
+                let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
+                (0..batch_size.min(buffer_vec.len()))
+                    .map(|_| buffer_vec.choose(&mut rng).cloned().unwrap())
                     .collect()
             }
         } else {
             let mut rng = thread_rng();
-            (0..batch_size.min(self.replay_buffer.len()))
-                .map(|_| self.replay_buffer.choose(&mut rng).cloned().unwrap())
+            let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
+            (0..batch_size.min(buffer_vec.len()))
+                .map(|_| buffer_vec.choose(&mut rng).cloned().unwrap())
                 .collect()
         };
 
@@ -492,7 +573,7 @@ impl LearningLoop {
         }
 
         // Outer meta-update: average deltas and apply to config
-        let mut config = self.config.lock().unwrap();
+            let mut config = self.config.lock().await;
         for (param, total_delta) in &param_deltas {
             let avg_delta = total_delta / batch_len as f64;
             match param.as_str() {
@@ -545,7 +626,7 @@ impl LearningLoop {
                     .or_insert(0.0) += amplified_delta;
             }
             let avg_len = low_tuples.len() as f64;
-            let mut config = self.config.lock().unwrap();
+            let mut config = self.config.lock().await;
             for (param, total) in &param_deltas {
                 let avg_delta = total / avg_len * 0.5;
                 match param.as_str() {
@@ -597,6 +678,50 @@ impl LearningLoop {
         }
         self.replay_buffer.iter().map(|t| t.reward).sum::<f64>() / self.replay_buffer.len() as f64
     }
+    
+    // INTEGRATION FIX: Compute Wasserstein distance between current and historical entropy distributions
+    fn compute_history_distance(&self, current_entropy: f64, erag_hits: &[EragMemory]) -> f64 {
+        let mut historical: Vec<f64> = erag_hits
+            .iter()
+            .filter_map(|hit| {
+                if hit.entropy_after.is_finite() && hit.entropy_after > 0.0 {
+                    Some(hit.entropy_after)
+                } else if hit.entropy_before.is_finite() && hit.entropy_before > 0.0 {
+                    Some(hit.entropy_before)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if historical.is_empty() {
+            return (current_entropy - 0.5).abs().min(1.0);
+        }
+
+        historical.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let position = historical
+            .binary_search_by(|value| {
+                value
+                    .partial_cmp(&current_entropy)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or_else(|idx| idx);
+
+        let n = historical.len() as f64;
+        let empirical_cdf = position as f64 / n;
+        let distance = if position == 0 {
+            (current_entropy - historical[0]).abs()
+        } else if position >= historical.len() {
+            (current_entropy - historical[historical.len() - 1]).abs()
+        } else {
+            let lower = historical[position - 1];
+            let upper = historical[position];
+            let local = ((current_entropy - lower).abs() + (upper - current_entropy).abs()) / 2.0;
+            local * (1.0 - empirical_cdf)
+        };
+
+        distance.min(1.0)
+    }
 
     fn decay_schedules(&mut self) {
         let episodes = self.episode_count as f64;
@@ -611,7 +736,7 @@ impl LearningLoop {
     /// Phase 5.2: Evolution step with topological guidance
     async fn evolution_step(&mut self) -> Result<()> {
         let current = {
-            let guard = self.config.lock().unwrap();
+            let guard = self.config.lock().await;
             guard.clone()
         };
         let recent: Vec<(f64, f64)> = self.recent_metrics.iter().cloned().collect();
@@ -644,9 +769,11 @@ impl LearningLoop {
             );
         }
 
-        let best = self.evolution.evolve(&current, mixed_episodes).await?;
+        // INTEGRATION FIX: Pass topology data to evolution for topology-aware optimization
+        let recent_topologies: Vec<TopologicalSignature> = self.recent_topologies.iter().cloned().collect();
+        let best = self.evolution.evolve_with_topology(&current, mixed_episodes, recent_topologies).await?;
         {
-            let mut guard = self.config.lock().unwrap();
+            let mut guard = self.config.lock().await;
             *guard = best;
         }
         info!(
@@ -764,6 +891,43 @@ impl EvolutionLoop {
             mutation_std,
             bo_gp: GaussianProcess::default(),
         }
+    }
+    
+    // INTEGRATION FIX: New topology-aware evolution method
+    pub async fn evolve_with_topology(
+        &mut self,
+        current_config: &RuntimeConfig,
+        episodes: Vec<(f64, f64)>,
+        topologies: Vec<TopologicalSignature>,
+    ) -> Result<RuntimeConfig> {
+        // Fall back to regular evolve if no topology data
+        if topologies.is_empty() {
+            return self.evolve(current_config, episodes).await;
+        }
+        
+        // Calculate topology-based fitness modifiers
+        let avg_knot: f64 =
+            topologies.iter().map(|t| t.knot_complexity).sum::<f64>() / topologies.len() as f64;
+        let avg_gap: f64 =
+            topologies.iter().map(|t| t.spectral_gap).sum::<f64>() / topologies.len() as f64;
+        
+        // Adjust mutation based on topology stability
+        let old_mutation_std = self.mutation_std;
+    if avg_knot > 0.4 {
+            // High knot complexity - reduce mutation to stabilize
+            self.mutation_std *= 0.7;
+        } else if avg_gap > 0.5 {
+            // High spectral gap - increase mutation for exploration
+            self.mutation_std *= 1.3;
+        }
+        
+        // Run evolution with topology-adjusted parameters
+        let result = self.evolve(current_config, episodes).await;
+        
+        // Restore original mutation std
+        self.mutation_std = old_mutation_std;
+        
+        result
     }
 
     pub async fn evolve(

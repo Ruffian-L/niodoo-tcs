@@ -93,6 +93,33 @@ impl TCSAnalyzer {
             tqft_engine,
         })
     }
+    
+    /// Apply TQFT reasoning to evolve a state through cobordism transitions
+    pub fn apply_tqft_reasoning(&self, 
+        initial_state: &[f64], 
+        transitions: &[Cobordism]
+    ) -> Result<Vec<f64>> {
+        use num_complex::Complex;
+        use nalgebra::DVector;
+        
+        // Convert real state to complex vector
+        let complex_state: DVector<Complex<f32>> = DVector::from_iterator(
+            initial_state.len().min(self.tqft_engine.dimension),
+            initial_state.iter().take(self.tqft_engine.dimension)
+                .map(|&x| Complex::new(x as f32, 0.0))
+        );
+        
+        // Apply TQFT reasoning
+        let result_state = self.tqft_engine.reason(&complex_state, transitions)
+            .map_err(|e| anyhow::anyhow!("TQFT reasoning failed: {}", e))?;
+        
+        // Convert back to real values
+        let real_state: Vec<f64> = result_state.iter()
+            .map(|c| c.re as f64)
+            .collect();
+        
+        Ok(real_state)
+    }
 
     /// Analyze topological structure of a state
     #[instrument(skip(self), fields(entropy = pad_state.entropy))]
@@ -208,17 +235,29 @@ impl TCSAnalyzer {
         KnotDiagram { crossings }
     }
 
-    /// Infer cobordism type from Betti number changes
+    /// Infer cobordism type from Betti number changes using TQFT engine
     fn infer_cobordism(&self, betti: &[usize; 3]) -> Option<Cobordism> {
-        // Simplified inference based on Betti numbers
-        // TODO: Phase 3 - Store previous Betti numbers and compare
-        if betti[0] > 1 {
-            Some(Cobordism::Split)
-        } else if betti[1] > 0 {
-            Some(Cobordism::Birth)
+        // Use TQFT engine's proper inference method
+        // This would need previous state, so for now use static inference
+        // In production, track previous Betti numbers for comparison
+        static PREV_BETTI: std::sync::Mutex<Option<[usize; 3]>> = std::sync::Mutex::new(None);
+        
+        let mut prev_guard = PREV_BETTI.lock().unwrap();
+        let cobordism = if let Some(prev) = *prev_guard {
+            TQFTEngine::infer_cobordism_from_betti(&prev, betti)
         } else {
-            Some(Cobordism::Identity)
-        }
+            // First run - infer from structure
+            if betti[0] > 1 {
+                Some(Cobordism::Split)
+            } else if betti[1] > 0 {
+                Some(Cobordism::Birth)
+            } else {
+                Some(Cobordism::Identity)
+            }
+        };
+        *prev_guard = Some(*betti);
+        
+        cobordism
     }
 
     fn collect_persistence_features(result: &PersistenceResult) -> Vec<PersistenceFeature> {
@@ -341,6 +380,7 @@ mod tests {
             entropy: 1.98,
             mu: [0.0; 7],
             sigma: [0.5; 7],
+            raw_stds: vec![0.5; 7],
         };
 
         let diagram = analyzer.pad_to_knot_diagram(&pad_state);
