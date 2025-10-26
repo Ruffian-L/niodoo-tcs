@@ -351,11 +351,14 @@ impl Pipeline {
             let compass_engine = self.compass.clone();
             let pad_state = pad_state.clone();
             let topology = topology.clone();
+            let thresholds = self.thresholds.clone();
             move || {
-                compass_engine
+                let mut guard = compass_engine
                     .lock()
-                    .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?
-                    .evaluate(&pad_state, Some(&topology))
+                    .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?;
+                // Retune compass parameters live from thresholds
+                guard.update_params(thresholds.mcts_c, thresholds.variance_spike, thresholds.variance_stagnation);
+                guard.evaluate(&pad_state, Some(&topology))
             }
         });
 
@@ -374,7 +377,10 @@ impl Pipeline {
                     Some(entry) if !entry.is_expired(now, collapse_ttl) => Ok(entry.value.clone()),
                     _ => {
                         self.collapse_cache.pop(&cache_key);
-                        let collapse = self.erag.collapse(&embedding).await?;
+                        // Dynamic top_k based on config knobs (reuses retrieval_top_k_increment as delta)
+                        let top_k = (3i32 + self.config.phase2_retrieval_top_k_increment)
+                            .clamp(1, 50) as usize;
+                        let collapse = self.erag.collapse_with_limit(&embedding, top_k).await?;
                         self.collapse_cache
                             .put(cache_key, CacheEntry::new(collapse.clone(), now));
                         Ok(collapse)
@@ -599,6 +605,7 @@ impl Pipeline {
                 stage_timings: timings,
                 last_entropy: pad_state.entropy,
                 failure: final_failure,
+                pad_state: pad_state.clone(),
             });
         }
 

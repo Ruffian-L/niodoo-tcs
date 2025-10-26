@@ -129,6 +129,10 @@ impl EragClient {
 
     #[instrument(skip_all, fields(dim = vector.len()))]
     pub async fn collapse(&self, vector: &[f32]) -> Result<CollapseResult> {
+        self.collapse_with_limit(vector, 3).await
+    }
+
+    pub async fn collapse_with_limit(&self, vector: &[f32], limit: usize) -> Result<CollapseResult> {
         anyhow::ensure!(
             vector.len() == self.vector_dim,
             "embedding dimension mismatch: expected {}, got {}",
@@ -139,7 +143,7 @@ impl EragClient {
         // Build search request manually
         let request_json = json!({
             "vector": vector.to_vec(),
-            "limit": 3,
+            "limit": limit.max(1).min(50),
             "score_threshold": self.similarity_threshold,
             "with_payload": true,
             "with_vectors": false
