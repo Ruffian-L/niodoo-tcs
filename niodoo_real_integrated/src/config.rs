@@ -189,6 +189,10 @@ fn default_dqn_epsilon() -> f64 {
     0.9
 }
 
+fn default_embedding_model_name() -> String {
+    "nomic-embed-text".to_string()
+}
+
 fn default_dqn_gamma() -> f64 {
     0.99
 }
@@ -237,6 +241,8 @@ pub struct RuntimeConfig {
     pub qdrant_collection: String,
     pub qdrant_vector_dim: usize,
     pub ollama_endpoint: String,
+    #[serde(default = "default_embedding_model_name")]
+    pub embedding_model_name: String,
     pub training_data_path: String,
     pub emotional_seed_path: String,
     pub rut_gauntlet_path: Option<String>,
@@ -294,7 +300,7 @@ pub struct RuntimeConfig {
     pub learning_window: usize,
     #[serde(default = "default_breakthrough_threshold")]
     pub breakthrough_threshold: f64,
-    
+
     // Generation parameters
     pub temperature: f64,
     pub top_p: f64,
@@ -335,9 +341,7 @@ impl RuntimeConfig {
             .to_string();
 
         let vllm_model = env_with_fallback(&["VLLM_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL_PATH"])
-            .unwrap_or_else(|| {
-                "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ/snapshots/b25037543e9394b818fdfca67ab2a00ecc7dd641".to_string()
-            });
+            .unwrap_or_else(|| "Qwen/Qwen2.5-7B-Instruct-AWQ".to_string());
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
         if matches!(args.hardware, HardwareProfile::Laptop5080Q) {
@@ -361,6 +365,13 @@ impl RuntimeConfig {
 
         let ollama_endpoint = env_with_fallback(&["OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
             .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+
+        let embedding_model_name = env_with_fallback(&[
+            "EMBEDDING_MODEL_NAME",
+            "OLLAMA_EMBED_MODEL",
+            "EMBEDDING_MODEL",
+        ])
+        .unwrap_or_else(|| "nomic-embed-text".to_string());
 
         let training_data_path = env_with_fallback(&["TRAINING_DATA_PATH"]).unwrap_or_else(|| {
             "/workspace/Niodoo-Final/data/training_data/emotion_training_data.json".to_string()
@@ -471,6 +482,7 @@ impl RuntimeConfig {
             qdrant_collection,
             qdrant_vector_dim,
             ollama_endpoint,
+            embedding_model_name,
             training_data_path,
             emotional_seed_path,
             rut_gauntlet_path,

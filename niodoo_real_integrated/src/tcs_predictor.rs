@@ -22,7 +22,7 @@ impl TcsPredictor {
         weights.insert("persistence_entropy".to_string(), -0.1);
         weights.insert("spectral_gap".to_string(), 0.4); // Low gap is good
         weights.insert("betti0".to_string(), 0.3);
-        
+
         Self {
             feature_weights: weights,
             history: Vec::new(),
@@ -32,32 +32,53 @@ impl TcsPredictor {
 
     /// Phase 5.3: Predict reward delta based on topological signature
     pub fn predict_reward_delta(&self, sig: &TopologicalSignature) -> f64 {
-        let knot_contrib = sig.knot_complexity as f64 * self.feature_weights.get("knot_complexity").unwrap_or(&0.0);
-        let betti1_contrib = sig.betti_numbers[1] as f64 * self.feature_weights.get("betti1").unwrap_or(&0.0);
-        let pe_contrib = sig.persistence_entropy * self.feature_weights.get("persistence_entropy").unwrap_or(&0.0);
-        let gap_contrib = sig.spectral_gap * self.feature_weights.get("spectral_gap").unwrap_or(&0.0);
-        let betti0_contrib = sig.betti_numbers[0] as f64 * self.feature_weights.get("betti0").unwrap_or(&0.0);
+        let knot_contrib = sig.knot_complexity as f64
+            * self.feature_weights.get("knot_complexity").unwrap_or(&0.0);
+        let betti1_contrib =
+            sig.betti_numbers[1] as f64 * self.feature_weights.get("betti1").unwrap_or(&0.0);
+        let pe_contrib = sig.persistence_entropy
+            * self
+                .feature_weights
+                .get("persistence_entropy")
+                .unwrap_or(&0.0);
+        let gap_contrib =
+            sig.spectral_gap * self.feature_weights.get("spectral_gap").unwrap_or(&0.0);
+        let betti0_contrib =
+            sig.betti_numbers[0] as f64 * self.feature_weights.get("betti0").unwrap_or(&0.0);
 
         knot_contrib + betti1_contrib + pe_contrib + gap_contrib + betti0_contrib
     }
 
     /// Phase 5.3: Predict optimal action based on topological features
-    pub fn predict_action(&self, sig: &TopologicalSignature, _config: &RuntimeConfig) -> (String, f64) {
+    pub fn predict_action(
+        &self,
+        sig: &TopologicalSignature,
+        _config: &RuntimeConfig,
+    ) -> (String, f64) {
         // If knot complexity is high, suggest reducing temperature/entropy
         if sig.knot_complexity > 0.4 {
-            debug!("High knot complexity {:.3}, suggesting temperature reduction", sig.knot_complexity);
+            debug!(
+                "High knot complexity {:.3}, suggesting temperature reduction",
+                sig.knot_complexity
+            );
             return ("temperature".to_string(), -0.1);
         }
 
         // If spectral gap is high (unstable), suggest parameter stabilization
         if sig.spectral_gap > 0.5 {
-            debug!("High spectral gap {:.3}, suggesting stabilization", sig.spectral_gap);
+            debug!(
+                "High spectral gap {:.3}, suggesting stabilization",
+                sig.spectral_gap
+            );
             return ("top_p".to_string(), 0.05);
         }
 
         // If betti numbers indicate complexity, adjust novelty threshold
         if sig.betti_numbers[1] > 2 {
-            debug!("High H1 betti {}, suggesting novelty increase", sig.betti_numbers[1]);
+            debug!(
+                "High H1 betti {}, suggesting novelty increase",
+                sig.betti_numbers[1]
+            );
             return ("novelty_threshold".to_string(), 0.1);
         }
 
@@ -87,7 +108,7 @@ impl TcsPredictor {
 
         // Simple correlation-based adaptation
         let avg_perf: f64 = recent.iter().map(|(_, _, p)| p).sum::<f64>() / recent.len() as f64;
-        
+
         for (sig, _, _) in recent {
             if sig.knot_complexity > 0.4 && avg_perf < 0.5 {
                 // High knot correlates with low performance - strengthen penalty
@@ -117,7 +138,9 @@ impl TcsPredictor {
         if self.history.is_empty() {
             return (0.0, 0.0);
         }
-        let avgs: (f64, f64) = self.history.iter()
+        let avgs: (f64, f64) = self
+            .history
+            .iter()
             .map(|(_, rd, p)| (*rd, *p))
             .fold((0.0, 0.0), |acc, x| (acc.0 + x.0, acc.1 + x.1));
         let len = self.history.len() as f64;
@@ -182,9 +205,8 @@ mod tests {
         let predictor = TcsPredictor::new();
         let high_knot = create_test_sig(0.5, 0.3);
         let low_knot = create_test_sig(0.2, 0.3);
-        
+
         assert!(predictor.should_trigger(&high_knot));
         assert!(!predictor.should_trigger(&low_knot));
     }
 }
-

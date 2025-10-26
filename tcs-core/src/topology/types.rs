@@ -112,13 +112,16 @@ impl PersistenceDiagram {
         }
         // Normalise lifetimes into probabilities.
         lifetimes.iter_mut().for_each(|l| *l /= total);
-        lifetimes.iter().fold(0.0, |acc, p| {
-            if *p > 0.0 {
-                acc - (*p * p.ln())
-            } else {
-                acc
-            }
-        })
+        lifetimes.iter().fold(
+            0.0,
+            |acc, p| {
+                if *p > 0.0 {
+                    acc - (*p * p.ln())
+                } else {
+                    acc
+                }
+            },
+        )
     }
 
     /// Compute a step-wise Betti curve for this diagram.

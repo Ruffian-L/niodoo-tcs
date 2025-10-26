@@ -10,13 +10,13 @@
 use anyhow::Context;
 use anyhow::Result;
 use async_trait::async_trait;
+use nalgebra::{DMatrix, DVector};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{info, warn};
-use nalgebra::{DMatrix, DVector};
 
 #[cfg(feature = "onnx")]
 const INFERENCE_HEAD_SAMPLES: usize = 5;
@@ -517,15 +517,6 @@ pub mod qwen_error;
 #[cfg(feature = "onnx")]
 pub use qwen_embedder::QwenEmbedder;
 
-// mod exploration_agent;
-// mod policies;
-// mod sampling;
-// mod search;
-// mod tasks;
-// mod utils;
-
-// pub use exploration_agent::ExplorationAgent;
-
 /// Simple exploration agent that perturbs cognitive knots with stochastic moves.
 #[derive(Debug)]
 pub struct ExplorationAgent {
@@ -562,9 +553,13 @@ impl ExplorationAgent {
         let distribution = Uniform::new(0, self.action_space + perturbation);
         distribution.sample(&mut self.rng)
     }
-    
+
     /// Process state through E(n)-equivariant layer for rotation-invariant features
-    pub fn process_with_equivariant(&self, positions: &DMatrix<f32>, features: &DMatrix<f32>) -> DMatrix<f32> {
+    pub fn process_with_equivariant(
+        &self,
+        positions: &DMatrix<f32>,
+        features: &DMatrix<f32>,
+    ) -> DMatrix<f32> {
         let layer = EquivariantLayer::new(features.ncols(), features.ncols());
         layer.forward(positions, features)
     }
@@ -580,37 +575,38 @@ pub struct EquivariantLayer {
 impl EquivariantLayer {
     pub fn new(input_dim: usize, output_dim: usize) -> Self {
         assert!(input_dim > 0 && output_dim > 0);
-        
+
         let mut weight = DMatrix::<f32>::zeros(input_dim, output_dim);
         let diagonal = input_dim.min(output_dim);
         for idx in 0..diagonal {
             weight[(idx, idx)] = 1.0;
         }
-        
+
         let bias = DVector::<f32>::zeros(output_dim);
         Self { weight, bias }
     }
-    
+
     pub fn forward(&self, positions: &DMatrix<f32>, features: &DMatrix<f32>) -> DMatrix<f32> {
         assert_eq!(positions.nrows(), features.nrows());
         assert_eq!(features.ncols(), self.weight.nrows());
-        
+
         // Compute rotation-invariant kernel
         let invariant_kernel = Self::pairwise_squared_distances(positions);
         let invariant_features = invariant_kernel * features;
         let mut output = invariant_features * &self.weight;
-        
+
         // Add bias
-        let bias_matrix = DMatrix::<f32>::from_fn(output.nrows(), self.bias.len(), |_, col| self.bias[col]);
+        let bias_matrix =
+            DMatrix::<f32>::from_fn(output.nrows(), self.bias.len(), |_, col| self.bias[col]);
         output += bias_matrix;
         output
     }
-    
+
     fn pairwise_squared_distances(positions: &DMatrix<f32>) -> DMatrix<f32> {
         let n_points = positions.nrows();
         let gram = positions * positions.transpose();
         let mut distances = DMatrix::<f32>::zeros(n_points, n_points);
-        
+
         for i in 0..n_points {
             let norm_i = gram[(i, i)];
             for j in 0..n_points {
@@ -619,7 +615,7 @@ impl EquivariantLayer {
                 distances[(i, j)] = value.max(0.0);
             }
         }
-        
+
         distances
     }
 }

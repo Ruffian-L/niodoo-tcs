@@ -7,14 +7,23 @@ use csv::Writer;
 use rand::Rng;
 use std::fs::File;
 use std::time::Instant;
-use tcs_core::{TopologicalEngine, init_metrics};
+use tcs_core::{init_metrics, TopologicalEngine};
 
 #[test]
 fn e2e_benchmark() {
     init_metrics();
-    
+
     let mut wtr = Writer::from_path("e2e_results.csv").unwrap();
-    wtr.write_record(&["run", "overhead_%", "stuck_rate", "rag_accuracy", "entropy_drop", "output_var", "tda_latency_ms"]).unwrap();
+    wtr.write_record(&[
+        "run",
+        "overhead_%",
+        "stuck_rate",
+        "rag_accuracy",
+        "entropy_drop",
+        "output_var",
+        "tda_latency_ms",
+    ])
+    .unwrap();
 
     let mut rng = rand::thread_rng();
     let engine = TopologicalEngine::new(128);
@@ -25,11 +34,11 @@ fn e2e_benchmark() {
         let state: Vec<f32> = (0..128).map(|_| rng.gen_range(-1.0..1.0)).collect();
 
         let rag_acc = if rng.gen::<f64>() > 0.15 { 0.85 } else { 0.2 };
-        
+
         let tda_start = Instant::now();
         let output = engine.predict_reward(&state).unwrap();
         let tda_latency = tda_start.elapsed().as_millis() as f64;
-        
+
         let entropy = engine.compute_persistence(&state).entropy();
         let var = output * rng.gen_range(0.8..1.2);
 
@@ -40,7 +49,7 @@ fn e2e_benchmark() {
             let evolved_state = engine.evolve(pop, 1).unwrap();
             let new_ent = engine.compute_persistence(&evolved_state).entropy();
             let delta = (new_ent - prev_entropy).abs();
-            
+
             if delta < 0.1 {
                 stuck_count += 1;
             }
@@ -49,7 +58,8 @@ fn e2e_benchmark() {
         let stuck_rate = stuck_count as f64 / 5.0;
 
         let total_time = start.elapsed();
-        let no_tda_time = std::time::Duration::from_millis((total_time.as_millis() as f64 * 0.92) as u64);
+        let no_tda_time =
+            std::time::Duration::from_millis((total_time.as_millis() as f64 * 0.92) as u64);
         let overhead = ((total_time.as_secs_f64() / no_tda_time.as_secs_f64()) - 1.0) * 100.0;
 
         let mut ent = entropy;
@@ -65,7 +75,7 @@ fn e2e_benchmark() {
         };
 
         results.push((run, overhead, stuck_rate, rag_acc, drop, var, tda_latency));
-        
+
         wtr.write_record(&[
             run.to_string(),
             format!("{:.2}", overhead),
@@ -74,7 +84,8 @@ fn e2e_benchmark() {
             format!("{:.2}", drop),
             format!("{:.3}", var),
             format!("{:.2}", tda_latency),
-        ]).unwrap();
+        ])
+        .unwrap();
         wtr.flush().unwrap();
 
         if overhead > 15.0 {
@@ -86,7 +97,7 @@ fn e2e_benchmark() {
         if rag_acc < 0.8 {
             println!("BUST: RAG {:.3} <80%", rag_acc);
         }
-        
+
         if run % 100 == 0 {
             println!("Run {}: Overhead {:.2}%, Stuck {:.3}, RAG {:.3}, Drop {:.2}%, Var {:.3}, TDA {:.2}ms", 
                 run, overhead, stuck_rate, rag_acc, drop, var, tda_latency);
@@ -98,14 +109,14 @@ fn e2e_benchmark() {
     let avg_rag = results.iter().map(|r| r.3).sum::<f64>() / results.len() as f64;
     let avg_drop = results.iter().map(|r| r.4).sum::<f64>() / results.len() as f64;
     let avg_tda = results.iter().map(|r| r.6).sum::<f64>() / results.len() as f64;
-    
+
     println!("\n=== PROVE ===");
     println!("Avg TDA overhead: {:.2}% (target <15%)", avg_overhead);
     println!("Avg stuck rate: {:.3} (target <10%)", avg_stuck);
     println!("Avg RAG accuracy: {:.3} (target >80%)", avg_rag);
     println!("Avg entropy drop: {:.2}% (target >20%)", avg_drop);
     println!("Avg TDA latency: {:.2}ms", avg_tda);
-    
+
     assert!(avg_overhead < 15.0, "TDA overhead too high");
     assert!(avg_stuck < 0.1, "Stuck rate too high");
     assert!(avg_rag > 0.8, "RAG accuracy too low");

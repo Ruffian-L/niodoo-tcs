@@ -150,7 +150,7 @@ impl CompassEngine {
         self.last_variance = Some(variance);
 
         let ucb1_score = mcts_branches.first().map(|b| b.ucb_score);
-        
+
         let outcome = CompassOutcome {
             quadrant,
             is_threat,

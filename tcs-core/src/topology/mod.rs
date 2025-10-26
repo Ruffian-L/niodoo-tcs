@@ -1,10 +1,10 @@
 //! Topology engine abstractions and implementations for persistence computation.
 
-mod types;
-#[cfg(feature = "tda_rust")]
-mod rust_vr;
 #[cfg(feature = "tda_gudhi")]
 mod gudhi;
+#[cfg(feature = "tda_rust")]
+mod rust_vr;
+mod types;
 
 pub use types::*;
 
@@ -20,7 +20,7 @@ pub trait TopologyEngine {
     ) -> anyhow::Result<PersistenceResult>;
 }
 
-#[cfg(feature = "tda_rust")]
-pub use rust_vr::RustVREngine;
 #[cfg(feature = "tda_gudhi")]
 pub use gudhi::GudhiEngine;
+#[cfg(feature = "tda_rust")]
+pub use rust_vr::RustVREngine;

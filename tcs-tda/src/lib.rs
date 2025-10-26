@@ -8,8 +8,8 @@
 use nalgebra::DVector;
 use ndarray::{Array1, Array2};
 use rayon::prelude::*;
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 /// Result of a persistent homology computation for a single feature.
 #[derive(Debug, Clone)]
@@ -177,60 +177,73 @@ impl PersistentHomology {
     pub fn compute(&self, points: &[DVector<f32>]) -> Vec<PersistenceFeature> {
         let n = points.len();
         let dist = self.distance_matrix(points);
-        
+
         // Generate simplices: vertices, edges, triangles (dim<=2)
         let mut simplices = vec![];
         // 0-simplex
         for i in 0..n {
-            simplices.push(Simplex { vertices: vec![i], filtration: 0.0 });
+            simplices.push(Simplex {
+                vertices: vec![i],
+                filtration: 0.0,
+            });
         }
         // 1-simplex
         for i in 0..n {
-            for j in i+1..n {
+            for j in i + 1..n {
                 let d = dist[i * n + j];
                 if d <= self.max_edge_length {
-                    simplices.push(Simplex { vertices: vec![i,j], filtration: d });
+                    simplices.push(Simplex {
+                        vertices: vec![i, j],
+                        filtration: d,
+                    });
                 }
             }
         }
         // 2-simplex
         for i in 0..n {
-            for j in i+1..n {
+            for j in i + 1..n {
                 let d_ij = dist[i * n + j];
-                if d_ij > self.max_edge_length { continue; }
-                for k in j+1..n {
+                if d_ij > self.max_edge_length {
+                    continue;
+                }
+                for k in j + 1..n {
                     let d_ik = dist[i * n + k];
                     let d_jk = dist[j * n + k];
                     let max_d = d_ij.max(d_ik.max(d_jk));
                     if max_d <= self.max_edge_length {
-                        simplices.push(Simplex { vertices: vec![i,j,k], filtration: max_d });
+                        simplices.push(Simplex {
+                            vertices: vec![i, j, k],
+                            filtration: max_d,
+                        });
                     }
                 }
             }
         }
-        simplices.sort_by(|a,b| a.filtration.partial_cmp(&b.filtration).unwrap());
+        simplices.sort_by(|a, b| a.filtration.partial_cmp(&b.filtration).unwrap());
 
         // Boundary matrix: columns are simplices, rows are faces
         let num_sim = simplices.len();
-        let mut boundary = vec![vec![0i32; num_sim]; num_sim];  // Sparse, but dense for small n
+        let mut boundary = vec![vec![0i32; num_sim]; num_sim]; // Sparse, but dense for small n
         let mut face_to_sim = BTreeMap::new();
-        
+
         // Build face to simplex mapping
         for (idx, sim) in simplices.iter().enumerate() {
             face_to_sim.insert(sim.vertices.clone(), idx);
         }
-        
+
         for col in 0..num_sim {
             let sim = &simplices[col];
             let dim = sim.vertices.len() - 1;
-            if dim == 0 { continue; }  // No boundary
+            if dim == 0 {
+                continue;
+            } // No boundary
             for face_idx in 0..sim.vertices.len() {
                 let mut face = sim.vertices.clone();
                 face.remove(face_idx);
                 face.sort();
                 // Find row for face
                 if let Some(&r) = face_to_sim.get(&face) {
-                    boundary[r][col] = if face_idx % 2 == 0 { 1 } else { -1 };  // Orientation
+                    boundary[r][col] = if face_idx % 2 == 0 { 1 } else { -1 }; // Orientation
                 }
             }
         }
@@ -266,12 +279,13 @@ impl PersistentHomology {
         // Extract persistence: unpaired positive = birth, paired = death
         let mut features = vec![];
         for i in 0..num_sim {
-            if pair[i] == usize::MAX && low[i] != usize::MAX {  // Birth
+            if pair[i] == usize::MAX && low[i] != usize::MAX {
+                // Birth
                 let birth = simplices[i].filtration;
-                let death = if let Some(death_col) = (i+1..num_sim).find(|&j| pair[j] == i) {
+                let death = if let Some(death_col) = (i + 1..num_sim).find(|&j| pair[j] == i) {
                     simplices[death_col].filtration
                 } else {
-                    self.max_edge_length * 2.0  // Inf
+                    self.max_edge_length * 2.0 // Inf
                 };
                 let dim = simplices[i].vertices.len() - 1;
                 if dim <= self.max_dimension {
@@ -283,20 +297,24 @@ impl PersistentHomology {
                 }
             }
         }
-        features.sort_by(|a,b| a.dimension.cmp(&b.dimension).then(a.birth.partial_cmp(&b.birth).unwrap()));
+        features.sort_by(|a, b| {
+            a.dimension
+                .cmp(&b.dimension)
+                .then(a.birth.partial_cmp(&b.birth).unwrap())
+        });
         features
     }
 
     fn distance_matrix(&self, points: &[DVector<f32>]) -> Vec<f32> {
         let n = points.len();
-        let mut dist = vec![0.0; n*n];
+        let mut dist = vec![0.0; n * n];
         for i in 0..n {
             for j in 0..n {
                 if i == j {
-                    dist[i*n + j] = 0.0;
+                    dist[i * n + j] = 0.0;
                 } else {
                     let d = (&points[i] - &points[j]).norm();
-                    dist[i*n + j] = d;
+                    dist[i * n + j] = d;
                 }
             }
         }

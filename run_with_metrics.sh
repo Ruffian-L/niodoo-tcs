@@ -1,5 +1,6 @@
 #!/bin/bash
 # Enhanced test runner with real-time metrics export for Niodoo
+set -o pipefail
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -167,6 +168,8 @@ echo "" >> "$METRICS_FILE"
 echo -e "${GREEN}🔄 Starting test iterations...${NC}"
 echo ""
 
+FAILED_RUNS=0
+
 for i in $(seq 1 $ITERATIONS); do
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}Iteration $i/$ITERATIONS${NC}"
@@ -176,21 +179,58 @@ for i in $(seq 1 $ITERATIONS); do
     
     # Run the actual command (or mock it)
     if [ -f "target/release/niodoo_real_integrated" ]; then
-        OUTPUT=$(./target/release/niodoo_real_integrated --prompt "$PROMPT" 2>&1 | tee -a "$LOG_FILE")
+        OUTPUT=$(./target/release/niodoo_real_integrated --prompt "$PROMPT" --output json 2>&1 | tee -a "$LOG_FILE")
+        STATUS=$?
+        if [ $STATUS -ne 0 ]; then
+            echo -e "  ${YELLOW}Binary exited with status $STATUS; skipping metrics for this iteration.${NC}"
+            FAILED_RUNS=$((FAILED_RUNS + 1))
+            sleep 2
+            continue
+        fi
     else
         # Mock output for testing
         OUTPUT="Mock run for iteration $i"
         echo "$OUTPUT" >> "$LOG_FILE"
+        STATUS=0
     fi
     
     END_TIME=$(date +%s%3N)
     LATENCY=$((END_TIME - START_TIME))
     
     # Extract REAL metrics from the actual output
-    ENTROPY=$(echo "$OUTPUT" | grep -oP "entropy[=:]\s*\K[0-9.]+" | tail -1)
-    ROUGE=$(echo "$OUTPUT" | grep -oP "rouge[=:]\s*\K[0-9.]+" | tail -1)
-    THREATS=$(echo "$OUTPUT" | grep -c "threat.*true" || echo "0")
-    HEALINGS=$(echo "$OUTPUT" | grep -c "healing.*true" || echo "0")
+    PARSED_VALUES=$(printf '%s' "$OUTPUT" | python3 - <<'PY'
+import json
+import re
+import sys
+
+text = sys.stdin.read()
+matches = re.findall(r'(\[\s*\{.*?\}\s*\])', text, re.S)
+if not matches:
+    sys.exit(0)
+for block in reversed(matches):
+    try:
+        records = json.loads(block)
+    except json.JSONDecodeError:
+        continue
+    if not isinstance(records, list) or not records:
+        continue
+    record = records[-1]
+    entropy = record.get('entropy')
+    rouge = record.get('rouge')
+    threat = 1 if record.get('threat') else 0
+    healing = 1 if record.get('healing') else 0
+    if entropy is None or rouge is None:
+        continue
+    print(f"{entropy} {rouge} {threat} {healing}")
+    sys.exit(0)
+sys.exit(0)
+PY
+    )
+
+    ENTROPY=$(echo "$PARSED_VALUES" | awk '{print $1}')
+    ROUGE=$(echo "$PARSED_VALUES" | awk '{print $2}')
+    THREATS=$(echo "$PARSED_VALUES" | awk '{print $3}')
+    HEALINGS=$(echo "$PARSED_VALUES" | awk '{print $4}')
     
     # Fallback to defaults if parsing fails
     ENTROPY=${ENTROPY:-1.946}
@@ -224,6 +264,9 @@ echo ""
 echo -e "${BLUE}📊 Results:${NC}"
 echo -e "   Metrics saved: ${CYAN}$METRICS_FILE${NC}"
 echo -e "   Logs saved: ${CYAN}$LOG_FILE${NC}"
+if [ $FAILED_RUNS -gt 0 ]; then
+    echo -e "   ${YELLOW}Skipped iterations due to binary failures: $FAILED_RUNS${NC}"
+fi
 echo ""
 echo -e "${YELLOW}📈 View in Grafana:${NC}"
 echo -e "   1. Start monitoring: ${CYAN}docker-compose -f docker-compose.monitoring.yml up -d${NC}"

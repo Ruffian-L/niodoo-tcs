@@ -12,12 +12,12 @@ pub mod counter_current;
 pub mod metrics;
 pub mod topology;
 
-#[cfg(feature = "tda_rust")]
-pub use topology::RustVREngine;
+pub use counter_current::{CounterCurrentScheduler, Observation, ProbabilisticBelief};
 #[cfg(feature = "tda_gudhi")]
 pub use topology::GudhiEngine;
-pub use topology::{PersistenceFeature, Point, TopologyEngine, TopologyParams, PersistentFeature};
-pub use counter_current::{CounterCurrentScheduler, Observation, ProbabilisticBelief};
+#[cfg(feature = "tda_rust")]
+pub use topology::RustVREngine;
+pub use topology::{PersistenceFeature, PersistentFeature, Point, TopologyEngine, TopologyParams};
 
 pub mod events {
     //! Event types emitted by the orchestrator when notable topological
@@ -151,7 +151,6 @@ pub mod embeddings {
         }
     }
 }
-
 
 /// Lightweight snapshot used to broadcast current state to observers.
 #[derive(Debug, Clone)]

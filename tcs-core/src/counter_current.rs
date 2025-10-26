@@ -13,10 +13,7 @@ pub struct ProbabilisticBelief {
 impl ProbabilisticBelief {
     /// Construct a belief from raw components. Covariance must be square and match the mean dimension.
     pub fn from_parts(mean: DVector<f32>, covariance: DMatrix<f32>) -> Result<Self> {
-        ensure!(
-            covariance.is_square(),
-            "covariance matrix must be square"
-        );
+        ensure!(covariance.is_square(), "covariance matrix must be square");
         ensure!(
             covariance.nrows() == mean.len(),
             "covariance dimension must match mean length"
@@ -42,10 +39,7 @@ impl ProbabilisticBelief {
     /// Differential entropy of the Gaussian belief (in nats).
     pub fn entropy(&self) -> f32 {
         let dim = self.dimension() as f32;
-        let det = self
-            .covariance
-            .determinant()
-            .max(std::f32::MIN_POSITIVE);
+        let det = self.covariance.determinant().max(std::f32::MIN_POSITIVE);
         // 0.5 * ln((2πe)^k * det(Sigma))
         0.5 * (dim * (2.0 * std::f32::consts::PI * std::f32::consts::E).ln() + det.ln())
     }
@@ -104,7 +98,11 @@ pub struct CounterCurrentScheduler {
 impl CounterCurrentScheduler {
     /// Build a scheduler from a set of initial beliefs. Beliefs are sorted by entropy (descending).
     pub fn new(mut beliefs: Vec<ProbabilisticBelief>) -> Self {
-        beliefs.sort_by(|a, b| b.entropy().partial_cmp(&a.entropy()).unwrap_or(std::cmp::Ordering::Equal));
+        beliefs.sort_by(|a, b| {
+            b.entropy()
+                .partial_cmp(&a.entropy())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         Self {
             beliefs,
             data_window: VecDeque::new(),
@@ -124,8 +122,11 @@ impl CounterCurrentScheduler {
     /// Add a new belief into the scheduler and maintain entropy ordering.
     pub fn push_belief(&mut self, belief: ProbabilisticBelief) {
         self.beliefs.push(belief);
-        self.beliefs
-            .sort_by(|a, b| b.entropy().partial_cmp(&a.entropy()).unwrap_or(std::cmp::Ordering::Equal));
+        self.beliefs.sort_by(|a, b| {
+            b.entropy()
+                .partial_cmp(&a.entropy())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         if self.data_window.len() > self.beliefs.len() {
             self.data_window.truncate(self.beliefs.len());
         }
@@ -138,17 +139,16 @@ impl CounterCurrentScheduler {
             self.data_window.truncate(self.beliefs.len());
         }
 
-        for (belief, datum) in self
-            .beliefs
-            .iter_mut()
-            .zip(self.data_window.iter())
-        {
+        for (belief, datum) in self.beliefs.iter_mut().zip(self.data_window.iter()) {
             let updated = belief.bayesian_update(datum);
             *belief = updated;
         }
 
-        self.beliefs
-            .sort_by(|a, b| b.entropy().partial_cmp(&a.entropy()).unwrap_or(std::cmp::Ordering::Equal));
+        self.beliefs.sort_by(|a, b| {
+            b.entropy()
+                .partial_cmp(&a.entropy())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 }
 
@@ -161,7 +161,9 @@ fn regularised_inverse(matrix: &DMatrix<f32>) -> DMatrix<f32> {
             for idx in 0..regularised.nrows() {
                 regularised[(idx, idx)] += EPS;
             }
-            regularised.try_inverse().expect("regularised matrix should be invertible")
+            regularised
+                .try_inverse()
+                .expect("regularised matrix should be invertible")
         }
     }
 }
@@ -186,13 +188,17 @@ mod tests {
         let (obs_mean, obs_cov) = make_gaussian(0.5, 0.5);
         let observation = Observation::from_parts(obs_mean, obs_cov).unwrap();
 
-        let mut scheduler = CounterCurrentScheduler::new(vec![belief_high.clone(), belief_low.clone()]);
+        let mut scheduler =
+            CounterCurrentScheduler::new(vec![belief_high.clone(), belief_low.clone()]);
 
         let before_entropy = scheduler.beliefs()[0].entropy();
         scheduler.update(observation);
         let after_entropy = scheduler.beliefs()[0].entropy();
 
-        assert!(after_entropy <= before_entropy + 1e-4, "entropy should not increase for top belief");
+        assert!(
+            after_entropy <= before_entropy + 1e-4,
+            "entropy should not increase for top belief"
+        );
     }
 
     #[test]

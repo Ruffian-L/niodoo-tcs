@@ -71,7 +71,10 @@ pub mod hotstuff {
 
     impl FakeNode {
         pub fn new(id: usize) -> Self {
-            Self { id, voting_power: 1 }
+            Self {
+                id,
+                voting_power: 1,
+            }
         }
     }
 
@@ -117,7 +120,9 @@ pub mod hotstuff {
     impl fmt::Display for HotStuffError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                HotStuffError::EmptyCommittee => write!(f, "committee must contain at least one node"),
+                HotStuffError::EmptyCommittee => {
+                    write!(f, "committee must contain at least one node")
+                }
                 HotStuffError::UnknownProposer(id) => write!(f, "unknown proposer node id {id}"),
                 HotStuffError::EmptyProposal => write!(f, "proposal payload cannot be empty"),
                 HotStuffError::MismatchedClusterSize {
@@ -273,7 +278,10 @@ mod hotstuff_tests {
             unsafe fn wake(_: *const ()) {}
             unsafe fn wake_by_ref(_: *const ()) {}
             unsafe fn drop(_: *const ()) {}
-            RawWaker::new(ptr::null(), &RawWakerVTable::new(clone, wake, wake_by_ref, drop))
+            RawWaker::new(
+                ptr::null(),
+                &RawWakerVTable::new(clone, wake, wake_by_ref, drop),
+            )
         }
 
         let waker = unsafe { Waker::from_raw(raw_waker()) };

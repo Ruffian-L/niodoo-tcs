@@ -4,10 +4,10 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context, Result};
 use once_cell::sync::OnceCell;
 use reqwest::Client;
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::{info, instrument, warn};
-use reqwest::StatusCode;
 
 #[derive(Serialize, Deserialize)]
 struct OllamaRequest {
@@ -48,8 +48,8 @@ pub struct GenerationResult {
     pub rouge_score: f64,   // New: ROUGE F1
     pub entropy_delta: f64, // New: Change in entropy
     pub source: String,
-    pub ucb1_score: f64, // From compass
-    pub curator_quality: f64, // From collapse/curator
+    pub ucb1_score: f64,                 // From compass
+    pub curator_quality: f64,            // From collapse/curator
     pub failure_type: Option<String>,    // e.g., "soft" or "hard"
     pub failure_details: Option<String>, // e.g., "low ROUGE: 0.3"
 }
@@ -446,11 +446,21 @@ impl GenerationEngine {
                 prompt,
                 stream: false,
             };
-            let ollama_url = self.endpoint.replace("/v1/chat/completions", "/api/generate");
-            let resp = self.client.post(&ollama_url).json(&ollama_req).send().await?;
+            let ollama_url = self
+                .endpoint
+                .replace("/v1/chat/completions", "/api/generate");
+            let resp = self
+                .client
+                .post(&ollama_url)
+                .json(&ollama_req)
+                .send()
+                .await?;
             if resp.status() == StatusCode::OK {
                 let ollama_resp: Vec<OllamaResponse> = resp.json().await?;
-                Ok(ollama_resp.iter().map(|r| r.response.clone()).collect::<String>())
+                Ok(ollama_resp
+                    .iter()
+                    .map(|r| r.response.clone())
+                    .collect::<String>())
             } else {
                 Err(anyhow!("Ollama request failed: {}", resp.status()))
             }
@@ -466,12 +476,21 @@ impl GenerationEngine {
                 logprobs: None,
                 top_logprobs: None,
             };
-            let response = self.client.post(&self.endpoint).json(&payload).send().await?;
+            let response = self
+                .client
+                .post(&self.endpoint)
+                .json(&payload)
+                .send()
+                .await?;
             if !response.status().is_success() {
                 anyhow::bail!("vLLM request failed: {}", response.status());
             }
             let completion: ChatCompletionResponse = response.json().await?;
-            let content = completion.choices.first().and_then(|choice| choice.message.content.clone()).unwrap_or_default();
+            let content = completion
+                .choices
+                .first()
+                .and_then(|choice| choice.message.content.clone())
+                .unwrap_or_default();
             Ok(content)
         }
     }
@@ -744,7 +763,7 @@ impl GenerationEngine {
         top_p: f64,
     ) -> Result<GenerationResult> {
         let start = Instant::now();
-        
+
         // Prepare messages for generation
         let messages = vec![
             ChatMessage {
@@ -758,8 +777,10 @@ impl GenerationEngine {
         ];
 
         // Call generation with custom params
-        let result = self.send_chat_with_custom_params(messages, temp, top_p, true).await;
-        
+        let result = self
+            .send_chat_with_custom_params(messages, temp, top_p, true)
+            .await;
+
         let (generated_text, logprobs) = match result {
             Ok((text, lp)) => (text, lp),
             Err(e) => {
@@ -775,7 +796,7 @@ impl GenerationEngine {
                     source: "failed".to_string(),
                     failure_type: Some("hard".to_string()),
                     failure_details: Some(format!("Generation error: {}", e)),
-                    ucb1_score: 0.5, // Default for failed generation
+                    ucb1_score: 0.5,      // Default for failed generation
                     curator_quality: 0.5, // Default for failed generation
                 });
             }
@@ -805,7 +826,7 @@ impl GenerationEngine {
             source: "param_tuned".to_string(),
             failure_type: None,
             failure_details: None,
-            ucb1_score: 0.5, // Default for failed generation
+            ucb1_score: 0.5,      // Default for failed generation
             curator_quality: 0.5, // Default for failed generation
         })
     }

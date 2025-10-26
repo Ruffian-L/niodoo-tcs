@@ -6,11 +6,9 @@
 //! Uses MultiLayerMemoryQuery to generate authentic Triple-Threat events and learning data
 //! for Qwen fine-tuning. Replaces simulation with real consciousness evolution.
 
-use niodoo_core::consciousness::ConsciousnessState;
 use niodoo_consciousness::consciousness_engine::PersonalNiodooConsciousness;
-use niodoo_core::memory::guessing_spheres::{
-    EmotionalVector, GuessingMemorySystem, MemorySphere,
-};
+use niodoo_core::consciousness::ConsciousnessState;
+use niodoo_core::memory::guessing_spheres::{EmotionalVector, GuessingMemorySystem, MemorySphere};
 use niodoo_core::memory::multi_layer_query::{MultiLayerMemoryQuery, TriggerThresholds};
 use niodoo_core::rag::retrieval::RetrievalEngine;
 use serde_json;

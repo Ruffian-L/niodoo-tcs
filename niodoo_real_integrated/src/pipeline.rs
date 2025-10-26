@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
 use anyhow::Context;
+use anyhow::Result;
 use futures::FutureExt;
 
 use crate::compass::{CompassEngine, CompassOutcome};
@@ -117,9 +117,14 @@ impl Pipeline {
 
         let embedder = QwenStatefulEmbedder::new(
             &config.ollama_endpoint,
-            "qwen2.5-coder:1.5b",
+            &config.embedding_model_name,
             config.qdrant_vector_dim,
         )?;
+        info!(
+            endpoint = %config.ollama_endpoint,
+            model = %config.embedding_model_name,
+            "Initialized Ollama embedding client"
+        );
         let embedder_arc = Arc::new(embedder.clone());
         let torus = TorusPadMapper::new(42);
         let compass = Arc::new(Mutex::new(CompassEngine::new(
@@ -133,7 +138,8 @@ impl Pipeline {
             config.qdrant_vector_dim,
             config.similarity_threshold,
             embedder_arc.clone(),
-        ).await?;
+        )
+        .await?;
         let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
         let generator = GenerationEngine::new_with_config(
             &config.vllm_endpoint,
@@ -261,7 +267,10 @@ impl Pipeline {
         let _topology_json = serde_json::to_string(&topology).unwrap_or_default();
         info!(
             "Topological signature: knot={:.3}, betti={:?}, pe={:.3}, gap={:.3}",
-            topology.knot_complexity, topology.betti_numbers, topology.persistence_entropy, topology.spectral_gap
+            topology.knot_complexity,
+            topology.betti_numbers,
+            topology.persistence_entropy,
+            topology.spectral_gap
         );
 
         // Pass topology to compass - ACTUAL INTEGRATION
@@ -334,7 +343,9 @@ impl Pipeline {
                     / voting.rouge_scores.len() as f64,
                 entropy_delta: 0.0,
                 source: "consistency".to_string(),
-                ucb1_score: compass.mcts_branches.iter()
+                ucb1_score: compass
+                    .mcts_branches
+                    .iter()
                     .map(|b| b.ucb_score)
                     .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(0.5),
@@ -396,7 +407,7 @@ impl Pipeline {
                 ucb1_score,
             )
             .await?;
-        
+
         // Update timings with threat cycle timing
         timings.threat_cycle_ms = threat_cycle_ms;
 
@@ -418,7 +429,16 @@ impl Pipeline {
         // Proceed with learning using curated response (with retry-corrected generation)
         let learning_start = Instant::now();
 
-        let learning = self.learning.update(&pad_state, &compass, &collapse, &final_generation, &topology).await
+        let learning = self
+            .learning
+            .update(
+                &pad_state,
+                &compass,
+                &collapse,
+                &final_generation,
+                &topology,
+            )
+            .await
             .context("Learning loop update failed")?;
 
         timings.learning_ms = learning_start.elapsed().as_secs_f64() * 1000.0;

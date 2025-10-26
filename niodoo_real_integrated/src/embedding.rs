@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument};
+use tracing::{debug, info, instrument};
+
+const MAX_EMBED_CHARS: usize = 4000;
 
 /// Wraps Ollama /api/embeddings API in an async-friendly interface.
 #[derive(Clone)]
@@ -37,8 +39,41 @@ impl QwenStatefulEmbedder {
         })
     }
 
-    #[instrument(skip_all, fields(tokens = prompt.len()))]
+    #[instrument(skip_all, fields(chars = prompt.len()))]
     pub async fn embed(&self, prompt: &str) -> Result<Vec<f32>> {
+        let chunks = chunk_text(prompt, MAX_EMBED_CHARS);
+        let chunk_count = chunks.len();
+        if chunk_count > 1 {
+            debug!(chunk_count, "embedding prompt split for Ollama context limits");
+        }
+
+        let mut accum: Option<Vec<f32>> = None;
+        let mut count = 0f32;
+
+        for chunk in chunks {
+            let embedding = self.fetch_embedding(&chunk).await?;
+            if let Some(ref mut total) = accum {
+                for (sum, value) in total.iter_mut().zip(embedding.iter()) {
+                    *sum += *value;
+                }
+            } else {
+                accum = Some(embedding);
+            }
+            count += 1.0;
+        }
+
+        let mut combined = accum.unwrap_or_else(|| vec![0.0; self.expected_dim]);
+        if count > 1.0 {
+            for value in combined.iter_mut() {
+                *value /= count;
+            }
+            normalize(&mut combined);
+        }
+
+        Ok(combined)
+    }
+
+    async fn fetch_embedding(&self, prompt: &str) -> Result<Vec<f32>> {
         let url = format!("{}/api/embeddings", self.endpoint);
         let request = OllamaEmbeddingRequest {
             model: self.model.clone(),
@@ -91,4 +126,31 @@ fn normalize(vec: &mut [f32]) {
         *v = (*v as f64 / norm) as f32;
     }
     info!(dim = vec.len(), "normalized embedding to hypersphere");
+}
+
+fn chunk_text(input: &str, max_chars: usize) -> Vec<String> {
+    if input.len() <= max_chars {
+        return vec![input.to_string()];
+    }
+
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+
+    for word in input.split_whitespace() {
+        if current.len() + word.len() + 1 > max_chars && !current.is_empty() {
+            chunks.push(current.trim().to_string());
+            current.clear();
+        }
+
+        if !current.is_empty() {
+            current.push(' ');
+        }
+        current.push_str(word);
+    }
+
+    if !current.is_empty() {
+        chunks.push(current.trim().to_string());
+    }
+
+    chunks
 }

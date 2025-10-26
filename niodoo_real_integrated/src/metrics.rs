@@ -3,13 +3,13 @@ use anyhow::{Error, Result};
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use prometheus::{
-    register_counter, register_gauge, register_histogram, Counter, Encoder, Gauge, Histogram,
-    HistogramOpts, TextEncoder, GaugeVec, register_gauge_vec,
+    register_counter, register_gauge, register_gauge_vec, register_histogram, Counter, Encoder,
+    Gauge, GaugeVec, Histogram, HistogramOpts, TextEncoder,
 };
 use rand::Rng;
-use std::time::Duration;
 use std::collections::VecDeque;
-use std::sync::{Mutex, LazyLock};
+use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 
 static METRICS: Lazy<PipelineMetrics> =
     Lazy::new(|| PipelineMetrics::new().expect("failed to initialise Prometheus metrics"));
@@ -136,8 +136,18 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref AVG_ROUGE: GaugeVec = register_gauge_vec!("niodoo_avg_rouge", "Average ROUGE score over episodes", &["type"]).unwrap();
-    static ref AVG_ENTROPY_DELTA: GaugeVec = register_gauge_vec!("niodoo_avg_entropy_delta", "Average entropy delta over episodes", &["type"]).unwrap();
+    static ref AVG_ROUGE: GaugeVec = register_gauge_vec!(
+        "niodoo_avg_rouge",
+        "Average ROUGE score over episodes",
+        &["type"]
+    )
+    .unwrap();
+    static ref AVG_ENTROPY_DELTA: GaugeVec = register_gauge_vec!(
+        "niodoo_avg_entropy_delta",
+        "Average entropy delta over episodes",
+        &["type"]
+    )
+    .unwrap();
 }
 
 #[derive(Default)]
@@ -165,10 +175,13 @@ impl FailureAggregator {
         self.entropy_history.push_back(entropy_delta);
 
         let avg_rouge = self.rouge_history.iter().sum::<f64>() / self.rouge_history.len() as f64;
-        let avg_entropy = self.entropy_history.iter().sum::<f64>() / self.entropy_history.len() as f64;
+        let avg_entropy =
+            self.entropy_history.iter().sum::<f64>() / self.entropy_history.len() as f64;
 
         AVG_ROUGE.with_label_values(&["macro"]).set(avg_rouge);
-        AVG_ENTROPY_DELTA.with_label_values(&["macro"]).set(avg_entropy);
+        AVG_ENTROPY_DELTA
+            .with_label_values(&["macro"])
+            .set(avg_entropy);
     }
 }
 
@@ -202,7 +215,8 @@ impl FailureSignals {
     }
 }
 
-static AGG: LazyLock<Mutex<FailureAggregator>> = LazyLock::new(|| Mutex::new(FailureAggregator::new(10)));
+static AGG: LazyLock<Mutex<FailureAggregator>> =
+    LazyLock::new(|| Mutex::new(FailureAggregator::new(10)));
 
 pub fn failure_aggregator() -> &'static Mutex<FailureAggregator> {
     &AGG

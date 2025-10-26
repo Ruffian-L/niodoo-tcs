@@ -50,7 +50,12 @@ impl MetricsHandles {
 static METRICS: Lazy<MetricsHandles> = Lazy::new(|| {
     let registry = Arc::new(Registry::new());
 
-    let entropy_gauge = register_gauge_vec(&registry, "tcs_entropy", "Current persistence entropy", &["component"]);
+    let entropy_gauge = register_gauge_vec(
+        &registry,
+        "tcs_entropy",
+        "Current persistence entropy",
+        &["component"],
+    );
     let persistence_entropy = register_gauge_vec(
         &registry,
         "tcs_persistence_entropy",
@@ -59,7 +64,12 @@ static METRICS: Lazy<MetricsHandles> = Lazy::new(|| {
     );
     let betti_0 = register_gauge(&registry, "tcs_betti_0", "Betti-0 (connected components)");
     let betti_1 = register_gauge(&registry, "tcs_betti_1", "Betti-1 (loops)");
-    let prompt_counter = register_counter_vec(&registry, "tcs_prompts_total", "Prompt status counts", &["type"]);
+    let prompt_counter = register_counter_vec(
+        &registry,
+        "tcs_prompts_total",
+        "Prompt status counts",
+        &["type"],
+    );
     let output_hist = register_histogram_vec(
         &registry,
         "tcs_output_duration_seconds",
@@ -72,7 +82,12 @@ static METRICS: Lazy<MetricsHandles> = Lazy::new(|| {
         "Output variance histogram",
         &["component"],
     );
-    let memory_counter = register_counter_vec(&registry, "tcs_memories_saved_total", "Memory save counter", &["type"]);
+    let memory_counter = register_counter_vec(
+        &registry,
+        "tcs_memories_saved_total",
+        "Memory save counter",
+        &["type"],
+    );
     let memory_gauge = register_gauge_vec(
         &registry,
         "tcs_memories_size_bytes",
@@ -97,7 +112,12 @@ static METRICS: Lazy<MetricsHandles> = Lazy::new(|| {
         "RAG similarity scores",
         &["component"],
     );
-    let llm_counter = register_counter_vec(&registry, "tcs_llm_prompts_total", "LLM prompt counter", &["type"]);
+    let llm_counter = register_counter_vec(
+        &registry,
+        "tcs_llm_prompts_total",
+        "LLM prompt counter",
+        &["type"],
+    );
     let learning_entropy_delta = register_gauge_vec(
         &registry,
         "tcs_learning_entropy_delta",
@@ -157,7 +177,12 @@ fn betti_value(result: &PersistenceResult, dimension: usize) -> usize {
         })
 }
 
-fn register_gauge_vec(registry: &Arc<Registry>, name: &str, help: &str, labels: &[&str]) -> GaugeVec {
+fn register_gauge_vec(
+    registry: &Arc<Registry>,
+    name: &str,
+    help: &str,
+    labels: &[&str],
+) -> GaugeVec {
     let gauge = GaugeVec::new(Opts::new(name, help), labels).expect("failed to create gauge vec");
     registry
         .register(Box::new(gauge.clone()))
@@ -173,8 +198,14 @@ fn register_gauge(registry: &Arc<Registry>, name: &str, help: &str) -> Gauge {
     gauge
 }
 
-fn register_counter_vec(registry: &Arc<Registry>, name: &str, help: &str, labels: &[&str]) -> CounterVec {
-    let counter = CounterVec::new(Opts::new(name, help), labels).expect("failed to create counter vec");
+fn register_counter_vec(
+    registry: &Arc<Registry>,
+    name: &str,
+    help: &str,
+    labels: &[&str],
+) -> CounterVec {
+    let counter =
+        CounterVec::new(Opts::new(name, help), labels).expect("failed to create counter vec");
     registry
         .register(Box::new(counter.clone()))
         .expect("failed to register counter vec");
@@ -194,4 +225,3 @@ fn register_histogram_vec(
         .expect("failed to register histogram vec");
     histogram
 }
-

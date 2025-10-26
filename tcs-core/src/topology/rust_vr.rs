@@ -3,7 +3,10 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
 
-use super::{BettiCurve, DistanceMetric, PersistenceDiagram, PersistenceFeature, PersistenceResult, Point, TopologyEngine, TopologyParams};
+use super::{
+    BettiCurve, DistanceMetric, PersistenceDiagram, PersistenceFeature, PersistenceResult, Point,
+    TopologyEngine, TopologyParams,
+};
 
 /// Reference implementation of a sparsified Vietoris–Rips persistence engine.
 #[derive(Debug, Default)]
@@ -25,13 +28,20 @@ impl TopologyEngine for RustVREngine {
         if points.is_empty() {
             return Ok(PersistenceResult::empty());
         }
-        if points.iter().any(|p| p.dimensions() != points[0].dimensions()) {
+        if points
+            .iter()
+            .any(|p| p.dimensions() != points[0].dimensions())
+        {
             return Err(anyhow!("all points must share the same dimensionality"));
         }
 
         let distances = compute_distance_matrix(points, params.metric);
         let edges = build_knn_edges(&distances, params);
-        let triangles = if max_dim >= 1 { build_triangles(points.len(), &edges, &distances, params) } else { Vec::new() };
+        let triangles = if max_dim >= 1 {
+            build_triangles(points.len(), &edges, &distances, params)
+        } else {
+            Vec::new()
+        };
 
         let simplices = assemble_simplices(points.len(), &edges, &triangles);
         let result = persistent_reduction(&simplices, max_dim.min(1))?;
@@ -152,10 +162,11 @@ fn build_knn_edges(distances: &[Vec<f32>], params: &TopologyParams) -> Vec<Edge>
             }
         }
     }
-    edges.sort_by(|a, b| a
-        .filtration
-        .partial_cmp(&b.filtration)
-        .unwrap_or(Ordering::Equal));
+    edges.sort_by(|a, b| {
+        a.filtration
+            .partial_cmp(&b.filtration)
+            .unwrap_or(Ordering::Equal)
+    });
     edges
 }
 
@@ -180,7 +191,10 @@ fn build_triangles(
                 let mut vertices = [i, neighbors[a_idx], neighbors[b_idx]];
                 vertices.sort_unstable();
                 let (v0, v1, v2) = (vertices[0], vertices[1], vertices[2]);
-                if !adjacency[v0].contains(&v1) || !adjacency[v0].contains(&v2) || !adjacency[v1].contains(&v2) {
+                if !adjacency[v0].contains(&v1)
+                    || !adjacency[v0].contains(&v2)
+                    || !adjacency[v1].contains(&v2)
+                {
                     continue;
                 }
                 if !seen.insert((v0, v1, v2)) {
@@ -194,21 +208,29 @@ fn build_triangles(
                         continue;
                     }
                 }
-                triangles.push(Triangle { vertices, filtration });
+                triangles.push(Triangle {
+                    vertices,
+                    filtration,
+                });
             }
         }
     }
-    triangles.sort_by(|a, b| a
-        .filtration
-        .partial_cmp(&b.filtration)
-        .unwrap_or(Ordering::Equal));
+    triangles.sort_by(|a, b| {
+        a.filtration
+            .partial_cmp(&b.filtration)
+            .unwrap_or(Ordering::Equal)
+    });
     triangles
 }
 
 fn assemble_simplices(n: usize, edges: &[Edge], triangles: &[Triangle]) -> Vec<Simplex> {
     let mut simplices: Vec<Simplex> = (0..n).map(Simplex::vertex).collect();
     simplices.extend(edges.iter().map(|e| Simplex::edge(e.u, e.v, e.filtration)));
-    simplices.extend(triangles.iter().map(|t| Simplex::triangle(t.vertices, t.filtration)));
+    simplices.extend(
+        triangles
+            .iter()
+            .map(|t| Simplex::triangle(t.vertices, t.filtration)),
+    );
 
     simplices.sort_by(|a, b| {
         a.filtration
@@ -241,9 +263,8 @@ fn persistent_reduction(simplices: &[Simplex], target_dim: u8) -> Result<Persist
     }
 
     let target_dim = target_dim.min(1) as usize;
-    let mut diagrams: Vec<PersistenceDiagram> = (0..=target_dim)
-        .map(PersistenceDiagram::new)
-        .collect();
+    let mut diagrams: Vec<PersistenceDiagram> =
+        (0..=target_dim).map(PersistenceDiagram::new).collect();
     let mut columns: Vec<Vec<usize>> = vec![Vec::new(); simplices.len()];
     let mut low_map: HashMap<usize, usize> = HashMap::new();
     let mut creators: HashMap<usize, (usize, usize)> = HashMap::new();
@@ -292,10 +313,8 @@ fn persistent_reduction(simplices: &[Simplex], target_dim: u8) -> Result<Persist
     let diagrams: Vec<PersistenceDiagram> = diagrams
         .into_iter()
         .map(|mut d| {
-            d.features.sort_by(|a, b| a
-                .birth
-                .partial_cmp(&b.birth)
-                .unwrap_or(Ordering::Equal));
+            d.features
+                .sort_by(|a, b| a.birth.partial_cmp(&b.birth).unwrap_or(Ordering::Equal));
             d
         })
         .collect();
@@ -321,13 +340,16 @@ fn boundary(
         1 => {
             let u = simplex.vertices[0];
             let v = simplex.vertices[1];
-            let mut boundary = vec![vertex_index
-                .get(&u)
-                .copied()
-                .ok_or_else(|| anyhow!("missing vertex {} in boundary", u))?, vertex_index
-                .get(&v)
-                .copied()
-                .ok_or_else(|| anyhow!("missing vertex {} in boundary", v))?];
+            let mut boundary = vec![
+                vertex_index
+                    .get(&u)
+                    .copied()
+                    .ok_or_else(|| anyhow!("missing vertex {} in boundary", u))?,
+                vertex_index
+                    .get(&v)
+                    .copied()
+                    .ok_or_else(|| anyhow!("missing vertex {} in boundary", v))?,
+            ];
             boundary.sort_unstable();
             Ok(boundary)
         }
@@ -388,5 +410,9 @@ fn xor_columns(a: &[usize], b: &[usize]) -> Vec<usize> {
 
 #[inline]
 fn edge_key(u: usize, v: usize) -> (usize, usize) {
-    if u < v { (u, v) } else { (v, u) }
+    if u < v {
+        (u, v)
+    } else {
+        (v, u)
+    }
 }

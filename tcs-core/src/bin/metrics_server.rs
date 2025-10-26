@@ -4,14 +4,14 @@
 use axum::{routing::get, Router};
 use prometheus::{Encoder, TextEncoder};
 use std::{env, net::SocketAddr};
-use tokio;
 use tcs_core::metrics::{get_registry, init_metrics};
+use tokio;
 
 #[tokio::main]
 async fn main() {
     // Initialize metrics
     init_metrics();
-    
+
     let requested_port = env::var("TCS_METRICS_PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
@@ -33,11 +33,11 @@ async fn main() {
         }
     };
 
-    println!(
-        "✅ Metrics endpoint available at http://localhost:{bound_port}/metrics"
-    );
+    println!("✅ Metrics endpoint available at http://localhost:{bound_port}/metrics");
 
-    axum::serve(listener, app).await.expect("Server failed to start");
+    axum::serve(listener, app)
+        .await
+        .expect("Server failed to start");
 }
 
 async fn bind_listener(port: u16) -> Result<(tokio::net::TcpListener, u16), std::io::Error> {
@@ -52,9 +52,8 @@ async fn handler() -> String {
     let encoder = TextEncoder::new();
     let registry = get_registry();
     let metric_families = registry.gather();
-    
+
     let mut buffer = Vec::new();
     encoder.encode(&metric_families, &mut buffer).unwrap();
     String::from_utf8(buffer).unwrap()
 }
-

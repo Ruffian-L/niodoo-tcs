@@ -19,6 +19,8 @@ impl TopologyEngine for GudhiEngine {
         _max_dim: u8,
         _params: &TopologyParams,
     ) -> Result<PersistenceResult> {
-        Err(anyhow!("GudhiEngine is not implemented yet; enable the `tda_rust` feature"))
+        Err(anyhow!(
+            "GudhiEngine is not implemented yet; enable the `tda_rust` feature"
+        ))
     }
 }

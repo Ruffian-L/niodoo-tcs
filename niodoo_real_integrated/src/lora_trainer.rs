@@ -451,33 +451,30 @@ impl LoRATrainer {
         learning_rate: f32,
     ) -> Result<f32> {
         let device = self.adapter.device();
-        
+
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
-            
+
             for (input_vec, target_vec) in data {
                 // Convert to tensors
-                let input = Tensor::from_vec(
-                    input_vec.clone(),
-                    Shape::from((1, input_vec.len())),
-                    device,
-                )?;
-                
+                let input =
+                    Tensor::from_vec(input_vec.clone(), Shape::from((1, input_vec.len())), device)?;
+
                 let target = Tensor::from_vec(
                     target_vec.clone(),
                     Shape::from((1, target_vec.len())),
                     device,
                 )?;
-                
+
                 // Forward pass
                 let output = self.adapter.forward(&input)?;
-                
+
                 // Compute loss (MSE)
                 let diff = output.sub(&target)?;
                 let loss = diff.sqr()?.mean_all()?;
                 let loss_val = loss.to_scalar::<f32>()?;
                 total_loss += loss_val;
-                
+
                 // Backward pass (simplified SGD)
                 if epoch > 0 && loss_val > 0.001 {
                     // Update weights manually (simplified SGD without full optimizer)
@@ -485,25 +482,22 @@ impl LoRATrainer {
                     let lora_a_grad = Tensor::randn(
                         0.0,
                         learning_rate * loss_val,
-                        Shape::from((
-                            self.config.input_dim,
-                            self.config.rank,
-                        )),
+                        Shape::from((self.config.input_dim, self.config.rank)),
                         device,
                     )?;
-                    
+
                     let _ = self.adapter.lora_a().sub(&lora_a_grad)?;
                     // Note: Full tensor update would require mut access to adapter
                     // This is a simplified version
                 }
             }
-            
+
             let avg_loss = total_loss / data.len() as f32;
             if epoch % 10 == 0 {
                 tracing::info!("Epoch {}: Loss = {:.6}", epoch, avg_loss);
             }
         }
-        
+
         Ok(0.0)
     }
 }

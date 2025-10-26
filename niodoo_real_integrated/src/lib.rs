@@ -21,13 +21,13 @@ pub mod util;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::erag::EragMemory;
-    use crate::compass::MctsBranch;
-    use crate::pipeline::Pipeline;
-    use crate::config::CliArgs;
-    use crate::tokenizer::TokenizerOutput;
     use crate::compass::CompassOutcome;
+    use crate::compass::MctsBranch;
+    use crate::config::CliArgs;
     use crate::erag::CollapseResult;
+    use crate::erag::EragMemory;
+    use crate::pipeline::Pipeline;
+    use crate::tokenizer::TokenizerOutput;
 
     #[tokio::test]
     #[ignore]

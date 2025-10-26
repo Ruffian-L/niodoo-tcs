@@ -104,14 +104,14 @@ impl TCSOrchestrator {
         if embedded.is_empty() {
             return Ok(events);
         }
-        
+
         // Apply GPU-accelerated distance matrix computation
         let _dist_matrix = crate::tcs::performance::gpu_ripser_distance_matrix(&embedded)
             .unwrap_or_else(|_| {
                 debug!(target: "tcs-pipeline::orchestrator", "GPU fallback to CPU");
                 nalgebra::DMatrix::<f32>::zeros(embedded.len(), embedded.len())
             });
-        
+
         let features = self.homology.compute(&embedded);
         self.update_state_from_features(&features, &mut events);
 
