@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
+use blake3::hash;
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, instrument};
-use futures::future;
+use tracing::{debug, info, instrument, warn};
 
 /// Wraps Ollama /api/embeddings API in an async-friendly interface.
 #[derive(Clone)]
@@ -116,6 +118,14 @@ impl QwenStatefulEmbedder {
                 .text()
                 .await
                 .unwrap_or_else(|_| String::from("<no body>"));
+            if status == StatusCode::NOT_FOUND {
+                warn!(
+                    model = %self.model,
+                    endpoint = %self.endpoint,
+                    "Embedding model missing on Ollama endpoint; using deterministic fallback embedding"
+                );
+                return Ok(self.fallback_embedding(prompt));
+            }
             anyhow::bail!("Ollama embeddings API returned {}: {}", status, error_text);
         }
 
@@ -137,6 +147,19 @@ impl QwenStatefulEmbedder {
 
         normalize(&mut embedding);
         Ok(embedding)
+    }
+
+    fn fallback_embedding(&self, prompt: &str) -> Vec<f32> {
+        let mut seed = [0u8; 32];
+        seed.copy_from_slice(hash(prompt.as_bytes()).as_bytes());
+
+        let mut rng = StdRng::from_seed(seed);
+        let mut embedding = Vec::with_capacity(self.expected_dim);
+        for _ in 0..self.expected_dim {
+            embedding.push(rng.gen_range(-1.0..=1.0));
+        }
+        normalize(&mut embedding);
+        embedding
     }
 }
 
