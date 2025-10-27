@@ -176,3 +176,40 @@ phase*.txt
 
 # Monitoring dashboards (generated)
 grafana-dashboard-*.json
+
+# Temporary instruction/test files
+COMMANDS_FOR_YOU.txt
+DO_THIS_NOW.sh
+*_NOW.sh
+*_NOW.txt
+TEST_NOW.txt
+FIX_*.sh
+FIX_*.txt
+START_*.sh
+START_*.txt
+RUN_*.sh
+check_all_services.sh
+start_all_services.sh
+
+# Benchmark results and plots
+emotion_bench_metrics.csv
+emotion_bench_results.json
+entropy_over_cycles.png
+rouge_vs_baseline.png
+
+# Temporary documentation
+EMOTION_BENCH_SUMMARY.md
+QUICK_START_INSTRUCTIONS.md
+QUICK_STATUS.md
+READY_FOR_CODEX.md
+REALITY_CHECK.md
+README_BENCHMARK.md
+VLLM_BIG_MODEL*.md
+SERVICE_TEST_COMMANDS.md
+
+# Python virtual environments
+venv_new/
+venv/
+
+# Benchmark binaries
+**/bin/emotion_bench.rs

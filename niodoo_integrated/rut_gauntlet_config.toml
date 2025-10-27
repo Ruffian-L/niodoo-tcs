@@ -23,7 +23,7 @@ wolfram_app_id = ""  # Set this for real Wolfram calls
 use_mock_apis = true  # Set to false for real API calls
 
 [vllm]
-endpoint = "http://localhost:8000/v1/completions"
+endpoint = "http://localhost:5001/v1/completions"
 model = "Qwen/Qwen2.5-32B-Instruct-AWQ"
 max_tokens = 512
 temperature = 0.7

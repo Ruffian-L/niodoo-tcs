@@ -557,7 +557,7 @@ impl GenerationEngine {
     }
 
     pub async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
-        if self.endpoint.contains(":11434") {
+        if self.endpoint.contains(":5000") {
             // Ollama mode
             let prompt = messages.last().unwrap().content.clone();
             let ollama_req = OllamaRequest {

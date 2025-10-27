@@ -30,7 +30,7 @@ struct CsvRecord {
     compass: String,
     threat: bool,
     healing: bool,
-    raw_stds: Vec<f64>,
+    raw_stds: String,
 }
 
 #[tokio::main]
@@ -140,7 +140,7 @@ fn emit_csv(cycles: &[PipelineCycle]) -> Result<()> {
             compass: format!("{:?}", cycle.compass.quadrant),
             threat: cycle.compass.is_threat,
             healing: cycle.compass.is_healing,
-            raw_stds: cycle.pad_state.raw_stds.clone(),
+            raw_stds: format!("{:?}", cycle.pad_state.raw_stds),
         })?;
     }
     writer.flush()?;
@@ -160,7 +160,7 @@ fn emit_json(cycles: &[PipelineCycle]) -> Result<()> {
             compass: format!("{:?}", cycle.compass.quadrant),
             threat: cycle.compass.is_threat,
             healing: cycle.compass.is_healing,
-            raw_stds: cycle.pad_state.raw_stds.clone(),
+            raw_stds: format!("{:?}", cycle.pad_state.raw_stds),
         })
         .collect();
     let json = serde_json::to_string_pretty(&records)?;

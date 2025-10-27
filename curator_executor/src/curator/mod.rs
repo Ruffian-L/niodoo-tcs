@@ -20,7 +20,7 @@ pub struct CuratorConfig {
 impl Default for CuratorConfig {
     fn default() -> Self {
         Self {
-            vllm_endpoint: std::env::var("VLLM_ENDPOINT").unwrap_or_else(|_| "http://localhost:8000".to_string()),
+            vllm_endpoint: std::env::var("VLLM_ENDPOINT").unwrap_or_else(|_| "http://localhost:5001".to_string()),
             model_name: "Qwen2.5-0.5B-Instruct".to_string(),
             embedding_dim: 768,
             max_context_length: 2048,

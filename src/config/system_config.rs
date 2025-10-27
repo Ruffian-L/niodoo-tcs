@@ -1305,11 +1305,11 @@ impl Default for QtConfig {
             connections_count: Self::load_qt_config_value("connections_count", 1209),
             architect_endpoint: env_var_with_default(
                 "NIODOO_ARCHITECT_ENDPOINT",
-                "http://localhost:11434/api/generate",
+                "http://localhost:5000/api/generate",
             ),
             developer_endpoint: env_var_with_default(
                 "NIODOO_DEVELOPER_ENDPOINT",
-                "http://localhost:11434/api/generate",
+                "http://localhost:5000/api/generate",
             ),
             hardware_acceleration: true,
             network_mode: "Distributed".to_string(),
@@ -1321,7 +1321,7 @@ impl Default for QtConfig {
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
-            ollama_url: env_var_with_default("OLLAMA_URL", "http://localhost:11434"),
+            ollama_url: env_var_with_default("OLLAMA_URL", "http://localhost:5000"),
             api_timeout: 30,
             retry_attempts: 3,
             enable_caching: true,

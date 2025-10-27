@@ -41,7 +41,7 @@ pub struct GenerationEngine {
 impl GenerationEngine {
     pub fn new() -> Result<Self> {
         Self::with_config(
-            "http://localhost:8000".to_string(),
+            "http://localhost:5001".to_string(),
             512,  // max_tokens
             0.7,  // temperature
             200,  // context_truncate_chars

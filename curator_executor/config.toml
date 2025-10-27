@@ -1,5 +1,5 @@
 [vllm]
-endpoint = "http://localhost:8000"
+endpoint = "http://localhost:5001"
 api_key = "runpod-h200-test"
 curator_model = "Qwen2.5-0.5B-Instruct"
 executor_model = "Qwen2.5-Coder-7B-Instruct"

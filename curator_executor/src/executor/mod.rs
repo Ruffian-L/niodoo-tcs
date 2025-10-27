@@ -22,7 +22,7 @@ pub struct ExecutorConfig {
 impl Default for ExecutorConfig {
     fn default() -> Self {
         Self {
-            vllm_endpoint: std::env::var("VLLM_ENDPOINT").unwrap_or_else(|_| "http://localhost:8000".to_string()),
+            vllm_endpoint: std::env::var("VLLM_ENDPOINT").unwrap_or_else(|_| "http://localhost:5001".to_string()),
             model_name: "Qwen2.5-Coder-7B-Instruct".to_string(),
             max_context_length: 8192,
             max_new_tokens: 2048,

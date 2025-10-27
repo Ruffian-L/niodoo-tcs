@@ -426,7 +426,7 @@ impl RuntimeConfig {
         }
         vllm_keys.push("TEST_ENDPOINT_VLLM");
         let vllm_endpoint = env_with_fallback(&vllm_keys)
-            .unwrap_or_else(|| "http://127.0.0.1:8000".to_string())
+            .unwrap_or_else(|| "http://127.0.0.1:5001".to_string())
             .trim()
             .trim_end_matches('/')
             // Strip common API paths if present (curator appends its own)
@@ -460,7 +460,7 @@ impl RuntimeConfig {
             .unwrap_or(768);
 
         let ollama_endpoint = env_with_fallback(&["OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
-            .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+            .unwrap_or_else(|| "http://127.0.0.1:5000".to_string());
 
         let embedding_model_name = env_with_fallback(&[
             "EMBEDDING_MODEL_NAME",

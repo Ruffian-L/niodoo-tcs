@@ -101,7 +101,7 @@ impl Curator {
     /// Call the vLLM model for text generation
     pub async fn call_model(&self, prompt: &str) -> Result<String> {
         // Check if using Ollama (not vLLM)
-        let is_ollama = self.config.vllm_endpoint.contains("11434");
+        let is_ollama = self.config.vllm_endpoint.contains(":5000");
 
         if is_ollama {
             // Ollama API format

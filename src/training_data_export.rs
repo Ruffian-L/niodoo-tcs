@@ -120,7 +120,7 @@ impl Default for ExportConfig {
             rag_config: RagConfig::default(),
             context_top_k: 5,
             enable_vllm: true, // Enable vLLM by default
-            vllm_url: Some("http://localhost:8000".to_string()),
+            vllm_url: Some("http://localhost:5001".to_string()),
             vllm_api_key: None,
             max_tokens: 512,
             temperature: 0.7,

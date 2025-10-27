@@ -26,7 +26,7 @@ impl GenerationEngine {
         }
         Ok(Self {
             client: Client::new(),
-            vllm_url: "http://localhost:8000".to_string(),
+            vllm_url: "http://localhost:5001".to_string(),
             model_path,
             use_real_apis: std::env::var("USE_REAL_APIS").map(|v| v == "true").unwrap_or(false),
         })
