@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{info, warn};
 
 pub fn prime_environment() {
     let mut roots: HashSet<PathBuf> = HashSet::new();
@@ -426,6 +426,12 @@ impl RuntimeConfig {
         }
         vllm_keys.push("TEST_ENDPOINT_VLLM");
         let vllm_endpoint = env_with_fallback(&vllm_keys)
+            .or_else(|| {
+                warn!(
+                    "Set VLLM_URL and ensure vLLM service is running (default http://127.0.0.1:5001)"
+                );
+                None
+            })
             .unwrap_or_else(|| "http://127.0.0.1:5001".to_string())
             .trim()
             .trim_end_matches('/')
@@ -436,8 +442,8 @@ impl RuntimeConfig {
             .trim_end_matches('/')
             .to_string();
 
-        let vllm_model = env_with_fallback(&["VLLM_MODEL_ID", "VLLM_MODEL", "VLLM_MODEL_PATH"])
-            .unwrap_or_else(|| "Qwen/Qwen2.5-7B-Instruct-AWQ".to_string());
+        let vllm_model = env_with_fallback(&["MAIN_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL", "VLLM_MODEL_PATH"])
+            .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
         if matches!(args.hardware, HardwareProfile::Laptop5080Q) {
@@ -455,19 +461,29 @@ impl RuntimeConfig {
         let qdrant_collection = env_with_fallback(&["QDRANT_COLLECTION", "QDRANT_COLLECTION_NAME"])
             .unwrap_or_else(|| "experiences".to_string());
 
-        let qdrant_vector_dim = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(768);
+        let requested_qdrant_dim = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
+            .and_then(|value| value.parse().ok());
+        if let Some(value) = requested_qdrant_dim {
+            if value != 768 {
+                warn!(expected = 768, provided = value, "Qdrant dim fixed to 768; overriding provided value");
+            }
+        }
+        let qdrant_vector_dim = 768;
 
-        let ollama_endpoint = env_with_fallback(&["OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
-            .unwrap_or_else(|| "http://127.0.0.1:5001".to_string());
+        let ollama_endpoint = env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
+            .or_else(|| {
+                warn!("Set OLLAMA_URL and run 'ollama serve && ollama pull qwen2:0.5b'");
+                None
+            })
+            .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
 
         let embedding_model_name = env_with_fallback(&[
+            "CURATOR_MODEL",
             "EMBEDDING_MODEL_NAME",
             "OLLAMA_EMBED_MODEL",
             "EMBEDDING_MODEL",
         ])
-        .unwrap_or_else(|| "nomic-embed-text".to_string());
+        .unwrap_or_else(|| "qwen2:0.5b".to_string());
 
         let embedding_max_chars = env_with_fallback(&[
             "EMBEDDING_MAX_CHARS",
@@ -509,12 +525,12 @@ impl RuntimeConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(true); // Enabled by default
 
-        let curator_model_name = env_with_fallback(&["CURATOR_MODEL_NAME"])
-            .unwrap_or_else(|| vllm_model.clone());
+        let curator_model_name = env_with_fallback(&["CURATOR_MODEL", "CURATOR_MODEL_NAME"])
+            .unwrap_or_else(|| "qwen2:0.5b".to_string());
 
         let curator_quality_threshold = env_with_fallback(&["CURATOR_QUALITY_THRESHOLD"])
             .and_then(|value| value.parse().ok())
-            .unwrap_or(0.5); // Reduced from 0.7 for more lenient acceptance
+            .unwrap_or(0.8);
 
         let curator_minimum_threshold = env_with_fallback(&["CURATOR_MINIMUM_THRESHOLD"])
             .and_then(|value| value.parse().ok())
@@ -526,7 +542,7 @@ impl RuntimeConfig {
 
         let curator_temperature = env_with_fallback(&["CURATOR_TEMPERATURE"])
             .and_then(|value| value.parse().ok())
-            .unwrap_or(0.7);
+            .unwrap_or(0.3);
 
         let curator_max_tokens = env_with_fallback(&["CURATOR_MAX_TOKENS"])
             .and_then(|value| value.parse().ok())
@@ -621,7 +637,7 @@ impl RuntimeConfig {
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(default_retrieval_top_k_increment());
 
-        Ok(Self {
+        let runtime = Self {
             vllm_endpoint,
             vllm_model,
             qdrant_url,
@@ -684,7 +700,11 @@ impl RuntimeConfig {
             mcts_c_scale,
             cache_capacity,
             retry_backoff_exponent_cap,
-        })
+        };
+
+        info!(model = %runtime.curator_model_name, "Config loaded: CURATOR_MODEL={}", runtime.curator_model_name);
+
+        Ok(runtime)
     }
 }
 

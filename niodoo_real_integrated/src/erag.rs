@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
 use rand::{thread_rng, Rng};
 use reqwest::Client;
@@ -99,35 +99,43 @@ impl EragClient {
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
 
-        let _qdrant = Qdrant::from_url(&base_url); // Unused, for init if needed
+        let _qdrant = Qdrant::from_url(&base_url);
 
         // Ensure collections exist using Qdrant 1.8+ spec (vectors_config)
+        let expected_dim = 768;
+        if vector_dim != expected_dim {
+            warn!(requested = vector_dim, expected = expected_dim, "Qdrant dim fixed to 768; using enforced dimension");
+        }
         let create_body = json!({
             "vectors_config": {
-                "size": vector_dim,
+                "size": expected_dim,
                 "distance": "Cosine"
             }
         });
 
         let create_url = format!("{}/collections/{}", base_url, collection);
         let create_resp = client.put(&create_url).json(&create_body).send().await?;
-        if !create_resp.status().is_success() {
+        let create_status = create_resp.status();
+        if !create_status.is_success() {
             let body = create_resp.text().await.unwrap_or_default();
-            warn!(collection = %collection, status = %create_resp.status(), %body, "failed to ensure experiences collection");
+            bail!("Failed to ensure experiences collection: status={}, body={body}", create_status);
         }
 
         let failures_url = format!("{}/collections/failures", base_url);
         let failures_resp = client.put(&failures_url).json(&create_body).send().await?;
-        if !failures_resp.status().is_success() {
+        let failures_status = failures_resp.status();
+        if !failures_status.is_success() {
             let body = failures_resp.text().await.unwrap_or_default();
-            warn!(collection = "failures", status = %failures_resp.status(), %body, "failed to ensure failures collection");
+            warn!(collection = "failures", status = %failures_status, %body, "failed to ensure failures collection");
         }
+
+        info!(collection, dim = expected_dim, "Qdrant dim fixed to 768, search active");
 
         Ok(Self {
             client,
             base_url: base_url.clone(),
             collection: collection.to_string(),
-            vector_dim,
+            vector_dim: expected_dim,
             similarity_threshold,
             embedder,
         })
@@ -194,6 +202,7 @@ impl EragClient {
                         request = %request_dump,
                         "qdrant search returned error status"
                     );
+                    bail!("Qdrant search failed: status={status}");
                 }
             }
             Err(err) => {
@@ -202,6 +211,7 @@ impl EragClient {
                     request = %request_dump,
                     "qdrant search request errored"
                 );
+                bail!("Qdrant search request errored: {err}");
             }
         }
 

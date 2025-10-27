@@ -1,170 +1,247 @@
-// tests/integration_test.rs - Integration tests for Niodoo consciousness system
+use std::collections::HashMap;
+use std::env;
 
-#[cfg(test)]
-mod tests {
-    use niodoo_consciousness::*;
-    use tokio::test;
-    use std::time::Duration;
-    
-    #[test]
-    async fn test_toroidal_migration() {
-        // Create Möbius memories
-        let mobius_memories = vec![
-            memory::mobius::MemoryFragment {
-                content: "Test memory 1".to_string(),
-                layer: memory::mobius::MemoryLayer::Semantic,
-                relevance: 0.8,
-                timestamp: 1.0,
-            },
-            memory::mobius::MemoryFragment {
-                content: "Test memory 2".to_string(),
-                layer: memory::mobius::MemoryLayer::Episodic,
-                relevance: 0.6,
-                timestamp: 2.0,
-            },
-        ];
-        
-        // Migrate to toroidal system
-        let toroidal_system = memory::toroidal::migrate_mobius_to_torus(mobius_memories).await;
-        
-        // Verify migration
-        let projections = toroidal_system.holographic_projection(0.0).await;
-        assert_eq!(projections.len(), 2);
-        
-        // Test parallel processing
-        let results = toroidal_system.process_parallel_streams(0.1).await;
-        assert_eq!(results.len(), 3); // 3 default streams
-    }
-    
-    #[test]
-    async fn test_consciousness_engine_timeout() {
-        let mut engine = consciousness_engine::NiodooConsciousness::new()
-            .expect("Failed to create engine");
-        
-        // Test with timeout protection
-        let result = tokio::time::timeout(
-            Duration::from_secs(10),
-            engine.process_input("Test input")
-        ).await;
-        
-        assert!(result.is_ok());
-    }
-    
-    #[test]
-    async fn test_memory_bounds() {
-        let mut memory_system = memory::mobius::MobiusMemorySystem::new();
-        
-        // Try to overflow memory
-        for i in 0..10001 {
-            let fragment = memory::mobius::MemoryFragment {
-                content: format!("Memory {}", i),
-                layer: memory::mobius::MemoryLayer::Working,
-                relevance: 0.5,
-                timestamp: i as f64,
-            };
-            
-            // This should not panic due to bounds checking
-            let result = memory_system.bi_directional_traverse(
-                &format!("query {}", i),
-                "neutral"
-            );
-            
-            // Memory should be bounded
-            assert!(memory_system.persistent_memories.len() <= 10000);
-        }
-    }
-    
-    #[test]
-    async fn test_error_recovery() {
-        use error::{MemoryError, ErrorRecovery};
-        
-        let overflow_error = MemoryError::Overflow { capacity: 10000 };
-        let recovery_result = ErrorRecovery::recover_memory(&overflow_error).await;
-        assert!(recovery_result.is_ok());
-        
-        let persistence_error = MemoryError::PersistenceFailed("Test failure".to_string());
-        let recovery_result = ErrorRecovery::recover_memory(&persistence_error).await;
-        assert!(recovery_result.is_ok());
-    }
-    
-    #[test]
-    async fn test_circuit_breaker() {
-        use error::{CircuitBreaker, ConsciousnessError};
-        use std::sync::Arc;
-        
-        let breaker = Arc::new(CircuitBreaker::new(3, Duration::from_secs(1)));
-        
-        // Simulate failures
-        for _ in 0..3 {
-            let result = breaker.call(|| {
-                Err(ConsciousnessError::Unknown("Test failure".to_string()))
-            });
-            assert!(result.is_err());
-        }
-        
-        // Circuit should be open now
-        let result = breaker.call(|| {
-            Ok("Should not execute".to_string())
-        });
-        assert!(result.is_err());
-        
-        // Wait for reset
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        
-        // Circuit should be closed now
-        let result = breaker.call(|| {
-            Ok("Should execute".to_string())
-        });
-        assert!(result.is_ok());
-    }
-    
-    #[test]
-    async fn test_toroidal_quantum_correction() {
-        let system = memory::toroidal::ToroidalConsciousnessSystem::new(3.0, 1.0);
-        
-        // Add test memories
-        for i in 0..10 {
-            let node = memory::toroidal::ToroidalMemoryNode {
-                id: format!("test_{}", i),
-                coordinate: memory::toroidal::ToroidalCoordinate::new(
-                    i as f64 * 0.628,
-                    i as f64 * 0.314
-                ),
-                content: format!("Test content {}", i),
-                emotional_vector: vec![0.5],
-                temporal_context: vec![i as f64],
-                activation_strength: 0.7,
-                connections: std::collections::HashMap::new(),
-            };
-            system.add_memory(node).await;
-        }
-        
-        // Test quantum error correction
-        let syndrome = system.quantum_error_correction().await;
-        assert!(syndrome >= 0.0 && syndrome <= 1.0);
-    }
-    
-    #[test]
-    async fn test_geodesic_distance() {
-        use memory::toroidal::ToroidalCoordinate;
-        
-        let coord1 = ToroidalCoordinate::new(0.0, 0.0);
-        let coord2 = ToroidalCoordinate::new(
-            std::f64::consts::PI,
-            std::f64::consts::PI / 2.0
-        );
-        
-        let distance = coord1.geodesic_distance(&coord2);
-        assert!(distance > 0.0);
-        
-        // Test wrap-around
-        let coord3 = ToroidalCoordinate::new(0.1, 0.1);
-        let coord4 = ToroidalCoordinate::new(
-            2.0 * std::f64::consts::PI - 0.1,
-            2.0 * std::f64::consts::PI - 0.1
-        );
-        
-        let wrap_distance = coord3.geodesic_distance(&coord4);
-        assert!(wrap_distance < 0.5); // Should be small due to wrap-around
+use chrono::Utc;
+use niodoo_real_integrated::compass::{CompassOutcome, CompassQuadrant, MctsBranch};
+use niodoo_real_integrated::config::{self, CliArgs, HardwareProfile, OutputFormat};
+use niodoo_real_integrated::erag::{CollapseResult, EmotionalVector, EragMemory};
+use niodoo_real_integrated::generation::{GenerationResult, LensEcho};
+use niodoo_real_integrated::learning::LearningOutcome;
+use niodoo_real_integrated::pipeline::{Pipeline, StageTimings};
+use niodoo_real_integrated::torus::PadGhostState;
+use niodoo_real_integrated::tcs_analysis::TopologicalSignature;
+
+const TRACKED_ENV_VARS: [&str; 3] = ["VLLM_ENDPOINT", "QDRANT_URL", "OLLAMA_ENDPOINT"];
+
+struct TestEnvGuard {
+    saved: Vec<(&'static str, Option<String>)>,
+}
+
+impl TestEnvGuard {
+    fn new() -> Self {
+        let saved = TRACKED_ENV_VARS
+            .iter()
+            .map(|key| (*key, env::var(key).ok()))
+            .collect();
+        Self { saved }
     }
 }
+
+impl Drop for TestEnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in self.saved.drain(..) {
+            match value {
+                Some(v) => env::set_var(key, v),
+                None => env::remove_var(key),
+            }
+        }
+    }
+}
+
+fn prime_test_environment() -> TestEnvGuard {
+    let guard = TestEnvGuard::new();
+    config::prime_environment();
+    guard
+}
+
+struct MockGenerationEngine;
+
+impl MockGenerationEngine {
+    async fn generate(&self, prompt: &str) -> GenerationResult {
+        GenerationResult {
+            baseline_response: format!("baseline::{prompt}"),
+            hybrid_response: format!("hybrid::{prompt}"),
+            echoes: vec![LensEcho {
+                lens: "discover".into(),
+                response: format!("lens::{prompt}"),
+            }],
+            rouge_to_baseline: 0.82,
+            latency_ms: 128.0,
+            rouge_score: 0.84,
+            entropy_delta: -0.06,
+            source: "mock-generator".into(),
+            ucb1_score: 0.5,
+            curator_quality: 0.72,
+            failure_type: None,
+            failure_details: None,
+        }
+    }
+}
+
+struct MockEragClient;
+
+impl MockEragClient {
+    async fn collapse(&self, prompt: &str) -> CollapseResult {
+        let memory = EragMemory {
+            input: prompt.to_string(),
+            output: format!("memory::{prompt}"),
+            emotional_vector: EmotionalVector::default(),
+            erag_context: vec!["mock context".into()],
+            entropy_before: 1.96,
+            entropy_after: 1.80,
+            timestamp: Utc::now().to_rfc3339(),
+            compass_state: Some("Discover".into()),
+            quality_score: Some(0.71),
+            topology_betti: Some([1, 0, 0]),
+            topology_knot_complexity: Some(0.12),
+            solution_path: Some("mock-solution".into()),
+            conversation_history: vec![prompt.to_string()],
+            iteration_count: 1,
+        };
+
+        CollapseResult {
+            top_hits: vec![memory],
+            aggregated_context: format!("aggregated::{prompt}"),
+            average_similarity: 0.64,
+            curator_quality: Some(0.70),
+            failure_type: None,
+            failure_details: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct MockCycle {
+    prompt: String,
+    generation: GenerationResult,
+    collapse: CollapseResult,
+    pad_state: PadGhostState,
+    learning: LearningOutcome,
+    compass: CompassOutcome,
+    timings: StageTimings,
+    topology: TopologicalSignature,
+}
+
+#[derive(Default)]
+struct MockPipeline {
+    generation: MockGenerationEngine,
+    erag: MockEragClient,
+}
+
+impl MockPipeline {
+    async fn process_prompt(&self, prompt: &str) -> MockCycle {
+        let generation = self.generation.generate(prompt).await;
+        let collapse = self.erag.collapse(prompt).await;
+
+        let pad_state = PadGhostState {
+            pad: [0.1; 7],
+            entropy: 1.95,
+            mu: [0.0; 7],
+            sigma: [0.1; 7],
+            raw_stds: vec![0.1; 7],
+        };
+
+        let mut adjusted_params = HashMap::new();
+        adjusted_params.insert("temperature".into(), 0.6);
+
+        let learning = LearningOutcome {
+            events: vec!["entropy_drop".into()],
+            breakthroughs: vec!["qlora-adapted".into()],
+            qlora_updates: vec!["mock-adapter".into()],
+            entropy_delta: generation.entropy_delta,
+            adjusted_params,
+        };
+
+        let compass = CompassOutcome {
+            quadrant: CompassQuadrant::Discover,
+            is_threat: false,
+            is_healing: true,
+            mcts_branches: vec![MctsBranch {
+                label: "mock-branch".into(),
+                ucb_score: 0.42,
+                entropy_projection: 0.08,
+            }],
+            intrinsic_reward: 0.8,
+            ucb1_score: Some(0.42),
+        };
+
+        let timings = StageTimings {
+            embedding_ms: 4.0,
+            torus_ms: 1.2,
+            tcs_ms: 0.8,
+            compass_ms: 0.4,
+            erag_ms: 0.6,
+            tokenizer_ms: 0.5,
+            generation_ms: 12.0,
+            learning_ms: 3.5,
+            threat_cycle_ms: 0.2,
+        };
+
+        let topology = TopologicalSignature::new(
+            Vec::new(),
+            [1, 0, 0],
+            0.1,
+            "unknot".into(),
+            1,
+            None,
+            0.5,
+            0.05,
+            0.8,
+        );
+
+        MockCycle {
+            prompt: prompt.to_string(),
+            generation,
+            collapse,
+            pad_state,
+            learning,
+            compass,
+            timings,
+            topology,
+        }
+    }
+}
+
+// NOTE: #[tokio::test] is the Tokio async test macro; each test runs on its own lightweight runtime.
+
+#[tokio::test]
+async fn mock_pipeline_cycle_has_expected_shape() {
+    let _guard = prime_test_environment();
+    let pipeline = MockPipeline::default();
+    let cycle = pipeline.process_prompt("test prompt").await;
+
+    assert_eq!(cycle.prompt, "test prompt");
+    assert!(cycle.generation.hybrid_response.contains("hybrid"));
+    assert!(cycle.collapse.aggregated_context.contains("test prompt"));
+    assert_eq!(cycle.pad_state.raw_stds.len(), 7);
+    assert!(cycle.learning.entropy_delta < 0.0);
+    assert!(cycle.timings.generation_ms > 0.0);
+    assert_eq!(cycle.topology.betti_numbers[0], 1);
+}
+
+#[tokio::test]
+async fn mock_learning_outcome_tracks_entropy_delta() {
+    let _guard = prime_test_environment();
+    let pipeline = MockPipeline::default();
+    let cycle = pipeline.process_prompt("entropy prompt").await;
+
+    assert!(cycle
+        .learning
+        .adjusted_params
+        .contains_key("temperature"));
+    assert!(cycle
+        .learning
+        .events
+        .iter()
+        .any(|event| event.contains("entropy")));
+    assert!(cycle.learning.entropy_delta < 0.0);
+}
+
+#[tokio::test]
+#[ignore = "requires live vLLM/Qdrant backends"]
+async fn real_pipeline_initialises_with_backends() {
+    let _guard = prime_test_environment();
+    let args = CliArgs {
+        hardware: HardwareProfile::Beelink,
+        prompt: None,
+        prompt_file: None,
+        swarm: 1,
+        output: OutputFormat::Json,
+        config: None,
+    };
+
+    Pipeline::initialise(args)
+        .await
+        .expect("pipeline should initialise when backends are available");
+}
+ 

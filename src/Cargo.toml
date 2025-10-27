@@ -262,9 +262,10 @@ path = "real_ai_inference.rs"
 name = "emotional_influence"
 path = "bin/emotional_influence.rs"
 
-[[bin]]
-name = "emotion_bench"
-path = "bin/emotion_bench.rs"
+# Disabled: requires libfontconfig/libfreetype for plotters
+# [[bin]]
+# name = "emotion_bench"
+# path = "bin/emotion_bench.rs"
 
 [[bin]]
 name = "consciousness_stack_probe"

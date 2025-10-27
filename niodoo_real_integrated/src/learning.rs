@@ -15,6 +15,7 @@ use crate::lora_trainer::LoRATrainer;
 use crate::tcs_analysis::TopologicalSignature;
 use crate::tcs_predictor::TcsPredictor;
 use crate::torus::PadGhostState;
+use crate::tokenizer::TokenizerEngine;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -89,6 +90,15 @@ pub struct ReplayTuple {
     pub next_state: DqnState,
 }
 
+#[derive(Default)]
+struct CuratedSample {
+    input: String,
+    output: String,
+    reward: f64,
+    knot_complexity: f64,
+    spectral_gap: f64,
+}
+
 pub struct LearningLoop {
     entropy_history: VecDeque<f64>,
     window: usize,
@@ -110,6 +120,10 @@ pub struct LearningLoop {
     predictor: TcsPredictor,  // FIXED: Removed underscore to make it active
     lora_trainer: LoRATrainer,
     reward_threshold: f64,
+    tokenizer: Arc<Mutex<TokenizerEngine>>,
+    curated_buffer: Vec<CuratedSample>,
+    lora_epochs: usize,
+    lora_rank: usize,
 }
 
 impl LearningLoop {
@@ -121,6 +135,7 @@ impl LearningLoop {
         alpha: f64,
         erag: Arc<EragClient>,
         config: Arc<Mutex<RuntimeConfig>>,
+        tokenizer: Arc<Mutex<TokenizerEngine>>,
     ) -> Self {
         let action_space = vec![
             DqnAction {
@@ -178,6 +193,15 @@ impl LearningLoop {
             LoRATrainer::default()
         });
 
+        let lora_epochs = std::env::var("LORA_EPOCHS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(5);
+        let lora_rank = std::env::var("LORA_RANK")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(8);
+
         Self {
             entropy_history: VecDeque::with_capacity(window),
             window,
@@ -199,6 +223,10 @@ impl LearningLoop {
             predictor: TcsPredictor::new(),  // FIXED: Removed underscore
             lora_trainer,
             reward_threshold: -0.5,
+            tokenizer,
+            curated_buffer: Vec::new(),
+            lora_epochs,
+            lora_rank,
         }
     }
 
@@ -387,6 +415,77 @@ impl LearningLoop {
             entropy_delta,
             adjusted_params,
         })
+    }
+
+    pub async fn apply_curator_learned(
+        &mut self,
+        refined: &str,
+        learned: bool,
+        reward: f64,
+        topology: &TopologicalSignature,
+        input: &str,
+    ) -> Result<()> {
+        if !learned {
+            return Ok(());
+        }
+
+        {
+            let mut tokenizer = self.tokenizer.lock().await;
+            tokenizer.promote_patterns(refined);
+        }
+        info!("Curated memory added to LoRA buffer");
+
+        self.curated_buffer.push(CuratedSample {
+            input: input.to_string(),
+            output: refined.to_string(),
+            reward,
+            knot_complexity: topology.knot_complexity,
+            spectral_gap: topology.spectral_gap,
+        });
+
+        if self.curated_buffer.len() <= 10 {
+            return Ok(());
+        }
+
+        let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
+            .curated_buffer
+            .iter()
+            .map(|sample| {
+                let mut features = vec![
+                    sample.reward as f32,
+                    sample.knot_complexity as f32,
+                    sample.spectral_gap as f32,
+                ];
+                while features.len() < 768 {
+                    features.push(0.0);
+                }
+                let mut target = sample.output.bytes().map(|byte| byte as f32).collect::<Vec<_>>();
+                if target.len() < 768 {
+                    target.resize(768, 0.0);
+                } else {
+                    target.truncate(768);
+                }
+                features.truncate(768);
+                (features, target)
+            })
+            .collect();
+
+        if training_samples.is_empty() {
+            return Ok(());
+        }
+
+        let epochs = self.lora_epochs;
+        match self.lora_trainer.train(&training_samples, epochs, 1e-3_f32) {
+            Ok(_) => {
+                info!(count = training_samples.len(), "QLoRA trained on {} curated", training_samples.len());
+                self.curated_buffer.clear();
+            }
+            Err(error) => {
+                warn!(%error, "QLoRA training failed on curated data");
+            }
+        }
+
+        Ok(())
     }
 
     fn record_entropy(&mut self, value: f64) {

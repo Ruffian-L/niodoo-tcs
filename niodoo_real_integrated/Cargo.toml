@@ -11,6 +11,7 @@ default = ["beelink"]
 beelink = []
 5080-q = []
 pyo3 = []
+gauntlet = []
 
 [dependencies]
 anyhow = "1.0"
@@ -48,8 +49,9 @@ blake3 = { workspace = true }
 lru = { workspace = true }
 redis = { version = "0.24", default-features = false, features = ["tokio-comp", "connection-manager"] }
 bincode = "1"
-candle-core = "0.8"
+candle-core = "0.3"
 candle-nn = "0.8"
+ollama-rs = "0.1"
 safetensors = "0.4"
 num-complex = "0.4"
 rayon = "1.10"
@@ -68,6 +70,10 @@ criterion = "0.5"
 name = "niodoo_real_bench"
 harness = false
 
+[[test]]
+name = "integration_test"
+path = "../tests/integration_test.rs"
+
 [[bin]]
 name = "niodoo_real_integrated"
 path = "src/main.rs"
@@ -75,6 +81,7 @@ path = "src/main.rs"
 [[bin]]
 name = "rut_gauntlet"
 path = "src/bin/rut_gauntlet.rs"
+required-features = ["gauntlet"]
 
 [[bin]]
 name = "topology_spider"

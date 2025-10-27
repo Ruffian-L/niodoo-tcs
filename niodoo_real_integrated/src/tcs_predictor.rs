@@ -157,10 +157,11 @@ impl Default for TcsPredictor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RuntimeConfig;
     use crate::tcs_analysis::TopologicalSignature;
     use uuid::Uuid;
 
-    fn create_test_sig(knot: f32, gap: f64) -> TopologicalSignature {
+    fn create_test_sig(knot: f64, gap: f64) -> TopologicalSignature {
         TopologicalSignature {
             id: Uuid::new_v4(),
             timestamp: chrono::Utc::now(),
@@ -193,7 +194,8 @@ mod tests {
     #[test]
     fn test_action_prediction() {
         let predictor = TcsPredictor::new();
-        let config = RuntimeConfig::default();
+        let args = crate::config::CliArgs::default();
+        let config = RuntimeConfig::load(&args).expect("failed to load runtime config for test");
         let sig = create_test_sig(0.5, 0.3);
         let (param, delta) = predictor.predict_action(&sig, &config);
         assert_eq!(param, "temperature");
