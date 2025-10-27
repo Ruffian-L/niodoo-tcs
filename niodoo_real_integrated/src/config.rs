@@ -716,7 +716,7 @@ pub struct CuratorConfig {
 impl CuratorConfig {
     pub fn from_runtime_config(config: &RuntimeConfig) -> Self {
         Self {
-            vllm_endpoint: config.ollama_endpoint.clone(), // Curator uses Ollama with small model
+            vllm_endpoint: config.vllm_endpoint.clone(),
             model_name: config.curator_model_name.clone(),
             embedding_dim: config.qdrant_vector_dim,
             max_context_length: 2048,

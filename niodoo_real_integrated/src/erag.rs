@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 
 use crate::compass::CompassOutcome;
 use crate::embedding::QwenStatefulEmbedder;
@@ -149,6 +149,8 @@ impl EragClient {
             "with_vectors": false
         });
 
+        let request_dump = request_json.to_string();
+
         let url = format!(
             "{}/collections/{}/points/search",
             self.base_url, self.collection
@@ -175,11 +177,25 @@ impl EragClient {
                         }
                     }
                 } else {
-                    info!(status = %resp.status(), "qdrant search returned error status");
+                    let status = resp.status();
+                    let body = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "<no body>".to_string());
+                    warn!(
+                        %status,
+                        body = %body,
+                        request = %request_dump,
+                        "qdrant search returned error status"
+                    );
                 }
             }
             Err(err) => {
-                info!(%err, "qdrant search failed - proceeding without hits");
+                warn!(
+                    %err,
+                    request = %request_dump,
+                    "qdrant search request errored"
+                );
             }
         }
 
