@@ -460,7 +460,7 @@ impl RuntimeConfig {
             .unwrap_or(768);
 
         let ollama_endpoint = env_with_fallback(&["OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
-            .unwrap_or_else(|| "http://127.0.0.1:5000".to_string());
+            .unwrap_or_else(|| "http://127.0.0.1:5001".to_string());
 
         let embedding_model_name = env_with_fallback(&[
             "EMBEDDING_MODEL_NAME",
@@ -510,7 +510,7 @@ impl RuntimeConfig {
             .unwrap_or(true); // Enabled by default
 
         let curator_model_name = env_with_fallback(&["CURATOR_MODEL_NAME"])
-            .unwrap_or_else(|| "qwen2.5-coder:1.5b".to_string());
+            .unwrap_or_else(|| vllm_model.clone());
 
         let curator_quality_threshold = env_with_fallback(&["CURATOR_QUALITY_THRESHOLD"])
             .and_then(|value| value.parse().ok())

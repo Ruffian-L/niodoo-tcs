@@ -677,6 +677,14 @@ impl GenerationEngine {
     }
 
     pub async fn warmup(&self) -> Result<()> {
+        if std::env::var("SKIP_VLLM_WARMUP")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
+            .unwrap_or(false)
+        {
+            info!("Skipping vLLM warmup via SKIP_VLLM_WARMUP flag");
+            return Ok(());
+        }
+
         // Log GPU status
         if self.gpu_available {
             info!("GPU available - running warmup with GPU acceleration");

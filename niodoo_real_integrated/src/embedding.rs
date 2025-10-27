@@ -210,7 +210,7 @@ impl QwenStatefulEmbedder {
                 }
                 Err(error) => {
                     last_error = Some(anyhow::anyhow!(
-                        "failed to send embedding request to Ollama: {}",
+                        "failed to send embedding request to embedding backend: {}",
                         error
                     ));
                 }

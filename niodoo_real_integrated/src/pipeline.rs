@@ -181,9 +181,6 @@ impl Pipeline {
             config.consistency_variance_threshold,
         )?;
         generator.set_system_prompt(config.system_prompt.clone());
-        if let Err(error) = generator.warmup().await {
-            warn!(?error, "vLLM warmup failed");
-        }
         let config_arc = Arc::new(AsyncMutex::new(config.clone()));
         let erag_arc = Arc::new(erag.clone());
         let config_sync = Arc::new(AsyncMutex::new(config.clone()));

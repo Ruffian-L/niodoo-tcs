@@ -101,21 +101,27 @@ impl EragClient {
 
         let _qdrant = Qdrant::from_url(&base_url); // Unused, for init if needed
 
-        // Create collections via HTTP
+        // Ensure collections exist using Qdrant 1.8+ spec (vectors_config)
         let create_body = json!({
-            "vectors": {
+            "vectors_config": {
                 "size": vector_dim,
                 "distance": "Cosine"
             }
         });
 
-        // Experiences
         let create_url = format!("{}/collections/{}", base_url, collection);
-        let _ = client.put(&create_url).json(&create_body).send().await?;
+        let create_resp = client.put(&create_url).json(&create_body).send().await?;
+        if !create_resp.status().is_success() {
+            let body = create_resp.text().await.unwrap_or_default();
+            warn!(collection = %collection, status = %create_resp.status(), %body, "failed to ensure experiences collection");
+        }
 
-        // Failures
         let failures_url = format!("{}/collections/failures", base_url);
-        let _ = client.put(&failures_url).json(&create_body).send().await?;
+        let failures_resp = client.put(&failures_url).json(&create_body).send().await?;
+        if !failures_resp.status().is_success() {
+            let body = failures_resp.text().await.unwrap_or_default();
+            warn!(collection = "failures", status = %failures_resp.status(), %body, "failed to ensure failures collection");
+        }
 
         Ok(Self {
             client,
