@@ -112,7 +112,7 @@ impl QwenStatefulEmbedder {
         }
 
         normalize(&mut combined);
-        info!(dim = self.expected_dim, "Ollama Qwen embed: dim=768");
+        info!(dim = self.expected_dim, "Ollama Qwen embed complete");
 
         Ok(combined)
     }

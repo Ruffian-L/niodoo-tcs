@@ -14,7 +14,7 @@ pub mod metrics;
 pub mod pipeline;
 pub mod tcs_analysis;
 pub mod tcs_predictor;
-pub mod tokenizer;
+pub mod token_manager;
 pub mod topology_crawler;
 pub mod torus;
 pub mod util;

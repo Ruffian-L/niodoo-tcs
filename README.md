@@ -11,12 +11,41 @@ Niodoo is an experiment in self-evolving AI: A system that learns through 1000-c
 
 This started as sketches and prompts—persistence turned it real. Early runs show promise: 100+ learning updates, 90% retry recovery, ROUGE hits near 1.0.
 
-## Setup (Simple Run)
+## Setup
+
+### Prerequisites
+1. Install Ollama: `curl -fsSL https://ollama.com/install.sh | sh`
+2. Pull model: `ollama pull qwen2:0.5b`
+3. Run vLLM: `vllm serve Qwen/Qwen2-0.5B-Instruct --port 5001`
+
+### Environment Variables
+Create a `.env` file in the project root with:
+```
+OLLAMA_URL=http://127.0.0.1:11434
+VLLM_URL=http://127.0.0.1:5001
+CURATOR_MODEL=qwen2:0.5b
+MAIN_MODEL=Qwen/Qwen2-0.5B-Instruct
+CURATOR_TEMP=0.3
+CURATOR_THRESHOLD=0.8
+QDRANT_DIM=768
+LORA_RANK=8
+LORA_EPOCHS=5
+TEST_CYCLES=100
+```
+
+### Build and Run
 1. Clone: `git clone https://github.com/yourusername/Niodoo-Integrated.git`
 2. Install Rust: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-3. Build/Run Test: `cd src && cargo build --release && cargo run --release --bin niodoo_test`
+3. Build: `cd niodoo_real_integrated && cargo build --release`
+4. Run Test: `export TEST_CYCLES=100; RUST_LOG=debug cargo run --release --bin million_cycle_test`
    - Watches `logs/cycle_1000_test_live.log` for progress.
-4. Monitor: Use Grafana/Loki setup in `docs/MONITORING_SETUP.md` for live dashboards.
+5. Monitor: Use Grafana/Loki setup in `docs/MONITORING_SETUP.md` for live dashboards.
+
+### Expected Output
+- Logs show "Qwen curator refined: learned=true"
+- "Curated memory added to LoRA buffer"
+- "QLoRA trained"
+- No "fallback" or dim errors
 
 Expected: 2-3 hour run. Outputs: `summary.json` (stats), `sample_results.csv` (examples).
 

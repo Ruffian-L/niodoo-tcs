@@ -23,7 +23,7 @@ struct OllamaResponse {
 
 use crate::api_clients::{ClaudeClient, GptClient};
 use crate::compass::CompassOutcome;
-use crate::tokenizer::TokenizerOutput;
+use crate::token_manager::TokenizerOutput;
 use crate::util::{entropy_from_logprobs, rouge_l};
 
 #[derive(Debug, Clone)]

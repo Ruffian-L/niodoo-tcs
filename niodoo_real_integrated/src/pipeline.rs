@@ -20,13 +20,12 @@ use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
 use crate::metrics::{metrics, FailureSignals, RetryContext};
 use crate::tcs_analysis::TCSAnalyzer;
-use crate::tokenizer::{TokenizerEngine, TokenizerOutput};
+use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::task::spawn_blocking;
 use tracing::{info, warn};
 
 // Define CuratedExperience struct
@@ -36,6 +35,8 @@ struct CuratedExperience {
     quality_score: f32,
     solution_path: Option<String>,
     emotional_context: PadGhostState,
+    promoted_tokens: Vec<String>,
+    learned: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -97,9 +98,9 @@ pub struct Pipeline {
     torus_counter: AtomicU64,
     compass: Arc<Mutex<CompassEngine>>,
     erag: Arc<EragClient>,
-    tokenizer: TokenizerEngine,
+    tokenizer: Arc<DynamicTokenizerManager>,
     generator: GenerationEngine,
-    learning: LearningLoop,
+    learning: AsyncMutex<LearningLoop>,
     curator: Option<Curator>,
     tcs_analyzer: TCSAnalyzer,
     embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
@@ -169,7 +170,19 @@ impl Pipeline {
             embedder_arc.clone(),
         )
         .await?;
-        let tokenizer = TokenizerEngine::new(tokenizer_path()?, thresholds.mirage_sigma)?;
+        
+        // Log collection state for diagnostics
+        if let Err(e) = erag.check_collection_info().await {
+            warn!(error = %e, "Failed to check Qdrant collection info");
+        }
+        let tokenizer = DynamicTokenizerManager::initialise(
+            &tokenizer_path()?,
+            std::env::var("NODE_ID").unwrap_or_else(|_| "niodoo_real_integrated".to_string()),
+            config.token_promotion_interval,
+        )
+        .await?;
+        let tokenizer_arc = Arc::new(tokenizer);
+        tokenizer_arc.spawn_maintenance().await;
         let mut generator = GenerationEngine::new_with_config(
             &config.vllm_endpoint,
             &config.vllm_model,
@@ -183,7 +196,7 @@ impl Pipeline {
         generator.set_system_prompt(config.system_prompt.clone());
         let config_arc = Arc::new(AsyncMutex::new(config.clone()));
         let erag_arc = Arc::new(erag.clone());
-        let config_sync = Arc::new(AsyncMutex::new(config.clone()));
+        let config_sync = Arc::new(Mutex::new(config.clone()));
         let learning = LearningLoop::new(
             config.learning_window,
             config.breakthrough_threshold,
@@ -192,6 +205,7 @@ impl Pipeline {
             config.dqn_alpha,
             erag_arc.clone(),
             config_sync.clone(),
+            tokenizer_arc.clone(),
         );
 
         // Initialize TCS analyzer
@@ -235,9 +249,9 @@ impl Pipeline {
             torus_counter: AtomicU64::new(0),
             compass,
             erag: erag_arc.clone(),
-            tokenizer,
+            tokenizer: tokenizer_arc.clone(),
             generator,
-            learning,
+            learning: AsyncMutex::new(learning),
             curator,
             tcs_analyzer,
             embedding_cache: LruCache::new(cache_capacity),
@@ -344,7 +358,7 @@ impl Pipeline {
         );
 
         // Pass topology to compass - ACTUAL INTEGRATION
-        let compass_task = spawn_blocking({
+        let compass_task = tokio::task::spawn_blocking({
             let compass_engine = self.compass.clone();
             let pad_state = pad_state.clone();
             let topology = topology.clone();
@@ -397,9 +411,15 @@ impl Pipeline {
 
         // Stage 5: Tokenizer
         let tokenizer_start = Instant::now();
-        let tokenizer_output =
-            self.tokenizer
-                .process(prompt, &collapse, &pad_state, self.thresholds.entropy_mean)?;
+        let tokenizer_output = self
+            .tokenizer
+            .process_with_memories(
+                prompt,
+                &collapse,
+                &pad_state,
+                collapse.top_hits.clone(),
+            )
+            .await?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
         // Update generation engine with latest config params (before generation)
@@ -481,9 +501,25 @@ impl Pipeline {
                 &pad_state,
                 &compass,
                 &collapse.aggregated_context,
-                &topology,  // INTEGRATION FIX: Pass topology to curator
+                &topology,
+                &tokenizer_output,
             )
             .await?;
+
+        // Feed curator output to learning loop if learned=true
+        if curated_experience.learned {
+            let reward = generation.rouge_score * 0.5 + (1.0 - pad_state.entropy) * 0.5;
+            if let Err(e) = self.learning.lock().await.apply_curator_learned(
+                &curated_experience.refined_response,
+                true,
+                reward,
+                &topology,
+                prompt,
+                &curated_experience.promoted_tokens,
+            ).await {
+                warn!("Failed to apply curator learned data: {}", e);
+            }
+        }
 
         // Failure evaluation after curator
         let entropy_delta = pad_state.entropy - (self.thresholds.entropy_mean);
@@ -542,8 +578,10 @@ impl Pipeline {
         // Proceed with learning using curated response (with retry-corrected generation)
         let learning_start = Instant::now();
 
-        let learning = self
+        let learning_outcome = self
             .learning
+            .lock()
+            .await
             .update(
                 &pad_state,
                 &compass,
@@ -598,7 +636,7 @@ impl Pipeline {
                 generation: final_generation,
                 tokenizer: tokenizer_output,
                 collapse,
-                learning,
+                learning: learning_outcome,
                 stage_timings: timings,
                 last_entropy: pad_state.entropy,
                 failure: final_failure,
@@ -667,7 +705,7 @@ impl Pipeline {
             generation: final_generation,
             tokenizer: tokenizer_output,
             collapse,
-            learning,
+            learning: learning_outcome,
             stage_timings: timings,
             last_entropy: pad_state.entropy,
             failure: final_failure,
@@ -884,6 +922,7 @@ impl Pipeline {
         compass: &CompassOutcome,
         context: &str,
         topology: &crate::tcs_analysis::TopologicalSignature,
+        tokenizer_output: &TokenizerOutput,
     ) -> Result<CuratedExperience> {
         // Call curator_executor logic here
         // (either spawn as subprocess or integrate as library)
@@ -898,78 +937,47 @@ impl Pipeline {
         );
 
         // TOPOLOGY INTEGRATION: Analyze quality with topological insights
-        let quality_score = if let Some(ref curator) = self.curator {
-            // Calculate quality based on actual curator metrics + topology
-            let compass_quadrant_str = if compass.quadrant == crate::compass::CompassQuadrant::Panic
-            {
-                "Panic"
-            } else if compass.quadrant == crate::compass::CompassQuadrant::Persist {
-                "Persist"
-            } else if compass.quadrant == crate::compass::CompassQuadrant::Discover {
-                "Discover"
+        // Calculate base quality score based on output length, entropy, and topology
+        let base = 0.5f32;
+        let length_factor = (output.len().min(1000) as f32 / 1000.0) * 0.2;
+        let entropy_factor = if pad_state.entropy < 0.5 { 0.15f32 } else { 0.0f32 };
+        let base_quality = base + length_factor + entropy_factor;
+        
+        // TOPOLOGY ENHANCEMENT: Adjust quality based on topological features
+        let mut adjusted_quality = base_quality;
+        
+        // High knot complexity indicates tangled/complex reasoning - slight quality penalty
+        if topology.knot_complexity > 0.6 {
+            adjusted_quality *= 0.9;
+            info!("High knot complexity {:.3} - reducing quality", topology.knot_complexity);
+        }
+        
+        // High spectral gap indicates good exploration - quality bonus
+        if topology.spectral_gap > 0.7 {
+            adjusted_quality *= 1.1;
+            info!("High spectral gap {:.3} - boosting quality", topology.spectral_gap);
+        }
+        
+        // High Betti-1 indicates many loops/cycles - check if intentional
+        if topology.betti_numbers[1] > 3 {
+            // In Discover quadrant, loops are good (exploration)
+            if compass.quadrant == crate::compass::CompassQuadrant::Discover {
+                adjusted_quality *= 1.05;
             } else {
-                "Master"
-            };
-
-            match curator
-                .assess_quality(input, output, pad_state.entropy, compass_quadrant_str)
-                .await
-            {
-                Ok(base_quality) => {
-                    // TOPOLOGY ENHANCEMENT: Adjust quality based on topological features
-                    let mut adjusted_quality = base_quality;
-                    
-                    // High knot complexity indicates tangled/complex reasoning - slight quality penalty
-                    if topology.knot_complexity > 0.6 {
-                        adjusted_quality *= 0.9;
-                        info!("High knot complexity {:.3} - reducing quality", topology.knot_complexity);
-                    }
-                    
-                    // High spectral gap indicates good exploration - quality bonus
-                    if topology.spectral_gap > 0.7 {
-                        adjusted_quality *= 1.1;
-                        info!("High spectral gap {:.3} - boosting quality", topology.spectral_gap);
-                    }
-                    
-                    // High Betti-1 indicates many loops/cycles - check if intentional
-                    if topology.betti_numbers[1] > 3 {
-                        // In Discover quadrant, loops are good (exploration)
-                        if compass.quadrant == crate::compass::CompassQuadrant::Discover {
-                            adjusted_quality *= 1.05;
-                        } else {
-                            // In other quadrants, too many loops might indicate confusion
-                            adjusted_quality *= 0.95;
-                        }
-                        info!("Betti-1={} affecting quality in {:?} quadrant", 
-                            topology.betti_numbers[1], compass.quadrant);
-                    }
-                    
-                    // Persistence entropy indicates structural stability
-                    if topology.persistence_entropy < 0.3 {
-                        // Low entropy = stable structure = good quality
-                        adjusted_quality *= 1.05;
-                    }
-                    
-                    adjusted_quality.min(1.0).max(0.0)
-                }
-                Err(e) => {
-                    warn!("Curator quality assessment failed: {}, using topology fallback", e);
-                    // Topology-based fallback quality score
-                    let base = 0.5f32;
-                    let knot_penalty = (topology.knot_complexity as f32) * 0.2;
-                    let gap_bonus = (topology.spectral_gap as f32) * 0.15;
-                    let stability_bonus = if topology.persistence_entropy < 0.5 { 0.1f32 } else { 0.0f32 };
-                    (base - knot_penalty + gap_bonus + stability_bonus).min(1.0).max(0.0)
-                }
+                // In other quadrants, too many loops might indicate confusion
+                adjusted_quality *= 0.95;
             }
-        } else {
-            // Topology-based fallback quality score when no curator
-            let base = 0.5f32;
-            let knot_penalty = (topology.knot_complexity as f32) * 0.2;
-            let gap_bonus = (topology.spectral_gap as f32) * 0.15;
-            let stability_bonus = if topology.persistence_entropy < 0.5 { 0.1f32 } else { 0.0f32 };
-            (base - knot_penalty + gap_bonus + stability_bonus).min(1.0).max(0.0)
-        };
+            info!("Betti-1={} affecting quality in {:?} quadrant", 
+                topology.betti_numbers[1], compass.quadrant);
+        }
+        
+        // Persistence entropy indicates structural stability
+        if topology.persistence_entropy < 0.3 {
+            // Low entropy = stable structure = good quality
+            adjusted_quality *= 1.05;
+        }
+        
+        let quality_score = adjusted_quality.min(1.0).max(0.0);
 
         // TOPOLOGY-AWARE REFINEMENT: Refine if quality is low OR topology indicates issues
         let refinement_threshold = self.config.curator_quality_threshold;
@@ -979,41 +987,33 @@ impl Pipeline {
             || (topology.betti_numbers[1] > 5 && compass.quadrant != crate::compass::CompassQuadrant::Discover)  // Too many loops outside exploration
             || topology.persistence_entropy > 0.8;  // Too chaotic structure
 
-        let refined = if quality_score < refinement_threshold || topology_needs_refinement {
+        let (refined, learned) = if quality_score < refinement_threshold || topology_needs_refinement {
             // Attempt refinement for low-quality or topologically problematic responses
             if let Some(ref curator) = self.curator {
-                // Add topology context to refinement prompt
-                let topology_hint = format!(
-                    "\n[Topology: knot={:.2}, gap={:.2}, betti1={}, entropy={:.2}]",
-                    topology.knot_complexity, topology.spectral_gap, 
-                    topology.betti_numbers[1], topology.persistence_entropy
-                );
-                let output_with_context = format!("{}{}", output, topology_hint);
-                
-                match curator.refine_response(input, &output_with_context).await {
-                    Ok(mut refined_output) => {
-                        // Remove the topology hint from refined output if it was preserved
-                        if refined_output.contains("[Topology:") {
-                            refined_output = refined_output.split("[Topology:").next()
-                                .unwrap_or(&refined_output).to_string();
-                        }
-                        
-                        info!(
-                            "Curator refined response (quality={:.3}, knot={:.3}, forced={})",
-                            quality_score, topology.knot_complexity, topology_needs_refinement
-                        );
-                        refined_output
-                    }
+                // Call curator.refine with topology context
+                let (refined_output, learned_flag) = match curator.refine(
+                    output,
+                    quality_score as f64,
+                    topology.knot_complexity,
+                    topology.persistence_entropy
+                ).await {
+                    Ok(result) => result,
                     Err(e) => {
                         warn!("Curator refinement failed: {}, using original", e);
-                        output.to_string()
+                        (output.to_string(), false)
                     }
-                }
+                };
+                
+                info!(
+                    "Curator refined response (quality={:.3}, knot={:.3}, learned={})",
+                    quality_score, topology.knot_complexity, learned_flag
+                );
+                (refined_output, learned_flag)
             } else {
-                output.to_string()
+                (output.to_string(), false)
             }
         } else {
-            output.to_string()
+            (output.to_string(), false)
         };
 
         Ok(CuratedExperience {
@@ -1021,6 +1021,12 @@ impl Pipeline {
             quality_score,
             solution_path: crate::data::extract_code_blocks(output),
             emotional_context: pad_state.clone(),
+            promoted_tokens: tokenizer_output
+                .promoted_tokens
+                .iter()
+                .map(|token| String::from_utf8_lossy(&token.bytes).to_string())
+                .collect(),
+            learned,
         })
     }
 }

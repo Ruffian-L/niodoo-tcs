@@ -102,9 +102,10 @@ impl EragClient {
         let _qdrant = Qdrant::from_url(&base_url);
 
         // Ensure collections exist using Qdrant 1.8+ spec (vectors_config)
-        let expected_dim = 768;
+        let expected_dim = 896;
+
         if vector_dim != expected_dim {
-            warn!(requested = vector_dim, expected = expected_dim, "Qdrant dim fixed to 768; using enforced dimension");
+            warn!(requested = vector_dim, expected = expected_dim, "Qdrant dim fixed to 896; using enforced dimension");
         }
         let create_body = json!({
             "vectors_config": {
@@ -116,7 +117,7 @@ impl EragClient {
         let create_url = format!("{}/collections/{}", base_url, collection);
         let create_resp = client.put(&create_url).json(&create_body).send().await?;
         let create_status = create_resp.status();
-        if !create_status.is_success() {
+        if !create_status.is_success() && create_status != 409 {
             let body = create_resp.text().await.unwrap_or_default();
             bail!("Failed to ensure experiences collection: status={}, body={body}", create_status);
         }
@@ -124,12 +125,12 @@ impl EragClient {
         let failures_url = format!("{}/collections/failures", base_url);
         let failures_resp = client.put(&failures_url).json(&create_body).send().await?;
         let failures_status = failures_resp.status();
-        if !failures_status.is_success() {
+        if !failures_status.is_success() && failures_status != 409 {
             let body = failures_resp.text().await.unwrap_or_default();
             warn!(collection = "failures", status = %failures_status, %body, "failed to ensure failures collection");
         }
 
-        info!(collection, dim = expected_dim, "Qdrant dim fixed to 768, search active");
+        info!(collection, dim = expected_dim, "Qdrant dim fixed to 896, search active");
 
         Ok(Self {
             client,
@@ -139,6 +140,20 @@ impl EragClient {
             similarity_threshold,
             embedder,
         })
+    }
+
+    /// Check collection info for diagnostics
+    pub async fn check_collection_info(&self) -> Result<()> {
+        let url = format!("{}/collections/{}", self.base_url, self.collection);
+        let resp = self.client.get(&url).send().await?;
+        
+        if resp.status().is_success() {
+            let info: serde_json::Value = resp.json().await?;
+            info!(collection = self.collection, info = %info, "Qdrant collection info");
+        } else {
+            warn!(collection = self.collection, status = %resp.status(), "Failed to get collection info");
+        }
+        Ok(())
     }
 
     #[instrument(skip_all, fields(dim = vector.len()))]
@@ -190,20 +205,38 @@ impl EragClient {
                             info!(%err, "failed to decode qdrant search response");
                         }
                     }
-                } else {
-                    let status = resp.status();
-                    let body = resp
-                        .text()
-                        .await
-                        .unwrap_or_else(|_| "<no body>".to_string());
-                    warn!(
-                        %status,
-                        body = %body,
-                        request = %request_dump,
-                        "qdrant search returned error status"
-                    );
-                    bail!("Qdrant search failed: status={status}");
-                }
+        } else {
+            let status = resp.status();
+            let body = resp
+                .text()
+                .await
+                .unwrap_or_else(|_| "<no body>".to_string());
+            
+            // Handle empty collection gracefully - don't crash the pipeline
+            if status.as_u16() == 500 && body.contains("OutputTooSmall") {
+                warn!(
+                    %status,
+                    "Qdrant collection appears empty (OutputTooSmall), returning empty collapse result"
+                );
+                // Return empty result instead of bailing
+                return Ok(CollapseResult {
+                    top_hits: Vec::new(),
+                    aggregated_context: String::new(),
+                    average_similarity: 0.0,
+                    curator_quality: None,
+                    failure_type: Some("empty_collection".to_string()),
+                    failure_details: Some(format!("Qdrant collection is empty (status={status})")),
+                });
+            }
+            
+            warn!(
+                %status,
+                body = %body,
+                request = %request_dump,
+                "qdrant search returned error status"
+            );
+            bail!("Qdrant search failed: status={status}");
+        }
             }
             Err(err) => {
                 warn!(

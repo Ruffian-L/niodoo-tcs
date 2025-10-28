@@ -40,6 +40,7 @@ async fn main() -> Result<()> {
     let args = CliArgs::parse();
     // Load env files early so RuntimeConfig can pick up `.env.production` or `.env`
     niodoo_real_integrated::config::prime_environment();
+    niodoo_real_integrated::config::init();
     init_tracing();
 
     let mut pipeline = Pipeline::initialise(args.clone()).await?;

@@ -1,6 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use rand::prelude::*;
@@ -11,11 +10,11 @@ use crate::compass::CompassOutcome;
 use crate::config::RuntimeConfig;
 use crate::erag::{CollapseResult, EragClient, EragMemory};
 use crate::generation::GenerationResult;
-use crate::lora_trainer::LoRATrainer;
+use crate::lora_trainer::{LoRATrainer, LoRAConfig};
 use crate::tcs_analysis::TopologicalSignature;
 use crate::tcs_predictor::TcsPredictor;
 use crate::torus::PadGhostState;
-use crate::tokenizer::TokenizerEngine;
+use crate::token_manager::DynamicTokenizerManager;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -120,7 +119,7 @@ pub struct LearningLoop {
     predictor: TcsPredictor,  // FIXED: Removed underscore to make it active
     lora_trainer: LoRATrainer,
     reward_threshold: f64,
-    tokenizer: Arc<Mutex<TokenizerEngine>>,
+    tokenizer: Option<Arc<DynamicTokenizerManager>>,
     curated_buffer: Vec<CuratedSample>,
     lora_epochs: usize,
     lora_rank: usize,
@@ -135,63 +134,33 @@ impl LearningLoop {
         alpha: f64,
         erag: Arc<EragClient>,
         config: Arc<Mutex<RuntimeConfig>>,
-        tokenizer: Arc<Mutex<TokenizerEngine>>,
+        tokenizer: Arc<DynamicTokenizerManager>,
     ) -> Self {
-        let action_space = vec![
-            DqnAction {
-                param: "temperature".to_string(),
-                delta: -0.1,
-            },
-            DqnAction {
-                param: "temperature".to_string(),
-                delta: 0.1,
-            },
-            DqnAction {
-                param: "top_p".to_string(),
-                delta: -0.05,
-            },
-            DqnAction {
-                param: "top_p".to_string(),
-                delta: 0.05,
-            },
-            DqnAction {
-                param: "mcts_c".to_string(),
-                delta: -0.2,
-            },
-            DqnAction {
-                param: "mcts_c".to_string(),
-                delta: 0.2,
-            },
-            DqnAction {
-                param: "retrieval_top_k".to_string(),
-                delta: -5.0,
-            },
-            DqnAction {
-                param: "retrieval_top_k".to_string(),
-                delta: 5.0,
-            },
-            DqnAction {
-                param: "novelty_threshold".to_string(),
-                delta: -0.1,
-            },
-            DqnAction {
-                param: "novelty_threshold".to_string(),
-                delta: 0.1,
-            },
-            DqnAction {
-                param: "self_awareness_level".to_string(),
-                delta: -0.1,
-            },
-            DqnAction {
-                param: "self_awareness_level".to_string(),
-                delta: 0.1,
-            },
-        ];
+        let action_space: Vec<DqnAction> = {
+            let guard = config.lock().unwrap();
+            guard
+                .dqn_actions
+                .clone()
+                .into_iter()
+                .map(|cfg| cfg.into_dqn_action())
+                .collect()
+        };
 
-        let lora_trainer = LoRATrainer::new().unwrap_or_else(|err| {
-            warn!(error = %err, "Failed to initialise LoRA trainer, using default adapter");
-            LoRATrainer::default()
-        });
+        // Initialize LoRA trainer with correct embedding dimensions from config
+        let lora_trainer = {
+            let guard = config.lock().unwrap();
+            let embedding_dim = guard.qdrant_vector_dim;
+            let lora_config = LoRAConfig {
+                rank: 8, // Default LoRA rank
+                alpha: 16.0, // Default LoRA alpha
+                input_dim: embedding_dim,
+                output_dim: embedding_dim,
+            };
+            LoRATrainer::with_config(lora_config).unwrap_or_else(|err| {
+                warn!(error = %err, "Failed to initialise LoRA trainer with config, using default adapter");
+                LoRATrainer::default()
+            })
+        };
 
         let lora_epochs = std::env::var("LORA_EPOCHS")
             .ok()
@@ -223,7 +192,7 @@ impl LearningLoop {
             predictor: TcsPredictor::new(),  // FIXED: Removed underscore
             lora_trainer,
             reward_threshold: -0.5,
-            tokenizer,
+            tokenizer: Some(tokenizer.clone()),
             curated_buffer: Vec::new(),
             lora_epochs,
             lora_rank,
@@ -260,66 +229,47 @@ impl LearningLoop {
             self.recent_topologies.pop_front();
         }
 
+        let config_snapshot = self.config.lock().unwrap().clone();
+        let fallback_ucb = compass
+            .ucb1_score
+            .unwrap_or(config_snapshot.mcts_c_scale) as f64;
+        let fallback_curator = collapse
+            .curator_quality
+            .unwrap_or(config_snapshot.curator_quality_threshold) as f64;
+
+        let mut adjusted_params = HashMap::new();
+        let mut events = Vec::new();
+
+        // Stage A: Baseline reward computation (entropy vs rouge)
+        let base_reward = self.compute_reward(entropy_delta, generation.rouge_score);
         let state = DqnState::from_metrics(
             entropy_delta,
             generation.rouge_score,
-            generation.latency_ms,
-            compass.ucb1_score.unwrap_or(0.5) as f64,
-            collapse.curator_quality.unwrap_or(0.5) as f64,
+            self.average_latency(),
+            fallback_ucb,
+            fallback_curator,
         );
+        let history_dist = self.compute_history_distance(pad_state.entropy, collapse.top_hits.as_slice());
+ 
+        let shaped_reward = base_reward;
 
-        let predicted_reward_delta = self.predictor.predict_reward_delta(topology);
-        let predictor_action = if self.predictor.should_trigger(topology) {
-            let config_snapshot = {
-                let guard = self.config.lock().await;
-                guard.clone()
-            };
-            let (param, delta) = self.predictor.predict_action(topology, &config_snapshot);
-            info!(
-                param = %param,
-                delta,
-                knot = topology.knot_complexity,
-                gap = topology.spectral_gap,
-                "TCS predictor triggered"
-            );
-            Some(DqnAction { param, delta })
-        } else {
-            None
-        };
+        let predictor_delta = self.predictor.predict_reward_delta(topology).clamp(-1.0, 1.0);
+        let predictor_applied = predictor_delta.abs() > 1e-6;
+        if predictor_applied {
+            adjusted_params.insert("predictor_delta".to_string(), predictor_delta);
+            events.push(format!("Predictor adjusted reward by {:.3}", predictor_delta));
+        }
+
+        let predicted_reward_delta = predictor_delta;
 
         let action = self.choose_action(&state);
-
-        let mut adjusted_params: HashMap<String, f64> = HashMap::new();
-        let mut predictor_applied = false;
-        {
-            let mut config = self.config.lock().await;
-            Self::apply_action_to_config(&mut config, &action);
-            adjusted_params
-                .entry(action.param.clone())
-                .and_modify(|delta| *delta += action.delta)
-                .or_insert(action.delta);
-
-            if let Some(pred_action) = predictor_action.as_ref() {
-                if pred_action.delta.abs() > 1e-6 {
-                    Self::apply_action_to_config(&mut config, pred_action);
-                    adjusted_params
-                        .entry(pred_action.param.clone())
-                        .and_modify(|delta| *delta += pred_action.delta)
-                        .or_insert(pred_action.delta);
-                    predictor_applied = true;
-                }
-            }
-        }
-
-        // Simulate next state (estimate based on action and predictor influence)
         let mut next_state = self.estimate_next_state(&state, &action);
-        if let Some(pred_action) = predictor_action.as_ref() {
-            if pred_action.delta.abs() > 1e-6 {
-                next_state = self.estimate_next_state(&next_state, pred_action);
-            }
-        }
 
-        let base_reward = self.compute_reward(entropy_delta, generation.rouge_score);
+        next_state.metrics[0] = entropy_delta.clamp(-1.0, 1.0);
+        next_state.metrics[1] = generation.rouge_score;
+        next_state.metrics[2] = self.average_latency();
+        next_state.metrics[3] = fallback_ucb;
+        next_state.metrics[4] = fallback_curator;
 
         let mode = match compass.quadrant {
             crate::compass::CompassQuadrant::Discover => "Discover",
@@ -327,11 +277,8 @@ impl LearningLoop {
             crate::compass::CompassQuadrant::Persist => "Persist",
             crate::compass::CompassQuadrant::Panic => "Panic",
         };
-        // INTEGRATION FIX: Calculate actual Wasserstein distance from ERAG history
-        let history_dist = self.compute_history_distance(pad_state.entropy, &collapse.top_hits);
-        
-        let reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist);
-    let blended_reward = reward + (predicted_reward_delta * 0.3);
+        let reward = base_reward;
+        let blended_reward = reward + (predicted_reward_delta * 0.3);
 
         self.dqn_update(state.clone(), action.clone(), blended_reward, next_state.clone())
             .await?;
@@ -356,7 +303,6 @@ impl LearningLoop {
         }
 
         // Existing event/breakthrough logic...
-        let mut events = Vec::new();
         if entropy_delta.abs() > 0.15 {
             events.push(format!(
                 "Entropy shift: prev={:.3}, curr={:.3}, delta={:.3}",
@@ -372,14 +318,8 @@ impl LearningLoop {
             ));
         }
 
-        if let Some(pred_action) = predictor_action.as_ref() {
-            events.push(format!(
-                "TCS predictor {} {} Δ{:.3} (pred Δreward={:.3})",
-                if predictor_applied { "applied" } else { "suggested" },
-                pred_action.param,
-                pred_action.delta,
-                predicted_reward_delta
-            ));
+        if predictor_applied {
+            events.push(format!("Predictor delta applied (Δreward={:.3})", predicted_reward_delta));
         }
 
         let mut breakthroughs = Vec::new();
@@ -419,26 +359,33 @@ impl LearningLoop {
 
     pub async fn apply_curator_learned(
         &mut self,
-        refined: &str,
+        refined_response: &str,
         learned: bool,
         reward: f64,
         topology: &TopologicalSignature,
-        input: &str,
+        prompt: &str,
+        promoted_tokens: &[String],
     ) -> Result<()> {
         if !learned {
             return Ok(());
         }
 
-        {
-            let mut tokenizer = self.tokenizer.lock().await;
-            tokenizer.promote_patterns(refined);
-        }
+        // Get embedding dimension from config
+        let embedding_dim = {
+            let guard = self.config.lock().unwrap();
+            guard.qdrant_vector_dim
+        };
+
+        let mut rng = rand::thread_rng();
+        let synthetic_reward: f64 = rng.gen_range(0.05..0.15);
+        let total_reward = reward + synthetic_reward;
+
         info!("Curated memory added to LoRA buffer");
 
         self.curated_buffer.push(CuratedSample {
-            input: input.to_string(),
-            output: refined.to_string(),
-            reward,
+            input: prompt.to_string(),
+            output: refined_response.to_string(),
+            reward: total_reward,
             knot_complexity: topology.knot_complexity,
             spectral_gap: topology.spectral_gap,
         });
@@ -447,31 +394,65 @@ impl LearningLoop {
             return Ok(());
         }
 
+        // Build training samples with proper dimension handling
         let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
             .curated_buffer
             .iter()
             .map(|sample| {
+                // Build feature vector: start with reward, knot, spectral_gap, then pad to embedding_dim
                 let mut features = vec![
                     sample.reward as f32,
                     sample.knot_complexity as f32,
                     sample.spectral_gap as f32,
                 ];
-                while features.len() < 768 {
+                
+                // Pad to target embedding dimension
+                while features.len() < embedding_dim {
                     features.push(0.0);
                 }
+                features.truncate(embedding_dim);
+                
+                // Build target vector from output bytes
                 let mut target = sample.output.bytes().map(|byte| byte as f32).collect::<Vec<_>>();
-                if target.len() < 768 {
-                    target.resize(768, 0.0);
+                if target.len() < embedding_dim {
+                    target.resize(embedding_dim, 0.0);
                 } else {
-                    target.truncate(768);
+                    target.truncate(embedding_dim);
                 }
-                features.truncate(768);
+                
                 (features, target)
             })
             .collect();
 
+        // CRITICAL: Skip training if no valid samples or if all features are zero
         if training_samples.is_empty() {
+            warn!("Skipping LoRA training: no training samples from curated buffer");
             return Ok(());
+        }
+
+        // Check if we have any non-zero features
+        let has_valid_features = training_samples.iter().any(|(features, _)| {
+            features.iter().any(|&f| f.abs() > 1e-6)
+        });
+        
+        if !has_valid_features {
+            warn!("Skipping LoRA training: all feature vectors are zero (empty collapse result)");
+            self.curated_buffer.clear();
+            return Ok(());
+        }
+
+        if let Some(tokenizer_manager) = &self.tokenizer {
+            let promoted_tokens = if promoted_tokens.is_empty() {
+                tokenizer_manager
+                    .promoted_tokens()
+                    .await
+                    .into_iter()
+                    .map(|token| String::from_utf8_lossy(&token.bytes).to_string())
+                    .collect()
+            } else {
+                promoted_tokens.to_vec()
+            };
+            info!(count = promoted_tokens.len(), "Retrieved promoted tokens for LoRA training");
         }
 
         let epochs = self.lora_epochs;
@@ -672,7 +653,7 @@ impl LearningLoop {
         }
 
         // Outer meta-update: average deltas and apply to config
-            let mut config = self.config.lock().await;
+            let mut config = self.config.lock().unwrap();
         for (param, total_delta) in &param_deltas {
             let avg_delta = total_delta / batch_len as f64;
             match param.as_str() {
@@ -775,7 +756,7 @@ impl LearningLoop {
                                 .or_insert(0.0) += amplified_delta;
                         }
                         let avg_len = low_tuples.len() as f64;
-                        let mut config = self.config.lock().await;
+                        let mut config = self.config.lock().unwrap();
                         for (param, total) in &param_deltas {
                             let avg_delta = total / avg_len * 0.3; // Reduced impact after LoRA training
                             match param.as_str() {
@@ -887,7 +868,7 @@ impl LearningLoop {
     /// Phase 5.2: Evolution step with topological guidance
     async fn evolution_step(&mut self) -> Result<()> {
         let current = {
-            let guard = self.config.lock().await;
+            let guard = self.config.lock().unwrap();
             guard.clone()
         };
         let recent: Vec<(f64, f64)> = self.recent_metrics.iter().cloned().collect();
@@ -924,7 +905,7 @@ impl LearningLoop {
         let recent_topologies: Vec<TopologicalSignature> = self.recent_topologies.iter().cloned().collect();
         let best = self.evolution.evolve_with_topology(&current, mixed_episodes, recent_topologies).await?;
         {
-            let mut guard = self.config.lock().await;
+            let mut guard = self.config.lock().unwrap();
             *guard = best;
         }
         info!(
@@ -975,6 +956,13 @@ impl LearningLoop {
                 Err(error) => warn!(%error, "LoRA fine-tuning failed"),
             }
         }
+    }
+
+    fn average_latency(&self) -> f64 {
+        if self.recent_metrics.is_empty() {
+            return 0.0;
+        }
+        self.recent_metrics.iter().map(|(_, latency)| *latency).sum::<f64>() / self.recent_metrics.len() as f64
     }
 }
 

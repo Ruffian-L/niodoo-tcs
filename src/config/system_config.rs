@@ -596,6 +596,8 @@ pub struct ConsciousnessConfig {
     pub token_promotion_min_score: f64,
     /// Maximum tokens to promote per cycle
     pub token_promotion_max_per_cycle: usize,
+    pub token_promotion_consensus_threshold: Option<f64>,
+    pub token_promotion_pruning_min_usage: Option<u64>,
     /// Path to base tokenizer file (relative to project root)
     pub tokenizer_path: String,
 
@@ -1391,6 +1393,8 @@ impl Default for ConsciousnessConfig {
             token_promotion_interval: 100,
             token_promotion_min_score: 0.75,
             token_promotion_max_per_cycle: 50,
+            token_promotion_consensus_threshold: Some(0.66),
+            token_promotion_pruning_min_usage: Some(10),
             tokenizer_path: "models/tokenizer.json".to_string(),
 
             // TDA defaults - mathematically sound values for consciousness topology

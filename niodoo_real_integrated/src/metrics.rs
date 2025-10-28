@@ -1,4 +1,5 @@
 use crate::generation::GenerationResult;
+use crate::token_manager::DynamicTokenizerManager;
 use anyhow::{Error, Result};
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
@@ -76,6 +77,10 @@ impl PipelineMetrics {
         let mut buffer = Vec::new();
         TextEncoder::new().encode(&metric_families, &mut buffer)?;
         Ok(String::from_utf8(buffer).unwrap_or_default())
+    }
+
+    pub fn tokenizer_manager(&self) -> Option<DynamicTokenizerManager> {
+        None
     }
 }
 
@@ -227,4 +232,63 @@ static AGG: LazyLock<Mutex<FailureAggregator>> =
 
 pub fn failure_aggregator() -> &'static Mutex<FailureAggregator> {
     &AGG
+}
+
+static TOKENIZER_METRICS: Lazy<TokenizerMetricHandles> =
+    Lazy::new(|| TokenizerMetricHandles::new().expect("failed to initialise tokenizer metrics"));
+
+#[derive(Clone)]
+pub struct TokenizerMetricHandles {
+    vocab_size: Gauge,
+    oov_rate: Gauge,
+    promoted_total: Counter,
+    pruned_total: Counter,
+    promotion_latency_ms: Gauge,
+}
+
+impl TokenizerMetricHandles {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            vocab_size: register_gauge!(
+                "niodoo_tokenizer_vocab_size",
+                "Current dynamic tokenizer vocabulary size"
+            )
+            .map_err(Error::from)?,
+            oov_rate: register_gauge!(
+                "niodoo_tokenizer_oov_rate",
+                "Dynamic tokenizer out-of-vocabulary rate"
+            )
+            .map_err(Error::from)?,
+            promoted_total: register_counter!(
+                "niodoo_tokenizer_promoted_total",
+                "Total promoted tokens"
+            )
+            .map_err(Error::from)?,
+            pruned_total: register_counter!(
+                "niodoo_tokenizer_pruned_total",
+                "Total pruned tokens"
+            )
+            .map_err(Error::from)?,
+            promotion_latency_ms: register_gauge!(
+                "niodoo_tokenizer_promotion_latency_ms",
+                "Last promotion cycle duration in milliseconds"
+            )
+            .map_err(Error::from)?,
+        })
+    }
+
+    pub fn record(&self, vocab_size: f64, oov_rate: f64) {
+        self.vocab_size.set(vocab_size);
+        self.oov_rate.set(oov_rate);
+    }
+
+    pub fn record_promotion(&self, promoted: usize, pruned: usize, latency_ms: f64) {
+        self.promoted_total.inc_by(promoted as f64);
+        self.pruned_total.inc_by(pruned as f64);
+        self.promotion_latency_ms.set(latency_ms);
+    }
+}
+
+pub fn tokenizer_metrics() -> &'static TokenizerMetricHandles {
+    &TOKENIZER_METRICS
 }

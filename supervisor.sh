@@ -74,14 +74,14 @@ check_service() {
 start_all() {
     echo "🚀 Starting all services..."
     
-    # Start vLLM
-    start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && vllm serve Qwen/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 8000 --gpu-memory-utilization 0.85"
+    # Start vLLM on port 5001
+    start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && export HF_HUB_ENABLE_HF_TRANSFER=0 && vllm serve Qwen/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 5001 --gpu-memory-utilization 0.85 --trust-remote-code"
     
-    # Start Qdrant
-    start_service "qdrant" "cd /workspace/qdrant && /workspace/qdrant/qdrant --config-path /workspace/qdrant_config/config.yaml"
+    # Start Qdrant on port 6333
+    start_service "qdrant" "cd /workspace/qdrant && /workspace/qdrant/qdrant --config-path /workspace/qdrant_config/config.yaml 2>&1"
     
-    # Start Ollama
-    start_service "ollama" "cd /workspace && /workspace/ollama serve"
+    # Start Ollama on port 11434
+    start_service "ollama" "cd /workspace && OLLAMA_HOST=127.0.0.1:11434 /workspace/ollama/bin/ollama serve"
     
     echo "✅ All services started"
 }
@@ -106,19 +106,19 @@ monitor() {
         # Check vLLM
         if ! check_service "vllm"; then
             echo "⚠️  vLLM down, restarting..."
-            start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && vllm serve Qwen/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 8000 --gpu-memory-utilization 0.85"
+            start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && export HF_HUB_ENABLE_HF_TRANSFER=0 && vllm serve Qwen/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 5001 --gpu-memory-utilization 0.85 --trust-remote-code"
         fi
         
         # Check Qdrant
         if ! check_service "qdrant"; then
             echo "⚠️  Qdrant down, restarting..."
-            start_service "qdrant" "cd /workspace/qdrant && /workspace/qdrant/qdrant --config-path /workspace/qdrant_config/config.yaml"
+            start_service "qdrant" "cd /workspace/qdrant && /workspace/qdrant/qdrant --config-path /workspace/qdrant_config/config.yaml 2>&1"
         fi
         
         # Check Ollama
         if ! check_service "ollama"; then
             echo "⚠️  Ollama down, restarting..."
-            start_service "ollama" "cd /workspace && /workspace/ollama serve"
+            start_service "ollama" "cd /workspace && OLLAMA_HOST=127.0.0.1:11434 /workspace/ollama/bin/ollama serve"
         fi
     done
 }

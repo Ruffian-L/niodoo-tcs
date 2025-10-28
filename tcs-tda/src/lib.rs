@@ -414,6 +414,7 @@ fn nearest_neighbour(target: &DVector<f32>, points: &[DVector<f32>]) -> Option<(
     best_idx.map(|idx| (idx, best_dist))
 }
 
+#[allow(dead_code)]
 fn pairwise_distances(points: &[DVector<f32>]) -> Array2<f32> {
     let n = points.len();
     let mut matrix = Array2::<f32>::zeros((n, n));

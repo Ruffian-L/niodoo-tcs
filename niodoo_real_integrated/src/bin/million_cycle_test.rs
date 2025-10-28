@@ -1,6 +1,5 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -371,6 +370,7 @@ async fn main() -> Result<()> {
     
     // Load environment
     niodoo_real_integrated::config::prime_environment();
+    niodoo_real_integrated::config::init();
     
     let args = MillionTestArgs::parse();
     run_parallel_test(args).await

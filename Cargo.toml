@@ -58,7 +58,7 @@ ndarray = { version = "0.15", features = ["rayon", "blas", "serde"] }
 ndarray-linalg = { version = "0.16", features = ["openblas-system"] }
 ort = { version = "1.16", default-features = false, features = ["load-dynamic", "half"] }
 tokenizers = { version = "0.15", default-features = false, features = ["http", "onig"] }
-onig = { version = "6.5", default-features = false, features = ["std", "generate"] }
+onig = { version = "6.5" }
 hf-hub = "0.3"
 
 # Candle framework for ML operations

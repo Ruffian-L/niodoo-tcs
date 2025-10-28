@@ -2,14 +2,7 @@
 //! Exposes /metrics endpoint on port 9091 for Prometheus scraping
 
 use anyhow::Result;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
-use std::sync::Arc;
+use axum::{http::StatusCode, response::IntoResponse, routing::get, Router};
 use tokio::signal;
 use tracing::{info, warn};
 use tower::ServiceBuilder;
@@ -34,9 +27,6 @@ async fn main() -> Result<()> {
     info!("📊 Prometheus endpoint: http://localhost:9091/metrics");
     info!("🏥 Health check: http://localhost:9091/health");
 
-    // Create app state
-    let state = Arc::new(());
-
     // Build router
     let app = Router::new()
         .route("/metrics", get(metrics_handler))
@@ -46,8 +36,7 @@ async fn main() -> Result<()> {
             ServiceBuilder::new()
                 .layer(CorsLayer::permissive())
                 .into_inner(),
-        )
-        .with_state(state);
+        );
 
     // Start server
     let listener = tokio::net::TcpListener::bind("0.0.0.0:9091").await?;

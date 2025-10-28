@@ -42,6 +42,38 @@ pub fn prime_environment() {
     }
 }
 
+pub fn init() {
+    prime_environment();
+    
+    let curator_model = env_with_fallback(&["CURATOR_MODEL", "EMBEDDING_MODEL_NAME", "OLLAMA_EMBED_MODEL", "EMBEDDING_MODEL"])
+        .unwrap_or_else(|| "qwen2:0.5b".to_string());
+    
+    let main_model = env_with_fallback(&["MAIN_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL", "VLLM_MODEL_PATH"])
+        .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
+    
+    let qdrant_dim: usize = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(896);
+    
+    let ollama_url = env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
+        .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    
+    info!(
+        curator_model = %curator_model,
+        main_model = %main_model,
+        qdrant_dim = qdrant_dim,
+        "Config loaded: CURATOR_MODEL={}, MAIN_MODEL={}, QDRANT_DIM={}",
+        curator_model, main_model, qdrant_dim
+    );
+    
+    if ollama_url != "http://127.0.0.1:11434" {
+        warn!(
+            ollama_url = %ollama_url,
+            "OLLAMA_URL not default—ensure 'ollama serve && ollama pull qwen2:0.5b'"
+        );
+    }
+}
+
 /// CLI arguments for the integrated pipeline binary.
 ///
 /// The binary can operate on a single prompt or over a full rut-gauntlet batch.
@@ -218,6 +250,10 @@ fn default_collapse_cache_ttl_secs() -> u64 {
     30
 }
 
+fn default_token_promotion_interval() -> u64 {
+    100
+}
+
 fn default_training_data_sample_cap() -> Option<usize> {
     Some(20_000)
 }
@@ -264,6 +300,10 @@ fn default_novelty_threshold() -> f64 {
 
 fn default_self_awareness_level() -> f64 {
     0.3
+}
+
+fn default_curator_quality_threshold() -> f32 {
+    0.6
 }
 
 impl BackendType {
@@ -327,6 +367,7 @@ pub struct RuntimeConfig {
     #[serde(default)]
     pub enable_curator: bool,
     pub curator_model_name: String,
+    #[serde(default = "default_curator_quality_threshold")]
     pub curator_quality_threshold: f32,
     pub curator_minimum_threshold: f32,
     pub curator_timeout_secs: u64,
@@ -352,6 +393,8 @@ pub struct RuntimeConfig {
     pub learning_window: usize,
     #[serde(default = "default_breakthrough_threshold")]
     pub breakthrough_threshold: f64,
+    #[serde(default = "default_dqn_actions")]
+    pub dqn_actions: Vec<DqnActionConfig>,
 
     // Generation parameters
     pub temperature: f64,
@@ -364,6 +407,8 @@ pub struct RuntimeConfig {
     // Engine/pipeline runtime knobs
     #[serde(default = "default_prompt_max_chars")]
     pub prompt_max_chars: usize,
+    #[serde(default = "default_token_promotion_interval")]
+    pub token_promotion_interval: u64,
     #[serde(default = "default_embedding_cache_ttl_secs")]
     pub embedding_cache_ttl_secs: u64,
     #[serde(default = "default_collapse_cache_ttl_secs")]
@@ -462,13 +507,13 @@ impl RuntimeConfig {
             .unwrap_or_else(|| "experiences".to_string());
 
         let requested_qdrant_dim = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
-            .and_then(|value| value.parse().ok());
+            .and_then(|value| value.parse::<usize>().ok());
         if let Some(value) = requested_qdrant_dim {
-            if value != 768 {
-                warn!(expected = 768, provided = value, "Qdrant dim fixed to 768; overriding provided value");
+            if value != 896usize {
+                warn!(expected = 896usize, provided = value, "Qdrant dim fixed to 896; overriding provided value");
             }
         }
-        let qdrant_vector_dim = 768;
+        let qdrant_vector_dim = 896usize;
 
         let ollama_endpoint = env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
             .or_else(|| {
@@ -529,8 +574,8 @@ impl RuntimeConfig {
             .unwrap_or_else(|| "qwen2:0.5b".to_string());
 
         let curator_quality_threshold = env_with_fallback(&["CURATOR_QUALITY_THRESHOLD"])
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(0.8);
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_curator_quality_threshold);
 
         let curator_minimum_threshold = env_with_fallback(&["CURATOR_MINIMUM_THRESHOLD"])
             .and_then(|value| value.parse().ok())
@@ -637,6 +682,11 @@ impl RuntimeConfig {
                 .and_then(|value| value.parse().ok())
                 .unwrap_or(default_retrieval_top_k_increment());
 
+        let dqn_actions = env_with_fallback(&["DQN_ACTIONS"])
+            .as_deref()
+            .and_then(|s| serde_yaml::from_str(s).ok())
+            .unwrap_or_else(default_dqn_actions);
+
         let runtime = Self {
             vllm_endpoint,
             vllm_model,
@@ -678,11 +728,13 @@ impl RuntimeConfig {
             dqn_alpha: default_dqn_alpha(),
             learning_window: default_learning_window(),
             breakthrough_threshold: default_breakthrough_threshold(),
+            dqn_actions,
             temperature: 0.7,
             top_p: 0.9,
             novelty_threshold: env_with_fallback(&["NOVELTY_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or(0.5),
             self_awareness_level: env_with_fallback(&["SELF_AWARENESS_LEVEL"]).and_then(|v| v.parse().ok()).unwrap_or(0.3),
             prompt_max_chars,
+            token_promotion_interval: default_token_promotion_interval(),
             embedding_cache_ttl_secs,
             collapse_cache_ttl_secs,
             training_data_sample_cap,
@@ -706,12 +758,14 @@ impl RuntimeConfig {
 
         Ok(runtime)
     }
+
 }
 
 /// Curator configuration derived from runtime config
 #[derive(Debug, Clone)]
 pub struct CuratorConfig {
     pub vllm_endpoint: String,
+    pub ollama_endpoint: String,
     pub model_name: String,
     pub embedding_dim: usize,
     pub max_context_length: usize,
@@ -737,6 +791,7 @@ impl CuratorConfig {
     pub fn from_runtime_config(config: &RuntimeConfig) -> Self {
         Self {
             vllm_endpoint: config.vllm_endpoint.clone(),
+            ollama_endpoint: config.ollama_endpoint.clone(),
             model_name: config.curator_model_name.clone(),
             embedding_dim: config.qdrant_vector_dim,
             max_context_length: 2048,
@@ -774,6 +829,45 @@ impl CuratorConfig {
                 .unwrap_or(0.4),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DqnActionConfig {
+    pub param: String,
+    pub delta: f64,
+}
+
+impl DqnActionConfig {
+    pub fn new(param: impl Into<String>, delta: f64) -> Self {
+        Self {
+            param: param.into(),
+            delta,
+        }
+    }
+
+    pub fn into_dqn_action(self) -> crate::learning::DqnAction {
+        crate::learning::DqnAction {
+            param: self.param,
+            delta: self.delta,
+        }
+    }
+}
+
+fn default_dqn_actions() -> Vec<DqnActionConfig> {
+    vec![
+        DqnActionConfig::new("temperature", -0.1),
+        DqnActionConfig::new("temperature", 0.1),
+        DqnActionConfig::new("top_p", -0.05),
+        DqnActionConfig::new("top_p", 0.05),
+        DqnActionConfig::new("mcts_c", -0.2),
+        DqnActionConfig::new("mcts_c", 0.2),
+        DqnActionConfig::new("retrieval_top_k", -5.0),
+        DqnActionConfig::new("retrieval_top_k", 5.0),
+        DqnActionConfig::new("novelty_threshold", -0.1),
+        DqnActionConfig::new("novelty_threshold", 0.1),
+        DqnActionConfig::new("self_awareness_level", -0.1),
+        DqnActionConfig::new("self_awareness_level", 0.1),
+    ]
 }
 
 fn load_env_file(path: &Path) -> Result<()> {

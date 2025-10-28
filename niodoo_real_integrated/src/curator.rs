@@ -69,7 +69,7 @@ impl Curator {
         let url = format!("{}/api/generate", self.config.vllm_endpoint.trim_end_matches('/'));
         let response = self
             .client
-            .post(&url)
+            .post(url)
             .json(&request)
             .send()
             .await
@@ -110,5 +110,57 @@ impl Curator {
             reason: parsed.reason,
             processing_time_ms: start.elapsed().as_secs_f64() * 1000.0,
         })
+    }
+
+    /// Refine a response using Qwen JSON call (returns refined text and learning flag)
+    pub async fn refine(&self, response: &str, rouge: f64, knot: f64, entropy: f64) -> Result<(String, bool)> {
+        let quality = rouge * 0.6 + (1.0 / (knot + 1.0)) * 0.4;
+
+        if quality >= 0.8 { // Using a default value for curator_threshold
+            info!("Curator skipped: quality={} >= {}", quality, 0.8);
+            return Ok((response.to_string(), false));
+        }
+
+        info!("Curator Qwen call: quality={}, knot={}, entropy={}", quality, knot, entropy);
+
+        let prompt = format!(
+            "As code reviewer, validate/refine for quality>0.8, untangle knot {}, balance entropy {}: Response '{}'. Output JSON: {{\"learned\": true/false, \"refined\": \"text\", \"reason\": \"brief\"}}",
+            knot, entropy, response
+        );
+
+        let ollama_url = format!(
+            "{}/api/generate",
+            self.config.ollama_endpoint.trim_end_matches('/')
+        );
+        let body = json!({
+            "model": "qwen2", // Using a default value for curator_model
+            "prompt": prompt,
+            "stream": false,
+            "options": {
+                "temperature": 0.7, // Using a default value for curator_temp
+                "top_p": 0.9
+            }
+        });
+
+        let resp = self.client.post(ollama_url).json(&body).send().await?;
+        
+        if !resp.status().is_success() {
+            error!("Ollama down—run 'ollama serve && ollama pull qwen2:0.5b'");
+            return Err(anyhow!("Ollama unavailable"));
+        }
+
+        let result: serde_json::Value = resp.json().await?;
+        let learned = result["learned"].as_bool().unwrap_or(false);
+        let refined = result["refined"].as_str().unwrap_or(response).to_string();
+        let reason = result["reason"].as_str().unwrap_or("No reason");
+
+        info!("Qwen curator refined: learned={}, refined len={}, reason={}", learned, refined.len(), reason);
+        Ok((refined, learned))
+    }
+
+    /// Refine a response (simpler version for compatibility)
+    pub async fn refine_response(&self, _input: &str, output: &str) -> Result<String> {
+        let (refined, _learned) = self.refine(output, 0.5, 0.5, 0.5).await?;
+        Ok(refined)
     }
 }

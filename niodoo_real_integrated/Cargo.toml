@@ -38,6 +38,7 @@ tcs-tda = { path = "../tcs-tda" }
 tcs-knot = { path = "../tcs-knot" }
 tcs-tqft = { path = "../tcs-tqft" }
 tcs-core = { path = "../tcs-core" }
+niodoo-core = { path = "../niodoo-core" }
 axum = "0.7"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors"] }
@@ -49,12 +50,15 @@ blake3 = { workspace = true }
 lru = { workspace = true }
 redis = { version = "0.24", default-features = false, features = ["tokio-comp", "connection-manager"] }
 bincode = "1"
-candle-core = "0.3"
+candle-core = "0.8"
 candle-nn = "0.8"
 ollama-rs = "0.1"
 safetensors = "0.4"
 num-complex = "0.4"
 rayon = "1.10"
+tokenizers = { workspace = true }
+onig = { workspace = true }
+
 
 qdrant-client = "1.9"
 urlencoding = "2.1"

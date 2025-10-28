@@ -1,6 +1,6 @@
 use crate::pipeline::Pipeline;
 use crate::config::CliArgs;
-use crate::tokenizer::TokenizerOutput;
+use crate::token_manager::TokenizerOutput;
 use crate::compass::{CompassOutcome, CompassQuadrant, MctsBranch};
 use crate::erag::CollapseResult;
 
