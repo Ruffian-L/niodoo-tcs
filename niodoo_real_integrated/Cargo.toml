@@ -10,8 +10,8 @@ license = "MIT"
 default = ["beelink"]
 beelink = []
 5080-q = []
-pyo3 = []
 gauntlet = []
+examples = []
 
 [dependencies]
 anyhow = "1.0"
@@ -50,14 +50,16 @@ blake3 = { workspace = true }
 lru = { workspace = true }
 redis = { version = "0.24", default-features = false, features = ["tokio-comp", "connection-manager"] }
 bincode = "1"
-candle-core = "0.8"
-candle-nn = "0.8"
+candle-core = { version = "0.8", default-features = false }
+candle-nn = { version = "0.8", default-features = false }
 ollama-rs = "0.1"
 safetensors = "0.4"
 num-complex = "0.4"
 rayon = "1.10"
 tokenizers = { workspace = true }
 onig = { workspace = true }
+prost = "0.12"
+parking_lot = "0.12"
 
 
 qdrant-client = "1.9"
@@ -69,14 +71,17 @@ serde_json = "1.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["full"] }
 criterion = "0.5"
+mockall = "0.13"
 
 [[bench]]
 name = "niodoo_real_bench"
 harness = false
 
+# Legacy integration tests removed in 2025-10 cleanup
+
 [[test]]
-name = "integration_test"
-path = "../tests/integration_test.rs"
+name = "integration"
+path = "tests/integration.rs"
 
 [[bin]]
 name = "niodoo_real_integrated"
@@ -102,3 +107,23 @@ path = "src/bin/million_cycle_test.rs"
 [[bin]]
 name = "metrics_server"
 path = "src/bin/metrics_server.rs"
+
+[[example]]
+name = "topology_baseline"
+path = "examples/topology_baseline.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "topology_eval"
+path = "examples/topology_eval.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "resilience"
+path = "examples/resilience.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "argo_istio_blueprint"
+path = "examples/argo_istio_blueprint.rs"
+required-features = ["examples"]

@@ -69,6 +69,3 @@ impl From<&crate::tcs_analysis::TopologicalSignature> for TopologyMetrics {
         }
     }
 }
-
-
-

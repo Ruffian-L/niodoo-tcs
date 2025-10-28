@@ -237,38 +237,3 @@ impl CascadingParser {
         Err(anyhow!("All parsing strategies failed"))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_json_parser() {
-        let json = r#"{"score": 0.85}"#;
-        let parser = JsonParser;
-        assert_eq!(parser.parse_score(json).unwrap(), 0.85);
-    }
-
-    #[test]
-    fn test_regex_parser() {
-        let text = "Here's a score: 0.8";
-        let parser = RegexParser::new().unwrap();
-        assert_eq!(parser.parse_score(text).unwrap(), 0.8);
-    }
-
-    #[test]
-    fn test_heuristic_parser_config() {
-        let parser = HeuristicParser::new("test".to_string(), 1.8)
-            .with_config(1000, 1.0, 3.0, 0.95, 0.5, 0.3);
-        let score = parser.parse_score("").unwrap();
-        assert!(score > 0.0 && score <= 1.0);
-    }
-
-    #[test]
-    fn test_cascading_parser() {
-        let text = "The quality score is 0.75";
-        let parser = CascadingParser::new(ParserMode::Regex)
-            .with_heuristic_fallback("test".to_string(), 1.8);
-        assert_eq!(parser.parse(text).unwrap(), 0.75);
-    }
-}

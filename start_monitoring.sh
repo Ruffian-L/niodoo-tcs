@@ -41,16 +41,16 @@ echo "🔧 Building metrics server..."
 cd tcs-core
 cargo build --bin metrics_server --release 2>/dev/null || cargo build --bin metrics_server
 
-echo "🚀 Starting metrics server on :9091..."
-cargo run --bin metrics_server > ../logs/metrics_server.log 2>&1 &
+echo "🚀 Starting metrics server on :9093..."
+TCS_METRICS_PORT=9093 cargo run --bin metrics_server > ../logs/metrics_server.log 2>&1 &
 METRICS_PID=$!
 echo $METRICS_PID > ../logs/metrics_server.pid
 
 sleep 2
 
 # Check if metrics endpoint is up
-if curl -s http://localhost:9091/metrics > /dev/null; then
-    echo "✅ Metrics server is running at http://localhost:9091/metrics"
+if curl -s http://localhost:9093/metrics > /dev/null; then
+    echo "✅ Metrics server is running at http://localhost:9093/metrics"
 else
     echo "⚠️  Metrics server not responding"
 fi
@@ -59,7 +59,7 @@ echo ""
 echo "📊 Dashboard URLs:"
 echo "  Simple: http://localhost:3000/d/simple"
 echo "  Advanced: http://localhost:3000/d/advanced"
-echo "  Metrics: http://localhost:9091/metrics"
+echo "  Metrics: http://localhost:9093/metrics"
 echo "  Prometheus: http://localhost:9090"
 echo ""
 echo "To stop: ./stop_monitoring.sh"

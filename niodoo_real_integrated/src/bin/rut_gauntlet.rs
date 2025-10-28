@@ -224,8 +224,10 @@ async fn run_100_prompt_test() -> Result<()> {
         prompt: None,
         prompt_file: None,
         swarm: 1,
+        iterations: 1,
         output: OutputFormat::Csv,
         config: None,
+        rng_seed_override: None,
     };
 
     let mut pipeline = Pipeline::initialise(args).await?;

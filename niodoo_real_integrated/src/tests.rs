@@ -1,68 +1,102 @@
-use crate::pipeline::Pipeline;
-use crate::config::CliArgs;
-use crate::token_manager::TokenizerOutput;
-use crate::compass::{CompassOutcome, CompassQuadrant, MctsBranch};
+#![cfg(test)]
+
+use anyhow::Result;
+use mockall::mock;
+use mockall::predicate;
+
 use crate::erag::CollapseResult;
+use crate::test_support::mock_pipeline;
 
-#[tokio::test]
-#[ignore]
-// TODO: Implement proper test infrastructure for retry loop
-// Need to create mock generation results, failure signals, and retry context
-// Issue reference: retry loop testing infrastructure needs to be implemented
-async fn test_run_retry_loop() {
-    // Mock pipeline with config
-    let mut pipeline = Pipeline::initialise(CliArgs::default()).await.unwrap();
-    
-    // Create proper test fixtures
-    let tokenizer_output = mock_tokenizer();
-    let compass = mock_compass();
-    let collapse = mock_collapse();
-    
-    // TODO: Implement actual retry loop test
-    // The method run_retry_loop doesn't exist - need to test handle_retry_with_reflection instead
-    // with proper generation results and failure signals
-    
-    // Placeholder test to ensure test compiles
-    assert_eq!(tokenizer_output.augmented_prompt, "test prompt");
-    assert_eq!(compass.quadrant, CompassQuadrant::Discover);
-    assert_eq!(collapse.average_similarity, 0.8);
+trait EmbedService {
+    fn embed(&self, prompt: &str) -> Result<Vec<f32>>;
 }
 
-// Mock helper functions
-fn mock_tokenizer() -> TokenizerOutput {
-    TokenizerOutput {
-        tokens: vec![1, 2, 3],
-        augmented_prompt: "test prompt".to_string(),
-        promoted_tokens: vec![],
-        vocab_size: 1000,
-        oov_rate: 0.0,
-        failure_type: None,
-        failure_details: None,
+trait CollapseService {
+    fn collapse(&self, embedding: &[f32]) -> Result<CollapseResult>;
+}
+
+mock! {
+    pub EmbedServiceMock {}
+    impl EmbedService for EmbedServiceMock {
+        fn embed(&self, prompt: &str) -> Result<Vec<f32>>;
     }
 }
 
-fn mock_compass() -> CompassOutcome {
-    CompassOutcome {
-        quadrant: CompassQuadrant::Discover,
-        is_threat: false,
-        is_healing: true,
-        mcts_branches: vec![MctsBranch {
-            label: "test".to_string(),
-            ucb_score: 0.5,
-            entropy_projection: 0.7,
-        }],
-        intrinsic_reward: 1.0,
-        ucb1_score: Some(0.5),
+mock! {
+    pub CollapseServiceMock {}
+    impl CollapseService for CollapseServiceMock {
+        fn collapse(&self, embedding: &[f32]) -> Result<CollapseResult>;
     }
 }
 
-fn mock_collapse() -> CollapseResult {
-    CollapseResult {
-        top_hits: vec![],
-        aggregated_context: "context".to_string(),
-        average_similarity: 0.8,
-        curator_quality: Some(0.8),
-        failure_type: None,
-        failure_details: None,
+struct MockPipelineFacade<E, M>
+where
+    E: EmbedService,
+    M: CollapseService,
+{
+    embedder: E,
+    erag: M,
+}
+
+impl<E, M> MockPipelineFacade<E, M>
+where
+    E: EmbedService,
+    M: CollapseService,
+{
+    fn new(embedder: E, erag: M) -> Self {
+        Self { embedder, erag }
     }
+
+    async fn process_prompt(&self, prompt: &str) -> Result<CollapseResult> {
+        let embedding = self.embedder.embed(prompt)?;
+        self.erag.collapse(&embedding)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mock_pipeline_embed_stage() -> Result<()> {
+    let harness = mock_pipeline("embed").await?;
+    assert!(harness.pipeline().dataset_stats.sample_count > 0);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_process_prompt_with_mock_clients() -> Result<()> {
+    let prompt = "Möbius convergence smoke";
+    let embedding = vec![0.42f32, 0.84f32, 0.21f32, 0.63f32];
+    let expected_context = "Synthetic Möbius trace".to_string();
+
+    let mut embedder = MockEmbedServiceMock::new();
+    let capture_prompt = prompt.to_string();
+    let embedding_clone = embedding.clone();
+    embedder
+        .expect_embed()
+        .with(predicate::eq(capture_prompt))
+        .times(1)
+        .returning(move |_| Ok(embedding_clone.clone()));
+
+    let mut erag = MockCollapseServiceMock::new();
+    let embedding_verification = embedding.clone();
+    let context_clone = expected_context.clone();
+    erag.expect_collapse()
+        .withf(move |received| received == embedding_verification.as_slice())
+        .times(1)
+        .returning(move |_| {
+            Ok(CollapseResult {
+                top_hits: Vec::new(),
+                aggregated_context: context_clone.clone(),
+                average_similarity: 0.82,
+                curator_quality: Some(0.8),
+                failure_type: None,
+                failure_details: None,
+            })
+        });
+
+    let facade = MockPipelineFacade::new(embedder, erag);
+    let collapse = facade.process_prompt(prompt).await?;
+
+    assert_eq!(collapse.aggregated_context, expected_context);
+    assert!(collapse.average_similarity >= 0.8);
+    assert_eq!(collapse.failure_type, None);
+    Ok(())
 }

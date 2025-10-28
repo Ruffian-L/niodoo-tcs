@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::Builder;
 use std::time::{Duration, Instant};
@@ -19,13 +20,7 @@ use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
 use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
-use tokio::{
-    fs,
-    runtime::Handle,
-    sync::RwLock,
-    task::block_in_place,
-    time::interval,
-};
+use tokio::{fs, runtime::Handle, sync::RwLock, task::block_in_place, time::interval};
 use tracing::{debug, info, instrument, warn};
 
 use crate::erag::{CollapseResult, EragMemory};
@@ -43,6 +38,13 @@ pub struct TokenizerOutput {
     pub failure_details: Option<String>,
 }
 
+impl Drop for DynamicTokenizerManager {
+    fn drop(&mut self) {
+        // Cooperative shutdown for background maintenance loop
+        self.shutdown.store(true, Ordering::Relaxed);
+    }
+}
+
 #[derive(Clone)]
 pub struct DynamicTokenizerManager {
     tokenizer: Arc<RwLock<DynamicTokenizer>>,
@@ -51,6 +53,7 @@ pub struct DynamicTokenizerManager {
     metrics: Arc<TokenizationMetrics>,
     promotion_interval: u64,
     state_path: PathBuf,
+    shutdown: Arc<AtomicBool>,
 }
 
 struct TokenizationMetrics {
@@ -137,6 +140,7 @@ impl DynamicTokenizerManager {
             metrics: Arc::new(TokenizationMetrics::new()),
             promotion_interval,
             state_path,
+            shutdown: Arc::new(AtomicBool::new(false)),
         };
 
         manager.load_persisted_vocabulary().await?;
@@ -157,17 +161,30 @@ impl DynamicTokenizerManager {
             return;
         }
 
-        let manager = self.clone();
+        let weak = Arc::downgrade(self);
+        let shutdown = self.shutdown.clone();
+        let period = self.promotion_interval;
         tokio::spawn(async move {
-            let mut ticker = interval(Duration::from_secs(manager.promotion_interval));
+            let mut ticker = interval(Duration::from_secs(period));
             loop {
                 ticker.tick().await;
-                let mgr = manager.clone();
-                if let Err(err) = mgr.run_promotion_cycle().await {
-                    warn!(?err, "background promotion cycle failed");
+                if shutdown.load(Ordering::Relaxed) {
+                    break;
+                }
+                match weak.upgrade() {
+                    Some(manager) => {
+                        if let Err(err) = manager.run_promotion_cycle().await {
+                            warn!(?err, "background promotion cycle failed");
+                        }
+                    }
+                    None => break,
                 }
             }
         });
+    }
+
+    pub fn request_shutdown(&self) {
+        self.shutdown.store(true, Ordering::Relaxed);
     }
 
     #[instrument(skip(self, prompt, collapse, pad_state))]
@@ -256,6 +273,12 @@ impl DynamicTokenizerManager {
 
     #[instrument(skip(self))]
     pub async fn run_promotion_cycle(&self) -> Result<()> {
+        if std::env::var("TOKEN_PROMOTION_DISABLED")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
         let promotion_engine = self.promotion_engine.clone();
         let memories = self.memories.clone();
 

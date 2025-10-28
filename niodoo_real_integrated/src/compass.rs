@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rand::prelude::*;
+use rand::rngs::StdRng;
 use tracing::instrument;
 
 use crate::torus::PadGhostState;
@@ -29,12 +30,28 @@ pub struct MctsBranch {
     pub entropy_projection: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct CompassRuntimeParams {
+    pub exploration_c: f64,
+    pub variance_spike: f64,
+    pub variance_stagnation: f64,
+}
+
+impl CompassRuntimeParams {
+    pub fn new(exploration_c: f64, variance_spike: f64, variance_stagnation: f64) -> Self {
+        Self {
+            exploration_c,
+            variance_spike,
+            variance_stagnation,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CompassEngine {
     pub exploration_c: f64,
     pub variance_spike: f64,
     pub variance_stagnation: f64,
-    _rng: StdRng,
     last_quadrant: Option<CompassQuadrant>,
     last_entropy: Option<f64>,
     last_variance: Option<f64>,
@@ -56,7 +73,6 @@ impl CompassEngine {
             exploration_c,
             variance_spike,
             variance_stagnation,
-            _rng: StdRng::seed_from_u64(42),
             last_quadrant: None,
             last_entropy: None,
             last_variance: None,
@@ -77,21 +93,36 @@ impl CompassEngine {
         self.variance_stagnation = variance_stagnation.max(0.0);
     }
 
+    pub fn evaluate_with_params(
+        &mut self,
+        params: CompassRuntimeParams,
+        state: &PadGhostState,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Result<CompassOutcome> {
+        self.update_params(
+            params.exploration_c,
+            params.variance_spike,
+            params.variance_stagnation,
+        );
+        self.evaluate(state, topology)
+    }
+
     #[instrument(skip_all)]
-    pub fn evaluate(
+    pub fn evaluate_with_rng(
         &mut self,
         state: &PadGhostState,
         topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+        rng: &mut StdRng,
     ) -> Result<CompassOutcome> {
         let mut pleasure = state.pad[0];
         let mut arousal = state.pad[1];
         let mut dominance = state.pad[2];
 
-        pleasure = (pleasure + self._rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
-        arousal = (arousal + self._rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
-        dominance = (dominance + self._rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
+        pleasure = (pleasure + rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
+        arousal = (arousal + rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
+        dominance = (dominance + rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
 
-        if self._rng.gen_bool(0.15) {
+        if rng.gen_bool(0.15) {
             pleasure = (pleasure * 1.1).clamp(-1.0, 1.0);
         }
 
@@ -134,7 +165,7 @@ impl CompassEngine {
             }
         }
 
-        if !is_threat && self._rng.gen_bool(0.45) {
+        if !is_threat && rng.gen_bool(0.45) {
             if arousal > -0.2 && pleasure < 0.35 {
                 is_threat = true;
             }
@@ -192,6 +223,17 @@ impl CompassEngine {
         self.ingest_outcome(state, &outcome, variance);
 
         Ok(outcome)
+    }
+
+    #[instrument(skip_all)]
+    pub fn evaluate(
+        &mut self,
+        state: &PadGhostState,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Result<CompassOutcome> {
+        // Fallback: deterministic default seed when external RNG isn't provided
+        let mut rng = StdRng::seed_from_u64(42);
+        self.evaluate_with_rng(state, topology, &mut rng)
     }
 
     fn compute_intrinsic_reward(&self, quadrant: CompassQuadrant, entropy: f64) -> f64 {

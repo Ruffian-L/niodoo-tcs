@@ -1,12 +1,12 @@
 //! Curator: Memory guardian and knowledge distiller
 //! Adapted from curator_executor for niodoo_real_integrated integration
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
 use std::time::{Duration, Instant};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::config::CuratorConfig;
 use crate::data::Experience;
@@ -31,6 +31,7 @@ pub struct CuratedResponse {
 pub struct Curator {
     client: Client,
     config: CuratorConfig,
+    mock_mode: bool,
 }
 
 impl Curator {
@@ -41,7 +42,16 @@ impl Curator {
             .build()
             .context("failed to build curator HTTP client")?;
 
-        Ok(Self { client, config })
+        if config.mock_mode {
+            info!("Curator mock mode enabled; responses will bypass Ollama");
+        }
+
+        let mock_mode = config.mock_mode;
+        Ok(Self {
+            client,
+            config,
+            mock_mode,
+        })
     }
 
     pub async fn curate(
@@ -51,6 +61,10 @@ impl Curator {
         entropy: f64,
     ) -> Result<CuratedResponse> {
         let start = Instant::now();
+
+        if self.mock_mode {
+            return Ok(self.mock_curated(experience, start.elapsed().as_secs_f64() * 1000.0));
+        }
         let prompt = format!(
             "As code reviewer, validate/refine for quality>0.8, untangle knot {knot}, balance entropy {entropy}: Response '{response}'. Output JSON: {{\"learned\": true/false, \"refined\": \"text\", \"reason\": \"brief\"}}",
             response = experience.output
@@ -83,9 +97,11 @@ impl Curator {
                 status = %response.status(),
                 "Ollama down—run 'ollama serve && ollama pull qwen2:0.5b'"
             );
-            return Err(anyhow!(
+            ensure!(
+                self.mock_mode,
                 "Ollama unavailable; fix with 'ollama serve && ollama pull qwen2:0.5b'"
-            ));
+            );
+            return Ok(self.mock_curated(experience, start.elapsed().as_secs_f64() * 1000.0));
         }
 
         let payload = response
@@ -97,7 +113,14 @@ impl Curator {
             .and_then(|value| value.as_str())
             .ok_or_else(|| anyhow!("Curator did not return response field"))?;
 
-        let parsed: CuratorJson = serde_json::from_str(raw).context("curator JSON parse failed")?;
+        let parsed: CuratorJson = match serde_json::from_str(raw) {
+            Ok(value) => value,
+            Err(error) => {
+                warn!(?error, "Curator JSON parse failed, returning mock response");
+                ensure!(self.mock_mode, "Curator JSON parse failed: {error}");
+                return Ok(self.mock_curated(experience, start.elapsed().as_secs_f64() * 1000.0));
+            }
+        };
 
         info!(
             learned = parsed.learned,
@@ -131,6 +154,10 @@ impl Curator {
             return Ok((response.to_string(), false));
         }
 
+        if self.mock_mode {
+            return Ok((response.to_string(), false));
+        }
+
         info!(
             "Curator Qwen call: quality={}, knot={}, entropy={}",
             quality, knot, entropy
@@ -159,24 +186,30 @@ impl Curator {
 
         if !resp.status().is_success() {
             error!("Ollama down—run 'ollama serve && ollama pull qwen2:0.5b'");
-            return Err(anyhow!("Ollama unavailable"));
+            ensure!(self.mock_mode, "Ollama unavailable");
+            return Ok((response.to_string(), false));
         }
 
         let result: serde_json::Value = resp.json().await?;
         // Ollama returns {"response": "text here"}
         let response_text = result["response"].as_str().unwrap_or("");
-        
+
         // Try to parse as JSON first, fallback to treating as plain text
-        let (learned, refined, reason) = if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(response_text) {
-            (
-                parsed["learned"].as_bool().unwrap_or(false),
-                parsed["refined"].as_str().unwrap_or(response).to_string(),
-                parsed["reason"].as_str().unwrap_or("No reason").to_string(),
-            )
-        } else {
-            // Fallback: treat as plain text refinement
-            (false, response_text.to_string(), "Plain text response".to_string())
-        };
+        let (learned, refined, reason) =
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(response_text) {
+                (
+                    parsed["learned"].as_bool().unwrap_or(false),
+                    parsed["refined"].as_str().unwrap_or(response).to_string(),
+                    parsed["reason"].as_str().unwrap_or("No reason").to_string(),
+                )
+            } else {
+                // Fallback: treat as plain text refinement
+                (
+                    false,
+                    response_text.to_string(),
+                    "Plain text response".to_string(),
+                )
+            };
 
         info!(
             "Qwen curator refined: learned={}, refined len={}, reason={}",
@@ -191,5 +224,16 @@ impl Curator {
     pub async fn refine_response(&self, _input: &str, output: &str) -> Result<String> {
         let (refined, _learned) = self.refine(output, 0.5, 0.5, 0.5).await?;
         Ok(refined)
+    }
+}
+
+impl Curator {
+    fn mock_curated(&self, experience: &Experience, elapsed_ms: f64) -> CuratedResponse {
+        CuratedResponse {
+            refined_response: experience.output.clone(),
+            learned: false,
+            reason: "curator mock mode".to_string(),
+            processing_time_ms: elapsed_ms,
+        }
     }
 }

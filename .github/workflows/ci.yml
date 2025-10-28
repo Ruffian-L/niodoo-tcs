@@ -1,4 +1,4 @@
-name: tcs-ml CI
+name: niodoo-ci
 
 on:
   push:
@@ -12,8 +12,11 @@ env:
   QWEN_MODEL_PATH: ${{ github.workspace }}/models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx
 
 jobs:
-  build-and-test:
+  rust:
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        rust: [stable]
 
     steps:
       - name: Checkout repository
@@ -25,7 +28,10 @@ jobs:
           sudo apt-get install -y libonig-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
 
       - name: Cache cargo builds
         uses: actions/cache@v4
@@ -50,15 +56,20 @@ jobs:
         run: |
           mkdir -p models/qwen2.5-coder-0.5b-instruct-onnx/onnx
           cd models/qwen2.5-coder-0.5b-instruct-onnx
-          # Download model and tokenizer from HuggingFace
           wget -q https://huggingface.co/onnx-community/Qwen2.5-Coder-0.5B-Instruct/resolve/main/onnx/model_quantized.onnx -O onnx/model_quantized.onnx
           wget -q https://huggingface.co/onnx-community/Qwen2.5-Coder-0.5B-Instruct/resolve/main/tokenizer.json -O tokenizer.json
 
       - name: Configure ONNX Runtime path
         run: echo "LD_LIBRARY_PATH=${{ github.workspace }}/third_party/onnxruntime-linux-x64-1.18.1/lib:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
 
-      - name: Cargo check (onnx feature)
-        run: cargo check -p tcs-ml --lib --features onnx
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
 
-      - name: Run stateful embedder smoke test
-        run: cargo run -p tcs-ml --bin test_qwen_stateful --features onnx-with-tokenizers
+      - name: cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --all-features
+
+      - name: Möbius prompt smoke test
+        run: cargo test -p niodoo_real_integrated --test integration mobius_prompt_smoke -- --exact --nocapture

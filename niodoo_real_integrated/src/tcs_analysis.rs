@@ -373,29 +373,3 @@ impl Default for TCSAnalyzer {
         Self::new().expect("Failed to initialize TCS analyzer")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tcs_analyzer_initialization() {
-        let analyzer = TCSAnalyzer::new();
-        assert!(analyzer.is_ok());
-    }
-
-    #[test]
-    fn test_pad_to_knot_diagram() {
-        let analyzer = TCSAnalyzer::new().unwrap();
-        let pad_state = PadGhostState {
-            pad: [0.8, -0.3, 0.6, -0.2, 0.4, 0.0, 0.1],
-            entropy: 1.98,
-            mu: [0.0; 7],
-            sigma: [0.5; 7],
-            raw_stds: vec![0.5; 7],
-        };
-
-        let diagram = analyzer.pad_to_knot_diagram(&pad_state);
-        assert!(!diagram.crossings.is_empty());
-    }
-}

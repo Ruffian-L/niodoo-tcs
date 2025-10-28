@@ -15,4 +15,5 @@ rayon = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tcs-core = { path = "../tcs-core" }
 phlite = "0.1.0"

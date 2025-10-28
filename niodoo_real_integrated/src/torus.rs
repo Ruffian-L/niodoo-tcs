@@ -1,7 +1,7 @@
 use anyhow::Result;
 use nalgebra::SVector;
-use rand::thread_rng;
 use rand::Rng;
+use rand::{rngs::StdRng, SeedableRng};
 use tracing::{debug, instrument};
 
 use crate::util::shannon_entropy;
@@ -16,21 +16,15 @@ pub struct PadGhostState {
 }
 
 /// Differentiable torus projection approximated by a light-weight VAE head.
-/// Thread-safe: Uses thread-local RNG instead of owned StdRng
+/// Deterministic: Uses an owned, seeded StdRng
 pub struct TorusPadMapper {
-    seed: u64,
+    rng: StdRng,
 }
 
 impl TorusPadMapper {
     pub fn new(seed: u64) -> Self {
-        Self { seed }
-    }
-
-    pub fn from_entropy() -> Self {
-        use rand::RngCore;
-        let mut rng = thread_rng();
         Self {
-            seed: rng.next_u64(),
+            rng: StdRng::seed_from_u64(seed),
         }
     }
 
@@ -90,11 +84,9 @@ impl TorusPadMapper {
             sigma[i] = scaled.max(dynamic_floor);
         }
 
-        // Use thread-local RNG for thread safety
-        let mut rng = thread_rng();
         let mut pad = [0.0f64; 7];
         for dim in 0..7 {
-            let eps = rng.sample::<f64, _>(rand_distr::StandardNormal);
+            let eps = self.rng.sample::<f64, _>(rand_distr::StandardNormal);
             pad[dim] = mu[dim] + sigma[dim] * eps;
             ghosts[dim] = (embedding[64 + dim] as f64).sin();
         }

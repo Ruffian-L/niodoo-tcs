@@ -1,5 +1,2 @@
-pub mod synthetic;
 pub mod metrics;
-
-
-
+pub mod synthetic;

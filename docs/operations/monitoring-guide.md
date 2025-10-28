@@ -124,6 +124,23 @@ This operations manual provides comprehensive guidance for monitoring, maintaini
 }
 ```
 
+## ✨ Kid Explorer Dashboard
+
+For curious co-pilots (ages 5+) we ship a prebuilt Grafana view that mirrors the production metrics with friendlier visuals.
+
+- **Location**: `http://localhost:3000/d/simple`
+- **Panels**:
+  - *AI Happiness (Entropy)* — stat gauge with red/yellow/green thresholds and a tooltip explaining mood swings.
+  - *Prompt Adventure Types* — pie chart of prompt tribes with hover text.
+  - *RAG Speedometer* — gauge describing librarian speed.
+  - *Memory Tree Growth* — gauge showing memory forest size.
+  - *Learning Spark* — stat for entropy delta.
+  - *Story Log* — live log stream sourced from the kid overlay scrape job.
+- **Provisioning**: packaged in `grafana-dashboard-simple.json`, auto-loaded via `grafana-provisioning/`.
+- **Prometheus job**: `niodoo-kid-overlay` scraping `host.docker.internal:9092` every 5s for overlay metrics and annotated log lines.
+
+Tooltips keep the core terms (entropy, RAG, topology) while providing plain-language descriptions so young explorers can follow along without diluting the science.
+
 ## 🔍 Health Checks
 
 ### Automated Health Monitoring

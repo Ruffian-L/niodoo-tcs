@@ -13,7 +13,10 @@ struct Args {
     num_prompts: usize,
     #[arg(long, default_value_t = 42)]
     seed: u64,
-    #[arg(long, default_value = "/workspace/Niodoo-Final/results/topology_eval.csv")]
+    #[arg(
+        long,
+        default_value = "/workspace/Niodoo-Final/results/topology_eval.csv"
+    )]
     out: String,
     /// Modes: erag, erag+lora, full
     #[arg(long, num_args = 1.., value_delimiter = ' ')]
@@ -43,7 +46,10 @@ async fn main() -> Result<()> {
 
     for mode in args.modes.iter() {
         // Configure ablation toggles via env vars used internally BEFORE init
-        std::env::set_var("ENABLE_CURATOR", if mode == "erag" { "false" } else { "true" });
+        std::env::set_var(
+            "ENABLE_CURATOR",
+            if mode == "erag" { "false" } else { "true" },
+        );
         std::env::set_var(
             "ENABLE_CONSISTENCY_VOTING",
             if mode == "full" { "true" } else { "false" },
@@ -95,5 +101,3 @@ async fn main() -> Result<()> {
     println!("Wrote {}", args.out);
     Ok(())
 }
-
-

@@ -1,10 +1,14 @@
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
+use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
 use csv::WriterBuilder;
+use futures::future::{join_all, BoxFuture};
+use rayon::prelude::*;
 use serde::Serialize;
+use tokio::sync::Mutex as AsyncMutex;
 use tracing::info;
 use tracing_subscriber::{
     filter::FilterFn,
@@ -38,24 +42,69 @@ async fn main() -> Result<()> {
     tcs_core::metrics::init_metrics();
 
     let args = CliArgs::parse();
+    if let Some(seed) = args.rng_seed_override {
+        std::env::set_var("RNG_SEED", seed.to_string());
+    }
     // Load env files early so RuntimeConfig can pick up `.env.production` or `.env`
     niodoo_real_integrated::config::prime_environment();
     niodoo_real_integrated::config::init();
     init_tracing();
 
-    let mut pipeline = Pipeline::initialise(args.clone()).await?;
+    // Seed RNG from env in main and pass into pipeline
+    let seed = std::env::var("RNG_SEED")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(42);
+    let mut pipeline = Pipeline::initialise_with_seed(args.clone(), seed).await?;
     let prompts = collect_prompts(&args, &pipeline)?;
+    let prompt_count = prompts.len();
 
     info!(
-        count = prompts.len(),
+        count = prompt_count,
         "processing prompts through NIODOO pipeline"
     );
 
-    let mut cycles = Vec::new();
-    for prompt in prompts {
-        let cycle = pipeline.process_prompt(&prompt.text).await?;
-        cycles.push(cycle);
-    }
+    let cycles = if args.swarm > 1 {
+        let mut shared = Vec::with_capacity(args.swarm);
+        shared.push(Arc::new(AsyncMutex::new(pipeline)));
+        for offset in 1..args.swarm {
+            let extra_seed = seed.wrapping_add(offset as u64);
+            let extra = Pipeline::initialise_with_seed(args.clone(), extra_seed).await?;
+            shared.push(Arc::new(AsyncMutex::new(extra)));
+        }
+        let pipelines = Arc::new(shared);
+        let pipelines_len = pipelines.len();
+
+        let tasks: Vec<BoxFuture<'static, anyhow::Result<(usize, PipelineCycle)>>> = prompts
+            .into_par_iter()
+            .enumerate()
+            .map(|(idx, prompt)| {
+                let pipelines = pipelines.clone();
+                Box::pin(async move {
+                    let slot = idx % pipelines_len;
+                    let pipeline = pipelines[slot].clone();
+                    let mut guard = pipeline.lock().await;
+                    let cycle = guard.process_prompt(&prompt.text).await?;
+                    Ok::<(usize, PipelineCycle), anyhow::Error>((idx, cycle))
+                }) as BoxFuture<'static, anyhow::Result<(usize, PipelineCycle)>>
+            })
+            .collect();
+
+        let mut indexed = Vec::with_capacity(prompt_count);
+        for result in join_all(tasks).await {
+            let (idx, cycle) = result?;
+            indexed.push((idx, cycle));
+        }
+        indexed.sort_by_key(|(idx, _)| *idx);
+        indexed.into_iter().map(|(_, cycle)| cycle).collect()
+    } else {
+        let mut sequential_cycles = Vec::with_capacity(prompt_count);
+        for prompt in prompts {
+            let cycle = pipeline.process_prompt(&prompt.text).await?;
+            sequential_cycles.push(cycle);
+        }
+        sequential_cycles
+    };
 
     match args.output {
         OutputFormat::Csv => emit_csv(&cycles)?,
@@ -97,33 +146,49 @@ fn collect_prompts(
     args: &CliArgs,
     pipeline: &Pipeline,
 ) -> Result<Vec<niodoo_real_integrated::data::RutPrompt>> {
-    if let Some(ref prompt) = args.prompt {
-        return Ok(vec![niodoo_real_integrated::data::RutPrompt {
+    let base_prompts = if let Some(ref prompt) = args.prompt {
+        vec![niodoo_real_integrated::data::RutPrompt {
             index: 0,
             category: niodoo_real_integrated::data::RutCategory::Wildcard,
             text: prompt.clone(),
-        }]);
-    }
-
-    if let Some(ref path) = args.prompt_file {
+        }]
+    } else if let Some(ref path) = args.prompt_file {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let mut prompts = Vec::new();
-        for (idx, line) in reader.lines().enumerate() {
+        for line in reader.lines() {
             let text = line?;
             if text.trim().is_empty() {
                 continue;
             }
             prompts.push(niodoo_real_integrated::data::RutPrompt {
-                index: idx + 1,
+                index: 0,
                 category: niodoo_real_integrated::data::RutCategory::Wildcard,
                 text,
             });
         }
-        return Ok(prompts);
+        prompts
+    } else {
+        pipeline.rut_prompts()
+    };
+
+    let iterations = args.iterations.max(1);
+    let mut expanded = Vec::with_capacity(base_prompts.len() * iterations);
+    for prompt in base_prompts {
+        for _ in 0..iterations {
+            expanded.push(niodoo_real_integrated::data::RutPrompt {
+                index: 0,
+                category: prompt.category,
+                text: prompt.text.clone(),
+            });
+        }
     }
 
-    Ok(pipeline.rut_prompts())
+    for (idx, prompt) in expanded.iter_mut().enumerate() {
+        prompt.index = idx + 1;
+    }
+
+    Ok(expanded)
 }
 
 fn emit_csv(cycles: &[PipelineCycle]) -> Result<()> {

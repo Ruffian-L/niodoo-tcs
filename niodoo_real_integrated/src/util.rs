@@ -1,8 +1,5 @@
 use std::collections::HashSet;
 
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
-
 /// Compute Shannon entropy (base e) for a slice of probabilities.
 pub fn shannon_entropy(probs: &[f64]) -> f64 {
     let mut entropy = 0.0;
@@ -58,37 +55,12 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// ROUGE-L score between two strings.
-/// Uses PyO3 bridge to rouge-score library if available, falls back to native Rust impl.
+/// Native Rust implementation.
 pub fn rouge_l(candidate: &str, reference: &str) -> f64 {
-    // Try Python rouge-score first for accuracy
-    #[cfg(feature = "pyo3")]
-    {
-        if let Ok(score) = rouge_l_py(candidate, reference) {
-            return score;
-        }
-    }
-
-    // Fallback to native Rust implementation
     rouge_l_native(candidate, reference)
 }
 
-/// Python bridge for ROUGE-L using rouge-score library via PyO3
-#[cfg(feature = "pyo3")]
-fn rouge_l_py(candidate: &str, reference: &str) -> PyResult<f64> {
-    Python::with_gil(|py| {
-        let module = py.import_bound("rouge_score.rouge_scorer")?;
-        let scorer_class = module.getattr("RougeScorer")?;
-        let scorer = scorer_class.call1((vec!["rougeL"], Some("f")))?;
-
-        let scores = scorer.call_method1("score", (reference, candidate))?;
-        let rouge_dict = scores.downcast::<pyo3::types::PyDict>()?;
-        let rouge_l = rouge_dict.get_item("rougeL")?.unwrap();
-        let fmeasure = rouge_l.getattr("fmeasure")?;
-        fmeasure.extract::<f64>()
-    })
-}
-
-/// Native Rust implementation of ROUGE-L (fallback)
+/// Native Rust implementation of ROUGE-L
 fn rouge_l_native(candidate: &str, reference: &str) -> f64 {
     let cand_tokens: Vec<&str> = candidate.split_whitespace().collect();
     let ref_tokens: Vec<&str> = reference.split_whitespace().collect();

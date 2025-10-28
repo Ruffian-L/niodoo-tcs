@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use once_cell::sync::OnceCell;
 use reqwest::StatusCode;
 use serde::Deserialize;
@@ -16,6 +16,7 @@ pub struct QwenStatefulEmbedder {
     expected_dim: usize,
     max_chunk_chars: usize,
     concurrency_limiter: Arc<Semaphore>,
+    mock_mode: bool,
 }
 
 #[derive(Deserialize)]
@@ -68,11 +69,22 @@ impl QwenStatefulEmbedder {
             expected_dim,
             max_chunk_chars: chunk_limit,
             concurrency_limiter: semaphore,
+            mock_mode: false,
         })
+    }
+
+    pub fn set_mock_mode(&mut self, mock_mode: bool) {
+        if mock_mode && !self.mock_mode {
+            warn!("Embedding mock mode enabled; returning zero vectors");
+        }
+        self.mock_mode = mock_mode;
     }
 
     #[instrument(skip_all, fields(chars = prompt.len()))]
     pub async fn embed(&self, prompt: &str) -> Result<Vec<f32>> {
+        if self.mock_mode {
+            return Ok(vec![0.0; self.expected_dim]);
+        }
         let chunks = chunk_text(prompt, self.max_chunk_chars);
         let chunk_count = chunks.len();
         if chunk_count > 1 {
@@ -129,6 +141,9 @@ impl QwenStatefulEmbedder {
     }
 
     async fn fetch_embedding(&self, prompt: &str) -> Result<Vec<f32>> {
+        if self.mock_mode {
+            return Ok(vec![0.0; self.expected_dim]);
+        }
         let permit = self
             .concurrency_limiter
             .clone()
@@ -161,17 +176,25 @@ impl QwenStatefulEmbedder {
                     model = %self.model,
                     "Ollama down—run 'ollama serve && ollama pull qwen2:0.5b'"
                 );
-                return Err(anyhow!(
+                anyhow::ensure!(
+                    self.mock_mode,
                     "Ollama missing model {}; run 'ollama serve && ollama pull qwen2:0.5b'",
                     self.model
-                ));
+                );
+                warn!("Embedding mock fallback engaged after 404");
+                return Ok(vec![0.0; self.expected_dim]);
             }
 
             error!(%status, body = %body, "Ollama embeddings request failed");
-            return Err(anyhow!(
-                "Ollama embeddings request failed: status={}, body={body}",
+            anyhow::ensure!(
+                self.mock_mode,
+                "Ollama embeddings request failed: status={status}, body={body}"
+            );
+            warn!(
+                "Embedding mock fallback engaged after error status {}",
                 status
-            ));
+            );
+            return Ok(vec![0.0; self.expected_dim]);
         }
 
         let response_body: OllamaEmbeddingResponse = response

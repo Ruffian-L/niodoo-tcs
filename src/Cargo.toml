@@ -316,9 +316,9 @@ path = "bin/cuda_test.rs"
 name = "geometry_demo"
 path = "geometry_demo.rs"
 
-[[bin]]
-name = "test_integration"
-path = "../tests/bin_test_integration.rs"
+# [[bin]]
+# name = "test_integration"
+# path = "../tests/bin_test_integration.rs"
 
 # NOTE: embed_codebase binary is defined in embeddings-system/Cargo.toml
 # It belongs to the embeddings-system workspace member, not the main src package

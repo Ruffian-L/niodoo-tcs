@@ -89,8 +89,10 @@ impl PipelinePool {
                 prompt: None,
                 prompt_file: None,
                 swarm: 1,
+                iterations: 1,
                 output: OutputFormat::Csv,
                 config: None,
+                rng_seed_override: None,
             };
 
             let pipeline = Pipeline::initialise(args)

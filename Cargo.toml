@@ -47,13 +47,13 @@ resolver = "2"
 [workspace.package]
 authors = ["NiodO.o Topology Team <niodoo@dev>"]
 edition = "2021"
-license = "MIT"
+license-file = "LICENSE"
 repository = "https://github.com/Ruffian-L/niodoo-tcs"
 version = "0.1.0"
 
 # Core dependencies shared across workspace
 [workspace.dependencies]
-# Core tensor and inference libraries (ORT preferred over Candle for CUDA stability)
+# Core tensor and inference libraries (ORT CPU-only, Candle CPU-only)
 ndarray = { version = "0.15", features = ["rayon", "blas", "serde"] }
 ndarray-linalg = { version = "0.16", features = ["openblas-system"] }
 ort = { version = "1.16", default-features = false, features = ["load-dynamic", "half"] }
@@ -61,10 +61,10 @@ tokenizers = { version = "0.15", default-features = false, features = ["http", "
 onig = { version = "6.5" }
 hf-hub = "0.3"
 
-# Candle framework for ML operations
-candle-core = { version = "0.8" }
-candle-nn = { version = "0.8" }
-candle-transformers = { version = "0.8" }
+# Candle framework for ML operations (CPU-only)
+candle-core = { version = "0.8", default-features = false }
+candle-nn = { version = "0.8", default-features = false }
+candle-transformers = { version = "0.8", default-features = false }
 
 # Async & concurrency
 tokio = { version = "1", features = ["full"] }
@@ -98,6 +98,8 @@ rand = "0.8"
 rand_chacha = "0.3"
 rand_distr = "0.4"
 clap = { version = "4.5", features = ["derive"] }
+regex = "1.10"
+prost = "0.12"
 
 # Data structures & serialization - UPDATED
 serde = { version = "1.0", features = ["derive"] }

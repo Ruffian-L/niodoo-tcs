@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use rand::prelude::*;
 use rayon::prelude::*;
+use parking_lot::RwLock;
 use tracing::{info, warn};
 
 use crate::compass::CompassOutcome;
@@ -15,6 +16,7 @@ use crate::tcs_analysis::TopologicalSignature;
 use crate::tcs_predictor::TcsPredictor;
 use crate::token_manager::DynamicTokenizerManager;
 use crate::torus::PadGhostState;
+use tcs_ml::InferenceModelBackend;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -23,6 +25,18 @@ pub struct LearningOutcome {
     pub qlora_updates: Vec<String>,
     pub entropy_delta: f64,
     pub adjusted_params: HashMap<String, f64>, // e.g., "temperature" => 0.8
+}
+
+impl Default for LearningOutcome {
+    fn default() -> Self {
+        Self {
+            events: Vec::new(),
+            breakthroughs: Vec::new(),
+            qlora_updates: Vec::new(),
+            entropy_delta: 0.0,
+            adjusted_params: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -103,7 +117,7 @@ pub struct LearningLoop {
     window: usize,
     breakthrough_threshold: f64,
     replay_buffer: VecDeque<ReplayTuple>,
-    q_table: HashMap<String, HashMap<String, f64>>, // state_key -> (action_key -> q_value)
+    q_table: Arc<RwLock<HashMap<String, HashMap<String, f64>>>>, // state_key -> (action_key -> q_value)
     action_space: Vec<DqnAction>,
     epsilon: f64,
     gamma: f64, // discount
@@ -123,6 +137,8 @@ pub struct LearningLoop {
     curated_buffer: Vec<CuratedSample>,
     lora_epochs: usize,
     lora_rank: usize,
+    ml_backend: Option<InferenceModelBackend>,
+    rng: rand::rngs::StdRng,
 }
 
 impl LearningLoop {
@@ -135,6 +151,7 @@ impl LearningLoop {
         erag: Arc<EragClient>,
         config: Arc<Mutex<RuntimeConfig>>,
         tokenizer: Arc<DynamicTokenizerManager>,
+        rng_seed: u64,
     ) -> Self {
         let action_space: Vec<DqnAction> = {
             let guard = config.lock().unwrap();
@@ -171,12 +188,49 @@ impl LearningLoop {
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(8);
 
+        let ml_backend = match std::env::var("TCS_MODEL_PATH") {
+            Ok(path) => {
+                let trimmed_path = path.trim();
+                if trimmed_path.is_empty() {
+                    None
+                } else {
+                    match InferenceModelBackend::new("tcs-learning") {
+                        Ok(backend) => match backend.load(trimmed_path) {
+                            Ok(_) => {
+                                info!(
+                                    path = trimmed_path,
+                                    "Loaded TCS ONNX model for learning loop backend"
+                                );
+                                Some(backend)
+                            }
+                            Err(error) => {
+                                warn!(
+                                    path = trimmed_path,
+                                    %error,
+                                    "Failed to load TCS ONNX model; continuing without backend"
+                                );
+                                None
+                            }
+                        },
+                        Err(error) => {
+                            warn!(
+                                %error,
+                                "Failed to construct TCS ONNX backend; continuing without backend"
+                            );
+                            None
+                        }
+                    }
+                }
+            }
+            Err(_) => None,
+        };
+
         Self {
             entropy_history: VecDeque::with_capacity(window),
             window,
             breakthrough_threshold,
             replay_buffer: VecDeque::new(),
-            q_table: HashMap::new(),
+            q_table: Arc::new(RwLock::new(HashMap::new())),
             action_space,
             epsilon,
             gamma,
@@ -196,6 +250,8 @@ impl LearningLoop {
             curated_buffer: Vec::new(),
             lora_epochs,
             lora_rank,
+            ml_backend,
+            rng: rand::rngs::StdRng::seed_from_u64(rng_seed),
         }
     }
 
@@ -390,8 +446,7 @@ impl LearningLoop {
             guard.qdrant_vector_dim
         };
 
-        let mut rng = rand::thread_rng();
-        let synthetic_reward: f64 = rng.gen_range(0.05..0.15);
+        let synthetic_reward: f64 = self.rng.gen_range(0.05..0.15);
         let total_reward = reward + synthetic_reward;
 
         info!("Curated memory added to LoRA buffer");
@@ -476,7 +531,10 @@ impl LearningLoop {
             );
         }
 
-        if std::env::var("DISABLE_LORA").map(|v| matches!(v.as_str(), "1" | "true" | "TRUE")).unwrap_or(false) {
+        if std::env::var("DISABLE_LORA")
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+            .unwrap_or(false)
+        {
             info!("LoRA training disabled via DISABLE_LORA");
             self.curated_buffer.clear();
             return Ok(());
@@ -534,13 +592,13 @@ impl LearningLoop {
         base - (penalty * weight) + conv_bonus + novelty_bonus
     }
 
-    fn choose_action(&self, state: &DqnState) -> DqnAction {
-        let mut rng = thread_rng();
-        if rng.gen::<f64>() < self.epsilon {
-            self.action_space.choose(&mut rng).cloned().unwrap()
+    fn choose_action(&mut self, state: &DqnState) -> DqnAction {
+        if self.rng.gen::<f64>() < self.epsilon {
+            self.action_space.choose(&mut self.rng).cloned().unwrap()
         } else {
             let s_key = state.to_key();
-            let q_values = self.q_table.get(&s_key);
+            let table = self.q_table.read();
+            let q_values = table.get(&s_key);
             if let Some(qs) = q_values {
                 let max_key = qs
                     .iter()
@@ -591,31 +649,36 @@ impl LearningLoop {
         }
 
         // Sample random batch for learning
-        let mut rng = thread_rng();
         let batch_size = 32.min(self.replay_buffer.len());
         // Convert VecDeque to Vec for sampling
         let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
         let batch: Vec<_> = (0..batch_size)
-            .map(|_| buffer_vec.choose(&mut rng).cloned().unwrap())
+            .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
             .collect();
 
-        for tuple in batch {
-            let s_key = tuple.state.to_key();
-            let a_key = tuple.action.to_key();
+        let q_table = Arc::clone(&self.q_table);
+        let alpha = self.alpha;
+        let gamma = self.gamma;
 
-            // Compute max_next_q first (immutable borrow)
-            let next_qs = self.q_table.get(&tuple.next_state.to_key());
-            let max_next_q = next_qs
-                .map(|qs| qs.values().cloned().fold(f64::NEG_INFINITY, f64::max))
-                .unwrap_or(0.0);
+        tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            let mut table = q_table.write();
+            for tuple in batch {
+                let s_key = tuple.state.to_key();
+                let a_key = tuple.action.to_key();
+                let max_next_q = table
+                    .get(&tuple.next_state.to_key())
+                    .map(|qs| qs.values().cloned().fold(f64::NEG_INFINITY, f64::max))
+                    .unwrap_or(0.0);
 
-            // Now get mutable access and update
-            let qs = self.q_table.entry(s_key).or_insert_with(HashMap::new);
-            let current_q = *qs.entry(a_key.clone()).or_insert(0.0);
-            let new_q =
-                current_q + self.alpha * (tuple.reward + self.gamma * max_next_q - current_q);
-            qs.insert(a_key, new_q);
-        }
+                let entry = table.entry(s_key).or_insert_with(HashMap::new);
+                let current_q = entry.get(&a_key).copied().unwrap_or(0.0);
+                let updated =
+                    current_q + alpha * (tuple.reward + gamma * max_next_q - current_q);
+                entry.insert(a_key, updated);
+            }
+            Ok(())
+        })
+        .await??;
 
         Ok(())
     }
@@ -658,17 +721,15 @@ impl LearningLoop {
             }
             #[cfg(test)]
             {
-                let mut rng = thread_rng();
                 let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
                 (0..batch_size.min(buffer_vec.len()))
-                    .map(|_| buffer_vec.choose(&mut rng).cloned().unwrap())
+                    .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
                     .collect()
             }
         } else {
-            let mut rng = thread_rng();
             let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
             (0..batch_size.min(buffer_vec.len()))
-                .map(|_| buffer_vec.choose(&mut rng).cloned().unwrap())
+                .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
                 .collect()
         };
 
@@ -769,7 +830,10 @@ impl LearningLoop {
             }
 
             // Step 3: Train LoRA adapter on topological data
-            if std::env::var("DISABLE_LORA").map(|v| matches!(v.as_str(), "1" | "true" | "TRUE")).unwrap_or(false) {
+            if std::env::var("DISABLE_LORA")
+                .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+                .unwrap_or(false)
+            {
                 info!("QLoRA fine-tuning disabled via DISABLE_LORA");
                 return Ok(());
             }
@@ -993,7 +1057,10 @@ impl LearningLoop {
                 return;
             }
 
-            if std::env::var("DISABLE_LORA").map(|v| matches!(v.as_str(), "1" | "true" | "TRUE")).unwrap_or(false) {
+            if std::env::var("DISABLE_LORA")
+                .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+                .unwrap_or(false)
+            {
                 info!("LoRA fine-tuning disabled via DISABLE_LORA");
                 return;
             }

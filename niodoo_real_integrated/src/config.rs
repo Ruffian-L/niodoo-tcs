@@ -107,6 +107,10 @@ pub struct CliArgs {
     #[arg(short, long, default_value_t = 1)]
     pub swarm: usize,
 
+    /// Repeat a single prompt this many times (sequentially) for stability runs.
+    #[arg(long, default_value_t = 1)]
+    pub iterations: usize,
+
     /// Output format for results: csv or json.
     #[arg(short, long, default_value = "csv")]
     pub output: OutputFormat,
@@ -118,6 +122,10 @@ pub struct CliArgs {
     /// Optional explicit config file (YAML) overriding env defaults.
     #[arg(long)]
     pub config: Option<String>,
+
+    /// Optional RNG seed override for deterministic runs (overrides env RNG_SEED)
+    #[arg(long = "rng-seed-override")]
+    pub rng_seed_override: Option<u64>,
 }
 
 impl Default for CliArgs {
@@ -126,9 +134,11 @@ impl Default for CliArgs {
             prompt: None,
             prompt_file: None,
             swarm: 1,
+            iterations: 1,
             output: OutputFormat::Csv,
             hardware: HardwareProfile::Beelink,
             config: None,
+            rng_seed_override: None,
         }
     }
 }
@@ -375,6 +385,8 @@ pub struct RuntimeConfig {
     pub entropy_cycles_for_baseline: usize,
     #[serde(default)]
     pub enable_consistency_voting: bool,
+    #[serde(default)]
+    pub mock_mode: bool,
 
     // Phase 2 retry configuration
     #[serde(default = "default_max_retries")]
@@ -609,6 +621,19 @@ impl RuntimeConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(false);
 
+        let mock_mode = env_with_fallback(&["MOCK_MODE"])
+            .map(|value| {
+                matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false);
+
+        if mock_mode {
+            warn!("MOCK_MODE enabled; external services will return stubbed responses");
+        }
+
         let generation_backend = BackendType::from_env();
 
         let enable_curator = env_with_fallback(&["ENABLE_CURATOR"])
@@ -774,6 +799,7 @@ impl RuntimeConfig {
             rut_gauntlet_path,
             entropy_cycles_for_baseline,
             enable_consistency_voting,
+            mock_mode,
             phase2_max_retries,
             phase2_retry_base_delay_ms,
             similarity_threshold,
@@ -850,6 +876,7 @@ pub struct CuratorConfig {
     pub max_tokens: usize,
     pub assessment_prompt_template: String,
     pub parse_mode: crate::curator_parser::ParserMode,
+    pub mock_mode: bool,
     // Heuristic parser configuration
     pub heuristic_max_length: usize,
     pub heuristic_optimal_entropy_low: f64,
@@ -876,6 +903,7 @@ impl CuratorConfig {
             max_tokens: config.curator_max_tokens,
             assessment_prompt_template: config.assessment_prompt_template.clone(),
             parse_mode: crate::curator_parser::ParserMode::from_env(),
+            mock_mode: config.mock_mode,
             // Heuristic parser defaults (configurable via env if needed)
             heuristic_max_length: env_with_fallback(&["CURATOR_HEURISTIC_MAX_LENGTH"])
                 .and_then(|v| v.parse().ok())

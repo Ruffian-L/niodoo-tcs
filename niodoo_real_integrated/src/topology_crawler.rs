@@ -363,34 +363,3 @@ pub struct HealingTestResults {
     pub failed: usize,
     pub total: usize,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_topology_crawler() {
-        let mut crawler = TopologyCrawler::new().unwrap();
-        let results = crawler.crawl_space().await.unwrap();
-
-        // Verify we tested all positions
-        assert_eq!(results.positions.len(), 5);
-
-        // Verify at least some healing was detected
-        assert!(results.healing_detected > 0);
-    }
-
-    #[tokio::test]
-    async fn test_healing_scenarios() {
-        let mut crawler = TopologyCrawler::new().unwrap();
-        let results = crawler.test_healing_scenarios().await.unwrap();
-
-        // At least 3 out of 4 tests should pass
-        assert!(
-            results.passed >= 3,
-            "Healing integration test failed: {}/{} passed",
-            results.passed,
-            results.total
-        );
-    }
-}

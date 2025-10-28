@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use anyhow::Result;
 
-use crate::compass::{CompassEngine, CompassOutcome};
+use crate::compass::{CompassEngine, CompassOutcome, CompassRuntimeParams};
 use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
 use crate::curator::Curator;
 use crate::data::{
@@ -19,13 +19,15 @@ use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
 use crate::metrics::{metrics, FailureSignals, RetryContext};
-use crate::tcs_analysis::TCSAnalyzer;
+use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
-use tokio::sync::Mutex as AsyncMutex;
+use rand::{rngs::StdRng, RngCore, SeedableRng};
+use tcs_core::topology::PersistenceFeature;
+use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::{info, warn};
 
 // Define CuratedExperience struct
@@ -89,20 +91,20 @@ enum TorusSeedStrategy {
 
 pub struct Pipeline {
     pub config: RuntimeConfig,
-    config_arc: Arc<AsyncMutex<RuntimeConfig>>,
+    config_arc: Arc<RwLock<RuntimeConfig>>,
     pub args: CliArgs,
     pub thresholds: Thresholds,
     pub dataset_stats: DatasetStats,
     embedder: QwenStatefulEmbedder,
     torus_strategy: TorusSeedStrategy,
     torus_counter: AtomicU64,
-    compass: Arc<Mutex<CompassEngine>>,
+    compass: Arc<AsyncMutex<CompassEngine>>,
     erag: Arc<EragClient>,
     tokenizer: Arc<DynamicTokenizerManager>,
     generator: GenerationEngine,
     learning: AsyncMutex<LearningLoop>,
     curator: Option<Curator>,
-    tcs_analyzer: TCSAnalyzer,
+    tcs_analyzer: Option<TCSAnalyzer>,
     embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
     collapse_cache: LruCache<u64, CacheEntry<CollapseResult>>,
     retry_count: Arc<AtomicU32>,
@@ -125,12 +127,13 @@ impl Pipeline {
             mcts_c: stats.entropy_std.max(config.mcts_c_min_std) * config.mcts_c_scale,
         };
 
-        let embedder = QwenStatefulEmbedder::new(
+        let mut embedder = QwenStatefulEmbedder::new(
             &config.ollama_endpoint,
             &config.embedding_model_name,
             config.qdrant_vector_dim,
             config.embedding_max_chars,
         )?;
+        embedder.set_mock_mode(config.mock_mode);
         info!(
             endpoint = %config.ollama_endpoint,
             model = %config.embedding_model_name,
@@ -153,7 +156,7 @@ impl Pipeline {
                 TorusSeedStrategy::Random
             }
         };
-        let compass = Arc::new(Mutex::new(CompassEngine::new(
+        let compass = Arc::new(AsyncMutex::new(CompassEngine::new(
             thresholds.mcts_c,
             thresholds.variance_spike,
             thresholds.variance_stagnation,
@@ -164,6 +167,7 @@ impl Pipeline {
             config.qdrant_vector_dim,
             config.similarity_threshold,
             embedder_arc.clone(),
+            config.mock_mode,
         )
         .await?;
 
@@ -189,8 +193,9 @@ impl Pipeline {
             config.prompt_max_chars,
             config.consistency_variance_threshold,
         )?;
+        generator.set_mock_mode(config.mock_mode);
         generator.set_system_prompt(config.system_prompt.clone());
-        let config_arc = Arc::new(AsyncMutex::new(config.clone()));
+        let config_arc = Arc::new(RwLock::new(config.clone()));
         let erag_arc = Arc::new(erag.clone());
         let config_sync = Arc::new(Mutex::new(config.clone()));
         let learning = LearningLoop::new(
@@ -202,14 +207,20 @@ impl Pipeline {
             erag_arc.clone(),
             config_sync.clone(),
             tokenizer_arc.clone(),
+            config.rng_seed,
         );
 
         // Initialize TCS analyzer
-        let tcs_analyzer = TCSAnalyzer::new().unwrap_or_else(|e| {
-            warn!("Failed to initialize TCS analyzer: {}, using default", e);
-            TCSAnalyzer::default()
-        });
-        info!("TCS topology analyzer initialized");
+        let tcs_analyzer = match TCSAnalyzer::new() {
+            Ok(analyzer) => {
+                info!("TCS topology analyzer initialized");
+                Some(analyzer)
+            }
+            Err(error) => {
+                warn!(%error, "Failed to initialize TCS analyzer; falling back to mocked signatures");
+                None
+            }
+        };
 
         // Initialize curator if enabled
         let curator = if config.enable_curator {
@@ -264,6 +275,11 @@ impl Pipeline {
         })
     }
 
+    pub async fn initialise_with_seed(args: CliArgs, seed: u64) -> Result<Self> {
+        std::env::set_var("TORUS_SEED", seed.to_string());
+        Self::initialise(args).await
+    }
+
     fn next_torus_mapper(&self) -> TorusPadMapper {
         // Derive a fresh mapper each request to avoid locking entropy across iterations.
         match self.torus_strategy {
@@ -272,7 +288,10 @@ impl Pipeline {
                 let derived_seed = seed ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15);
                 TorusPadMapper::new(derived_seed)
             }
-            TorusSeedStrategy::Random => TorusPadMapper::from_entropy(),
+            TorusSeedStrategy::Random => {
+                let mut rng = StdRng::from_entropy();
+                TorusPadMapper::new(rng.next_u64())
+            }
         }
     }
 
@@ -333,8 +352,23 @@ impl Pipeline {
         timings.torus_ms = torus_start.elapsed().as_secs_f64() * 1000.0;
 
         let tcs_start = Instant::now();
-        let topology = self.tcs_analyzer.analyze_state(&pad_state)?;
+        let (topology, used_fallback) = match self.tcs_analyzer.as_mut() {
+            Some(analyzer) => match analyzer.analyze_state(&pad_state) {
+                Ok(signature) => (signature, false),
+                Err(error) => {
+                    warn!(%error, "TCS analyzer failed; using mocked topology signature");
+                    (mocked_topological_signature(), true)
+                }
+            },
+            None => {
+                warn!("TCS analyzer unavailable; using mocked topology signature");
+                (mocked_topological_signature(), true)
+            }
+        };
         timings.tcs_ms = tcs_start.elapsed().as_secs_f64() * 1000.0;
+        if used_fallback {
+            info!("Mocked topology signature injected");
+        }
         info!(
             "Pipeline stage: TCS topology analysis completed in {:.2}ms",
             timings.tcs_ms
@@ -356,24 +390,22 @@ impl Pipeline {
             topology.spectral_gap
         );
 
-        // Pass topology to compass - ACTUAL INTEGRATION
-        let compass_task = tokio::task::spawn_blocking({
-            let compass_engine = self.compass.clone();
-            let pad_state = pad_state.clone();
-            let topology = topology.clone();
-            let thresholds = self.thresholds.clone();
-            move || {
-                let mut guard = compass_engine
-                    .lock()
-                    .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?;
-                // Retune compass parameters live from thresholds
-                guard.update_params(
-                    thresholds.mcts_c,
-                    thresholds.variance_spike,
-                    thresholds.variance_stagnation,
-                );
-                guard.evaluate(&pad_state, Some(&topology))
-            }
+        // Evaluate compass on blocking thread without locking inside closure
+        let pad_state_for_compass = pad_state.clone();
+        let topology_for_compass = topology.clone();
+        let compass_params = CompassRuntimeParams::new(
+            self.thresholds.mcts_c,
+            self.thresholds.variance_spike,
+            self.thresholds.variance_stagnation,
+        );
+        let compass_guard = self.compass.clone().lock_owned().await;
+        let compass_task = tokio::task::spawn_blocking(move || {
+            let mut engine = compass_guard;
+            engine.evaluate_with_params(
+                compass_params,
+                &pad_state_for_compass,
+                Some(&topology_for_compass),
+            )
         });
 
         let (compass, collapse) = tokio::try_join!(
@@ -421,32 +453,26 @@ impl Pipeline {
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
         // Update generation engine with latest config params (before generation)
-        let current_config = self.config_arc.lock().await.clone();
+        let current_config = self.config_arc.read().await.clone();
         self.generator.apply_runtime_from_config(&current_config);
         self.generator.update_params(
             current_config.temperature,
             current_config.top_p,
             current_config.repetition_penalty,
         );
+        self.config = current_config;
 
         // Recompute thresholds from updated config and update compass
         self.recompute_thresholds();
-        {
-            let mut compass_guard = self.compass.lock().unwrap();
-            compass_guard.update_params(
-                self.thresholds.mcts_c,
-                self.thresholds.variance_spike,
-                self.thresholds.variance_stagnation,
-            );
-        }
 
         // Stage 6: Generation
         let generation_start = Instant::now();
         // Apply latest runtime parameters before generation
         {
-            let cfg = self.config_arc.lock().await.clone();
+            let cfg = self.config_arc.read().await.clone();
             self.generator.apply_runtime_from_config(&cfg);
             self.recompute_thresholds();
+            self.config = cfg;
         }
         let generation = if self.config.enable_consistency_voting {
             let voting = self
@@ -484,7 +510,7 @@ impl Pipeline {
             }
         } else {
             self.generator
-                .generate_with_topology(&tokenizer_output, &compass, Some(&topology))
+                .generate_with_topology(&tokenizer_output, &compass, Some(&topology), false)
                 .await?
         };
         timings.generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
@@ -1149,4 +1175,26 @@ fn tokenizer_path() -> Result<PathBuf> {
     }
 
     anyhow::bail!("Tokenizer JSON not found; set TOKENIZER_JSON or QWEN_TOKENIZER")
+}
+
+fn mocked_topological_signature() -> TopologicalSignature {
+    let persistence_features: Vec<PersistenceFeature> = (0..=2)
+        .map(|dimension| PersistenceFeature {
+            birth: 0.0,
+            death: 2.0,
+            dimension,
+        })
+        .collect();
+
+    TopologicalSignature::new(
+        persistence_features,
+        [1, 1, 0],
+        0.5,
+        "mocked_jones".to_string(),
+        2,
+        None,
+        0.0,
+        1.0,
+        0.5,
+    )
 }

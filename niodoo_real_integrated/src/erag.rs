@@ -69,6 +69,7 @@ pub struct EragClient {
     vector_dim: usize,
     pub similarity_threshold: f32,
     embedder: Arc<QwenStatefulEmbedder>,
+    mock_mode: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +82,19 @@ pub struct CollapseResult {
     pub failure_details: Option<String>,
 }
 
+impl CollapseResult {
+    pub fn empty(failure_type: &str, failure_details: Option<String>) -> Self {
+        Self {
+            top_hits: Vec::new(),
+            aggregated_context: String::new(),
+            average_similarity: 0.0,
+            curator_quality: None,
+            failure_type: Some(failure_type.to_string()),
+            failure_details,
+        }
+    }
+}
+
 impl EragClient {
     pub async fn new(
         url: &str,
@@ -88,6 +102,7 @@ impl EragClient {
         vector_dim: usize,
         similarity_threshold: f32,
         embedder: Arc<QwenStatefulEmbedder>,
+        mock_mode: bool,
     ) -> Result<Self> {
         // Priority: env var > config > default
         let base_url = std::env::var("QDRANT_URL")
@@ -98,6 +113,19 @@ impl EragClient {
             .timeout(Duration::from_secs(10))
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
+
+        if mock_mode {
+            info!("Qdrant mock mode active; skipping collection provisioning");
+            return Ok(Self {
+                client,
+                base_url: base_url.clone(),
+                collection: collection.to_string(),
+                vector_dim,
+                similarity_threshold,
+                embedder,
+                mock_mode,
+            });
+        }
 
         let _qdrant = Qdrant::from_url(&base_url);
 
@@ -150,11 +178,15 @@ impl EragClient {
             vector_dim: expected_dim,
             similarity_threshold,
             embedder,
+            mock_mode,
         })
     }
 
     /// Check collection info for diagnostics
     pub async fn check_collection_info(&self) -> Result<()> {
+        if self.mock_mode {
+            return Ok(());
+        }
         let url = format!("{}/collections/{}", self.base_url, self.collection);
         let resp = self.client.get(&url).send().await?;
 
@@ -177,6 +209,12 @@ impl EragClient {
         vector: &[f32],
         limit: usize,
     ) -> Result<CollapseResult> {
+        if self.mock_mode {
+            return Ok(CollapseResult::empty(
+                "mock_mode",
+                Some("Qdrant mock mode enabled; returning empty collapse".to_string()),
+            ));
+        }
         anyhow::ensure!(
             vector.len() == self.vector_dim,
             "embedding dimension mismatch: expected {}, got {}",
@@ -246,6 +284,23 @@ impl EragClient {
                         });
                     }
 
+                    if status.is_server_error() {
+                        warn!(
+                            %status,
+                            body = %body,
+                            request = %request_dump,
+                            "qdrant search returned server error"
+                        );
+                        anyhow::ensure!(
+                            self.mock_mode,
+                            "Qdrant search failed: status={status}, body={body}"
+                        );
+                        return Ok(CollapseResult::empty(
+                            "server_error",
+                            Some(format!("status={status}; body={body}")),
+                        ));
+                    }
+
                     warn!(
                         %status,
                         body = %body,
@@ -261,7 +316,11 @@ impl EragClient {
                     request = %request_dump,
                     "qdrant search request errored"
                 );
-                bail!("Qdrant search request errored: {err}");
+                anyhow::ensure!(self.mock_mode, "Qdrant search request errored: {err}");
+                return Ok(CollapseResult::empty(
+                    "request_error",
+                    Some(err.to_string()),
+                ));
             }
         }
 
@@ -348,6 +407,10 @@ impl EragClient {
         solution_path: Option<String>,
         iteration_count: u32,
     ) -> Result<()> {
+        if self.mock_mode {
+            info!("ERAG mock mode: skipping memory upsert");
+            return Ok(());
+        }
         let memory = EragMemory {
             input: prompt.to_string(),
             output: response.to_string(),
@@ -400,6 +463,10 @@ impl EragClient {
         failure_type: &str,
         retry_count: u32,
     ) -> Result<()> {
+        if self.mock_mode {
+            info!("ERAG mock mode: skipping failure storage");
+            return Ok(());
+        }
         let payload = json!({
             "type": "failure_episode",
             "prompt": prompt,
@@ -445,6 +512,9 @@ impl EragClient {
         k: usize,
         filter: Option<JsonValue>,
     ) -> Result<Vec<SearchHit>> {
+        if self.mock_mode {
+            return Ok(Vec::new());
+        }
         let embedding = self.embedder.embed(query).await?;
 
         // Build search request manually
@@ -469,17 +539,33 @@ impl EragClient {
             .send()
             .await?;
 
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            warn!(%status, %body, "Qdrant search returned error, returning empty result");
+            return Ok(Vec::new());
+        }
+
         #[derive(Deserialize)]
         struct SearchResponse {
             #[serde(default)]
             result: Vec<SearchHit>,
         }
 
-        let search_resp: SearchResponse = resp.json().await?;
-        Ok(search_resp.result)
+        match resp.json::<SearchResponse>().await {
+            Ok(search_resp) => Ok(search_resp.result),
+            Err(e) => {
+                warn!(error = %e, "Failed to decode Qdrant search response, returning empty result");
+                Ok(Vec::new())
+            }
+        }
     }
 
     pub async fn store_replay_tuple(&self, tuple: &ReplayTuple) -> Result<()> {
+        if self.mock_mode {
+            info!("ERAG mock mode: skipping replay tuple store");
+            return Ok(());
+        }
         let content = format!(
             "DQN: state={:?} action={} reward={} next={:?}",
             tuple.state, tuple.action.param, tuple.reward, tuple.next_state
@@ -520,6 +606,9 @@ impl EragClient {
         _query_metrics: &[f64],
         k: usize,
     ) -> Result<Vec<ReplayTuple>> {
+        if self.mock_mode {
+            return Ok(Vec::new());
+        }
         let hits = self.search(query, k, None).await?;
         let mut tuples = Vec::new();
         for hit in hits {
@@ -558,6 +647,9 @@ impl EragClient {
         min_reward: f64,
         k: usize,
     ) -> Result<Vec<DqnTuple>> {
+        if self.mock_mode {
+            return Ok(Vec::new());
+        }
         // Use HTTP API directly since Filter API has changed
         let filter_json = json!({
             "must": [
@@ -585,16 +677,9 @@ impl EragClient {
         );
         let resp = self.client.post(&url).json(&request_json).send().await?;
 
-        #[derive(Deserialize)]
-        struct ScrollResponse {
-            result: Option<Vec<ScrollPoint>>,
-            #[serde(default)]
-            next_page_offset: Option<String>,
-        }
-
         let mut tuples = Vec::new();
         let scroll_resp: ScrollResponse = resp.json().await?;
-        let points = scroll_resp.result.unwrap_or_default();
+        let (points, _offset) = scroll_resp.into_points();
         for point in points {
             let payload = point.payload.unwrap_or_default();
             if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
@@ -628,6 +713,9 @@ impl EragClient {
     }
 
     pub async fn query_old_dqn_tuples(&self, batch_id: u32, num: usize) -> Result<Vec<DqnTuple>> {
+        if self.mock_mode {
+            return Ok(Vec::new());
+        }
         // Query older DQN tuples for experience replay (anti-forgetting)
         // Use batch_id as a seed for deterministic sampling
         let offset = (batch_id as u64 * 100) % 1000;
@@ -646,17 +734,9 @@ impl EragClient {
         );
         let resp = self.client.post(&url).json(&request_json).send().await?;
 
-        #[derive(Deserialize)]
-        struct ScrollResponse {
-            result: Option<Vec<ScrollPoint>>,
-            #[serde(default)]
-            next_page_offset: Option<String>,
-        }
-
         let mut tuples = Vec::new();
         let scroll_resp: ScrollResponse = resp.json().await?;
-        let points = scroll_resp.result.unwrap_or_default();
-
+        let (points, _offset) = scroll_resp.into_points();
         for point in points {
             let payload = point.payload.unwrap_or_default();
             if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
@@ -686,6 +766,9 @@ impl EragClient {
     }
 
     pub async fn query_tough_knots(&self, num: usize) -> Result<Vec<EragMemory>> {
+        if self.mock_mode {
+            return Ok(Vec::new());
+        }
         // Query memories with high topology_knot_complexity > 0.4
         // Use filter-based search via HTTP API
         let filter_json = json!({
@@ -785,9 +868,35 @@ impl From<&JsonMap<String, JsonValue>> for SimpleMetrics {
 
 #[derive(Deserialize)]
 pub struct ScrollResponse {
-    pub result: Option<Vec<ScrollPoint>>,
+    #[serde(default)]
+    pub result: Option<ScrollResultPayload>,
     #[serde(default)]
     pub next_page_offset: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum ScrollResultPayload {
+    Legacy(Vec<ScrollPoint>),
+    Object {
+        #[serde(default)]
+        points: Vec<ScrollPoint>,
+        #[serde(default)]
+        next_page_offset: Option<String>,
+    },
+}
+
+impl ScrollResponse {
+    fn into_points(self) -> (Vec<ScrollPoint>, Option<String>) {
+        match self.result {
+            Some(ScrollResultPayload::Legacy(points)) => (points, self.next_page_offset),
+            Some(ScrollResultPayload::Object {
+                points,
+                next_page_offset,
+            }) => (points, next_page_offset.or(self.next_page_offset)),
+            None => (Vec::new(), self.next_page_offset),
+        }
+    }
 }
 
 #[derive(Deserialize)]

@@ -1,21 +1,18 @@
-MIT License
+Prosperity Public License 3.0.0
 
-Copyright (c) 2025 Jason Van Pham
+Licensor: Jason Van Pham <jasonvanpham@niodoo.com>
+Year: 2025
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to use, copy, modify, and share the Software, for any purpose that is not a Commercial Use, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Noncommercial Use Only. You may not use the Software for Commercial Use. “Commercial Use” means use of the Software in any manner primarily intended for or directed toward commercial advantage or monetary compensation.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Commercial License. If you wish to use the Software for Commercial Use, you must obtain a separate commercial license from the Licensor. Contact the Licensor at the email above to obtain terms.
+
+3. No Liability. The Software is provided “as is”, without warranty of any kind, express or implied. In no event shall the Licensor be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the Software or the use or other dealings in the Software.
+
+4. No Trademark License. This license does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Software and reproducing the content of the copyright notice.
+
+5. Notices. You must keep this license text with all copies of the Software and accompanying documentation. If you modify the Software, you must include a notice in the modified files stating that you have modified the Software and the date of modification.
+
+For the avoidance of doubt, this Prosperity Public License is non-OSI and intended to enable free, noncommercial use while reserving commercial rights to the Licensor.
