@@ -587,12 +587,15 @@ impl EragClient {
 
         #[derive(Deserialize)]
         struct ScrollResponse {
-            result: Vec<ScrollPoint>,
+            result: Option<Vec<ScrollPoint>>,
+            #[serde(default)]
+            next_page_offset: Option<String>,
         }
 
-        let scroll_resp: ScrollResponse = resp.json().await?;
         let mut tuples = Vec::new();
-        for point in scroll_resp.result {
+        let scroll_resp: ScrollResponse = resp.json().await?;
+        let points = scroll_resp.result.unwrap_or_default();
+        for point in points {
             let payload = point.payload.unwrap_or_default();
             if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
                 let state = tp["state"]
@@ -645,13 +648,16 @@ impl EragClient {
 
         #[derive(Deserialize)]
         struct ScrollResponse {
-            result: Vec<ScrollPoint>,
+            result: Option<Vec<ScrollPoint>>,
+            #[serde(default)]
+            next_page_offset: Option<String>,
         }
 
-        let scroll_resp: ScrollResponse = resp.json().await?;
         let mut tuples = Vec::new();
+        let scroll_resp: ScrollResponse = resp.json().await?;
+        let points = scroll_resp.result.unwrap_or_default();
 
-        for point in scroll_resp.result {
+        for point in points {
             let payload = point.payload.unwrap_or_default();
             if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
                 let state = tp["state"]
@@ -779,9 +785,9 @@ impl From<&JsonMap<String, JsonValue>> for SimpleMetrics {
 
 #[derive(Deserialize)]
 pub struct ScrollResponse {
-    pub result: Vec<ScrollPoint>,
+    pub result: Option<Vec<ScrollPoint>>,
     #[serde(default)]
-    pub next_page_offset: Option<u64>,
+    pub next_page_offset: Option<String>,
 }
 
 #[derive(Deserialize)]

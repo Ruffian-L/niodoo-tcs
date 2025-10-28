@@ -59,7 +59,7 @@ pub fn init() {
         "VLLM_MODEL",
         "VLLM_MODEL_PATH",
     ])
-    .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
+    .unwrap_or_else(|| "/workspace/models/Qwen2.5-7B-Instruct-AWQ".to_string());
 
     let qdrant_dim: usize = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
         .and_then(|v| v.parse().ok())
@@ -528,7 +528,7 @@ impl RuntimeConfig {
             "VLLM_MODEL",
             "VLLM_MODEL_PATH",
         ])
-        .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
+        .unwrap_or_else(|| "/workspace/models/Qwen2.5-7B-Instruct-AWQ".to_string());
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
         if matches!(args.hardware, HardwareProfile::Laptop5080Q) {

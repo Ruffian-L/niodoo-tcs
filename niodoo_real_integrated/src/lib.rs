@@ -29,7 +29,7 @@ mod tests {
     use crate::erag::CollapseResult;
     use crate::erag::EragMemory;
     use crate::pipeline::Pipeline;
-    use crate::tokenizer::TokenizerOutput;
+    use crate::token_manager::TokenizerOutput;
 
     #[tokio::test]
     #[ignore]

@@ -75,7 +75,7 @@ start_all() {
     echo "🚀 Starting all services..."
     
     # Start vLLM on port 5001
-    start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && export HF_HUB_ENABLE_HF_TRANSFER=0 && vllm serve Qwen/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 5001 --gpu-memory-utilization 0.85 --trust-remote-code"
+    start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && export HF_HUB_ENABLE_HF_TRANSFER=0 && vllm serve /workspace/models/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 5001 --gpu-memory-utilization 0.85 --trust-remote-code"
     
     # Start Qdrant on port 6333
     start_service "qdrant" "cd /workspace/qdrant && /workspace/qdrant/qdrant --config-path /workspace/qdrant_config/config.yaml 2>&1"
@@ -106,7 +106,7 @@ monitor() {
         # Check vLLM
         if ! check_service "vllm"; then
             echo "⚠️  vLLM down, restarting..."
-            start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && export HF_HUB_ENABLE_HF_TRANSFER=0 && vllm serve Qwen/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 5001 --gpu-memory-utilization 0.85 --trust-remote-code"
+            start_service "vllm" "cd /workspace/Niodoo-Final && source venv/bin/activate && export HF_HUB_ENABLE_HF_TRANSFER=0 && vllm serve /workspace/models/Qwen2.5-7B-Instruct-AWQ --host 127.0.0.1 --port 5001 --gpu-memory-utilization 0.85 --trust-remote-code"
         fi
         
         # Check Qdrant

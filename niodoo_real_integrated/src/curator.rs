@@ -163,9 +163,20 @@ impl Curator {
         }
 
         let result: serde_json::Value = resp.json().await?;
-        let learned = result["learned"].as_bool().unwrap_or(false);
-        let refined = result["refined"].as_str().unwrap_or(response).to_string();
-        let reason = result["reason"].as_str().unwrap_or("No reason");
+        // Ollama returns {"response": "text here"}
+        let response_text = result["response"].as_str().unwrap_or("");
+        
+        // Try to parse as JSON first, fallback to treating as plain text
+        let (learned, refined, reason) = if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(response_text) {
+            (
+                parsed["learned"].as_bool().unwrap_or(false),
+                parsed["refined"].as_str().unwrap_or(response).to_string(),
+                parsed["reason"].as_str().unwrap_or("No reason").to_string(),
+            )
+        } else {
+            // Fallback: treat as plain text refinement
+            (false, response_text.to_string(), "Plain text response".to_string())
+        };
 
         info!(
             "Qwen curator refined: learned={}, refined len={}, reason={}",
