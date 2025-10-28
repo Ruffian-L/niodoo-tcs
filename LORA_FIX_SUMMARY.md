@@ -8,9 +8,9 @@ The LoRA trainer was crashing with dimension mismatch errors when ERAG returned 
 
 ## Root Causes
 
-1. **LoRA Trainer Configuration**: Initialized with hardcoded 768-dim default instead of using RuntimeConfig's `qdrant_vector_dim` (896)
+1. **LoRA Trainer Configuration**: Initialized with hardcoded 896-dim default instead of using RuntimeConfig's `qdrant_vector_dim` (896)
 2. **Empty Collapse Handling**: `apply_curator_learned` didn't check for zero-length features before training
-3. **Dimension Padding**: Feature vectors padded to wrong dimension (768 instead of 896)
+3. **Dimension Padding**: Feature vectors padded to wrong dimension (896 instead of 896)
 
 ## Fixes Applied
 
@@ -98,7 +98,7 @@ let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
 ```
 
 **Changes**:
-- Uses `embedding_dim` from config instead of hardcoded 768
+- Uses `embedding_dim` from config instead of hardcoded 896
 - Properly pads/truncates both input and target vectors
 - Ensures dimension consistency throughout the pipeline
 

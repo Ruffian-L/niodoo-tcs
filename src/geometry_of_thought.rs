@@ -259,11 +259,11 @@ impl GeometryOfThoughtConsciousness {
 
         // Convert attractor dynamics to valence-arousal-dominance model
         let valence = if (attractor.bump_center / 100.0 - 0.5) > 0.0 {
-            0.7  // Positive valence for satisfied
+            0.7 // Positive valence for satisfied
         } else {
-            -0.5  // Negative valence for frustrated
+            -0.5 // Negative valence for frustrated
         };
-        
+
         let arousal = (activity_sum / attractor.final_activity.len() as f64).clamp(0.0, 1.0);
         let dominance = (1.0 - activity_variance.sqrt()).clamp(-1.0, 1.0);
         let authenticity = 0.8;

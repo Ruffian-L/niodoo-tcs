@@ -6,12 +6,12 @@ use crate::consciousness::ConsciousnessState;
 use crate::rag::RetrievalEngine;
 use crate::token_promotion::{run_promotion_cycle, PromotionResult};
 use anyhow::Result;
+use niodoo_core::memory::multi_layer_query::CycleTrigger;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
-use niodoo_core::memory::multi_layer_query::CycleTrigger;
 
 /// Memory result with both semantic and emotional resonance scores
 #[derive(Debug, Clone, Serialize, Deserialize)]

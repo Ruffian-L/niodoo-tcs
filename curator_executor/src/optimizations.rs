@@ -181,7 +181,7 @@ impl BatchedCurator {
             // In real implementation, use actual curator embed
             handles.push(tokio::spawn(async move {
                 // Simulated embedding
-                vec![0.1; 768]  // 768-dim BERT standard
+                vec![0.1; 896]  // 896-dim BERT standard
             }));
         }
         

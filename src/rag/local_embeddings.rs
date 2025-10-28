@@ -397,7 +397,7 @@ impl LocalEmbeddingGenerator {
 
             // Create and return the real BERT model
             Ok(MathematicalEmbeddingModel {
-                embedding_dim: 768,
+                embedding_dim: 896,
                 torus: crate::real_mobius_consciousness::KTwistedTorus::new(1.0, 0.5, 2),
             })
         } else {

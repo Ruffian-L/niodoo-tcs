@@ -4,9 +4,9 @@
 use anyhow::Result;
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Router};
 use tokio::signal;
-use tracing::{info, warn};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
+use tracing::{info, warn};
 
 use niodoo_real_integrated::metrics::metrics;
 
@@ -15,8 +15,7 @@ async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -112,4 +111,3 @@ async fn shutdown_signal() {
 
     info!("🛑 Metrics server shutting down gracefully");
 }
-

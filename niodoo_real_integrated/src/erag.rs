@@ -105,7 +105,11 @@ impl EragClient {
         let expected_dim = 896;
 
         if vector_dim != expected_dim {
-            warn!(requested = vector_dim, expected = expected_dim, "Qdrant dim fixed to 896; using enforced dimension");
+            warn!(
+                requested = vector_dim,
+                expected = expected_dim,
+                "Qdrant dim fixed to 896; using enforced dimension"
+            );
         }
         let create_body = json!({
             "vectors_config": {
@@ -119,7 +123,10 @@ impl EragClient {
         let create_status = create_resp.status();
         if !create_status.is_success() && create_status != 409 {
             let body = create_resp.text().await.unwrap_or_default();
-            bail!("Failed to ensure experiences collection: status={}, body={body}", create_status);
+            bail!(
+                "Failed to ensure experiences collection: status={}, body={body}",
+                create_status
+            );
         }
 
         let failures_url = format!("{}/collections/failures", base_url);
@@ -130,7 +137,11 @@ impl EragClient {
             warn!(collection = "failures", status = %failures_status, %body, "failed to ensure failures collection");
         }
 
-        info!(collection, dim = expected_dim, "Qdrant dim fixed to 896, search active");
+        info!(
+            collection,
+            dim = expected_dim,
+            "Qdrant dim fixed to 896, search active"
+        );
 
         Ok(Self {
             client,
@@ -146,7 +157,7 @@ impl EragClient {
     pub async fn check_collection_info(&self) -> Result<()> {
         let url = format!("{}/collections/{}", self.base_url, self.collection);
         let resp = self.client.get(&url).send().await?;
-        
+
         if resp.status().is_success() {
             let info: serde_json::Value = resp.json().await?;
             info!(collection = self.collection, info = %info, "Qdrant collection info");
@@ -161,7 +172,11 @@ impl EragClient {
         self.collapse_with_limit(vector, 3).await
     }
 
-    pub async fn collapse_with_limit(&self, vector: &[f32], limit: usize) -> Result<CollapseResult> {
+    pub async fn collapse_with_limit(
+        &self,
+        vector: &[f32],
+        limit: usize,
+    ) -> Result<CollapseResult> {
         anyhow::ensure!(
             vector.len() == self.vector_dim,
             "embedding dimension mismatch: expected {}, got {}",
@@ -192,8 +207,7 @@ impl EragClient {
                 if resp.status().is_success() {
                     match resp.json::<SearchResponse>().await {
                         Ok(parsed) => {
-                            let hits: Vec<SearchHit> = parsed.result.unwrap_or_default();
-                            for hit in hits {
+                            for hit in parsed.result {
                                 if hit.payload.is_empty() {
                                     continue;
                                 }
@@ -206,38 +220,40 @@ impl EragClient {
                             info!(%err, "failed to decode qdrant search response, using empty result");
                         }
                     }
-        } else {
-            let status = resp.status();
-            let body = resp
-                .text()
-                .await
-                .unwrap_or_else(|_| "<no body>".to_string());
-            
-            // Handle empty collection gracefully - don't crash the pipeline
-            if status.as_u16() == 500 && body.contains("OutputTooSmall") {
-                warn!(
-                    %status,
-                    "Qdrant collection appears empty (OutputTooSmall), returning empty collapse result"
-                );
-                // Return empty result instead of bailing
-                return Ok(CollapseResult {
-                    top_hits: Vec::new(),
-                    aggregated_context: String::new(),
-                    average_similarity: 0.0,
-                    curator_quality: None,
-                    failure_type: Some("empty_collection".to_string()),
-                    failure_details: Some(format!("Qdrant collection is empty (status={status})")),
-                });
-            }
-            
-            warn!(
-                %status,
-                body = %body,
-                request = %request_dump,
-                "qdrant search returned error status"
-            );
-            bail!("Qdrant search failed: status={status}");
-        }
+                } else {
+                    let status = resp.status();
+                    let body = resp
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "<no body>".to_string());
+
+                    // Handle empty collection gracefully - don't crash the pipeline
+                    if status.as_u16() == 500 && body.contains("OutputTooSmall") {
+                        warn!(
+                            %status,
+                            "Qdrant collection appears empty (OutputTooSmall), returning empty collapse result"
+                        );
+                        // Return empty result instead of bailing
+                        return Ok(CollapseResult {
+                            top_hits: Vec::new(),
+                            aggregated_context: String::new(),
+                            average_similarity: 0.0,
+                            curator_quality: None,
+                            failure_type: Some("empty_collection".to_string()),
+                            failure_details: Some(format!(
+                                "Qdrant collection is empty (status={status})"
+                            )),
+                        });
+                    }
+
+                    warn!(
+                        %status,
+                        body = %body,
+                        request = %request_dump,
+                        "qdrant search returned error status"
+                    );
+                    bail!("Qdrant search failed: status={status}");
+                }
             }
             Err(err) => {
                 warn!(
@@ -455,11 +471,12 @@ impl EragClient {
 
         #[derive(Deserialize)]
         struct SearchResponse {
-            result: Option<Vec<SearchHit>>,
+            #[serde(default)]
+            result: Vec<SearchHit>,
         }
 
-        let search_resp: SearchResponse = resp.json().await.unwrap_or(SearchResponse { result: None });
-        Ok(search_resp.result.unwrap_or_default())
+        let search_resp: SearchResponse = resp.json().await?;
+        Ok(search_resp.result)
     }
 
     pub async fn store_replay_tuple(&self, tuple: &ReplayTuple) -> Result<()> {
@@ -611,7 +628,7 @@ impl EragClient {
         // Query older DQN tuples for experience replay (anti-forgetting)
         // Use batch_id as a seed for deterministic sampling
         let offset = (batch_id as u64 * 100) % 1000;
-        
+
         // Use HTTP API for scrolling through tuples
         let request_json = json!({
             "limit": num,
@@ -619,18 +636,21 @@ impl EragClient {
             "with_payload": true,
             "with_vectors": false
         });
-        
-        let url = format!("{}/collections/{}/points/scroll", self.base_url, self.collection);
+
+        let url = format!(
+            "{}/collections/{}/points/scroll",
+            self.base_url, self.collection
+        );
         let resp = self.client.post(&url).json(&request_json).send().await?;
-        
+
         #[derive(Deserialize)]
         struct ScrollResponse {
             result: Vec<ScrollPoint>,
         }
-        
+
         let scroll_resp: ScrollResponse = resp.json().await?;
         let mut tuples = Vec::new();
-        
+
         for point in scroll_resp.result {
             let payload = point.payload.unwrap_or_default();
             if let Some(tp) = payload.get("tuple").and_then(|t| t.as_object()) {
@@ -645,7 +665,7 @@ impl EragClient {
                     .as_array()
                     .map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect())
                     .unwrap_or_default();
-                
+
                 tuples.push(DqnTuple {
                     state,
                     action_param,
@@ -655,7 +675,7 @@ impl EragClient {
                 });
             }
         }
-        
+
         Ok(tuples)
     }
 
@@ -670,7 +690,7 @@ impl EragClient {
                 }
             ]
         });
-        
+
         let request_json = json!({
             "vector": vec![0.0f32; self.vector_dim], // Dummy vector for filter-only search
             "limit": num,
@@ -678,17 +698,28 @@ impl EragClient {
             "with_payload": true,
             "with_vectors": false
         });
-        
-        let url = format!("{}/collections/{}/points/search", self.base_url, self.collection);
+
+        let url = format!(
+            "{}/collections/{}/points/search",
+            self.base_url, self.collection
+        );
         let resp = self.client.post(&url).json(&request_json).send().await?;
-        
+
         #[derive(Deserialize)]
         struct SearchResponse {
-            result: Option<Vec<SearchHit>>,
+            #[serde(default)]
+            result: Vec<SearchHit>,
         }
-        
-        let search_resp: SearchResponse = resp.json().await.unwrap_or(SearchResponse { result: None });
-        Ok(search_resp.result.unwrap_or_default())
+
+        let search_resp: SearchResponse = resp.json().await?;
+        let mut memories = Vec::new();
+        for hit in search_resp.result {
+            if hit.payload.is_empty() {
+                continue;
+            }
+            memories.push(deserialize_memory(&hit.payload));
+        }
+        Ok(memories)
     }
 }
 

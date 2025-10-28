@@ -21,16 +21,16 @@ impl Embedder {
     }
 
     pub async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        let prompt = format!("Embed this text as 768-dim vector: {}", text);
+        let prompt = format!("Embed this text as 896-dim vector: {}", text);
         let response = self.ollama.generate_completion(&self.model, prompt).await?;
         
         // Parse response to vec (assume model outputs vector string or use embed endpoint)
         let embedding: Vec<f32> = parse_embedding(&response.response);  // Impl parse
-        if embedding.len() != 768 {
-            return Err(anyhow::anyhow!("Embed dim mismatch—expected 768"));
+        if embedding.len() != 896 {
+            return Err(anyhow::anyhow!("Embed dim mismatch—expected 896"));
         }
         
-        log::info!("Qwen embed complete: dim=768");
+        log::info!("Qwen embed complete: dim=896");
         Ok(embedding)
     }
 }
@@ -38,6 +38,6 @@ impl Embedder {
 // No fallback—if Ollama fails, error (install prompt in log)
 fn parse_embedding(resp: &str) -> Vec<f32> {
     // Parse logic (e.g., JSON array from Qwen)
-    vec![0.0; 768]  // Placeholder
+    vec![0.0; 896]  // Placeholder
 }
 

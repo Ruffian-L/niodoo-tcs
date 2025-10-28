@@ -2339,7 +2339,7 @@ export class BrainMCPSystem {
   // Fallback methods for when the brain system is unavailable
   private async fallbackEmbeddingProcess(text: string, context?: string): Promise<any> {
     return {
-      embedding: new Array(768).fill(0).map(() => Math.random()),
+      embedding: new Array(896).fill(0).map(() => Math.random()),
       neural_pathways: ['fallback_pathway'],
       agent_coordination: { fallback: true },
       consensus_score: 0.5
@@ -4782,7 +4782,7 @@ class UnifiedMCPServer {
     // For now, return mock responses
     const mockResponses = {
       embedding_process: {
-        embedding: new Array(768).fill(0).map(() => Math.random()),
+        embedding: new Array(896).fill(0).map(() => Math.random()),
         neural_pathways: ['pathway_1', 'pathway_2'],
         agent_coordination: { agents_used: 89 },
         consensus_score: 0.85

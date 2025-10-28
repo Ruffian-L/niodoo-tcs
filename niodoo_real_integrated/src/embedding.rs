@@ -38,7 +38,10 @@ impl QwenStatefulEmbedder {
             .context("failed to create HTTP client for embeddings")?;
 
         let chunk_limit = max_chunk_chars.max(1);
-        info!(chunk_limit, model, endpoint, "Initialized Ollama embedding client");
+        info!(
+            chunk_limit,
+            model, endpoint, "Initialized Ollama embedding client"
+        );
 
         static GLOBAL_EMBED_SEMAPHORE: OnceCell<Arc<Semaphore>> = OnceCell::new();
 
@@ -50,7 +53,10 @@ impl QwenStatefulEmbedder {
 
         let semaphore = GLOBAL_EMBED_SEMAPHORE
             .get_or_init(|| {
-                info!(limit = concurrency, "Embedding concurrency limiter initialized");
+                info!(
+                    limit = concurrency,
+                    "Embedding concurrency limiter initialized"
+                );
                 Arc::new(Semaphore::new(concurrency))
             })
             .clone();
@@ -73,10 +79,8 @@ impl QwenStatefulEmbedder {
             info!(chunk_count, "Embedding prompt split due to chunk limit");
         }
 
-        let embedding_results = futures::future::join_all(
-            chunks.iter().map(|chunk| self.fetch_embedding(chunk)),
-        )
-        .await;
+        let embedding_results =
+            futures::future::join_all(chunks.iter().map(|chunk| self.fetch_embedding(chunk))).await;
 
         let mut embeddings = Vec::with_capacity(embedding_results.len());
         for result in embedding_results {
@@ -206,7 +210,11 @@ impl QwenStatefulEmbedder {
 }
 
 fn normalize(vec: &mut [f32]) {
-    let norm = vec.iter().map(|value| (*value as f64).powi(2)).sum::<f64>().sqrt();
+    let norm = vec
+        .iter()
+        .map(|value| (*value as f64).powi(2))
+        .sum::<f64>()
+        .sqrt();
     if norm == 0.0 {
         return;
     }

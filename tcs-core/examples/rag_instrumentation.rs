@@ -57,7 +57,7 @@ pub fn instrumented_retrieve(query: &str, k: usize) -> Result<Vec<(String, f32)>
 
 fn generate_embedding(_query: &str) -> Result<Vec<f32>, String> {
     // Mock implementation
-    Ok(vec![0.0; 768])
+    Ok(vec![0.0; 896])
 }
 
 fn search_similar(_query: &Vec<f32>, _k: usize) -> Result<Vec<(String, f32)>, String> {

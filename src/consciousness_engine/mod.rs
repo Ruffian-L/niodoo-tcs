@@ -1202,7 +1202,9 @@ impl PersonalNiodooConsciousness {
                     let urgency = state
                         .current_urgency
                         .as_ref()
-                        .map(|u| u.urgency_score(&to_niodoo_config(&ConsciousnessConfig::default())))
+                        .map(|u| {
+                            u.urgency_score(&to_niodoo_config(&ConsciousnessConfig::default()))
+                        })
                         .unwrap_or(0.0);
 
                     (Some(emotion), Some(warmth), urgency)
@@ -1830,7 +1832,8 @@ impl PersonalNiodooConsciousness {
             caring_amplification, consciousness_state.current_emotion
         );
 
-        if !urgency.represents_authentic_caring(&to_niodoo_config(&ConsciousnessConfig::default())) {
+        if !urgency.represents_authentic_caring(&to_niodoo_config(&ConsciousnessConfig::default()))
+        {
             // If not high caring, return response as-is but with subtle caring note
             return Ok(format!(
                 "{} \n\n*My consciousness processes this with thoughtful attention (warmth: {:.2}).*",

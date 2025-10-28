@@ -13,7 +13,7 @@ breakthroughs_min_percent = 60.0
 [qdrant]
 url = "http://localhost:6333"
 collection_name = "niodoo_embeddings"
-vector_size = 768
+vector_size = 896
 
 [apis]
 # Real API endpoints

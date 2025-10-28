@@ -8,8 +8,8 @@ use niodoo_real_integrated::erag::{CollapseResult, EmotionalVector, EragMemory};
 use niodoo_real_integrated::generation::{GenerationResult, LensEcho};
 use niodoo_real_integrated::learning::LearningOutcome;
 use niodoo_real_integrated::pipeline::{Pipeline, StageTimings};
-use niodoo_real_integrated::torus::PadGhostState;
 use niodoo_real_integrated::tcs_analysis::TopologicalSignature;
+use niodoo_real_integrated::torus::PadGhostState;
 
 const TRACKED_ENV_VARS: [&str; 3] = ["VLLM_ENDPOINT", "QDRANT_URL", "OLLAMA_ENDPOINT"];
 
@@ -215,10 +215,7 @@ async fn mock_learning_outcome_tracks_entropy_delta() {
     let pipeline = MockPipeline::default();
     let cycle = pipeline.process_prompt("entropy prompt").await;
 
-    assert!(cycle
-        .learning
-        .adjusted_params
-        .contains_key("temperature"));
+    assert!(cycle.learning.adjusted_params.contains_key("temperature"));
     assert!(cycle
         .learning
         .events
@@ -244,4 +241,3 @@ async fn real_pipeline_initialises_with_backends() {
         .await
         .expect("pipeline should initialise when backends are available");
 }
- 

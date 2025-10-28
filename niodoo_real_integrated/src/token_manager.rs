@@ -3,17 +3,23 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use tokio::{fs, sync::RwLock, time::interval};
-use tracing::{debug, info, instrument, warn};
 use niodoo_core::config::ConsciousnessConfig;
-use niodoo_core::memory::guessing_spheres::{EmotionalVector as CoreEmotion, GuessingMemorySystem, SphereId};
+use niodoo_core::memory::guessing_spheres::{
+    EmotionalVector as CoreEmotion, GuessingMemorySystem, SphereId,
+};
 use niodoo_core::token_promotion::consensus::{ConsensusEngine, NodeId};
-use niodoo_core::token_promotion::dynamic_tokenizer::{DynamicTokenizer, MergeStats, RemoteVocabulary, TokenizerStats};
-use niodoo_core::token_promotion::engine::{PromotionConfig, PromotionCycleResult, TokenPromotionEngine};
+use niodoo_core::token_promotion::dynamic_tokenizer::{
+    DynamicTokenizer, MergeStats, RemoteVocabulary, TokenizerStats,
+};
+use niodoo_core::token_promotion::engine::{
+    PromotionConfig, PromotionCycleResult, TokenPromotionEngine,
+};
 use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
 use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
+use tokio::{fs, sync::RwLock, time::interval};
+use tracing::{debug, info, instrument, warn};
 
 use crate::erag::{CollapseResult, EragMemory};
 use crate::metrics::tokenizer_metrics;
@@ -79,7 +85,11 @@ impl TokenizationMetrics {
 
 impl DynamicTokenizerManager {
     #[instrument]
-    pub async fn initialise(tokenizer_path: &Path, node_id: String, promotion_interval: u64) -> Result<Self> {
+    pub async fn initialise(
+        tokenizer_path: &Path,
+        node_id: String,
+        promotion_interval: u64,
+    ) -> Result<Self> {
         let config = ConsciousnessConfig::default();
         let base_tokenizer = DynamicTokenizer::load_from_file(tokenizer_path)
             .with_context(|| format!("failed to load tokenizer at {}", tokenizer_path.display()))?;
@@ -89,7 +99,10 @@ impl DynamicTokenizerManager {
         let tda_calculator = PersistentHomologyCalculator::new(config.tda_max_filtration_steps);
         let pattern_discovery = Arc::new(
             PatternDiscoveryEngine::new(tda_calculator, spatial)
-                .with_lengths(config.tda_min_sequence_length, config.tda_max_sequence_length)
+                .with_lengths(
+                    config.tda_min_sequence_length,
+                    config.tda_max_sequence_length,
+                )
                 .with_persistence_threshold(config.tda_persistence_threshold),
         );
 
@@ -98,17 +111,15 @@ impl DynamicTokenizerManager {
             config.token_promotion_min_score,
         ));
 
-        let promotion_engine = TokenPromotionEngine::new(
-            pattern_discovery,
-            consensus,
-            tokenizer.clone(),
-        )
-        .with_config(PromotionConfig {
-            min_promotion_score: config.token_promotion_min_score,
-            max_candidates_per_cycle: config.token_promotion_max_per_cycle,
-            consensus_threshold: config.token_promotion_consensus_threshold,
-            pruning_min_usage: config.token_promotion_pruning_min_usage as u64,
-        });
+        let promotion_engine =
+            TokenPromotionEngine::new(pattern_discovery, consensus, tokenizer.clone()).with_config(
+                PromotionConfig {
+                    min_promotion_score: config.token_promotion_min_score,
+                    max_candidates_per_cycle: config.token_promotion_max_per_cycle,
+                    consensus_threshold: config.token_promotion_consensus_threshold,
+                    pruning_min_usage: config.token_promotion_pruning_min_usage as u64,
+                },
+            );
 
         let state_path = Self::state_path(tokenizer_path);
 
@@ -183,10 +194,12 @@ impl DynamicTokenizerManager {
             *slot = Some(stats.clone());
         }
         self.metrics.record_stats(&stats);
-        tokenizer_metrics()
-            .record(vocab_size as f64, oov_rate);
+        tokenizer_metrics().record(vocab_size as f64, oov_rate);
 
-        info!(tokens = tokens.len(), vocab_size, oov_rate, "tokenized prompt");
+        info!(
+            tokens = tokens.len(),
+            vocab_size, oov_rate, "tokenized prompt"
+        );
 
         let promoted_snapshot = self.metrics.promoted.lock().unwrap().clone();
 
@@ -230,7 +243,8 @@ impl DynamicTokenizerManager {
             }
         }
 
-        self.process(prompt, &collapse.aggregated_context, pad_state).await
+        self.process(prompt, &collapse.aggregated_context, pad_state)
+            .await
     }
 
     #[instrument(skip(self))]

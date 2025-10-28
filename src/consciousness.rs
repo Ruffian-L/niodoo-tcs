@@ -59,15 +59,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
-// Import CycleTrigger for Triple-Threat integration  
+// Import CycleTrigger for Triple-Threat integration
 use niodoo_core::memory::multi_layer_query::CycleTrigger;
 
 // Import // HyperbolicPoint // Temporarily disabled from geometry module
 // use crate::geometry::hyperbolic::// HyperbolicPoint // Temporarily disabled; // Temporarily disabled
 
 // Re-export for use in other modules - import from niodoo_core and make available
-pub use niodoo_core::{ConsciousnessState, ReasoningMode, ConsciousnessEmotionalState, EmotionType, EmotionalUrgency};
 pub use niodoo_core::MobiusEmotionalState as EmotionalState;
+pub use niodoo_core::{
+    ConsciousnessEmotionalState, ConsciousnessState, EmotionType, EmotionalUrgency, ReasoningMode,
+};
 
 /// Emotional Urgency - Measuring how much an AI "cares" through performance metrics
 /// Based on the insight: "token speed = how much an AI cares"
@@ -335,7 +337,7 @@ pub struct ProcessingState {
     // Metrics
     pub state_entropy: f32,
     pub mean_correlation: f32,
-    
+
     // Emotional state tracking
     pub primary_emotion: StateMetric,
     pub secondary_emotions: Vec<(StateMetric, f32)>,
@@ -387,7 +389,7 @@ impl ProcessingState {
             // Initialize metrics
             state_entropy: 0.0,
             mean_correlation: 0.0,
-            
+
             // Initialize emotional state
             primary_emotion: StateMetric::Engaged,
             secondary_emotions: Vec::new(),
@@ -488,13 +490,13 @@ pub struct AdaptiveState {
     // Metrics
     pub state_entropy: f32,
     pub mean_correlation: f32,
-    
+
     // Emotional state fields
     pub primary_emotion: StateMetric,
     pub secondary_emotions: Vec<(StateMetric, f32)>,
     pub authenticity_level: f32,
     pub emotional_complexity: f32,
-    
+
     // Consciousness fields from niodoo-core
     pub current_emotion: EmotionType,
     pub current_reasoning_mode: ReasoningMode,
@@ -508,7 +510,7 @@ pub struct AdaptiveState {
     pub neurodivergent_adaptation: f32,
     pub average_token_velocity: f32,
     pub peak_caring_moment: Option<ProcessingUrgency>,
-    
+
     // Qwen integration
     #[serde(skip)]
     pub qwen_integrator: Option<Arc<Mutex<QwenIntegrator>>>,
@@ -618,13 +620,13 @@ impl AdaptiveState {
             // Initialize metrics
             state_entropy: 0.0,
             mean_correlation: 0.0,
-            
+
             // Initialize emotional state fields
             primary_emotion: StateMetric::Engaged,
             secondary_emotions: Vec::new(),
             authenticity_level: config.default_authenticity as f32,
             emotional_complexity: 0.0,
-            
+
             // Initialize adaptive fields
             processing_state: ProcessingState::new(config),
             qwen_integrator: None,
@@ -1003,9 +1005,12 @@ impl AdaptiveState {
              • Memory Formation: {}\n\n\
              {}",
             self.current_emotion(),
-            self.emotional_state.feels_authentic(&to_niodoo_config(config)),
+            self.emotional_state
+                .feels_authentic(&to_niodoo_config(config)),
             self.current_reasoning_mode,
-            self.current_reasoning_mode.get_cognitive_load(&to_niodoo_config(config)) * 100.0,
+            self.current_reasoning_mode
+                .get_cognitive_load(&to_niodoo_config(config))
+                * 100.0,
             self.gpu_warmth_level * 100.0,
             self.processing_satisfaction * 100.0,
             self.authenticity_metric * 100.0,

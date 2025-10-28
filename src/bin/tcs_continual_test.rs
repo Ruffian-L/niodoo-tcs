@@ -178,8 +178,8 @@ impl TCSContinualTester {
         // Generate dummy topological data
         let training_data: Vec<(Vec<f32>, Vec<f32>)> = (0..10)
             .map(|i| {
-                let input = vec![i as f32 * 0.1; 768];
-                let target = vec![i as f32 * 0.1; 768];
+                let input = vec![i as f32 * 0.1; 896];
+                let target = vec![i as f32 * 0.1; 896];
                 (input, target)
             })
             .collect();

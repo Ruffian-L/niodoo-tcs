@@ -293,7 +293,7 @@ Based on `curator_executor/config.toml`:
 [curator]
 vllm_endpoint = "http://localhost:8000"
 model_name = "Qwen2.5-0.5B-Instruct"
-embedding_dim = 768
+embedding_dim = 896
 max_context_length = 2048
 distillation_batch_size = 32
 clustering_threshold = 0.8
@@ -301,7 +301,7 @@ clustering_threshold = 0.8
 [memory]
 qdrant_url = "http://localhost:6333"
 collection_name = "experiences"
-vector_dim = 768
+vector_dim = 896
 max_memory_size = 100000
 ```
 

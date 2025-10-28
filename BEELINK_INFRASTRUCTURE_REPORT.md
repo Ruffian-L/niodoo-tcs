@@ -105,7 +105,7 @@ async fn vllm_generate(prompt: &str) -> Result<String> {
 **Configuration:**
 ```yaml
 Collections: ["experiences"]
-Vector Dimension: 768
+Vector Dimension: 896
 Distance Metric: Cosine
 HNSW Parameters:
   m: 16
@@ -141,7 +141,7 @@ curl -X PUT http://100.113.10.90:6333/collections/experiences/points \
   -d '{
     "points": [{
       "id": 1,
-      "vector": [0.1, 0.2, ..., 0.768],
+      "vector": [0.1, 0.2, ..., 0.896],
       "payload": {
         "text": "sample experience",
         "emotional_vector": {"joy": 0.8, "fear": 0.1},
@@ -154,7 +154,7 @@ curl -X PUT http://100.113.10.90:6333/collections/experiences/points \
 curl -X POST http://100.113.10.90:6333/collections/experiences/points/search \
   -H "Content-Type: application/json" \
   -d '{
-    "vector": [0.1, 0.2, ..., 0.768],
+    "vector": [0.1, 0.2, ..., 0.896],
     "limit": 5,
     "with_payload": true
   }'
@@ -442,7 +442,7 @@ impl EmotionalVector {
     /// Convert to 768D vector for Qdrant (pad or project)
     pub fn to_qdrant_vector(&self) -> Vec<f32> {
         // Option 1: Simple padding (5D → 768D)
-        let mut vec = vec![0.0; 768];
+        let mut vec = vec![0.0; 896];
         vec[0] = self.joy;
         vec[1] = self.sadness;
         vec[2] = self.anger;
@@ -526,7 +526,7 @@ Format: OpenAI-compatible JSON
 
 **Configuration:**
 - Collection: "experiences"
-- Vector dimension: 768
+- Vector dimension: 896
 - Distance: Cosine
 - HNSW index: m=16, ef_construct=100
 

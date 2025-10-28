@@ -93,31 +93,34 @@ impl TCSAnalyzer {
             tqft_engine,
         })
     }
-    
+
     /// Apply TQFT reasoning to evolve a state through cobordism transitions
-    pub fn apply_tqft_reasoning(&self, 
-        initial_state: &[f64], 
-        transitions: &[Cobordism]
+    pub fn apply_tqft_reasoning(
+        &self,
+        initial_state: &[f64],
+        transitions: &[Cobordism],
     ) -> Result<Vec<f64>> {
-        use num_complex::Complex;
         use nalgebra::DVector;
-        
+        use num_complex::Complex;
+
         // Convert real state to complex vector
         let complex_state: DVector<Complex<f32>> = DVector::from_iterator(
             initial_state.len().min(self.tqft_engine.dimension),
-            initial_state.iter().take(self.tqft_engine.dimension)
-                .map(|&x| Complex::new(x as f32, 0.0))
+            initial_state
+                .iter()
+                .take(self.tqft_engine.dimension)
+                .map(|&x| Complex::new(x as f32, 0.0)),
         );
-        
+
         // Apply TQFT reasoning
-        let result_state = self.tqft_engine.reason(&complex_state, transitions)
+        let result_state = self
+            .tqft_engine
+            .reason(&complex_state, transitions)
             .map_err(|e| anyhow::anyhow!("TQFT reasoning failed: {}", e))?;
-        
+
         // Convert back to real values
-        let real_state: Vec<f64> = result_state.iter()
-            .map(|c| c.re as f64)
-            .collect();
-        
+        let real_state: Vec<f64> = result_state.iter().map(|c| c.re as f64).collect();
+
         Ok(real_state)
     }
 
@@ -128,7 +131,10 @@ impl TCSAnalyzer {
 
         let points = self.pad_to_points(pad_state);
         // Scaling guards: cap KNN and filtration for performance with configurable defaults
-        let k = std::env::var("TCS_KNN_K").ok().and_then(|v| v.parse().ok()).unwrap_or(16);
+        let k = std::env::var("TCS_KNN_K")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(16);
         let max_filtration = std::env::var("TCS_MAX_FILTRATION")
             .ok()
             .and_then(|v| v.parse::<f32>().ok())
@@ -247,7 +253,7 @@ impl TCSAnalyzer {
         // This would need previous state, so for now use static inference
         // In production, track previous Betti numbers for comparison
         static PREV_BETTI: std::sync::Mutex<Option<[usize; 3]>> = std::sync::Mutex::new(None);
-        
+
         let mut prev_guard = PREV_BETTI.lock().unwrap();
         let cobordism = if let Some(prev) = *prev_guard {
             TQFTEngine::infer_cobordism_from_betti(&prev, betti)
@@ -262,7 +268,7 @@ impl TCSAnalyzer {
             }
         };
         *prev_guard = Some(*betti);
-        
+
         cobordism
     }
 

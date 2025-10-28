@@ -1,5 +1,5 @@
 //! Topology Spider - Crawl through topology space and test healing integration
-//! 
+//!
 //! Usage: cargo run --bin topology_spider
 
 use anyhow::Result;
@@ -10,9 +10,7 @@ use tracing_subscriber;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     info!("🕷️  TOPOLOGY SPIDER - Starting crawl");
     info!("====================================");
@@ -30,13 +28,24 @@ async fn main() -> Result<()> {
     info!("");
     info!("🎯 FINAL SUMMARY");
     info!("================");
-    info!("Position crawl: {}/{} positions tested", 
-        crawl_results.positions.len(), crawl_results.positions.len());
-    info!("Knot complexity matches: {}/{}", 
-        crawl_results.positions.iter().filter(|r| r.knot_valid).count(),
-        crawl_results.positions.len());
-    info!("Healing integration: {}/{} tests passed", 
-        healing_results.passed, healing_results.total);
+    info!(
+        "Position crawl: {}/{} positions tested",
+        crawl_results.positions.len(),
+        crawl_results.positions.len()
+    );
+    info!(
+        "Knot complexity matches: {}/{}",
+        crawl_results
+            .positions
+            .iter()
+            .filter(|r| r.knot_valid)
+            .count(),
+        crawl_results.positions.len()
+    );
+    info!(
+        "Healing integration: {}/{} tests passed",
+        healing_results.passed, healing_results.total
+    );
 
     if healing_results.passed >= 3 {
         info!("✅ Healing/topology integration verified!");
@@ -46,4 +55,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

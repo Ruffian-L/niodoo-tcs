@@ -62,7 +62,7 @@ executor_model = "Qwen2.5-Coder-7B-Instruct"
 [memory_core]
 qdrant_url = "http://localhost:6333"
 collection_name = "experiences"
-vector_dim = 768
+vector_dim = 896
 max_memory_size = 100000
 ```
 
@@ -71,7 +71,7 @@ max_memory_size = 100000
 [qdrant]
 url = "http://localhost:6333"
 collection_name = "niodoo_embeddings"
-vector_size = 768
+vector_size = 896
 
 [vllm]
 endpoint = "http://localhost:8000/v1/completions"

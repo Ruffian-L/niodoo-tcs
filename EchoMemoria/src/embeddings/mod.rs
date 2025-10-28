@@ -147,7 +147,7 @@ impl EmbeddingEngine {
         
         // Simple projection layers (stub - train with QLoRA later)
         let proj1 = Linear::new(384, 512, vb.pp("proj1"))?;
-        let proj2 = Linear::new(512, 768, vb.pp("proj2"))?;
+        let proj2 = Linear::new(512, 896, vb.pp("proj2"))?;
         
         let base_tensor = Tensor::new(&base_embedding[..], &device)?.unsqueeze(0)?;
         let hidden = proj1.forward(base_tensor)?.relu()?;
@@ -438,11 +438,11 @@ mod tests {
         
         let emotional_emb = engine.embed_text_emotional(text, valence).await.unwrap();
         
-        assert_eq!(emotional_emb.len(), 775);  // 768 PAD + 7 ghosts
+        assert_eq!(emotional_emb.len(), 775);  // 896 PAD + 7 ghosts
         println!("Emotional embedding shape: {}", emotional_emb.len());
         
         // Check valence injection (ghosts should reflect emotion)
-        let ghosts = &emotional_emb[768..];
+        let ghosts = &emotional_emb[896..];
         assert!((ghosts[0].abs() - valence.abs()).abs() < 0.1);  // Intensity preserved
     }
 }

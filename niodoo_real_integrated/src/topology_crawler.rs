@@ -1,10 +1,10 @@
 //! Topology Space Crawler - Systematic exploration of topological positions
 //! Tests healing/topology integration at specific coordinates in the space
 
-use anyhow::Result;
 use crate::compass::{CompassEngine, CompassOutcome};
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::torus::PadGhostState;
+use anyhow::Result;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
@@ -24,8 +24,13 @@ impl TopologyPosition {
         PadGhostState {
             pad: self.coordinates,
             entropy: crate::util::shannon_entropy(&[
-                self.coordinates[0], self.coordinates[1], self.coordinates[2],
-                self.coordinates[3], self.coordinates[4], self.coordinates[5], self.coordinates[6]
+                self.coordinates[0],
+                self.coordinates[1],
+                self.coordinates[2],
+                self.coordinates[3],
+                self.coordinates[4],
+                self.coordinates[5],
+                self.coordinates[6],
             ]),
             mu: self.mu,
             sigma: self.sigma,
@@ -110,7 +115,10 @@ impl TopologyCrawler {
     pub async fn crawl_space(&mut self) -> Result<CrawlResults> {
         info!("🕷️  TOPOLOGY CRAWLER STARTING");
         info!("================================");
-        info!("Testing {} positions in topology space", self.test_positions.len());
+        info!(
+            "Testing {} positions in topology space",
+            self.test_positions.len()
+        );
 
         let mut results = Vec::new();
         let mut healing_detected = 0;
@@ -122,20 +130,25 @@ impl TopologyCrawler {
             info!("   Coordinates: {:?}", position.coordinates);
 
             let pad_state = position.to_pad_state();
-            
+
             // Analyze topology
             let topology = self.analyzer.analyze_state(&pad_state)?;
-            info!("   Topology: knot={:.3}, gap={:.3}, betti={:?}", 
-                topology.knot_complexity, topology.spectral_gap, topology.betti_numbers);
+            info!(
+                "   Topology: knot={:.3}, gap={:.3}, betti={:?}",
+                topology.knot_complexity, topology.spectral_gap, topology.betti_numbers
+            );
 
             // Evaluate compass (with topology integration)
-            let compass_outcome = self.compass
+            let compass_outcome = self
+                .compass
                 .lock()
                 .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?
                 .evaluate(&pad_state, Some(&topology))?;
-            
-            info!("   Compass: quadrant={:?}, threat={}, healing={}", 
-                compass_outcome.quadrant, compass_outcome.is_threat, compass_outcome.is_healing);
+
+            info!(
+                "   Compass: quadrant={:?}, threat={}, healing={}",
+                compass_outcome.quadrant, compass_outcome.is_threat, compass_outcome.is_healing
+            );
 
             // Validate knot complexity range
             let knot_valid = topology.knot_complexity >= position.expected_knot_complexity_range.0
@@ -143,7 +156,7 @@ impl TopologyCrawler {
 
             // Validate healing behavior
             let healing_match = compass_outcome.is_healing == position.expected_healing_behavior;
-            
+
             if compass_outcome.is_healing {
                 healing_detected += 1;
                 if healing_match {
@@ -169,8 +182,10 @@ impl TopologyCrawler {
                     warn!("   ⚠️  Knot complexity outside expected range");
                 }
                 if !healing_match {
-                    warn!("   ⚠️  Healing behavior mismatch: expected={}, got={}", 
-                        position.expected_healing_behavior, compass_outcome.is_healing);
+                    warn!(
+                        "   ⚠️  Healing behavior mismatch: expected={}, got={}",
+                        position.expected_healing_behavior, compass_outcome.is_healing
+                    );
                 }
             }
         }
@@ -179,8 +194,11 @@ impl TopologyCrawler {
         info!("📊 CRAWL RESULTS SUMMARY");
         info!("=========================");
         info!("Total positions tested: {}", results.len());
-        info!("Knot complexity valid: {}/{}", 
-            results.iter().filter(|r| r.knot_valid).count(), results.len());
+        info!(
+            "Knot complexity valid: {}/{}",
+            results.iter().filter(|r| r.knot_valid).count(),
+            results.len()
+        );
         info!("Healing detected: {}", healing_detected);
         info!("Healing correct: {}/{}", healing_correct, healing_detected);
 
@@ -210,16 +228,20 @@ impl TopologyCrawler {
             raw_stds: vec![0.1, 0.15, 0.12, 0.08, 0.08, 0.05, 0.03],
         };
         let topology = self.analyzer.analyze_state(&pad_state)?;
-        let compass = self.compass
+        let compass = self
+            .compass
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?
             .evaluate(&pad_state, Some(&topology))?;
-        
+
         if compass.is_healing {
             info!("   ✅ PASS: Healing triggered correctly");
             passed += 1;
         } else {
-            warn!("   ❌ FAIL: Expected healing state (knot={:.1})", topology.knot_complexity);
+            warn!(
+                "   ❌ FAIL: Expected healing state (knot={:.1})",
+                topology.knot_complexity
+            );
             failed += 1;
         }
 
@@ -233,16 +255,20 @@ impl TopologyCrawler {
             raw_stds: vec![0.08, 0.12, 0.1, 0.08, 0.08, 0.08, 0.04],
         };
         let topology = self.analyzer.analyze_state(&pad_state)?;
-        let compass = self.compass
+        let compass = self
+            .compass
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?
             .evaluate(&pad_state, Some(&topology))?;
-        
+
         if topology.spectral_gap > 0.7 && compass.is_healing {
             info!("   ✅ PASS: Healing triggered by spectral gap");
             passed += 1;
         } else {
-            warn!("   ❌ FAIL: Expected healing from spectral gap (gap={:.3})", topology.spectral_gap);
+            warn!(
+                "   ❌ FAIL: Expected healing from spectral gap (gap={:.3})",
+                topology.spectral_gap
+            );
             failed += 1;
         }
 
@@ -256,16 +282,20 @@ impl TopologyCrawler {
             raw_stds: vec![0.09, 0.1, 0.1, 0.07, 0.07, 0.05, 0.03],
         };
         let topology = self.analyzer.analyze_state(&pad_state)?;
-        let compass = self.compass
+        let compass = self
+            .compass
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?
             .evaluate(&pad_state, Some(&topology))?;
-        
+
         if topology.persistence_entropy < 0.3 && !compass.is_threat && compass.is_healing {
             info!("   ✅ PASS: Healing triggered by stable structure");
             passed += 1;
         } else {
-            warn!("   ❌ FAIL: Expected healing from stable structure (entropy={:.3})", topology.persistence_entropy);
+            warn!(
+                "   ❌ FAIL: Expected healing from stable structure (entropy={:.3})",
+                topology.persistence_entropy
+            );
             failed += 1;
         }
 
@@ -279,21 +309,29 @@ impl TopologyCrawler {
             raw_stds: vec![0.2, 0.25, 0.2, 0.2, 0.15, 0.15, 0.1],
         };
         let topology = self.analyzer.analyze_state(&pad_state)?;
-        let compass = self.compass
+        let compass = self
+            .compass
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?
             .evaluate(&pad_state, Some(&topology))?;
-        
+
         if topology.knot_complexity > 0.7 && !compass.is_healing {
             info!("   ✅ PASS: No healing for complex topology");
             passed += 1;
         } else {
-            warn!("   ❌ FAIL: Should not heal with high knot complexity ({:.3})", topology.knot_complexity);
+            warn!(
+                "   ❌ FAIL: Should not heal with high knot complexity ({:.3})",
+                topology.knot_complexity
+            );
             failed += 1;
         }
 
         info!("");
-        info!("Healing integration tests: {}/{} passed", passed, passed + failed);
+        info!(
+            "Healing integration tests: {}/{} passed",
+            passed,
+            passed + failed
+        );
 
         Ok(HealingTestResults {
             passed,
@@ -334,10 +372,10 @@ mod tests {
     async fn test_topology_crawler() {
         let mut crawler = TopologyCrawler::new().unwrap();
         let results = crawler.crawl_space().await.unwrap();
-        
+
         // Verify we tested all positions
         assert_eq!(results.positions.len(), 5);
-        
+
         // Verify at least some healing was detected
         assert!(results.healing_detected > 0);
     }
@@ -346,8 +384,13 @@ mod tests {
     async fn test_healing_scenarios() {
         let mut crawler = TopologyCrawler::new().unwrap();
         let results = crawler.test_healing_scenarios().await.unwrap();
-        
+
         // At least 3 out of 4 tests should pass
-        assert!(results.passed >= 3, "Healing integration test failed: {}/{} passed", results.passed, results.total);
+        assert!(
+            results.passed >= 3,
+            "Healing integration test failed: {}/{} passed",
+            results.passed,
+            results.total
+        );
     }
 }

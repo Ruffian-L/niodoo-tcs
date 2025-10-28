@@ -201,7 +201,7 @@ struct MockEmbeddingGenerator;
 
 impl MockEmbeddingGenerator {
     async fn generate_embedding(&self, bytes: &[u8]) -> Result<Vec<f32>> {
-        let mut embedding = vec![0.0_f32; 768];
+        let mut embedding = vec![0.0_f32; 896];
         if bytes.is_empty() {
             return Ok(embedding);
         }

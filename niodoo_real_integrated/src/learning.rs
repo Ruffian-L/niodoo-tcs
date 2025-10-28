@@ -10,11 +10,11 @@ use crate::compass::CompassOutcome;
 use crate::config::RuntimeConfig;
 use crate::erag::{CollapseResult, EragClient, EragMemory};
 use crate::generation::GenerationResult;
-use crate::lora_trainer::{LoRATrainer, LoRAConfig};
+use crate::lora_trainer::{LoRAConfig, LoRATrainer};
 use crate::tcs_analysis::TopologicalSignature;
 use crate::tcs_predictor::TcsPredictor;
-use crate::torus::PadGhostState;
 use crate::token_manager::DynamicTokenizerManager;
+use crate::torus::PadGhostState;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -114,9 +114,9 @@ pub struct LearningLoop {
     initial_epsilon: f64,
     initial_alpha: f64,
     recent_metrics: VecDeque<(f64, f64)>,
-    recent_topologies: VecDeque<TopologicalSignature>,  // INTEGRATION FIX: Track topology history
+    recent_topologies: VecDeque<TopologicalSignature>, // INTEGRATION FIX: Track topology history
     evolution: EvolutionLoop,
-    predictor: TcsPredictor,  // FIXED: Removed underscore to make it active
+    predictor: TcsPredictor, // FIXED: Removed underscore to make it active
     lora_trainer: LoRATrainer,
     reward_threshold: f64,
     tokenizer: Option<Arc<DynamicTokenizerManager>>,
@@ -151,7 +151,7 @@ impl LearningLoop {
             let guard = config.lock().unwrap();
             let embedding_dim = guard.qdrant_vector_dim;
             let lora_config = LoRAConfig {
-                rank: 8, // Default LoRA rank
+                rank: 8,     // Default LoRA rank
                 alpha: 16.0, // Default LoRA alpha
                 input_dim: embedding_dim,
                 output_dim: embedding_dim,
@@ -187,9 +187,9 @@ impl LearningLoop {
             initial_epsilon: epsilon,
             initial_alpha: alpha,
             recent_metrics: VecDeque::with_capacity(50),
-            recent_topologies: VecDeque::with_capacity(50),  // INTEGRATION FIX: Initialize topology tracking
+            recent_topologies: VecDeque::with_capacity(50), // INTEGRATION FIX: Initialize topology tracking
             evolution: EvolutionLoop::new(20, 5, 0.05),
-            predictor: TcsPredictor::new(),  // FIXED: Removed underscore
+            predictor: TcsPredictor::new(), // FIXED: Removed underscore
             lora_trainer,
             reward_threshold: -0.5,
             tokenizer: Some(tokenizer.clone()),
@@ -222,7 +222,7 @@ impl LearningLoop {
         if self.recent_metrics.len() > 50 {
             self.recent_metrics.pop_front();
         }
-        
+
         // INTEGRATION FIX: Track topology signatures for evolution
         self.recent_topologies.push_back(topology.clone());
         if self.recent_topologies.len() > 50 {
@@ -230,12 +230,11 @@ impl LearningLoop {
         }
 
         let config_snapshot = self.config.lock().unwrap().clone();
-        let fallback_ucb = compass
-            .ucb1_score
-            .unwrap_or(config_snapshot.mcts_c_scale) as f64;
+        let fallback_ucb = compass.ucb1_score.unwrap_or(config_snapshot.mcts_c_scale) as f64;
         let fallback_curator = collapse
             .curator_quality
-            .unwrap_or(config_snapshot.curator_quality_threshold) as f64;
+            .unwrap_or(config_snapshot.curator_quality_threshold)
+            as f64;
 
         let mut adjusted_params = HashMap::new();
         let mut events = Vec::new();
@@ -249,15 +248,22 @@ impl LearningLoop {
             fallback_ucb,
             fallback_curator,
         );
-        let history_dist = self.compute_history_distance(pad_state.entropy, collapse.top_hits.as_slice());
- 
+        let history_dist =
+            self.compute_history_distance(pad_state.entropy, collapse.top_hits.as_slice());
+
         let shaped_reward = base_reward;
 
-        let predictor_delta = self.predictor.predict_reward_delta(topology).clamp(-1.0, 1.0);
+        let predictor_delta = self
+            .predictor
+            .predict_reward_delta(topology)
+            .clamp(-1.0, 1.0);
         let predictor_applied = predictor_delta.abs() > 1e-6;
         if predictor_applied {
             adjusted_params.insert("predictor_delta".to_string(), predictor_delta);
-            events.push(format!("Predictor adjusted reward by {:.3}", predictor_delta));
+            events.push(format!(
+                "Predictor adjusted reward by {:.3}",
+                predictor_delta
+            ));
         }
 
         let predicted_reward_delta = predictor_delta;
@@ -280,8 +286,13 @@ impl LearningLoop {
         let reward = base_reward;
         let blended_reward = reward + (predicted_reward_delta * 0.3);
 
-        self.dqn_update(state.clone(), action.clone(), blended_reward, next_state.clone())
-            .await?;
+        self.dqn_update(
+            state.clone(),
+            action.clone(),
+            blended_reward,
+            next_state.clone(),
+        )
+        .await?;
 
         let performance =
             (generation.rouge_score + (1.0 - (entropy_delta.abs() / 0.5).min(1.0))) / 2.0;
@@ -319,7 +330,10 @@ impl LearningLoop {
         }
 
         if predictor_applied {
-            events.push(format!("Predictor delta applied (Δreward={:.3})", predicted_reward_delta));
+            events.push(format!(
+                "Predictor delta applied (Δreward={:.3})",
+                predicted_reward_delta
+            ));
         }
 
         let mut breakthroughs = Vec::new();
@@ -405,21 +419,25 @@ impl LearningLoop {
                     sample.knot_complexity as f32,
                     sample.spectral_gap as f32,
                 ];
-                
+
                 // Pad to target embedding dimension
                 while features.len() < embedding_dim {
                     features.push(0.0);
                 }
                 features.truncate(embedding_dim);
-                
+
                 // Build target vector from output bytes
-                let mut target = sample.output.bytes().map(|byte| byte as f32).collect::<Vec<_>>();
+                let mut target = sample
+                    .output
+                    .bytes()
+                    .map(|byte| byte as f32)
+                    .collect::<Vec<_>>();
                 if target.len() < embedding_dim {
                     target.resize(embedding_dim, 0.0);
                 } else {
                     target.truncate(embedding_dim);
                 }
-                
+
                 (features, target)
             })
             .collect();
@@ -431,10 +449,10 @@ impl LearningLoop {
         }
 
         // Check if we have any non-zero features
-        let has_valid_features = training_samples.iter().any(|(features, _)| {
-            features.iter().any(|&f| f.abs() > 1e-6)
-        });
-        
+        let has_valid_features = training_samples
+            .iter()
+            .any(|(features, _)| features.iter().any(|&f| f.abs() > 1e-6));
+
         if !has_valid_features {
             warn!("Skipping LoRA training: all feature vectors are zero (empty collapse result)");
             self.curated_buffer.clear();
@@ -452,13 +470,20 @@ impl LearningLoop {
             } else {
                 promoted_tokens.to_vec()
             };
-            info!(count = promoted_tokens.len(), "Retrieved promoted tokens for LoRA training");
+            info!(
+                count = promoted_tokens.len(),
+                "Retrieved promoted tokens for LoRA training"
+            );
         }
 
         let epochs = self.lora_epochs;
         match self.lora_trainer.train(&training_samples, epochs, 1e-3_f32) {
             Ok(_) => {
-                info!(count = training_samples.len(), "QLoRA trained on {} curated", training_samples.len());
+                info!(
+                    count = training_samples.len(),
+                    "QLoRA trained on {} curated",
+                    training_samples.len()
+                );
                 self.curated_buffer.clear();
             }
             Err(error) => {
@@ -653,7 +678,7 @@ impl LearningLoop {
         }
 
         // Outer meta-update: average deltas and apply to config
-            let mut config = self.config.lock().unwrap();
+        let mut config = self.config.lock().unwrap();
         for (param, total_delta) in &param_deltas {
             let avg_delta = total_delta / batch_len as f64;
             match param.as_str() {
@@ -695,7 +720,7 @@ impl LearningLoop {
             // Step 1: Collect low-reward tuples from ERAG
             let low_tuples = self.erag.query_low_reward_tuples(-0.5, 16).await?;
             let embedding_dim = self.config.lock().unwrap().qdrant_vector_dim;
-            
+
             // Step 2: Prepare training data from replay buffer + topological features
             let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
                 .replay_buffer
@@ -710,14 +735,14 @@ impl LearningLoop {
                         .iter()
                         .map(|value| *value as f32)
                         .collect::<Vec<f32>>();
-                    
+
                     // Pad to fixed size if needed
                     while input.len() < embedding_dim {
                         input.push(0.0);
                     }
                     input.truncate(embedding_dim);
-                    
-                    // Target: next state metrics (5 dims) -> pad to 768
+
+                    // Target: next state metrics (5 dims) -> pad to 896
                     let mut target = tuple
                         .next_state
                         .metrics
@@ -728,7 +753,7 @@ impl LearningLoop {
                         target.push(0.0);
                     }
                     target.truncate(embedding_dim);
-                    
+
                     (input, target)
                 })
                 .collect();
@@ -745,7 +770,7 @@ impl LearningLoop {
                         "QLoRA fine-tuning completed on {} samples",
                         training_samples.len()
                     );
-                    
+
                     // Step 4: After training, optionally adjust config based on low-reward tuples
                     if !low_tuples.is_empty() {
                         let mut param_deltas: HashMap<String, f64> = HashMap::new();
@@ -775,17 +800,20 @@ impl LearningLoop {
                                         config.phase2_mcts_c_increment.clamp(0.0, 2.0);
                                 }
                                 "retrieval_top_k" => {
-                                    let new_val = (config.phase2_retrieval_top_k_increment as f64 + avg_delta)
+                                    let new_val = (config.phase2_retrieval_top_k_increment as f64
+                                        + avg_delta)
                                         .clamp(0.0, 10.0);
                                     config.phase2_retrieval_top_k_increment = new_val as i32;
                                 }
                                 "novelty_threshold" => {
                                     config.novelty_threshold += avg_delta;
-                                    config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0);
+                                    config.novelty_threshold =
+                                        config.novelty_threshold.clamp(0.0, 1.0);
                                 }
                                 "self_awareness_level" => {
                                     config.self_awareness_level += avg_delta;
-                                    config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0);
+                                    config.self_awareness_level =
+                                        config.self_awareness_level.clamp(0.0, 1.0);
                                 }
                                 _ => {}
                             }
@@ -811,7 +839,7 @@ impl LearningLoop {
         }
         self.replay_buffer.iter().map(|t| t.reward).sum::<f64>() / self.replay_buffer.len() as f64
     }
-    
+
     // INTEGRATION FIX: Compute Wasserstein distance between current and historical entropy distributions
     fn compute_history_distance(&self, current_entropy: f64, erag_hits: &[EragMemory]) -> f64 {
         let mut historical: Vec<f64> = erag_hits
@@ -903,8 +931,12 @@ impl LearningLoop {
         }
 
         // INTEGRATION FIX: Pass topology data to evolution for topology-aware optimization
-        let recent_topologies: Vec<TopologicalSignature> = self.recent_topologies.iter().cloned().collect();
-        let best = self.evolution.evolve_with_topology(&current, mixed_episodes, recent_topologies).await?;
+        let recent_topologies: Vec<TopologicalSignature> =
+            self.recent_topologies.iter().cloned().collect();
+        let best = self
+            .evolution
+            .evolve_with_topology(&current, mixed_episodes, recent_topologies)
+            .await?;
         {
             let mut guard = self.config.lock().unwrap();
             *guard = best;
@@ -963,7 +995,11 @@ impl LearningLoop {
         if self.recent_metrics.is_empty() {
             return 0.0;
         }
-        self.recent_metrics.iter().map(|(_, latency)| *latency).sum::<f64>() / self.recent_metrics.len() as f64
+        self.recent_metrics
+            .iter()
+            .map(|(_, latency)| *latency)
+            .sum::<f64>()
+            / self.recent_metrics.len() as f64
     }
 }
 
@@ -1032,7 +1068,7 @@ impl EvolutionLoop {
             bo_gp: GaussianProcess::default(),
         }
     }
-    
+
     // INTEGRATION FIX: New topology-aware evolution method
     pub async fn evolve_with_topology(
         &mut self,
@@ -1044,29 +1080,29 @@ impl EvolutionLoop {
         if topologies.is_empty() {
             return self.evolve(current_config, episodes).await;
         }
-        
+
         // Calculate topology-based fitness modifiers
         let avg_knot: f64 =
             topologies.iter().map(|t| t.knot_complexity).sum::<f64>() / topologies.len() as f64;
         let avg_gap: f64 =
             topologies.iter().map(|t| t.spectral_gap).sum::<f64>() / topologies.len() as f64;
-        
+
         // Adjust mutation based on topology stability
         let old_mutation_std = self.mutation_std;
-    if avg_knot > 0.4 {
+        if avg_knot > 0.4 {
             // High knot complexity - reduce mutation to stabilize
             self.mutation_std *= 0.7;
         } else if avg_gap > 0.5 {
             // High spectral gap - increase mutation for exploration
             self.mutation_std *= 1.3;
         }
-        
+
         // Run evolution with topology-adjusted parameters
         let result = self.evolve(current_config, episodes).await;
-        
+
         // Restore original mutation std
         self.mutation_std = old_mutation_std;
-        
+
         result
     }
 

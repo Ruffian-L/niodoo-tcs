@@ -11,7 +11,7 @@ export LD_LIBRARY_PATH=/home/beelink/Niodoo-Final/onnxruntime-linux-x64-1.16.3/l
 export VLLM_ENDPOINT=http://localhost:8000
 export QDRANT_URL=http://localhost:6333
 export QDRANT_COLLECTION=experiences
-export QDRANT_VECTOR_SIZE=768
+export QDRANT_VECTOR_SIZE=896
 export RUST_LOG=info
 
 # Run the binary

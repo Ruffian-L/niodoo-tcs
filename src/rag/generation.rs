@@ -16,11 +16,7 @@ pub struct RagGeneration {
 }
 
 impl RagGeneration {
-    fn process_query(
-        &mut self,
-        query: &str,
-        context: &ConsciousnessState,
-    ) -> Result<String> {
+    fn process_query(&mut self, query: &str, context: &ConsciousnessState) -> Result<String> {
         // Create a temporary mutable state for processing
         let mut temp_state = context.clone();
         self.generate(query, &mut temp_state)
@@ -162,11 +158,7 @@ impl RagGeneration {
     }
 
     /// Generate response using retrieved documents as context
-    pub fn generate(
-        &mut self,
-        query: &str,
-        state: &mut ConsciousnessState,
-    ) -> Result<String> {
+    pub fn generate(&mut self, query: &str, state: &mut ConsciousnessState) -> Result<String> {
         // Use real retrieval with consciousness state
         let retrieved_with_scores = self.retrieval.retrieve(query, state);
 

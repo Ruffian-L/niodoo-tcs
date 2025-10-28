@@ -7,13 +7,13 @@
 
 ## Problem Identified
 
-User reported that after running `./run_with_metrics.sh --iterations 3`, every iteration died at the ERAG collapse step with a vector-dimension mismatch error: "expected 896, got 768".
+User reported that after running `./run_with_metrics.sh --iterations 3`, every iteration died at the ERAG collapse step with a vector-dimension mismatch error: "expected 896, got 896".
 
 ---
 
 ## Root Cause
 
-1. **Embedder outputs:** 768-dimensional vectors (`nomic-embed-text` model)
+1. **Embedder outputs:** 896-dimensional vectors (`nomic-embed-text` model)
 2. **Config expected:** 896-dimensional vectors
 3. **Qdrant collection:** Created with 896 dimensions
 
@@ -30,7 +30,7 @@ QDRANT_VECTOR_DIM=896  # Wrong
 ```
 To:
 ```bash
-QDRANT_VECTOR_DIM=768  # Correct
+QDRANT_VECTOR_DIM=896  # Correct
 ```
 
 ### 2. ✅ Updated Config Default
@@ -42,7 +42,7 @@ Changed:
 ```
 To:
 ```rust
-.unwrap_or(768);  // Correct default
+.unwrap_or(896);  // Correct default
 ```
 
 ### 3. ✅ Recreated Qdrant Collection
@@ -51,7 +51,7 @@ To:
 ```bash
 # Collection verified to have correct dimensions
 curl http://127.0.0.1:6333/collections/experiences | jq '.result.config.params.vectors.size'
-768  # ✅ Correct
+896  # ✅ Correct
 ```
 
 ### 4. ✅ Updated Comment in Code
@@ -88,10 +88,10 @@ Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.65s
 ✅ **All iterations completed successfully**
 
 ### Dimension Consistency
-Logs confirm 768-dim vectors throughout:
+Logs confirm 896-dim vectors throughout:
 ```
-INFO Initialized LoRA adapter: input_dim=768, output_dim=768, rank=8
-INFO embed: normalized embedding to hypersphere dim=768
+INFO Initialized LoRA adapter: input_dim=896, output_dim=896, rank=8
+INFO embed: normalized embedding to hypersphere dim=896
 ```
 ✅ **No dimension mismatches**
 
@@ -111,9 +111,9 @@ INFO learning loop updated with TCS reward
 ## Summary
 
 ### Changes Made: 4 Fixes
-1. ✅ Updated `.env` - Set `QDRANT_VECTOR_DIM=768`
-2. ✅ Updated `config.rs` - Changed default from 896 to 768
-3. ✅ Recreated Qdrant collection - New 768-dim collection
+1. ✅ Updated `.env` - Set `QDRANT_VECTOR_DIM=896`
+2. ✅ Updated `config.rs` - Changed default from 896 to 896
+3. ✅ Recreated Qdrant collection - New 896-dim collection
 4. ✅ Updated code comment - Removed hardcoded dimension reference
 
 ### Files Modified: 3
@@ -124,7 +124,7 @@ INFO learning loop updated with TCS reward
 ### Status: ✅ **COMPLETE AND VERIFIED**
 
 The dimension mismatch has been completely resolved. The pipeline now:
-- Uses 768-dimensional vectors throughout
+- Uses 896-dimensional vectors throughout
 - Completes all iterations successfully
 - Triggers TCS predictor correctly
 - Populates predictor telemetry

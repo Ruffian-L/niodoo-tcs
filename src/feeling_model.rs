@@ -80,7 +80,7 @@ impl Default for FeelingModelConfig {
     fn default() -> Self {
         Self {
             vocab_size: 30522,
-            hidden_dim: 768,
+            hidden_dim: 896,
             num_heads: 12,
             num_layers: 12,
             max_seq_len: 512,

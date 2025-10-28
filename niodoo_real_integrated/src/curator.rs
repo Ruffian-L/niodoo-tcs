@@ -66,7 +66,10 @@ impl Curator {
             }
         });
 
-        let url = format!("{}/api/generate", self.config.vllm_endpoint.trim_end_matches('/'));
+        let url = format!(
+            "{}/api/generate",
+            self.config.vllm_endpoint.trim_end_matches('/')
+        );
         let response = self
             .client
             .post(url)
@@ -113,15 +116,25 @@ impl Curator {
     }
 
     /// Refine a response using Qwen JSON call (returns refined text and learning flag)
-    pub async fn refine(&self, response: &str, rouge: f64, knot: f64, entropy: f64) -> Result<(String, bool)> {
+    pub async fn refine(
+        &self,
+        response: &str,
+        rouge: f64,
+        knot: f64,
+        entropy: f64,
+    ) -> Result<(String, bool)> {
         let quality = rouge * 0.6 + (1.0 / (knot + 1.0)) * 0.4;
 
-        if quality >= 0.8 { // Using a default value for curator_threshold
+        if quality >= 0.8 {
+            // Using a default value for curator_threshold
             info!("Curator skipped: quality={} >= {}", quality, 0.8);
             return Ok((response.to_string(), false));
         }
 
-        info!("Curator Qwen call: quality={}, knot={}, entropy={}", quality, knot, entropy);
+        info!(
+            "Curator Qwen call: quality={}, knot={}, entropy={}",
+            quality, knot, entropy
+        );
 
         let prompt = format!(
             "As code reviewer, validate/refine for quality>0.8, untangle knot {}, balance entropy {}: Response '{}'. Output JSON: {{\"learned\": true/false, \"refined\": \"text\", \"reason\": \"brief\"}}",
@@ -143,7 +156,7 @@ impl Curator {
         });
 
         let resp = self.client.post(ollama_url).json(&body).send().await?;
-        
+
         if !resp.status().is_success() {
             error!("Ollama down—run 'ollama serve && ollama pull qwen2:0.5b'");
             return Err(anyhow!("Ollama unavailable"));
@@ -154,7 +167,12 @@ impl Curator {
         let refined = result["refined"].as_str().unwrap_or(response).to_string();
         let reason = result["reason"].as_str().unwrap_or("No reason");
 
-        info!("Qwen curator refined: learned={}, refined len={}, reason={}", learned, refined.len(), reason);
+        info!(
+            "Qwen curator refined: learned={}, refined len={}, reason={}",
+            learned,
+            refined.len(),
+            reason
+        );
         Ok((refined, learned))
     }
 

@@ -73,7 +73,7 @@ impl Default for MemoryConfig {
         Self {
             qdrant_url: std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6333".to_string()),
             collection_name: "experiences".to_string(),
-            vector_dim: 768, // Qwen 0.5B embedding dimension
+            vector_dim: 896, // Qwen 0.5B embedding dimension
             max_memory_size: 100000,
         }
     }

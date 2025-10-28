@@ -65,7 +65,7 @@ pub struct GenerationEngine {
     model: String,
     temperature: f64,
     top_p: f64,
-    repetition_penalty: f64,  // Added field for repetition penalty
+    repetition_penalty: f64, // Added field for repetition penalty
     max_tokens: usize,
     client: Arc<Client>,
     // Optional API clients for cascading generation
@@ -102,7 +102,7 @@ fn sanitize_prompt(prompt: &str) -> String {
         .replace("assistant:", "")
         .replace("USER:", "")
         .replace("user:", "");
-    
+
     // Truncate if suspiciously long (potential DoS)
     if sanitized.len() > 10000 {
         sanitized.chars().take(10000).collect()
@@ -152,7 +152,7 @@ impl GenerationEngine {
             model: model.into(),
             temperature: 0.5,
             top_p: 0.6,
-            repetition_penalty: 1.2,  // Default repetition penalty
+            repetition_penalty: 1.2, // Default repetition penalty
             max_tokens,
             client: Arc::new(client),
             claude: None,
@@ -185,7 +185,7 @@ impl GenerationEngine {
     pub fn update_params(&mut self, temperature: f64, top_p: f64, repetition_penalty: f64) {
         self.temperature = temperature.clamp(0.1, 1.0);
         self.top_p = top_p.clamp(0.1, 1.0);
-        self.repetition_penalty = repetition_penalty.clamp(1.0, 2.0);  // Now stored as field
+        self.repetition_penalty = repetition_penalty.clamp(1.0, 2.0); // Now stored as field
     }
 
     fn compose_system_prompt(&self, compass: Option<&CompassOutcome>) -> String {
@@ -269,7 +269,8 @@ impl GenerationEngine {
                 Err(_) => {
                     warn!(
                         timeout_secs = self.timeout_secs,
-                        "GPT generation timed out after {}s, falling back to vLLM", self.timeout_secs
+                        "GPT generation timed out after {}s, falling back to vLLM",
+                        self.timeout_secs
                     );
                 }
             }
@@ -279,7 +280,7 @@ impl GenerationEngine {
 
         // Finally use vLLM as the guaranteed fallback (no timeout)
         let clamped_prompt = self.clamp_prompt(prompt);
-    match self.request_text(&clamped_prompt, None).await {
+        match self.request_text(&clamped_prompt, None).await {
             Ok((response, source)) => {
                 let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
                 info!(latency_ms, api = %source, "generation succeeded with fallback source");
@@ -298,9 +299,10 @@ impl GenerationEngine {
         tokenizer_output: &TokenizerOutput,
         compass: &CompassOutcome,
     ) -> Result<GenerationResult> {
-        self.generate_with_topology(tokenizer_output, compass, None).await
+        self.generate_with_topology(tokenizer_output, compass, None)
+            .await
     }
-    
+
     #[instrument(skip_all)]
     pub async fn generate_with_topology(
         &self,
@@ -309,7 +311,7 @@ impl GenerationEngine {
         topology: Option<&crate::tcs_analysis::TopologicalSignature>,
     ) -> Result<GenerationResult> {
         let start = Instant::now();
-        
+
         // Augment prompt with topology insights if available
         let augmented_prompt = if let Some(topo) = topology {
             if topo.knot_complexity > 0.6 {
@@ -318,16 +320,18 @@ impl GenerationEngine {
                     tokenizer_output.augmented_prompt, topo.knot_complexity)
             } else if topo.spectral_gap > 0.7 {
                 // High spectral gap - encourage exploration
-                format!("{}\n[Note: High spectral gap ({:.2}) indicates exploration opportunity.]", 
-                    tokenizer_output.augmented_prompt, topo.spectral_gap)
+                format!(
+                    "{}\n[Note: High spectral gap ({:.2}) indicates exploration opportunity.]",
+                    tokenizer_output.augmented_prompt, topo.spectral_gap
+                )
             } else {
                 tokenizer_output.augmented_prompt.clone()
             }
         } else {
             tokenizer_output.augmented_prompt.clone()
         };
-        
-    let baseline_future = self.request_text(&augmented_prompt, Some(compass));
+
+        let baseline_future = self.request_text(&augmented_prompt, Some(compass));
         let claude_future = self.request_lens_response(
             "Claude".to_string(),
             self.format_lens_prompt(
@@ -378,9 +382,9 @@ impl GenerationEngine {
             compass,
         );
 
-    let cand1_future = self.request_text(prompt, Some(compass));
+        let cand1_future = self.request_text(prompt, Some(compass));
         let cand2_future = self.request_lens_response("Claude".to_string(), lens_prompt.clone());
-    let cand3_future = self.request_text(prompt, Some(compass));
+        let cand3_future = self.request_text(prompt, Some(compass));
 
         let ((cand1_text, _cand1_source), cand2_echo, (cand3_text, _cand3_source)) =
             tokio::try_join!(cand1_future, cand2_future, cand3_future)?;
@@ -507,7 +511,8 @@ impl GenerationEngine {
             Err(_) => {
                 warn!(
                     timeout_secs = self.timeout_secs,
-                    "baseline generation timed out after {}s; returning fallback text", self.timeout_secs
+                    "baseline generation timed out after {}s; returning fallback text",
+                    self.timeout_secs
                 );
                 Ok((
                     "Baseline response unavailable (timeout)".to_string(),
@@ -548,7 +553,8 @@ impl GenerationEngine {
                 warn!(
                     lens,
                     timeout_secs = self.timeout_secs,
-                    "lens generation timed out after {}s; returning fallback text", self.timeout_secs
+                    "lens generation timed out after {}s; returning fallback text",
+                    self.timeout_secs
                 );
                 "Lens response unavailable (timeout)".to_string()
             }
@@ -815,7 +821,12 @@ impl GenerationEngine {
             .map(|(text, _)| text)
     }
 
-    fn format_lens_prompt(&self, prompt: &str, directive: &str, compass: &CompassOutcome) -> String {
+    fn format_lens_prompt(
+        &self,
+        prompt: &str,
+        directive: &str,
+        compass: &CompassOutcome,
+    ) -> String {
         let clipped = self.clamp_prompt(prompt);
         let pulse = snippet(&clipped, self.lens_snippet_chars);
         let pulse_len = pulse.chars().count();
@@ -870,7 +881,7 @@ impl GenerationEngine {
         self.generate_with_params(&augmented, temp, self.top_p)
             .await
     }
-    
+
     /// Apply topology-aware CoT repair for soft failures
     pub async fn apply_cot_repair_with_topology(
         &self,
@@ -893,21 +904,21 @@ impl GenerationEngine {
         } else {
             ""
         };
-        
+
         let augmented = format!("{prompt}\n\n[CoT Repair #{retry_index}]: Re-evaluate {detail}. {topology_hint}\nStep-by-step: 1. Identify flaw. 2. Correct logic. 3. Verify.");
-        
+
         // Adjust temperature based on topology
         let mut temp = self.temperature + 0.1 * retry_index as f64;
         if let Some(topo) = topology {
             // Lower temperature if too tangled, higher if need exploration
             if topo.knot_complexity > 0.7 {
-                temp *= 0.8;  // Cool down for clarity
+                temp *= 0.8; // Cool down for clarity
             } else if topo.spectral_gap > 0.8 {
-                temp *= 1.2;  // Heat up for exploration
+                temp *= 1.2; // Heat up for exploration
             }
         }
         temp = temp.min(1.0).max(0.1);
-        
+
         info!("Topology-aware CoT repair (index {retry_index}): temp={temp:.2}");
         self.generate_with_params(&augmented, temp, self.top_p)
             .await
@@ -940,17 +951,18 @@ impl GenerationEngine {
                 prompt
             )
         };
-        
+
         // Use optimal parameters for healing state
         let temp = 0.4; // Low temperature for consistency
         let top_p = 0.92; // Slightly constrained for quality
-        
+
         info!(
             "Generating healing-enhanced response (knot={:.2}, gap={:.2}, entropy={:.2})",
             topology.knot_complexity, topology.spectral_gap, topology.persistence_entropy
         );
-        
-        self.generate_with_params(&healing_prompt, temp, top_p).await
+
+        self.generate_with_params(&healing_prompt, temp, top_p)
+            .await
     }
 
     /// Apply Reflexion for hard failures

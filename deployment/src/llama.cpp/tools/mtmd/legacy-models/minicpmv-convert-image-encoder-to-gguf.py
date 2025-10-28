@@ -45,7 +45,7 @@ class SiglipVisionConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 896):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
@@ -81,7 +81,7 @@ class SiglipVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
+        hidden_size=896,
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,

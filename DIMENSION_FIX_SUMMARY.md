@@ -8,7 +8,7 @@
 ## Problem
 
 The pipeline booted cleanly but failed at the ERAG collapse step due to dimension mismatch:
-- **Embedder produces:** 768-dimensional vectors (nomic-embed-text model)
+- **Embedder produces:** 896-dimensional vectors (nomic-embed-text model)
 - **Pipeline expected:** 896-dimensional vectors (configured incorrectly)
 
 ---
@@ -18,7 +18,7 @@ The pipeline booted cleanly but failed at the ERAG collapse step due to dimensio
 ### 1. Environment Variable Mismatch
 The `.env` file had conflicting settings:
 ```bash
-QDRANT_VECTOR_SIZE=768   # Correct for nomic-embed-text
+QDRANT_VECTOR_SIZE=896   # Correct for nomic-embed-text
 QDRANT_VECTOR_DIM=896    # WRONG - caused mismatch
 ```
 
@@ -44,7 +44,7 @@ The Qdrant collection was created with 896 dimensions, requiring recreation.
 QDRANT_VECTOR_DIM=896
 
 # After
-QDRANT_VECTOR_DIM=768
+QDRANT_VECTOR_DIM=896
 ```
 
 ### 2. ✅ Updated Default in Config
@@ -56,7 +56,7 @@ QDRANT_VECTOR_DIM=768
 .unwrap_or(896);
 
 // After
-.unwrap_or(768);
+.unwrap_or(896);
 ```
 
 ### 3. ✅ Recreated Qdrant Collection
@@ -78,13 +78,13 @@ curl -X DELETE http://127.0.0.1:6333/collections/experiences
 $ curl -s -X POST http://127.0.0.1:11434/api/embeddings \
   -H "Content-Type: application/json" \
   -d '{"model":"nomic-embed-text","prompt":"test"}' | jq -r '.embedding | length'
-768
+896
 ```
 
 ### 2. Qdrant Collection Dimension
 ```bash
 $ curl -s http://127.0.0.1:6333/collections/experiences | jq -r '.result.config.params.vectors.size'
-768
+896
 ```
 
 ### 3. Test Run Success
@@ -116,7 +116,7 @@ INFO learning loop updated with TCS reward
 ```
 Prompt
   ↓
-Embedding (768-dim) ✅
+Embedding (896-dim) ✅
   ↓
 Torus Projection → PadGhostState
   ↓
@@ -144,9 +144,9 @@ Query Tough Knots (topology > 0.4)
 ## Summary
 
 ### Changes Made: 3 Fixes
-1. ✅ Updated `.env` - Set `QDRANT_VECTOR_DIM=768`
-2. ✅ Updated `config.rs` - Changed default from 896 to 768
-3. ✅ Recreated Qdrant collection - New 768-dim collection
+1. ✅ Updated `.env` - Set `QDRANT_VECTOR_DIM=896`
+2. ✅ Updated `config.rs` - Changed default from 896 to 896
+3. ✅ Recreated Qdrant collection - New 896-dim collection
 
 ### Files Modified: 2
 - `.env` - Fixed vector dimension env var

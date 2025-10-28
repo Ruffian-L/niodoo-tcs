@@ -46,7 +46,7 @@ void ggml_cuda_op_add_id(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     const int32_t * src2_d = (const int32_t *)src2->data;
     float * dst_d = (float *)dst->data;
 
-    int threads = std::min((int)ne00, 768); // cols
+    int threads = std::min((int)ne00, 896); // cols
     dim3 blocks(ne01, ne02); // n_experts_used, n_tokens
     add_id_kernel<<<blocks, threads, 0, ctx.stream()>>>(
         src0_d, src1_d, src2_d, dst_d,

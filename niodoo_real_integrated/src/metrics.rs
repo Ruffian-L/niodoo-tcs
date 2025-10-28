@@ -264,11 +264,8 @@ impl TokenizerMetricHandles {
                 "Total promoted tokens"
             )
             .map_err(Error::from)?,
-            pruned_total: register_counter!(
-                "niodoo_tokenizer_pruned_total",
-                "Total pruned tokens"
-            )
-            .map_err(Error::from)?,
+            pruned_total: register_counter!("niodoo_tokenizer_pruned_total", "Total pruned tokens")
+                .map_err(Error::from)?,
             promotion_latency_ms: register_gauge!(
                 "niodoo_tokenizer_promotion_latency_ms",
                 "Last promotion cycle duration in milliseconds"

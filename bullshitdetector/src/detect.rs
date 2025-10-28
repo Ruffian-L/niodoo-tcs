@@ -397,7 +397,7 @@ pub fn score_bs_confidence(alerts: &mut Vec<BullshitAlert>, memory: &crate::memo
         // Commented out due to compilation issues - will implement proper model loading later
         // let outputs = model.forward(&input_ids, &attention_mask, None)?;
         // let pooler_output = outputs.i((0, 0, ..))?.to_vec1::<f32>()?;
-        let pooler_output = vec![0.1; 768]; // Mock output
+        let pooler_output = vec![0.1; 896]; // Mock output
         let embedding: Vec<f32> = pooler_output.to_vec();
 
         // Spawn and run emotional probes

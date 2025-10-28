@@ -13,7 +13,7 @@
 ### ✅ Qdrant - OPERATIONAL  
 - Status: Running on port 6333
 - Collection: experiences recreated with correct vector size
-- Vector size: 896 (was 768, fixed via PUT request)
+- Vector size: 896 (was 896, fixed via PUT request)
 - Test: `curl http://127.0.0.1:6333/collections/experiences` returns collection info
 - Previous issue: Stale file handle error - resolved by recreating collection
 

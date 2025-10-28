@@ -82,7 +82,7 @@ struct PipelinePool {
 impl PipelinePool {
     async fn new(size: usize, hardware: HardwareProfile) -> Result<Self> {
         let mut pipelines = Vec::with_capacity(size);
-        
+
         for i in 0..size {
             let args = CliArgs {
                 hardware,
@@ -92,21 +92,22 @@ impl PipelinePool {
                 output: OutputFormat::Csv,
                 config: None,
             };
-            
-            let pipeline = Pipeline::initialise(args).await
+
+            let pipeline = Pipeline::initialise(args)
+                .await
                 .with_context(|| format!("Failed to initialize pipeline worker {}", i))?;
-            
+
             pipelines.push(Arc::new(Mutex::new(pipeline)));
-            
+
             if (i + 1) % 10 == 0 {
                 info!("Initialized {}/{} pipeline workers", i + 1, size);
             }
         }
-        
+
         info!("Pipeline pool initialized with {} workers", size);
         Ok(Self { pipelines })
     }
-    
+
     async fn process_prompt(&self, worker_id: usize, prompt: &str) -> Result<PipelineCycle> {
         let pipeline = &self.pipelines[worker_id % self.pipelines.len()];
         let mut pipeline_guard = pipeline.lock().await;
@@ -127,24 +128,40 @@ fn generate_test_prompts(count: usize) -> Vec<String> {
         "Discuss the trade-offs involved in {}",
         "Generate a comprehensive solution for {}",
     ];
-    
+
     let topics = vec![
-        "parallel processing", "memory management", "distributed systems",
-        "machine learning", "topological data analysis", "consciousness modeling",
-        "neural networks", "quantum computing", "information theory",
-        "computational complexity", "optimization algorithms", "graph theory",
-        "natural language processing", "computer vision", "reinforcement learning",
-        "embeddings", "attention mechanisms", "transformer architecture",
-        "persistent homology", "knot theory", "manifold learning",
-        "entropy measurement", "signal processing", "pattern recognition",
+        "parallel processing",
+        "memory management",
+        "distributed systems",
+        "machine learning",
+        "topological data analysis",
+        "consciousness modeling",
+        "neural networks",
+        "quantum computing",
+        "information theory",
+        "computational complexity",
+        "optimization algorithms",
+        "graph theory",
+        "natural language processing",
+        "computer vision",
+        "reinforcement learning",
+        "embeddings",
+        "attention mechanisms",
+        "transformer architecture",
+        "persistent homology",
+        "knot theory",
+        "manifold learning",
+        "entropy measurement",
+        "signal processing",
+        "pattern recognition",
     ];
-    
+
     let prompts: Vec<String> = (0..count)
         .map(|i| {
             let template = &base_templates[i % base_templates.len()];
             let topic1 = &topics[i % topics.len()];
             let topic2 = &topics[(i * 7) % topics.len()];
-            
+
             if template.contains("{}") && template.matches("{}").count() == 2 {
                 template.replace("{}", topic1).replace("{}", topic2)
             } else {
@@ -152,7 +169,7 @@ fn generate_test_prompts(count: usize) -> Vec<String> {
             }
         })
         .collect();
-    
+
     prompts
 }
 
@@ -168,30 +185,38 @@ fn calculate_percentile(values: &[f64], percentile: f64) -> f64 {
 
 async fn run_parallel_test(args: MillionTestArgs) -> Result<()> {
     let overall_start = Instant::now();
-    
+
     info!("🚀 Starting 1M-cycle NIODOO test");
-    info!("Configuration: count={}, workers={}, batch_size={}", 
-          args.count, args.workers, args.batch_size);
-    
+    info!(
+        "Configuration: count={}, workers={}, batch_size={}",
+        args.count, args.workers, args.batch_size
+    );
+
     // Determine hardware profile
     let hardware = match args.hardware.as_str() {
         "beelink" => HardwareProfile::Beelink,
         "5080q" | "5080-q" => HardwareProfile::Laptop5080Q,
         "h200" | "H200" => HardwareProfile::H200,
         _ => {
-            eprintln!("Unknown hardware profile: {}, defaulting to h200", args.hardware);
+            eprintln!(
+                "Unknown hardware profile: {}, defaulting to h200",
+                args.hardware
+            );
             HardwareProfile::H200
         }
     };
-    
+
     // Initialize pipeline pool
-    info!("Initializing pipeline pool with {} workers...", args.workers);
+    info!(
+        "Initializing pipeline pool with {} workers...",
+        args.workers
+    );
     let pool = PipelinePool::new(args.workers, hardware).await?;
-    
+
     // Generate test prompts
     info!("Generating {} test prompts...", args.count);
     let prompts = generate_test_prompts(args.count);
-    
+
     // Parallel processing
     info!("Starting parallel test execution...");
     let results: Vec<Result<TestResult>> = prompts
@@ -199,23 +224,24 @@ async fn run_parallel_test(args: MillionTestArgs) -> Result<()> {
         .enumerate()
         .map(|(batch_idx, batch)| {
             let worker_id = batch_idx % args.workers;
-            
-            batch.iter().enumerate().map(|(local_idx, prompt)| {
-                let test_id = batch_idx * args.batch_size + local_idx;
-                
-                // Synchronous processing block
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                let start = Instant::now();
-                
-                let result = rt.block_on(async {
-                    pool.process_prompt(worker_id, prompt).await
-                });
-                
-                let latency = start.elapsed().as_millis() as f64;
-                
-                match result {
-                    Ok(cycle) => {
-                        Ok(TestResult {
+
+            batch
+                .iter()
+                .enumerate()
+                .map(|(local_idx, prompt)| {
+                    let test_id = batch_idx * args.batch_size + local_idx;
+
+                    // Synchronous processing block
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    let start = Instant::now();
+
+                    let result =
+                        rt.block_on(async { pool.process_prompt(worker_id, prompt).await });
+
+                    let latency = start.elapsed().as_millis() as f64;
+
+                    match result {
+                        Ok(cycle) => Ok(TestResult {
                             id: test_id,
                             prompt: prompt.clone(),
                             entropy: cycle.entropy,
@@ -230,31 +256,31 @@ async fn run_parallel_test(args: MillionTestArgs) -> Result<()> {
                             tcs_time_ms: cycle.stage_timings.tcs_ms,
                             erag_time_ms: cycle.stage_timings.erag_ms,
                             generation_time_ms: cycle.stage_timings.generation_ms,
-                        })
+                        }),
+                        Err(e) => {
+                            eprintln!("Test {} failed: {}", test_id, e);
+                            Err(e)
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("Test {} failed: {}", test_id, e);
-                        Err(e)
-                    }
-                }
-            }).collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
         })
         .flatten()
         .collect();
-    
+
     // Analyze results
     let mut completed = Vec::new();
     let mut failed = 0;
-    
+
     for result in results {
         match result {
             Ok(res) => completed.push(res),
             Err(_) => failed += 1,
         }
     }
-    
+
     info!("Completed: {}, Failed: {}", completed.len(), failed);
-    
+
     // Calculate statistics
     let entropies: Vec<f64> = completed.iter().map(|r| r.entropy).collect();
     let rouges: Vec<f64> = completed.iter().map(|r| r.rouge).collect();
@@ -262,28 +288,31 @@ async fn run_parallel_test(args: MillionTestArgs) -> Result<()> {
     let threats: usize = completed.iter().filter(|r| r.is_threat).count();
     let healings: usize = completed.iter().filter(|r| r.is_healing).count();
     let cache_hits: usize = completed.iter().filter(|r| r.embeddings_cache_hit).count();
-    
+
     let avg_entropy = entropies.iter().sum::<f64>() / entropies.len() as f64;
-    let entropy_std = (entropies.iter()
+    let entropy_std = (entropies
+        .iter()
         .map(|&e| (e - avg_entropy).powi(2))
-        .sum::<f64>() / entropies.len() as f64).sqrt();
-    
+        .sum::<f64>()
+        / entropies.len() as f64)
+        .sqrt();
+
     let avg_rouge = rouges.iter().sum::<f64>() / rouges.len() as f64;
     let avg_latency = latencies.iter().sum::<f64>() / latencies.len() as f64;
-    
+
     let torus_times: Vec<f64> = completed.iter().map(|r| r.torus_time_ms).collect();
     let tcs_times: Vec<f64> = completed.iter().map(|r| r.tcs_time_ms).collect();
     let erag_times: Vec<f64> = completed.iter().map(|r| r.erag_time_ms).collect();
     let gen_times: Vec<f64> = completed.iter().map(|r| r.generation_time_ms).collect();
-    
+
     let torus_bottleneck = torus_times.iter().sum::<f64>() / torus_times.len() as f64;
     let tcs_bottleneck = tcs_times.iter().sum::<f64>() / tcs_times.len() as f64;
     let erag_bottleneck = erag_times.iter().sum::<f64>() / erag_times.len() as f64;
     let gen_bottleneck = gen_times.iter().sum::<f64>() / gen_times.len() as f64;
-    
+
     let total_time = overall_start.elapsed().as_secs_f64();
     let throughput = completed.len() as f64 / total_time;
-    
+
     let summary = TestSummary {
         total_tests: args.count,
         completed: completed.len(),
@@ -305,18 +334,27 @@ async fn run_parallel_test(args: MillionTestArgs) -> Result<()> {
         erag_bottleneck_ms: erag_bottleneck,
         generation_bottleneck_ms: gen_bottleneck,
     };
-    
+
     // Print summary
     println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("🎯 Million-Cycle Test Summary");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Total Tests: {}", summary.total_tests);
-    println!("Completed: {} ({:.1}%)", summary.completed, 
-             summary.completed as f64 / summary.total_tests as f64 * 100.0);
-    println!("Failed: {} ({:.1}%)", summary.failed,
-             summary.failed as f64 / summary.total_tests as f64 * 100.0);
+    println!(
+        "Completed: {} ({:.1}%)",
+        summary.completed,
+        summary.completed as f64 / summary.total_tests as f64 * 100.0
+    );
+    println!(
+        "Failed: {} ({:.1}%)",
+        summary.failed,
+        summary.failed as f64 / summary.total_tests as f64 * 100.0
+    );
     println!("\n📊 Performance Metrics:");
-    println!("  Average Entropy: {:.3} ± {:.3}", summary.avg_entropy, summary.entropy_std);
+    println!(
+        "  Average Entropy: {:.3} ± {:.3}",
+        summary.avg_entropy, summary.entropy_std
+    );
     println!("  Average ROUGE-L: {:.3}", summary.avg_rouge);
     println!("  Average Latency: {:.1}ms", summary.avg_latency_ms);
     println!("  P50 Latency: {:.1}ms", summary.p50_latency_ms);
@@ -335,29 +373,29 @@ async fn run_parallel_test(args: MillionTestArgs) -> Result<()> {
     println!("  ERAG Retrieval: {:.1}ms", summary.erag_bottleneck_ms);
     println!("  Generation: {:.1}ms", summary.generation_bottleneck_ms);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-    
+
     // Save results if requested
     if !args.output_dir.is_empty() {
         std::fs::create_dir_all(&args.output_dir)?;
-        
+
         let summary_path = format!("{}/summary.json", args.output_dir);
         let summary_json = serde_json::to_string_pretty(&summary)?;
         std::fs::write(&summary_path, summary_json)?;
         info!("Summary saved to: {}", summary_path);
-        
+
         // Sample first 1000 results for CSV export
         let sample: Vec<&TestResult> = completed.iter().take(1000).collect();
         let csv_path = format!("{}/sample_results.csv", args.output_dir);
         let mut writer = csv::Writer::from_path(&csv_path)?;
-        
+
         for result in sample {
             writer.serialize(result)?;
         }
-        
+
         writer.flush()?;
         info!("Sample results saved to: {}", csv_path);
     }
-    
+
     Ok(())
 }
 
@@ -367,12 +405,11 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    
+
     // Load environment
     niodoo_real_integrated::config::prime_environment();
     niodoo_real_integrated::config::init();
-    
+
     let args = MillionTestArgs::parse();
     run_parallel_test(args).await
 }
-

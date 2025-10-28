@@ -66,7 +66,12 @@ impl CompassEngine {
     }
 
     /// Update compass parameters from RuntimeConfig (called before each cycle)
-    pub fn update_params(&mut self, exploration_c: f64, variance_spike: f64, variance_stagnation: f64) {
+    pub fn update_params(
+        &mut self,
+        exploration_c: f64,
+        variance_spike: f64,
+        variance_stagnation: f64,
+    ) {
         self.exploration_c = exploration_c.max(0.0);
         self.variance_spike = variance_spike.max(0.0);
         self.variance_stagnation = variance_stagnation.max(0.0);
@@ -137,7 +142,7 @@ impl CompassEngine {
 
         // INTEGRATION FIX: Make healing detection topology-aware
         let mut is_healing = pleasure > healing_floor.0 && dominance > healing_floor.1;
-        
+
         // Enhance healing detection with topology signals
         if let Some(topo) = topology {
             // Low knot complexity indicates untangled, clear reasoning - healing state
@@ -283,8 +288,8 @@ impl CompassEngine {
         for idx in 0..3 {
             let reward_estimate = priors[idx].tanh() as f64;
             // Fixed UCB1: c * sqrt(ln(N(parent)) / N(n))
-            let exploration =
-                self.exploration_c * ((parent_visits as f64).ln() / visit_counts[idx] as f64).sqrt();
+            let exploration = self.exploration_c
+                * ((parent_visits as f64).ln() / visit_counts[idx] as f64).sqrt();
             let score = reward_estimate + exploration;
             branches.push(MctsBranch {
                 label: format!("branch_{idx}"),

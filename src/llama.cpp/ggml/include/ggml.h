@@ -1917,9 +1917,9 @@ extern "C" {
     // stride is equal to kernel size
     // padding is zero
     // example:
-    // a:     16   16    3  768
+    // a:     16   16    3  896
     // b:   1024 1024    3    1
-    // res:   64   64  768    1
+    // res:   64   64  896    1
     // used in sam
     GGML_API struct ggml_tensor * ggml_conv_2d_sk_p0(
             struct ggml_context * ctx,
@@ -2214,9 +2214,9 @@ extern "C" {
 
     // partition into non-overlapping windows with padding if needed
     // example:
-    // a:   768   64   64    1
+    // a:   896   64   64    1
     // w:    14
-    // res: 768   14   14    25
+    // res: 896   14   14    25
     // used in sam
     GGML_API struct ggml_tensor * ggml_win_part(
             struct ggml_context * ctx,

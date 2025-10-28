@@ -369,8 +369,8 @@ The LoRA implementation provides:
 pub struct LoRAConfig {
     pub rank: usize,           // Default: 8
     pub alpha: f32,            // Default: 16.0  
-    pub input_dim: usize,      // Default: 768
-    pub output_dim: usize,     // Default: 768
+    pub input_dim: usize,      // Default: 896
+    pub output_dim: usize,     // Default: 896
 }
 ```
 
@@ -960,16 +960,16 @@ Verified working modules:
 fn test_lora_adapter_creation() {
     let config = LoRAConfig::default();
     let adapter = LoRAAdapter::new(config).unwrap();
-    assert_eq!(adapter.num_params(), 768 * 8 + 8 * 768); // 2 * 6144 = 12288
+    assert_eq!(adapter.num_params(), 896 * 8 + 8 * 896); // 2 * 6144 = 12288
 }
 
 #[test] 
 fn test_lora_forward_pass() {
     let config = LoRAConfig::default();
     let adapter = LoRAAdapter::new(config).unwrap();
-    let input = Tensor::randn(0f32, 1f32, (1, 768), &Device::Cpu).unwrap();
+    let input = Tensor::randn(0f32, 1f32, (1, 896), &Device::Cpu).unwrap();
     let output = adapter.forward(&input).unwrap();
-    assert_eq!(output.shape().dims(), &[1, 768]);
+    assert_eq!(output.shape().dims(), &[1, 896]);
 }
 ```
 

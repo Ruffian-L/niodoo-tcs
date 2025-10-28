@@ -112,21 +112,17 @@ pub struct Pipeline {
 impl Pipeline {
     pub async fn initialise(args: CliArgs) -> Result<Self> {
         let config = RuntimeConfig::load(&args)?;
-        let samples = load_emotional_dataset(&config.training_data_path, config.training_data_sample_cap)?;
+        let samples =
+            load_emotional_dataset(&config.training_data_path, config.training_data_sample_cap)?;
         let stats = compute_dataset_stats(&samples);
 
         let thresholds = Thresholds {
             entropy_mean: stats.entropy_mean,
             entropy_high: stats.entropy_mean + stats.entropy_std,
             variance_stagnation: config.variance_stagnation_default,
-            variance_spike: stats
-                .variance_std
-                .max(config.variance_spike_min),
+            variance_spike: stats.variance_std.max(config.variance_spike_min),
             mirage_sigma: config.mirage_sigma_factor * stats.entropy_mean,
-            mcts_c: stats
-                .entropy_std
-                .max(config.mcts_c_min_std)
-                * config.mcts_c_scale,
+            mcts_c: stats.entropy_std.max(config.mcts_c_min_std) * config.mcts_c_scale,
         };
 
         let embedder = QwenStatefulEmbedder::new(
@@ -170,7 +166,7 @@ impl Pipeline {
             embedder_arc.clone(),
         )
         .await?;
-        
+
         // Log collection state for diagnostics
         if let Err(e) = erag.check_collection_info().await {
             warn!(error = %e, "Failed to check Qdrant collection info");
@@ -236,7 +232,8 @@ impl Pipeline {
             None
         };
 
-        let cache_capacity = NonZeroUsize::new(config.cache_capacity).unwrap_or(NonZeroUsize::new(256).unwrap());
+        let cache_capacity =
+            NonZeroUsize::new(config.cache_capacity).unwrap_or(NonZeroUsize::new(256).unwrap());
 
         Ok(Self {
             config: config.clone(),
@@ -285,11 +282,13 @@ impl Pipeline {
             entropy_mean: self.thresholds.entropy_mean, // Keep static
             entropy_high: self.thresholds.entropy_high, // Keep static
             variance_stagnation: self.config.variance_stagnation_default,
-            variance_spike: self.dataset_stats
+            variance_spike: self
+                .dataset_stats
                 .variance_std
                 .max(self.config.variance_spike_min),
             mirage_sigma: self.config.mirage_sigma_factor * self.dataset_stats.entropy_mean,
-            mcts_c: self.dataset_stats
+            mcts_c: self
+                .dataset_stats
                 .entropy_std
                 .max(self.config.mcts_c_min_std)
                 * self.config.mcts_c_scale,
@@ -329,8 +328,8 @@ impl Pipeline {
 
         // Stage 2: Torus projection
         let torus_start = Instant::now();
-    let mut torus_mapper = self.next_torus_mapper();
-    let pad_state = torus_mapper.project(&embedding)?;
+        let mut torus_mapper = self.next_torus_mapper();
+        let pad_state = torus_mapper.project(&embedding)?;
         timings.torus_ms = torus_start.elapsed().as_secs_f64() * 1000.0;
 
         let tcs_start = Instant::now();
@@ -368,7 +367,11 @@ impl Pipeline {
                     .lock()
                     .map_err(|e| anyhow::anyhow!("Failed to acquire compass lock: {}", e))?;
                 // Retune compass parameters live from thresholds
-                guard.update_params(thresholds.mcts_c, thresholds.variance_spike, thresholds.variance_stagnation);
+                guard.update_params(
+                    thresholds.mcts_c,
+                    thresholds.variance_spike,
+                    thresholds.variance_stagnation,
+                );
                 guard.evaluate(&pad_state, Some(&topology))
             }
         });
@@ -413,12 +416,7 @@ impl Pipeline {
         let tokenizer_start = Instant::now();
         let tokenizer_output = self
             .tokenizer
-            .process_with_memories(
-                prompt,
-                &collapse,
-                &pad_state,
-                collapse.top_hits.clone(),
-            )
+            .process_with_memories(prompt, &collapse, &pad_state, collapse.top_hits.clone())
             .await?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
@@ -430,7 +428,7 @@ impl Pipeline {
             current_config.top_p,
             current_config.repetition_penalty,
         );
-        
+
         // Recompute thresholds from updated config and update compass
         self.recompute_thresholds();
         {
@@ -485,7 +483,9 @@ impl Pipeline {
                 failure_details: None,
             }
         } else {
-            self.generator.generate_with_topology(&tokenizer_output, &compass, Some(&topology)).await?
+            self.generator
+                .generate_with_topology(&tokenizer_output, &compass, Some(&topology))
+                .await?
         };
         timings.generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
         info!(
@@ -509,14 +509,20 @@ impl Pipeline {
         // Feed curator output to learning loop if learned=true
         if curated_experience.learned {
             let reward = generation.rouge_score * 0.5 + (1.0 - pad_state.entropy) * 0.5;
-            if let Err(e) = self.learning.lock().await.apply_curator_learned(
-                &curated_experience.refined_response,
-                true,
-                reward,
-                &topology,
-                prompt,
-                &curated_experience.promoted_tokens,
-            ).await {
+            if let Err(e) = self
+                .learning
+                .lock()
+                .await
+                .apply_curator_learned(
+                    &curated_experience.refined_response,
+                    true,
+                    reward,
+                    &topology,
+                    prompt,
+                    &curated_experience.promoted_tokens,
+                )
+                .await
+            {
                 warn!("Failed to apply curator learned data: {}", e);
             }
         }
@@ -553,7 +559,7 @@ impl Pipeline {
                 entropy_delta,
                 curator_quality,
                 ucb1_score,
-                &topology,  // TOPOLOGY INTEGRATION: Pass topology to retry logic
+                &topology, // TOPOLOGY INTEGRATION: Pass topology to retry logic
             )
             .await?;
 
@@ -737,22 +743,24 @@ impl Pipeline {
             // In healing state with good topology - apply enhancement strategies
             if topology.knot_complexity < 0.4 && topology.spectral_gap > 0.6 {
                 info!("Healing state detected with good topology - applying enhancement");
-                
+
                 // Generate an enhanced version leveraging the good state
                 let enhancement_prompt = format!(
                     "{}\n\n[System is in optimal healing state. Enhance clarity and depth.]",
                     prompt
                 );
-                
-                if let Ok(enhanced) = self.generator
-                    .generate_with_params(&enhancement_prompt, 0.3, 0.95)  // Low temp for stability
-                    .await {
+
+                if let Ok(enhanced) = self
+                    .generator
+                    .generate_with_params(&enhancement_prompt, 0.3, 0.95) // Low temp for stability
+                    .await
+                {
                     return Ok((enhanced, "none".to_string(), 0.0));
                 }
             }
             return Ok((generation.clone(), "none".to_string(), 0.0));
         }
-        
+
         // No failure and not healing, return original
         if initial_failure == "none" {
             return Ok((generation.clone(), "none".to_string(), 0.0));
@@ -811,16 +819,22 @@ impl Pipeline {
                     .generator
                     .reflexion_retry(prompt, current_gen.rouge_score, details)
                     .await?;
-                
+
                 // Compare with baseline and keep the better one
                 let baseline_rouge = rouge_l(&current_gen.baseline_response, prompt);
                 let reflexion_rouge = rouge_l(&reflexion_response, prompt);
-                
+
                 if reflexion_rouge > baseline_rouge {
-                    info!("Reflexion improved from {:.3} to {:.3}", baseline_rouge, reflexion_rouge);
+                    info!(
+                        "Reflexion improved from {:.3} to {:.3}",
+                        baseline_rouge, reflexion_rouge
+                    );
                     reflexion_response
                 } else {
-                    info!("Baseline better than reflexion ({:.3} vs {:.3}), using baseline", baseline_rouge, reflexion_rouge);
+                    info!(
+                        "Baseline better than reflexion ({:.3} vs {:.3}), using baseline",
+                        baseline_rouge, reflexion_rouge
+                    );
                     current_gen.baseline_response.clone()
                 }
             } else {
@@ -842,7 +856,10 @@ impl Pipeline {
                     }
 
                     if best_rouge > 0.4 {
-                        info!("Topology-aware CoT iteration {} achieved ROUGE > 0.4", cot_iter + 1);
+                        info!(
+                            "Topology-aware CoT iteration {} achieved ROUGE > 0.4",
+                            cot_iter + 1
+                        );
                         break;
                     }
                 }
@@ -895,7 +912,10 @@ impl Pipeline {
         }
 
         if current_failure != "none" {
-            warn!("Failed after {} retry attempts, using degraded response", retry_count);
+            warn!(
+                "Failed after {} retry attempts, using degraded response",
+                retry_count
+            );
 
             // Graceful degradation: Instead of terminating, mark as degraded but continue
             if retry_count >= max_retries {
@@ -940,24 +960,34 @@ impl Pipeline {
         // Calculate base quality score based on output length, entropy, and topology
         let base = 0.5f32;
         let length_factor = (output.len().min(1000) as f32 / 1000.0) * 0.2;
-        let entropy_factor = if pad_state.entropy < 0.5 { 0.15f32 } else { 0.0f32 };
+        let entropy_factor = if pad_state.entropy < 0.5 {
+            0.15f32
+        } else {
+            0.0f32
+        };
         let base_quality = base + length_factor + entropy_factor;
-        
+
         // TOPOLOGY ENHANCEMENT: Adjust quality based on topological features
         let mut adjusted_quality = base_quality;
-        
+
         // High knot complexity indicates tangled/complex reasoning - slight quality penalty
         if topology.knot_complexity > 0.6 {
             adjusted_quality *= 0.9;
-            info!("High knot complexity {:.3} - reducing quality", topology.knot_complexity);
+            info!(
+                "High knot complexity {:.3} - reducing quality",
+                topology.knot_complexity
+            );
         }
-        
+
         // High spectral gap indicates good exploration - quality bonus
         if topology.spectral_gap > 0.7 {
             adjusted_quality *= 1.1;
-            info!("High spectral gap {:.3} - boosting quality", topology.spectral_gap);
+            info!(
+                "High spectral gap {:.3} - boosting quality",
+                topology.spectral_gap
+            );
         }
-        
+
         // High Betti-1 indicates many loops/cycles - check if intentional
         if topology.betti_numbers[1] > 3 {
             // In Discover quadrant, loops are good (exploration)
@@ -967,54 +997,60 @@ impl Pipeline {
                 // In other quadrants, too many loops might indicate confusion
                 adjusted_quality *= 0.95;
             }
-            info!("Betti-1={} affecting quality in {:?} quadrant", 
-                topology.betti_numbers[1], compass.quadrant);
+            info!(
+                "Betti-1={} affecting quality in {:?} quadrant",
+                topology.betti_numbers[1], compass.quadrant
+            );
         }
-        
+
         // Persistence entropy indicates structural stability
         if topology.persistence_entropy < 0.3 {
             // Low entropy = stable structure = good quality
             adjusted_quality *= 1.05;
         }
-        
+
         let quality_score = adjusted_quality.min(1.0).max(0.0);
 
         // TOPOLOGY-AWARE REFINEMENT: Refine if quality is low OR topology indicates issues
         let refinement_threshold = self.config.curator_quality_threshold;
-        
+
         // Force refinement if topology shows problematic patterns
         let topology_needs_refinement = topology.knot_complexity > 0.7  // Too tangled
             || (topology.betti_numbers[1] > 5 && compass.quadrant != crate::compass::CompassQuadrant::Discover)  // Too many loops outside exploration
-            || topology.persistence_entropy > 0.8;  // Too chaotic structure
+            || topology.persistence_entropy > 0.8; // Too chaotic structure
 
-        let (refined, learned) = if quality_score < refinement_threshold || topology_needs_refinement {
-            // Attempt refinement for low-quality or topologically problematic responses
-            if let Some(ref curator) = self.curator {
-                // Call curator.refine with topology context
-                let (refined_output, learned_flag) = match curator.refine(
-                    output,
-                    quality_score as f64,
-                    topology.knot_complexity,
-                    topology.persistence_entropy
-                ).await {
-                    Ok(result) => result,
-                    Err(e) => {
-                        warn!("Curator refinement failed: {}, using original", e);
-                        (output.to_string(), false)
-                    }
-                };
-                
-                info!(
-                    "Curator refined response (quality={:.3}, knot={:.3}, learned={})",
-                    quality_score, topology.knot_complexity, learned_flag
-                );
-                (refined_output, learned_flag)
+        let (refined, learned) =
+            if quality_score < refinement_threshold || topology_needs_refinement {
+                // Attempt refinement for low-quality or topologically problematic responses
+                if let Some(ref curator) = self.curator {
+                    // Call curator.refine with topology context
+                    let (refined_output, learned_flag) = match curator
+                        .refine(
+                            output,
+                            quality_score as f64,
+                            topology.knot_complexity,
+                            topology.persistence_entropy,
+                        )
+                        .await
+                    {
+                        Ok(result) => result,
+                        Err(e) => {
+                            warn!("Curator refinement failed: {}, using original", e);
+                            (output.to_string(), false)
+                        }
+                    };
+
+                    info!(
+                        "Curator refined response (quality={:.3}, knot={:.3}, learned={})",
+                        quality_score, topology.knot_complexity, learned_flag
+                    );
+                    (refined_output, learned_flag)
+                } else {
+                    (output.to_string(), false)
+                }
             } else {
                 (output.to_string(), false)
-            }
-        } else {
-            (output.to_string(), false)
-        };
+            };
 
         Ok(CuratedExperience {
             refined_response: refined,

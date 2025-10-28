@@ -44,20 +44,31 @@ pub fn prime_environment() {
 
 pub fn init() {
     prime_environment();
-    
-    let curator_model = env_with_fallback(&["CURATOR_MODEL", "EMBEDDING_MODEL_NAME", "OLLAMA_EMBED_MODEL", "EMBEDDING_MODEL"])
-        .unwrap_or_else(|| "qwen2:0.5b".to_string());
-    
-    let main_model = env_with_fallback(&["MAIN_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL", "VLLM_MODEL_PATH"])
-        .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
-    
+
+    let curator_model = env_with_fallback(&[
+        "CURATOR_MODEL",
+        "EMBEDDING_MODEL_NAME",
+        "OLLAMA_EMBED_MODEL",
+        "EMBEDDING_MODEL",
+    ])
+    .unwrap_or_else(|| "qwen2:0.5b".to_string());
+
+    let main_model = env_with_fallback(&[
+        "MAIN_MODEL",
+        "VLLM_MODEL_ID",
+        "VLLM_MODEL",
+        "VLLM_MODEL_PATH",
+    ])
+    .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
+
     let qdrant_dim: usize = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
         .and_then(|v| v.parse().ok())
         .unwrap_or(896);
-    
-    let ollama_url = env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
-        .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
-    
+
+    let ollama_url =
+        env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
+            .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+
     info!(
         curator_model = %curator_model,
         main_model = %main_model,
@@ -65,7 +76,7 @@ pub fn init() {
         "Config loaded: CURATOR_MODEL={}, MAIN_MODEL={}, QDRANT_DIM={}",
         curator_model, main_model, qdrant_dim
     );
-    
+
     if ollama_url != "http://127.0.0.1:11434" {
         warn!(
             ollama_url = %ollama_url,
@@ -158,7 +169,7 @@ impl HardwareProfile {
         match self {
             HardwareProfile::Beelink => 8,
             HardwareProfile::Laptop5080Q => 4,
-            HardwareProfile::H200 => 32,  // H200 can handle massive batch sizes
+            HardwareProfile::H200 => 32, // H200 can handle massive batch sizes
         }
     }
 
@@ -166,7 +177,7 @@ impl HardwareProfile {
         match self {
             HardwareProfile::Beelink => 100.0,
             HardwareProfile::Laptop5080Q => 180.0,
-            HardwareProfile::H200 => 50.0,  // H200 is blazing fast
+            HardwareProfile::H200 => 50.0, // H200 is blazing fast
         }
     }
 
@@ -174,7 +185,7 @@ impl HardwareProfile {
         match self {
             HardwareProfile::Beelink => 128_000,
             HardwareProfile::Laptop5080Q => 256_000,
-            HardwareProfile::H200 => 512_000,  // H200 has 141GB HBM3e
+            HardwareProfile::H200 => 512_000, // H200 has 141GB HBM3e
         }
     }
 }
@@ -197,11 +208,11 @@ impl Default for BackendType {
 }
 
 fn default_max_retries() -> u32 {
-    10  // Further increased to allow learning through degraded responses
+    10 // Further increased to allow learning through degraded responses
 }
 
 fn default_retry_base_delay_ms() -> u64 {
-    100  // Reduced from 200 for faster retries
+    100 // Reduced from 200 for faster retries
 }
 
 fn default_similarity_threshold() -> f32 {
@@ -224,19 +235,43 @@ fn default_retrieval_top_k_increment() -> i32 {
     2
 }
 
-fn default_repetition_penalty() -> f64 { 1.2 }
-fn default_lens_snippet_chars() -> usize { 180 }
-fn default_cot_temp_increment() -> f64 { 0.1 }
-fn default_reflexion_top_p_step() -> f64 { 0.05 }
-fn default_cot_success_rouge_threshold() -> f64 { 0.5 }
+fn default_repetition_penalty() -> f64 {
+    1.2
+}
+fn default_lens_snippet_chars() -> usize {
+    180
+}
+fn default_cot_temp_increment() -> f64 {
+    0.1
+}
+fn default_reflexion_top_p_step() -> f64 {
+    0.05
+}
+fn default_cot_success_rouge_threshold() -> f64 {
+    0.5
+}
 
-fn default_variance_stagnation_default() -> f64 { 0.05 }
-fn default_variance_spike_min() -> f64 { 0.3 }
-fn default_mirage_sigma_factor() -> f64 { 0.1 }
-fn default_mcts_c_min_std() -> f64 { 0.1 }
-fn default_mcts_c_scale() -> f64 { 0.25 }
-fn default_cache_capacity() -> usize { 256 }
-fn default_retry_backoff_exponent_cap() -> u32 { 10 }
+fn default_variance_stagnation_default() -> f64 {
+    0.05
+}
+fn default_variance_spike_min() -> f64 {
+    0.3
+}
+fn default_mirage_sigma_factor() -> f64 {
+    0.1
+}
+fn default_mcts_c_min_std() -> f64 {
+    0.1
+}
+fn default_mcts_c_scale() -> f64 {
+    0.25
+}
+fn default_cache_capacity() -> usize {
+    256
+}
+fn default_retry_backoff_exponent_cap() -> u32 {
+    10
+}
 
 fn default_prompt_max_chars() -> usize {
     512
@@ -487,8 +522,13 @@ impl RuntimeConfig {
             .trim_end_matches('/')
             .to_string();
 
-        let vllm_model = env_with_fallback(&["MAIN_MODEL", "VLLM_MODEL_ID", "VLLM_MODEL", "VLLM_MODEL_PATH"])
-            .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
+        let vllm_model = env_with_fallback(&[
+            "MAIN_MODEL",
+            "VLLM_MODEL_ID",
+            "VLLM_MODEL",
+            "VLLM_MODEL_PATH",
+        ])
+        .unwrap_or_else(|| "Qwen/Qwen2-0.5B-Instruct".to_string());
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
         if matches!(args.hardware, HardwareProfile::Laptop5080Q) {
@@ -510,17 +550,22 @@ impl RuntimeConfig {
             .and_then(|value| value.parse::<usize>().ok());
         if let Some(value) = requested_qdrant_dim {
             if value != 896usize {
-                warn!(expected = 896usize, provided = value, "Qdrant dim fixed to 896; overriding provided value");
+                warn!(
+                    expected = 896usize,
+                    provided = value,
+                    "Qdrant dim fixed to 896; overriding provided value"
+                );
             }
         }
         let qdrant_vector_dim = 896usize;
 
-        let ollama_endpoint = env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
-            .or_else(|| {
-                warn!("Set OLLAMA_URL and run 'ollama serve && ollama pull qwen2:0.5b'");
-                None
-            })
-            .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+        let ollama_endpoint =
+            env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
+                .or_else(|| {
+                    warn!("Set OLLAMA_URL and run 'ollama serve && ollama pull qwen2:0.5b'");
+                    None
+                })
+                .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
 
         let embedding_model_name = env_with_fallback(&[
             "CURATOR_MODEL",
@@ -616,42 +661,70 @@ impl RuntimeConfig {
                 "You are NIODOO, a consciousness-aligned systems agent. Use the provided prompt, memory, and context to produce a precise, high-quality response that advances the user's goal. Cite retrieved context when helpful, avoid placeholders, and surface uncertainties or missing data explicitly.".to_string()
             });
 
-        let prompt_max_chars = env_with_fallback(&["PROMPT_MAX_CHARS"]) 
+        let prompt_max_chars = env_with_fallback(&["PROMPT_MAX_CHARS"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_prompt_max_chars);
-        let embedding_cache_ttl_secs = env_with_fallback(&["EMBEDDING_CACHE_TTL_SECS"]) 
+        let embedding_cache_ttl_secs = env_with_fallback(&["EMBEDDING_CACHE_TTL_SECS"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_embedding_cache_ttl_secs);
-        let collapse_cache_ttl_secs = env_with_fallback(&["COLLAPSE_CACHE_TTL_SECS"]) 
+        let collapse_cache_ttl_secs = env_with_fallback(&["COLLAPSE_CACHE_TTL_SECS"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_collapse_cache_ttl_secs);
-        let training_data_sample_cap = env_with_fallback(&["TRAINING_DATA_SAMPLE_CAP"]) 
-            .and_then(|v| if v.to_lowercase() == "none" { Some(None) } else { v.parse::<usize>().ok().map(Some) })
+        let training_data_sample_cap = env_with_fallback(&["TRAINING_DATA_SAMPLE_CAP"])
+            .and_then(|v| {
+                if v.to_lowercase() == "none" {
+                    Some(None)
+                } else {
+                    v.parse::<usize>().ok().map(Some)
+                }
+            })
             .unwrap_or_else(default_training_data_sample_cap);
-        let rng_seed = env_with_fallback(&["RNG_SEED"]) 
+        let rng_seed = env_with_fallback(&["RNG_SEED"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_rng_seed);
-        let consistency_variance_threshold = env_with_fallback(&["CONSISTENCY_VARIANCE_THRESHOLD"]) 
+        let consistency_variance_threshold = env_with_fallback(&["CONSISTENCY_VARIANCE_THRESHOLD"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_consistency_variance_threshold);
 
-        let repetition_penalty = env_with_fallback(&["REPETITION_PENALTY"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_repetition_penalty);
+        let repetition_penalty = env_with_fallback(&["REPETITION_PENALTY"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_repetition_penalty);
         let lens_snippet_chars = env_with_fallback(&["LENS_SNIPPET_CHARS"])
             .and_then(|v| v.parse::<usize>().ok())
             .map(|n| n.clamp(100, 500))
             .unwrap_or_else(default_lens_snippet_chars);
-        let cot_temp_increment = env_with_fallback(&["COT_TEMP_INCREMENT"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cot_temp_increment);
-        let reflexion_top_p_step = env_with_fallback(&["REFLEXION_TOP_P_STEP"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_reflexion_top_p_step);
-        let cot_success_rouge_threshold = env_with_fallback(&["COT_SUCCESS_ROUGE_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cot_success_rouge_threshold);
+        let cot_temp_increment = env_with_fallback(&["COT_TEMP_INCREMENT"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_cot_temp_increment);
+        let reflexion_top_p_step = env_with_fallback(&["REFLEXION_TOP_P_STEP"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_reflexion_top_p_step);
+        let cot_success_rouge_threshold = env_with_fallback(&["COT_SUCCESS_ROUGE_THRESHOLD"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_cot_success_rouge_threshold);
 
-        let variance_stagnation_default = env_with_fallback(&["VARIANCE_STAGNATION_DEFAULT"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_variance_stagnation_default);
-        let variance_spike_min = env_with_fallback(&["VARIANCE_SPIKE_MIN"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_variance_spike_min);
-        let mirage_sigma_factor = env_with_fallback(&["MIRAGE_SIGMA_FACTOR"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_mirage_sigma_factor);
-        let mcts_c_min_std = env_with_fallback(&["MCTS_C_MIN_STD"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_mcts_c_min_std);
-        let mcts_c_scale = env_with_fallback(&["MCTS_C_SCALE"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_mcts_c_scale);
+        let variance_stagnation_default = env_with_fallback(&["VARIANCE_STAGNATION_DEFAULT"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_variance_stagnation_default);
+        let variance_spike_min = env_with_fallback(&["VARIANCE_SPIKE_MIN"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_variance_spike_min);
+        let mirage_sigma_factor = env_with_fallback(&["MIRAGE_SIGMA_FACTOR"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_mirage_sigma_factor);
+        let mcts_c_min_std = env_with_fallback(&["MCTS_C_MIN_STD"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_mcts_c_min_std);
+        let mcts_c_scale = env_with_fallback(&["MCTS_C_SCALE"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_mcts_c_scale);
 
-        let cache_capacity = env_with_fallback(&["CACHE_CAPACITY"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_cache_capacity);
-        let retry_backoff_exponent_cap = env_with_fallback(&["RETRY_BACKOFF_EXPONENT_CAP"]).and_then(|v| v.parse().ok()).unwrap_or_else(default_retry_backoff_exponent_cap);
+        let cache_capacity = env_with_fallback(&["CACHE_CAPACITY"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_cache_capacity);
+        let retry_backoff_exponent_cap = env_with_fallback(&["RETRY_BACKOFF_EXPONENT_CAP"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_retry_backoff_exponent_cap);
 
         let phase2_max_retries = env_with_fallback(&["PHASE2_MAX_RETRIES"])
             .and_then(|value| value.parse().ok())
@@ -758,7 +831,6 @@ impl RuntimeConfig {
 
         Ok(runtime)
     }
-
 }
 
 /// Curator configuration derived from runtime config

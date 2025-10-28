@@ -1218,7 +1218,7 @@ impl Default for ModelConfig {
             qwen_tokenizer_path: "models/tokenizer.json".to_string(),
             model_dtype: "f32".to_string(),
             use_quantized: true,
-            hidden_size: Some(768),
+            hidden_size: Some(896),
             qwen3_vocab_size: Some(152064),
             bert_model_path: "models/bert-emotion.onnx".to_string(),
             num_heads: 32,
@@ -1236,7 +1236,7 @@ impl Default for RagConfig {
             inspiration_mode: false,
             ingestion_batch_size: 100,
             allow_rag_retry: true,
-            embedding_dim: 768,
+            embedding_dim: 896,
             top_k: 5,
             consciousness_modulated_retrieval: true,
         }

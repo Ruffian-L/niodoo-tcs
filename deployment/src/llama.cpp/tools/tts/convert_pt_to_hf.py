@@ -99,7 +99,7 @@ def flatten_state_dict(state_dict, parent_key='', sep='.'):
         if new_key.endswith("gamma"):
             new_key = new_key.replace("gamma", "gamma.weight")
 
-        # convert from 1D [768] to 2D [768, 1] so that ggml_add can broadcast the bias
+        # convert from 1D [896] to 2D [896, 1] so that ggml_add can broadcast the bias
         if (new_key.endswith("norm.weight") or new_key.endswith("norm1.weight") or new_key.endswith("norm2.weight") or new_key.endswith(".bias")) and (new_key.startswith("backbone.posnet") or new_key.startswith("backbone.embed.bias")):
             value = value.unsqueeze(1)
 
@@ -165,11 +165,11 @@ config = {
     "max_position_embeddings": 8192, # ?
     "n_layer": 12,
     "posnet": {
-        "n_embd": 768,
+        "n_embd": 896,
         "n_layer": 6
     },
     "convnext": {
-        "n_embd": 768,
+        "n_embd": 896,
         "n_layer": 12
     },
 }

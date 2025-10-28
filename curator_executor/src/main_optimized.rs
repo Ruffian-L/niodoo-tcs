@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
     // Initialize memory core with Qdrant (hyperspherical embeddings)
     info!("📡 Connecting to Qdrant with hyperspherical normalization...");
     let memory_config = MemoryConfig {
-        vector_dim: 768,  // BERT-standard for Qwen
+        vector_dim: 896,  // BERT-standard for Qwen
         ..Default::default()
     };
     let memory = Arc::new(MemoryCore::new(memory_config).await?);
