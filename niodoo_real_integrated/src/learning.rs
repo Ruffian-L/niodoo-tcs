@@ -694,6 +694,7 @@ impl LearningLoop {
         {
             // Step 1: Collect low-reward tuples from ERAG
             let low_tuples = self.erag.query_low_reward_tuples(-0.5, 16).await?;
+            let embedding_dim = self.config.lock().unwrap().qdrant_vector_dim;
             
             // Step 2: Prepare training data from replay buffer + topological features
             let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
@@ -710,11 +711,11 @@ impl LearningLoop {
                         .map(|value| *value as f32)
                         .collect::<Vec<f32>>();
                     
-                    // Pad to fixed size if needed (target size: 768 for LoRA input_dim)
-                    while input.len() < 768 {
+                    // Pad to fixed size if needed
+                    while input.len() < embedding_dim {
                         input.push(0.0);
                     }
-                    input.truncate(768);
+                    input.truncate(embedding_dim);
                     
                     // Target: next state metrics (5 dims) -> pad to 768
                     let mut target = tuple
@@ -723,10 +724,10 @@ impl LearningLoop {
                         .iter()
                         .map(|value| *value as f32)
                         .collect::<Vec<f32>>();
-                    while target.len() < 768 {
+                    while target.len() < embedding_dim {
                         target.push(0.0);
                     }
-                    target.truncate(768);
+                    target.truncate(embedding_dim);
                     
                     (input, target)
                 })

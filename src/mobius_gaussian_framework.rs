@@ -93,7 +93,7 @@ pub fn bayesian_optimize(gp: &mut SimpleGP, objective: fn(&DVector<f64>) -> f64,
 
         // Acquisition: Upper Confidence Bound (UCB)
         let (mean, var) = gp.predict(&candidate);
-        let ucb = mean + 1.96 * var.sqrt(); // 95% CI
+        let _ucb = mean + 1.96 * var.sqrt(); // 95% CI - reserved for future UCB implementation
 
         let y = objective(&candidate);
         if y > best_y {

@@ -192,7 +192,8 @@ impl EragClient {
                 if resp.status().is_success() {
                     match resp.json::<SearchResponse>().await {
                         Ok(parsed) => {
-                            for hit in parsed.result {
+                            let hits: Vec<SearchHit> = parsed.result.unwrap_or_default();
+                            for hit in hits {
                                 if hit.payload.is_empty() {
                                     continue;
                                 }
@@ -202,7 +203,7 @@ impl EragClient {
                             }
                         }
                         Err(err) => {
-                            info!(%err, "failed to decode qdrant search response");
+                            info!(%err, "failed to decode qdrant search response, using empty result");
                         }
                     }
         } else {
@@ -454,11 +455,11 @@ impl EragClient {
 
         #[derive(Deserialize)]
         struct SearchResponse {
-            result: Vec<SearchHit>,
+            result: Option<Vec<SearchHit>>,
         }
 
-        let search_resp: SearchResponse = resp.json().await?;
-        Ok(search_resp.result)
+        let search_resp: SearchResponse = resp.json().await.unwrap_or(SearchResponse { result: None });
+        Ok(search_resp.result.unwrap_or_default())
     }
 
     pub async fn store_replay_tuple(&self, tuple: &ReplayTuple) -> Result<()> {
@@ -683,20 +684,11 @@ impl EragClient {
         
         #[derive(Deserialize)]
         struct SearchResponse {
-            result: Vec<SearchHit>,
+            result: Option<Vec<SearchHit>>,
         }
         
-        let search_resp: SearchResponse = resp.json().await?;
-        let mut memories = Vec::new();
-        
-        for hit in search_resp.result {
-            if !hit.payload.is_empty() {
-                let memory = deserialize_memory(&hit.payload);
-                memories.push(memory);
-            }
-        }
-        
-        Ok(memories)
+        let search_resp: SearchResponse = resp.json().await.unwrap_or(SearchResponse { result: None });
+        Ok(search_resp.result.unwrap_or_default())
     }
 }
 

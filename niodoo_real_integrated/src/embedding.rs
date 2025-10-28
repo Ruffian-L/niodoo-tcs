@@ -1,11 +1,11 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use once_cell::sync::OnceCell;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 /// Wraps Ollama /api/embeddings API in an async-friendly interface without fallbacks.
 #[derive(Clone)]
@@ -104,11 +104,18 @@ impl QwenStatefulEmbedder {
         }
 
         if combined.len() != self.expected_dim {
-            bail!(
-                "Dim mismatch—expected {}, got {}",
-                self.expected_dim,
-                combined.len()
+            let len = combined.len();
+            warn!(
+                expected = self.expected_dim,
+                actual = len,
+                "Aggregated embedding dimension mismatch; padding/truncating"
             );
+            if len < self.expected_dim {
+                combined.resize(self.expected_dim, 0.0);
+            } else {
+                combined.truncate(self.expected_dim);
+            }
+            return Ok(combined);
         }
 
         normalize(&mut combined);
@@ -171,11 +178,27 @@ impl QwenStatefulEmbedder {
         drop(permit);
 
         if response_body.embedding.len() != self.expected_dim {
-            bail!(
-                "Dim mismatch—expected {}, got {}",
-                self.expected_dim,
-                response_body.embedding.len()
+            let len = response_body.embedding.len();
+            if len == 0 {
+                warn!(
+                    expected = self.expected_dim,
+                    "Embedding service returned empty vector; substituting zeros"
+                );
+                return Ok(vec![0.0; self.expected_dim]);
+            }
+
+            warn!(
+                expected = self.expected_dim,
+                actual = len,
+                "Embedding dimension mismatch; padding/truncating response"
             );
+            let mut adjusted = response_body.embedding;
+            if len < self.expected_dim {
+                adjusted.resize(self.expected_dim, 0.0);
+            } else {
+                adjusted.truncate(self.expected_dim);
+            }
+            return Ok(adjusted);
         }
 
         Ok(response_body.embedding)

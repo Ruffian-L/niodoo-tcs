@@ -8,6 +8,7 @@ use prometheus::{CounterVec, Gauge, GaugeVec, HistogramOpts, HistogramVec, Opts,
 use crate::topology::PersistenceResult;
 
 #[derive(Debug)]
+#[allow(dead_code)] // Metrics are registered but may not all be actively used in current implementation
 struct MetricsHandles {
     registry: Arc<Registry>,
     entropy_gauge: GaugeVec,

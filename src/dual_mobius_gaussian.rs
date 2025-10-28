@@ -1977,14 +1977,6 @@ pub fn model_diagnostics(
 
     // Compute PCA diagnostics
     let pca_variance_explained = if n_spheres > 1 {
-        // Simplified variance explained calculation
-        let total_variance = cluster
-            .iter()
-            .map(|s| {
-                let mean_vec = s.mean.to_vec1::<f64>().unwrap();
-                mean_vec.iter().map(|&x| x * x).sum::<f64>()
-            })
-            .sum::<f64>();
         // Real mathematical explained variance using torus geometry and cluster analysis
         mobius.calculate_explained_variance(cluster)
     } else {
