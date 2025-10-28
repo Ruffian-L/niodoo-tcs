@@ -313,7 +313,12 @@ impl GenerationEngine {
         let start = Instant::now();
 
         // Augment prompt with topology insights if available
-        let augmented_prompt = if let Some(topo) = topology {
+        let augmented_prompt = if std::env::var("DISABLE_TOPOLOGY_AUGMENTATION")
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+            .unwrap_or(false)
+        {
+            tokenizer_output.augmented_prompt.clone()
+        } else if let Some(topo) = topology {
             if topo.knot_complexity > 0.6 {
                 // High complexity - need more structured reasoning
                 format!("{}\n[Note: Complex topological structure detected (knot={:.2}). Apply systematic reasoning.]", 

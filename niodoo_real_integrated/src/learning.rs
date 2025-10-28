@@ -476,6 +476,11 @@ impl LearningLoop {
             );
         }
 
+        if std::env::var("DISABLE_LORA").map(|v| matches!(v.as_str(), "1" | "true" | "TRUE")).unwrap_or(false) {
+            info!("LoRA training disabled via DISABLE_LORA");
+            self.curated_buffer.clear();
+            return Ok(());
+        }
         let epochs = self.lora_epochs;
         match self.lora_trainer.train(&training_samples, epochs, 1e-3_f32) {
             Ok(_) => {
@@ -764,6 +769,10 @@ impl LearningLoop {
             }
 
             // Step 3: Train LoRA adapter on topological data
+            if std::env::var("DISABLE_LORA").map(|v| matches!(v.as_str(), "1" | "true" | "TRUE")).unwrap_or(false) {
+                info!("QLoRA fine-tuning disabled via DISABLE_LORA");
+                return Ok(());
+            }
             match self.lora_trainer.train(&training_samples, 10, 1e-3_f32) {
                 Ok(_loss) => {
                     info!(
@@ -984,6 +993,10 @@ impl LearningLoop {
                 return;
             }
 
+            if std::env::var("DISABLE_LORA").map(|v| matches!(v.as_str(), "1" | "true" | "TRUE")).unwrap_or(false) {
+                info!("LoRA fine-tuning disabled via DISABLE_LORA");
+                return;
+            }
             match self.lora_trainer.train(&training_samples, 10, 1e-3_f32) {
                 Ok(loss) => info!(loss, "LoRA fine-tuning completed"),
                 Err(error) => warn!(%error, "LoRA fine-tuning failed"),

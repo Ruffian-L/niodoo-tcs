@@ -20,6 +20,10 @@ use crate::topology::persistent_homology::{
 use super::spatial::SpatialHash;
 use super::TokenCandidate;
 
+const MAX_SPHERES_PER_BATCH: usize = 50;
+const MAX_SEQUENCES_TOTAL: usize = 4_096;
+const MAX_SEQUENCES_PER_CHUNK: usize = 512;
+
 #[derive(Debug, Deserialize)]
 struct TokenPromotionSettings {
     persistence_threshold: f64,
@@ -72,7 +76,22 @@ impl PatternDiscoveryEngine {
 
     pub async fn rebuild_spatial_index(&self, memory_system: &GuessingMemorySystem) {
         let mut hash = self.spatial_hash.write().await;
-        hash.rebuild_from_memory(memory_system);
+        hash.clear();
+
+        let mut processed = 0_usize;
+        for (id, sphere) in memory_system.spheres_with_ids() {
+            if processed >= MAX_SPHERES_PER_BATCH {
+                tracing::debug!(
+                    processed_spheres = processed,
+                    "Spatial hash rebuild sphere limit reached"
+                );
+                break;
+            }
+
+            let bucket = hash.position_to_bucket(&sphere.position);
+            hash.insert_into_bucket(bucket, id.clone());
+            processed += 1;
+        }
     }
 
     pub async fn discover_candidates(
@@ -84,56 +103,68 @@ impl PatternDiscoveryEngine {
             return Ok(Vec::new());
         }
 
-        let point_cloud = self.bytes_to_point_cloud(&sequences)?;
-
-        let ripser_features = match self
-            .ripser_calculator
-            .compute_from_points(&point_cloud.points)
-        {
-            Ok(features) => features,
-            Err(err) => {
-                tracing::warn!(error = %err, "Ripser computation failed; falling back to internal calculator");
-                Vec::new()
-            }
-        };
-
-        let high_persistence: Vec<TopologicalFeature> = if !ripser_features.is_empty() {
-            ripser_features
-        } else {
-            let ph_result = self.tda_calculator.compute(&point_cloud)?;
-            ph_result
-                .features
-                .into_iter()
-                .filter(|feature| {
-                    feature.dimension == 1 && feature.persistence >= self.persistence_threshold
-                })
-                .collect()
-        };
-
-        if let Err(err) = self.export_persistence_barcode(&high_persistence) {
-            tracing::warn!(error = %err, "Failed to export persistence barcode");
-        }
-
-        tracing::debug!(
-            loop_features = high_persistence.len(),
-            "Loop features after persistence filtering"
-        );
-
         let mut candidates = Vec::new();
+        for (chunk_index, chunk) in sequences
+            .chunks(MAX_SEQUENCES_PER_CHUNK)
+            .enumerate()
+            .take((MAX_SEQUENCES_TOTAL / MAX_SEQUENCES_PER_CHUNK).max(1))
+        {
+            let point_cloud = self.bytes_to_point_cloud(chunk)?;
 
-        for (seq, feature) in sequences.iter().zip(high_persistence.iter()) {
-            let frequency = self.calculate_frequency(seq, memory_system);
-            let emotional_coherence = self.calculate_emotional_coherence(seq, memory_system).await;
-            let spatial_locality = self.calculate_spatial_locality(seq, memory_system).await;
+            let ripser_features = match self
+                .ripser_calculator
+                .compute_from_points(&point_cloud.points)
+            {
+                Ok(features) => features,
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        "Ripser computation failed; falling back to internal calculator"
+                    );
+                    Vec::new()
+                }
+            };
 
-            candidates.push(TokenCandidate {
-                bytes: seq.clone(),
-                persistence: feature.persistence,
-                frequency,
-                emotional_coherence,
-                spatial_locality,
-                timestamp: SystemTime::now(),
-            });
+            let high_persistence: Vec<TopologicalFeature> = if !ripser_features.is_empty() {
+                ripser_features
+            } else {
+                let ph_result = self.tda_calculator.compute(&point_cloud)?;
+                ph_result
+                    .features
+                    .into_iter()
+                    .filter(|feature| {
+                        feature.dimension == 1 && feature.persistence >= self.persistence_threshold
+                    })
+                    .collect()
+            };
+
+            if let Err(err) = self.export_persistence_barcode(&high_persistence) {
+                tracing::warn!(error = %err, "Failed to export persistence barcode");
+            }
+
+            tracing::debug!(
+                loop_features = high_persistence.len(),
+                chunk_index,
+                chunk_size = chunk.len(),
+                "Loop features after persistence filtering"
+            );
+
+            for (seq, feature) in chunk.iter().zip(high_persistence.iter()) {
+                let frequency = self.calculate_frequency(seq, memory_system);
+                let emotional_coherence =
+                    self.calculate_emotional_coherence(seq, memory_system).await;
+                let spatial_locality =
+                    self.calculate_spatial_locality(seq, memory_system).await;
+
+                candidates.push(TokenCandidate {
+                    bytes: seq.clone(),
+                    persistence: feature.persistence,
+                    frequency,
+                    emotional_coherence,
+                    spatial_locality,
+                    timestamp: SystemTime::now(),
+                });
+            }
         }
 
         candidates.sort_by(|a, b| {
@@ -148,11 +179,28 @@ impl PatternDiscoveryEngine {
     fn extract_byte_sequences(&self, memory_system: &GuessingMemorySystem) -> Vec<Vec<u8>> {
         let mut sequences = Vec::new();
 
-        for sphere in memory_system.spheres() {
+        let mut total_sequences = 0_usize;
+        for (sphere_idx, sphere) in memory_system.spheres().enumerate() {
+            if sphere_idx >= MAX_SPHERES_PER_BATCH {
+                tracing::debug!(
+                    processed_spheres = sphere_idx,
+                    "Pattern discovery sphere limit reached"
+                );
+                break;
+            }
+
             let bytes = sphere.memory_fragment.as_bytes();
             for len in self.min_sequence_length..=self.max_sequence_length {
                 for window in bytes.windows(len) {
+                    if total_sequences >= MAX_SEQUENCES_TOTAL {
+                        tracing::debug!(
+                            sequences = total_sequences,
+                            "Pattern discovery sequence limit reached"
+                        );
+                        return sequences;
+                    }
                     sequences.push(window.to_vec());
+                    total_sequences += 1;
                 }
             }
         }

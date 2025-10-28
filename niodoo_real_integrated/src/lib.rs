@@ -18,6 +18,7 @@ pub mod token_manager;
 pub mod topology_crawler;
 pub mod torus;
 pub mod util;
+pub mod eval;
 
 #[cfg(test)]
 mod tests {

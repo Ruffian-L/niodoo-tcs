@@ -49,6 +49,11 @@ black==24.10.0
 ruff==0.7.4
 mypy==1.14.1
 
+# Analysis & Plotting for topology validation
+pandas==2.2.3
+seaborn==0.13.2
+matplotlib==3.9.2
+
 # CLI & Utilities
 click==8.1.8
 typer==0.12.5

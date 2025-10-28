@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::thread::Builder;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -18,7 +19,13 @@ use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
 use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
-use tokio::{fs, sync::RwLock, time::interval};
+use tokio::{
+    fs,
+    runtime::Handle,
+    sync::RwLock,
+    task::block_in_place,
+    time::interval,
+};
 use tracing::{debug, info, instrument, warn};
 
 use crate::erag::{CollapseResult, EragMemory};
@@ -249,19 +256,43 @@ impl DynamicTokenizerManager {
 
     #[instrument(skip(self))]
     pub async fn run_promotion_cycle(&self) -> Result<()> {
-        let start = Instant::now();
+        let promotion_engine = self.promotion_engine.clone();
+        let memories = self.memories.clone();
 
-        let promotion_result = {
-            let engine = self.promotion_engine.read().await;
-            let memories = self.memories.read().await;
-            engine.run_promotion_cycle(&memories).await?
-        };
+        let (promotion_result, elapsed) = block_in_place(|| -> Result<_> {
+            let handle = Handle::current();
+            let engine_clone = promotion_engine.clone();
+            let memories_clone = memories.clone();
+
+            let thread = Builder::new()
+                .name("token_promotion_cycle".to_string())
+                .stack_size(8 * 1024 * 1024)
+                .spawn(move || {
+                    handle.block_on(async move {
+                        let start = Instant::now();
+                        let result = {
+                            let engine = engine_clone.read().await;
+                            let memories = memories_clone.read().await;
+                            engine.run_promotion_cycle(&memories).await
+                        }?;
+                        Ok::<_, anyhow::Error>((result, start.elapsed()))
+                    })
+                })
+                .context("failed to spawn token promotion thread")?;
+
+            let outcome = thread
+                .join()
+                .map_err(|_| anyhow::anyhow!("token promotion thread panicked"))?;
+
+            let (result, elapsed) = outcome?;
+            Ok((result, elapsed))
+        })?;
 
         self.persist_vocabulary().await?;
         self.metrics.record_promotion(&promotion_result);
 
         debug!(
-            cycle_ms = start.elapsed().as_millis(),
+            cycle_ms = elapsed.as_millis(),
             promoted = promotion_result.promoted.len(),
             "promotion cycle completed"
         );

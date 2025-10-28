@@ -31,12 +31,12 @@ impl SpatialHash {
     }
 
     /// Populate the hash from the current memory spheres.
-    pub fn rebuild_from_memory(&mut self, memory_system: &GuessingMemorySystem) {
+    pub fn clear(&mut self) {
         self.buckets.clear();
-        for (id, sphere) in memory_system.spheres_with_ids() {
-            let bucket = self.position_to_bucket(&sphere.position);
-            self.buckets.entry(bucket).or_default().push(id.clone());
-        }
+    }
+
+    pub fn insert_into_bucket(&mut self, bucket: (i32, i32, i32), id: SphereId) {
+        self.buckets.entry(bucket).or_default().push(id);
     }
 
     /// Retrieve references to the identifiers stored in a bucket.
