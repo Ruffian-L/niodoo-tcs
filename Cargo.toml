@@ -54,27 +54,14 @@ version = "0.1.0"
 
 # Core dependencies shared across workspace
 [workspace.dependencies]
-ort = { version = "1.16" }
-candle-core = { version = "0.8" }
-regex = "1.10"
-rand_distr = "0.4"
-prost = "0.13"
-ndarray = "0.16"
-ndarray-linalg = "0.17"
-tokenizers = "0.20"
-base64 = "0.22"
-tcs-core = { path = "../tcs-core" }
-tcs-tda = { path = "../tcs-tda" }
-tcs-knot = { path = "../tcs-knot" }
-tcs-ml = { path = "../tcs-ml" }
-tcs-consensus = { path = "../tcs-consensus" }
-mockall = "0.13"
-
-# Candle framework for ML operations (CPU-only)
+ndarray = { version = "0.15", features = ["rayon", "blas", "serde"] }
+ndarray-linalg = { version = "0.16", features = ["openblas-system"] }
+ort = { version = "1.16", default-features = false, features = ["load-dynamic", "half"] }
+tokenizers = { version = "0.20", default-features = false, features = ["http", "unstable_wasm"] }
+hf-hub = "0.3"
+candle-core = { version = "0.8", default-features = false }
 candle-nn = { version = "0.8", default-features = false }
 candle-transformers = { version = "0.8", default-features = false }
-
-# Async & concurrency
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
 futures = "0.3"
@@ -92,21 +79,19 @@ num_cpus = "1.16"
 dashmap = "6.1"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
-ndarray-linalg = "0.16"
 mimalloc = "0.1"
-lazy_static = "1.4"
-bincode = "1.3"
 num-complex = "0.4"
 usearch = "2.21.0"
 once_cell = "1.19"
 cudarc = "0.1"
 safetensors = "0.4"
-
 half = "2.4.0"
 rand = "0.8"
 rand_chacha = "0.3"
-
-# Data structures & serialization - UPDATED
+rand_distr = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+regex = "1.10"
+prost = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"
@@ -114,39 +99,35 @@ chrono = { version = "0.4.38", features = ["serde"] }
 csv = "1.3"
 serde_yaml = "0.9"
 dirs = "5.0"
-
-# Error handling & logging - UPDATED
 anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-
-# Filesystem utilities
 walkdir = "2.5"
 tempfile = "3.10"
-
-# CLI utilities
-clap = { version = "4.5", features = ["derive"] }
-
-# Cryptography
+base64 = "0.22"
+bincode = "1.3"
 blake3 = "1.5"
 ed25519-dalek = "2.1"
 sha2 = "0.10"
-
-# Python interop
 pyo3 = { version = "0.22" }
-
-# gRPC & web server dependencies
 tonic = "0.12"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors"] }
 tokio-stream = "0.1"
-
-# Monitoring & observability
 prometheus = "0.13"
-
-# Plotting & visualization
+lazy_static = "1.4"
 plotters = "0.3.7"
+tcs-core = { path = "tcs-core" }
+tcs-tda = { path = "tcs-tda" }
+tcs-knot = { path = "tcs-knot" }
+tcs-tqft = { path = "tcs-tqft" }
+tcs-ml = { path = "tcs-ml" }
+tcs-consensus = { path = "tcs-consensus" }
+tcs-pipeline = { path = "tcs-pipeline" }
+niodoo-core = { path = "niodoo-core" }
+constants_core = { path = "constants_core" }
+mockall = "0.13"
 
 # Workspace-specific configurations
 [workspace.lints.rust]
