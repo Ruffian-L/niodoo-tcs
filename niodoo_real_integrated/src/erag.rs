@@ -1142,8 +1142,7 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
     let quality_score = payload
         .get("quality_score")
         .and_then(|v| v.as_f64())
-        .map(|f| f as f32)
-        .unwrap_or_default();
+        .map(|f| f as f32);
     let topology_betti = if payload.contains_key("topology_betti_0") {
         Some([
             extract_number(payload, "topology_betti_0") as usize,
@@ -1156,14 +1155,12 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
     let topology_knot_complexity = payload
         .get("topology_knot_complexity")
         .and_then(|v| v.as_f64())
-        .map(|f| f as f32)
-        .unwrap_or_default();
+        .map(|f| f as f32);
 
     let solution_path = payload
         .get("solution_path")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_default();
+        .map(|s| s.to_string());
 
     let conversation_history = payload
         .get("conversation_history")
@@ -1179,8 +1176,8 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
     let iteration_count = extract_number(payload, "iteration_count") as u32;
 
     EragMemory {
-        input: extract_string(payload, "input").unwrap_or_default(),
-        output: extract_string(payload, "output").unwrap_or_default(),
+        input: extract_string(payload, "input"),
+        output: extract_string(payload, "output"),
         emotional_vector: EmotionalVector {
             joy: extract_number(payload, "joy") as f32,
             sadness: extract_number(payload, "sadness") as f32,
@@ -1191,11 +1188,10 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
         erag_context: context,
         entropy_before: extract_number(payload, "entropy_before"),
         entropy_after: extract_number(payload, "entropy_after"),
-        timestamp: extract_string(payload, "timestamp").unwrap_or_default(),
+        timestamp: extract_string(payload, "timestamp"),
         compass_state: payload
             .get("compass_state")
-            .and_then(|value| value.as_str().map(|s| s.to_string()))
-            .unwrap_or_default(),
+            .and_then(|value| value.as_str().map(|s| s.to_string())),
         quality_score,
         topology_betti,
         topology_knot_complexity,

@@ -19,8 +19,8 @@ use crate::ai_inference::AIInferenceEngine;
 use crate::config;
 use crate::config::ConsciousnessConfig;
 use crate::consciousness::EmotionType;
-use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
 use niodoo_core::config::system_config::AppConfig;
+use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
 
 /// Emotional evaluation of generated code
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,10 +45,7 @@ pub struct EmotionalCoder {
 
 impl EmotionalCoder {
     /// Create new emotional coder
-    pub fn new(
-        model_config: &config::ModelConfig,
-        config: &ConsciousnessConfig,
-    ) -> Result<Self> {
+    pub fn new(model_config: &config::ModelConfig, config: &ConsciousnessConfig) -> Result<Self> {
         let consciousness_engine = Self::init_inference_engine()?;
         Ok(Self {
             qwen_model_path: model_config.qwen_model_path.clone(),
@@ -539,7 +536,10 @@ pub extern "C" fn emotional_coder_init(model_path: *const c_char) -> bool {
     let instance = match EmotionalCoder::new(&model_config, &config) {
         Ok(coder) => coder,
         Err(err) => {
-            tracing::error!(?err, "emotional_coder_init: failed to initialize emotional coder");
+            tracing::error!(
+                ?err,
+                "emotional_coder_init: failed to initialize emotional coder"
+            );
             return false;
         }
     };

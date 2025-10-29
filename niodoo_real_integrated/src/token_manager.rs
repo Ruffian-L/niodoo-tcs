@@ -19,9 +19,9 @@ use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
 use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
+use tokio::signal;
 use tokio::{fs, sync::RwLock, time::interval};
 use tracing::{debug, info, instrument, warn};
-use tokio::signal;
 
 use crate::erag::{CollapseResult, EragMemory};
 use crate::metrics::tokenizer_metrics;
