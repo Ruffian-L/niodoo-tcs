@@ -25,3 +25,5 @@ mod stubs {
     pub fn configure_istio_gateway(_iqr: &[f64]) {} // Implement Istio config
 }
 // Bind in federated.rs as: let metrics = self.weave_istio_mesh(blueprint, &knot_iqr);
+
+

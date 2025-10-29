@@ -278,3 +278,4 @@ RUST_LOG=debug cargo run --release -- --swarm 4 --batch prompts.txt --output-for
 - **Swarm implementation**: `src/main.rs` lines 67–101 (rayon + futures orchestration)
 - **Learning loop**: `src/learning.rs` lines 120–142 (Q-table Arc<RwLock>)
 - **Compass params**: `src/compass.rs` lines 33–108 (runtime params injection)
+

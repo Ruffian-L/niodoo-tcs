@@ -1,7 +1,7 @@
 //! Curator: Memory guardian and knowledge distiller
 //! Adapted from curator_executor for niodoo_real_integrated integration
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -97,11 +97,13 @@ impl Curator {
                 status = %response.status(),
                 "Ollama down—run 'ollama serve && ollama pull qwen2:0.5b'"
             );
-            ensure!(
-                self.mock_mode,
-                "Ollama unavailable; fix with 'ollama serve && ollama pull qwen2:0.5b'"
-            );
-            return Ok(self.mock_curated(experience, start.elapsed().as_secs_f64() * 1000.0));
+            warn!("Ollama unavailable; returning unmodified response (learned=false)");
+            return Ok(CuratedResponse {
+                refined_response: experience.output.clone(),
+                learned: false,
+                reason: "Ollama unavailable".to_string(),
+                processing_time_ms: start.elapsed().as_secs_f64() * 1000.0,
+            });
         }
 
         let payload = response
@@ -116,9 +118,13 @@ impl Curator {
         let parsed: CuratorJson = match serde_json::from_str(raw) {
             Ok(value) => value,
             Err(error) => {
-                warn!(?error, "Curator JSON parse failed, returning mock response");
-                ensure!(self.mock_mode, "Curator JSON parse failed: {error}");
-                return Ok(self.mock_curated(experience, start.elapsed().as_secs_f64() * 1000.0));
+                warn!(?error, "Curator JSON parse failed, returning unmodified response");
+                return Ok(CuratedResponse {
+                    refined_response: experience.output.clone(),
+                    learned: false,
+                    reason: format!("JSON parse failed: {error}"),
+                    processing_time_ms: start.elapsed().as_secs_f64() * 1000.0,
+                });
             }
         };
 
@@ -182,11 +188,17 @@ impl Curator {
             }
         });
 
-        let resp = self.client.post(ollama_url).json(&body).send().await?;
+        let resp = match self.client.post(ollama_url).json(&body).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(%e, "Ollama request failed, returning unmodified response");
+                return Ok((response.to_string(), false));
+            }
+        };
 
         if !resp.status().is_success() {
             error!("Ollama down—run 'ollama serve && ollama pull qwen2:0.5b'");
-            ensure!(self.mock_mode, "Ollama unavailable");
+            warn!("Ollama unavailable; returning unmodified response (learned=false)");
             return Ok((response.to_string(), false));
         }
 

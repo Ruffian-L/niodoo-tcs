@@ -289,7 +289,7 @@ impl DynamicTokenizerManager {
 
             let thread = Builder::new()
                 .name("token_promotion_cycle".to_string())
-                .stack_size(8 * 1024 * 1024)
+                .stack_size(16 * 1024 * 1024)
                 .spawn(move || {
                     handle.block_on(async move {
                         let start = Instant::now();

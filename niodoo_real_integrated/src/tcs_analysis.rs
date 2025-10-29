@@ -149,11 +149,15 @@ impl TCSAnalyzer {
             .compute_persistence(&points, 2, &params)?;
         record_topology_metrics(&result);
 
-        let persistence_entropy = result
-            .entropy
-            .iter()
-            .map(|(_, value)| f64::from(*value))
-            .sum::<f64>();
+        // Parallelize entropy and spectral gap computation
+        let persistence_entropy = {
+            use rayon::prelude::*;
+            result
+                .entropy
+                .par_iter()
+                .map(|(_, value)| f64::from(*value))
+                .sum::<f64>()
+        };
 
         let spectral_gap = Self::compute_spectral_gap(&result);
 

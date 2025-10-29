@@ -1,6 +1,69 @@
-#![allow(missing_docs)]
 //! Niodoo Real Integrated: Topological Cognitive System (TCS) integration crate.
-//! Bridges pipelines, embeddings, learning, and generation into a cohesive runtime.
+//! 
+//! This crate provides a comprehensive integrated runtime that bridges pipelines, embeddings, 
+//! learning, and generation into a cohesive Topological Cognitive System.
+//!
+//! ## Overview
+//!
+//! The TCS architecture combines:
+//! - **Topological Data Analysis (TDA)**: Persistent homology, Betti numbers, and knot invariants
+//! - **Emotional Reasoning Augmented Generation (ERAG)**: Memory retrieval and context collapse
+//! - **Learning Loop**: DQN-based reinforcement learning with LoRA adapters
+//! - **Generation**: Hybrid model synthesis with consistency voting
+//!
+//! ## Key Components
+//!
+//! - [`Pipeline`]: Main orchestration loop connecting all components
+//! - [`TCSAnalyzer`]: Computes topological signatures from emotional states
+//! - [`EragClient`]: ERAG memory retrieval and storage via Qdrant
+//! - [`LearningLoop`]: Continuous learning with DQN and LoRA fine-tuning
+//! - [`GenerationEngine`]: Multi-model generation with Claude/GPT/vLLM fallback
+//!
+//! ## Usage
+//!
+//! ```no_run
+//! use niodoo_real_integrated::{CliArgs, Pipeline};
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let args = CliArgs::parse();
+//!     let pipeline = Pipeline::initialise(args).await?;
+//!     
+//!     // Process prompts through the integrated pipeline
+//!     let cycle = pipeline.run_cycle("Your prompt here").await?;
+//!     println!("Response: {}", cycle.hybrid_response);
+//!     
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Architecture
+//!
+//! The pipeline follows this flow:
+//! 1. **Embedding**: Convert input to vector space via Qwen embeddings
+//! 2. **Torus Mapping**: Transform to PAD emotional state space
+//! 3. **TCS Analysis**: Compute persistent homology and knot invariants
+//! 4. **Compass**: UCB1-based exploration/exploitation
+//! 5. **ERAG Collapse**: Retrieve relevant memories from Qdrant
+//! 6. **Tokenization**: Dynamic token promotion and vocabulary evolution
+//! 7. **Generation**: Hybrid synthesis with consistency voting
+//! 8. **Learning**: DQN updates and LoRA fine-tuning
+//!
+//! ## Benchmarks
+//!
+//! Run the million cycle test for long-run stability:
+//! ```bash
+//! cargo run -p niodoo_real_integrated --bin million_cycle_test
+//! ```
+//!
+//! Performance targets:
+//! - <200ms per cycle
+//! - Deterministic RNG flow enabled via `RNG_SEED`
+//! - Parallel processing via rayon
+//!
+//! ## License
+//!
+//! MIT License
 
 /// Clients for external/model/service APIs (tokenizers, hubs, inference backends).
 pub mod api_clients;
