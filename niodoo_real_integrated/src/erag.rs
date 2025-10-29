@@ -1,6 +1,5 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
-use rand::SeedableRng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
