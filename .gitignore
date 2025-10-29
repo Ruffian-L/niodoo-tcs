@@ -215,3 +215,4 @@ venv/
 
 # Benchmark binaries
 **/bin/emotion_bench.rs
+target_local/
