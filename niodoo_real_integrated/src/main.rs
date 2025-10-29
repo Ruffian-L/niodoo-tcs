@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use niodoo_real_integrated::config::{self, CliArgs};
+use niodoo_real_integrated::config::{self, env_value, set_env_override, CliArgs};
 use niodoo_real_integrated::pipeline::Pipeline;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -47,16 +47,9 @@ async fn main() -> Result<()> {
 
     let args = CliArgs::parse();
 
-    if let Some(seed) = args.rng_seed_override {
-        #[allow(unused_unsafe)]
-        unsafe {
-            std::env::set_var("RNG_SEED", seed.to_string());
-        }
-    }
-
-    let rng_seed = std::env::var("RNG_SEED")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
+    let rng_seed = args
+        .rng_seed_override
+        .or_else(|| env_value("RNG_SEED").and_then(|value| value.parse::<u64>().ok()))
         .unwrap_or_else(|| {
             let default_seed = 42_u64;
             warn!(
@@ -65,6 +58,8 @@ async fn main() -> Result<()> {
             );
             default_seed
         });
+
+    set_env_override("RNG_SEED", rng_seed.to_string());
 
     let prompts = gather_prompts(&args)?;
     let iterations = args.iterations.max(1);

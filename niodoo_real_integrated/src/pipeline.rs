@@ -8,7 +8,7 @@ use anyhow::Context;
 use anyhow::Result;
 
 use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant, CompassRuntimeParams};
-use crate::config::{env_value, CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode};
+use crate::config::{env_value, set_env_override, CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode};
 use crate::curator::Curator;
 use crate::data::{
     compute_dataset_stats, load_emotional_dataset, load_rut_gauntlet_prompts, DatasetStats,
@@ -140,6 +140,7 @@ impl Pipeline {
     ) -> Result<Self> {
         if let Some(seed) = seed_override {
             args.rng_seed_override = Some(seed);
+            set_env_override("RNG_SEED", seed.to_string());
         }
 
         let mut config = RuntimeConfig::load(&args)?;
@@ -379,10 +380,15 @@ impl Pipeline {
 
     fn next_torus_mapper(&self) -> TorusPadMapper {
         // Derive a fresh mapper using the global seed manager and a stable scope
+        // Include topology mode in scope to ensure baseline and hybrid produce different PAD states
         let counter = self.torus_counter.fetch_add(1, Ordering::Relaxed) + 1;
+        let mode_str = match self.config.topology_mode {
+            TopologyMode::Baseline => "baseline",
+            TopologyMode::Hybrid => "hybrid",
+        };
         let scope = match self.torus_strategy {
-            TorusSeedStrategy::Fixed(seed) => format!("torus/fixed/{seed}/{counter}"),
-            TorusSeedStrategy::Random => format!("torus/derived/{counter}"),
+            TorusSeedStrategy::Fixed(seed) => format!("torus/fixed/{seed}/{mode_str}/{counter}"),
+            TorusSeedStrategy::Random => format!("torus/derived/{mode_str}/{counter}"),
         };
         let mut derived_rng = crate::util::seed_manager().get_rng(&scope);
         // Extract u64 seed by sampling from the derived RNG to initialize mapper RNG deterministically

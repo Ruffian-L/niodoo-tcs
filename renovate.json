@@ -1,0 +1,12 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:base"],
+  "labels": ["deps"],
+  "enabledManagers": ["cargo"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    { "matchManagers": ["cargo"], "groupName": "rust-workspace-minors", "updateTypes": ["minor", "patch"] },
+    { "matchPackageNames": ["ort", "candle-core", "candle-transformers"], "separateMajorMinor": true }
+  ]
+}
+

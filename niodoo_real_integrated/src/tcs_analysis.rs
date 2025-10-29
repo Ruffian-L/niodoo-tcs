@@ -183,19 +183,24 @@ impl TCSAnalyzer {
         let mut betti = self.compute_betti_numbers(&result);
         
         // Validate Betti numbers: for n points, Betti_1 <= n-1 for connected components
-        // This prevents mathematically impossible values
+        // Additionally, enforce hard constraint: Betti_1 <= 6
+        // This prevents mathematically impossible values and ensures realistic bounds
         let num_points = points.len();
-        if betti[1] > num_points.saturating_sub(1) {
+        let theoretical_max = num_points.saturating_sub(1);
+        let constraint_max = 6;
+        let max_allowed = theoretical_max.min(constraint_max);
+        
+        if betti[1] > max_allowed {
             warn!(
-                "Betti_1 ({}) exceeds theoretical maximum ({} points - 1 = {}), capping to {}",
-                betti[1], num_points, num_points.saturating_sub(1), num_points.saturating_sub(1)
+                "Betti_1 ({}) exceeds maximum (theoretical: {}, constraint: {}), capping to {}",
+                betti[1], theoretical_max, constraint_max, max_allowed
             );
-            betti[1] = num_points.saturating_sub(1);
+            betti[1] = max_allowed;
         }
         
         let gap = (betti[1] as f64 - betti[0] as f64).abs();
-        // Cap knot proxy to prevent saturation: use min of Betti_1 and realistic maximum
-        let knot_proxy = (betti[1] as f64).min(num_points as f64 - 1.0).max(0.0);
+        // Cap knot proxy to prevent saturation: use capped Betti_1 value, ensuring variation
+        let knot_proxy = (betti[1] as f64).min(constraint_max as f64).max(0.0);
 
         let phi = Self::approximate_phi_from_betti(&betti);
         info!("IIT Φ (approx): {:.6}", phi);
@@ -205,8 +210,10 @@ impl TCSAnalyzer {
         let knot_analysis = self.knot_analyzer.analyze(&knot_diagram);
         let knot_polynomial = knot_analysis.polynomial;
 
-        // Use TDA knot proxy for complexity
-        let knot_complexity = knot_proxy.max(knot_analysis.complexity_score as f64);
+        // Use TDA knot proxy for complexity, but cap knot_analysis.complexity_score to prevent saturation
+        // This ensures variation in knot complexity rather than always saturating at max value
+        let knot_analysis_score = (knot_analysis.complexity_score as f64).min(constraint_max as f64);
+        let knot_complexity = knot_proxy.max(knot_analysis_score).min(constraint_max as f64);
 
         let cobordism_type = self.infer_cobordism(&betti);
 

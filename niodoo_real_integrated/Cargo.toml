@@ -10,7 +10,7 @@ license = "MIT"
 path = "src/lib.rs"
 
 [features]
-default = ["beelink"]
+default = ["beelink", "svc"]
 beelink = []
 5080-q = []
 gauntlet = []
@@ -18,6 +18,8 @@ examples = []
 qdrant = []
 embedded-qdrant = []
 otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
+svc = ["dep:axum", "dep:tower", "dep:tower-http", "dep:prometheus", "dep:tonic"]
+edge = []
 
 [dependencies]
 # Existing deps from workspace
@@ -52,8 +54,8 @@ parking_lot = { workspace = true }
 rayon = { workspace = true }
 rand_distr = { workspace = true }
 lru = { workspace = true }
-axum = { workspace = true }
-prometheus = { workspace = true }
+axum = { workspace = true, optional = true }
+prometheus = { workspace = true, optional = true }
 lazy_static = { workspace = true }
 regex = { workspace = true }
 serde_yaml = { workspace = true }
@@ -61,9 +63,9 @@ safetensors = { workspace = true }
 num-complex = { workspace = true }
 csv = { workspace = true }
 plotters = { workspace = true }
-tonic = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true }
+tonic = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 opentelemetry = { version = "0.24", optional = true, features = ["trace"] }
 opentelemetry-otlp = { version = "0.17", optional = true, features = ["tonic", "tls"] }
@@ -118,6 +120,7 @@ path = "src/bin/million_cycle_test.rs"
 [[bin]]
 name = "metrics_server"
 path = "src/bin/metrics_server.rs"
+required-features = ["svc"]
 
 [[bin]]
 name = "proto_test"
@@ -127,10 +130,12 @@ required-features = ["qdrant"]
 [[bin]]
 name = "shard_telemetry_server"
 path = "src/bin/shard_telemetry_server.rs"
+required-features = ["svc"]
 
 [[bin]]
 name = "federated_runtime"
 path = "src/bin/federated_runtime.rs"
+required-features = ["svc"]
 
 [[bin]]
 name = "topology_bench"

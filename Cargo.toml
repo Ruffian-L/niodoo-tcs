@@ -49,8 +49,8 @@ resolver = "2"
 # Workspace-wide package metadata
 [workspace.package]
 authors = ["NiodO.o Topology Team <niodoo@dev>"]
-edition = "2021"
-rust-version = "1.82"
+edition = "2024"
+rust-version = "1.85"
 license-file = "LICENSE"
 repository = "https://github.com/Ruffian-L/niodoo-tcs"
 version = "0.1.0"
@@ -146,6 +146,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+overflow-checks = true
 
 [profile.bench]
 opt-level = 3
