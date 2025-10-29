@@ -48,6 +48,7 @@ async fn main() -> Result<()> {
     let args = CliArgs::parse();
 
     if let Some(seed) = args.rng_seed_override {
+        #[allow(unused_unsafe)]
         unsafe {
             std::env::set_var("RNG_SEED", seed.to_string());
         }

@@ -122,6 +122,11 @@ impl SeedManager {
         Self { master_seed }
     }
 
+    /// Expose the configured master seed
+    pub fn master_seed(&self) -> u64 {
+        self.master_seed
+    }
+
     /// Initialize from environment variables. Falls back to 42 if unset/invalid.
     /// Recognized vars: NIODOO_SEED, RNG_SEED
     pub fn from_env() -> Self {
@@ -152,4 +157,18 @@ static GLOBAL_SEED_MANAGER: OnceCell<SeedManager> = OnceCell::new();
 /// Global access to the process-level seed manager, initialized from env
 pub fn seed_manager() -> &'static SeedManager {
     GLOBAL_SEED_MANAGER.get_or_init(SeedManager::from_env)
+}
+
+/// Override the global seed manager with a specific seed. Subsequent calls to
+/// `seed_manager()` will return a manager initialised with this seed. If the
+/// seed manager was already initialised with a different seed, the override is
+/// ignored to preserve determinism across threads.
+pub fn set_global_seed(seed: u64) {
+    if GLOBAL_SEED_MANAGER.set(SeedManager::new(seed)).is_err() {
+        if let Some(existing) = GLOBAL_SEED_MANAGER.get() {
+            if existing.master_seed() != seed {
+                // Intentionally silent: callers decide how to handle conflicting seeds.
+            }
+        }
+    }
 }

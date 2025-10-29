@@ -1,5 +1,4 @@
 use std::fs::{self, File};
-use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::torus::PadGhostState;
@@ -180,9 +180,22 @@ impl TCSAnalyzer {
 
         let spectral_gap = Self::compute_spectral_gap(&result);
 
-        let betti = self.compute_betti_numbers(&result);
+        let mut betti = self.compute_betti_numbers(&result);
+        
+        // Validate Betti numbers: for n points, Betti_1 <= n-1 for connected components
+        // This prevents mathematically impossible values
+        let num_points = points.len();
+        if betti[1] > num_points.saturating_sub(1) {
+            warn!(
+                "Betti_1 ({}) exceeds theoretical maximum ({} points - 1 = {}), capping to {}",
+                betti[1], num_points, num_points.saturating_sub(1), num_points.saturating_sub(1)
+            );
+            betti[1] = num_points.saturating_sub(1);
+        }
+        
         let gap = (betti[1] as f64 - betti[0] as f64).abs();
-        let knot_proxy = betti[1] as f64;
+        // Cap knot proxy to prevent saturation: use min of Betti_1 and realistic maximum
+        let knot_proxy = (betti[1] as f64).min(num_points as f64 - 1.0).max(0.0);
 
         let phi = Self::approximate_phi_from_betti(&betti);
         info!("IIT Φ (approx): {:.6}", phi);
@@ -220,14 +233,29 @@ impl TCSAnalyzer {
     }
 
     /// Convert PAD state to point cloud for homology computation
+    /// Uses PAD, mu, sigma, and incorporates entropy to make topology input-sensitive
     fn pad_to_points(&self, pad_state: &TCSState) -> Vec<Point> {
         let mut points = Vec::new();
+        
+        // Calculate global statistics for normalization
+        let pad_mean: f64 = pad_state.pad.iter().sum::<f64>() / pad_state.pad.len() as f64;
+        let pad_variance: f64 = pad_state.pad.iter()
+            .map(|&v| (v - pad_mean).powi(2))
+            .sum::<f64>() / pad_state.pad.len() as f64;
+        
         for i in 0..7 {
             // Create point from PAD coordinates with mu/sigma as extra dimensions
+            // Add entropy-normalized variance to make topology sensitive to input variation
             let mut coords = Vec::with_capacity(7);
             coords.push(pad_state.pad[i]);
             coords.push(pad_state.mu[i]);
             coords.push(pad_state.sigma[i]);
+            
+            // Add additional dimensions: variance-weighted position, relative deviation
+            // This ensures different PAD distributions produce different point clouds
+            coords.push((pad_state.pad[i] - pad_mean) * pad_variance.sqrt());
+            coords.push(pad_state.mu[i] * pad_state.sigma[i]); // Interaction term
+            
             // Pad to 7D
             while coords.len() < 7 {
                 coords.push(0.0);
@@ -239,11 +267,19 @@ impl TCSAnalyzer {
     }
 
     /// Compute Betti numbers from persistence features
+    /// Betti numbers count only persistent features (death == infinity), not all features
     fn compute_betti_numbers(&self, result: &PersistenceResult) -> [usize; 3] {
         let mut betti = [0usize; 3];
         for diagram in &result.diagrams {
             if diagram.dimension < 3 {
-                betti[diagram.dimension] = diagram.features.len();
+                // Only count features that persist to infinity (death == f64::INFINITY)
+                // These represent true topological holes, not temporary features
+                let persistent_count = diagram
+                    .features
+                    .iter()
+                    .filter(|f| f.death.is_infinite())
+                    .count();
+                betti[diagram.dimension] = persistent_count;
             }
         }
         betti

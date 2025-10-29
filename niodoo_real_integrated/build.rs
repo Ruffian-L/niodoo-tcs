@@ -57,3 +57,11 @@ fn build_federated_proto() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+fn set_protoc_env(path: &Path) {
+    let value = path.to_string_lossy().into_owned();
+    #[allow(unused_unsafe)]
+    unsafe {
+        env::set_var("PROTOC", value);
+    }
+}

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -8,6 +8,33 @@ use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
+use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
+
+static ENV_OVERRIDES: OnceCell<RwLock<HashMap<String, String>>> = OnceCell::new();
+
+fn env_store() -> &'static RwLock<HashMap<String, String>> {
+    ENV_OVERRIDES.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+pub fn set_env_override<K, V>(key: K, value: V)
+where
+    K: Into<String>,
+    V: Into<String>,
+{
+    env_store().write().insert(key.into(), value.into());
+}
+
+pub fn env_value(key: &str) -> Option<String> {
+    env_store().read().get(key).cloned().or_else(|| env::var(key).ok())
+}
+
+pub fn env_var(key: &str) -> std::result::Result<String, std::env::VarError> {
+    if let Some(value) = env_store().read().get(key) {
+        return Ok(value.clone());
+    }
+    env::var(key)
+}
 
 pub fn prime_environment() {
     let mut roots: HashSet<PathBuf> = HashSet::new();
@@ -1055,9 +1082,7 @@ fn load_env_file(path: &Path) -> Result<()> {
         }
         let raw_value = parts.next().unwrap_or("").trim();
         let value = normalise_env_value(raw_value);
-        unsafe {
-            env::set_var(key, value);
-        }
+        set_env_override(key, value);
     }
 
     Ok(())
@@ -1076,7 +1101,7 @@ fn normalise_env_value(value: &str) -> String {
 }
 fn env_with_fallback(keys: &[&str]) -> Option<String> {
     for key in keys {
-        if let Ok(value) = env::var(key) {
+        if let Some(value) = env_value(key) {
             let trimmed = value.trim();
             if !trimmed.is_empty() {
                 return Some(trimmed.to_string());

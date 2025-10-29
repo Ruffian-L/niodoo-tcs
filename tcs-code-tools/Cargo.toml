@@ -1,0 +1,22 @@
+[package]
+name = "tcs-code-tools"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = { version = "1" }
+walkdir = { version = "2" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+qdrant-client = "1.7"
+tcs-ml = { path = "../tcs-ml" }
+
+[[bin]]
+name = "code_indexer"
+path = "src/bin/code_indexer.rs"
+
+[[bin]]
+name = "code_query"
+path = "src/bin/code_query.rs"
+

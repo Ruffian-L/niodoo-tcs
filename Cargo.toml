@@ -30,6 +30,7 @@ members = [
     "constants_core",
     "niodoo_real_integrated",
     "tcs-core-wasm",
+    "tcs-code-tools",
     # Transitional member until all modules migrate
     "src",
 ]
@@ -178,6 +179,16 @@ codegen-units = 1
 panic = "abort"
 strip = true
 debug-assertions = false
+
+# Edge profile for embedded/edge builds
+[profile.edge]
+inherits = "release"
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
 
 # NOTE: Binary targets are defined in individual package Cargo.toml files (src/Cargo.toml)
 # NOTE: Features are defined in individual packages, not at workspace level

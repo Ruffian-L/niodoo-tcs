@@ -36,7 +36,7 @@ qdrant-client = "1.7"
 # NOTE: qdrant-embedded crate needs to be configured when available
 # For now, embedded Qdrant functionality is feature-gated but requires
 # manual dependency setup. See: https://docs.rs/qdrant-client for embedded mode options
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 uuid = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }

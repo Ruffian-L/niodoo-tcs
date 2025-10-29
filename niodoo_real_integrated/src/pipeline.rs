@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -9,7 +8,7 @@ use anyhow::Context;
 use anyhow::Result;
 
 use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant, CompassRuntimeParams};
-use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode};
+use crate::config::{env_value, CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode};
 use crate::curator::Curator;
 use crate::data::{
     compute_dataset_stats, load_emotional_dataset, load_rut_gauntlet_prompts, DatasetStats,
@@ -23,14 +22,14 @@ use crate::metrics::{metrics, FailureSignals};
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
-use crate::util::rouge_l;
+use crate::util::{rouge_l, seed_manager, set_global_seed};
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use parking_lot::RwLock;
 use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::process::Command;
-use tracing::{info, warn, error};
+use rand::RngCore;
+use tracing::{info, warn};
 #[allow(unused_imports)]
 use qdrant_client::qdrant::{CreateCollection, Distance, VectorsConfig};
 
@@ -127,18 +126,26 @@ pub struct Pipeline {
 
 impl Pipeline {
     pub async fn initialise(args: CliArgs) -> Result<Self> {
-        Self::initialise_with_topology(args, None).await
+        Self::initialise_with_topology(args, None, None).await
     }
 
     pub async fn initialise_with_mode(args: CliArgs, mode: TopologyMode) -> Result<Self> {
-        Self::initialise_with_topology(args, Some(mode)).await
+        Self::initialise_with_topology(args, Some(mode), None).await
     }
 
     async fn initialise_with_topology(
-        args: CliArgs,
+        mut args: CliArgs,
         override_mode: Option<TopologyMode>,
+        seed_override: Option<u64>,
     ) -> Result<Self> {
+        if let Some(seed) = seed_override {
+            args.rng_seed_override = Some(seed);
+        }
+
         let mut config = RuntimeConfig::load(&args)?;
+        if let Some(seed) = seed_override {
+            config.rng_seed = seed;
+        }
         if let Some(mode) = override_mode {
             config.topology_mode = mode;
         }
@@ -174,26 +181,23 @@ impl Pipeline {
             "Initialized embedding client"
         );
         let embedder_arc = Arc::new(embedder.clone());
-        let torus_strategy = match std::env::var("TORUS_SEED") {
-            Ok(value) => match value.parse::<u64>() {
+        let torus_strategy = if let Some(seed) = seed_override {
+            info!(seed, "Initializing torus pad mapper with fixed seed override");
+            TorusSeedStrategy::Fixed(seed)
+        } else if let Some(value) = env_value("TORUS_SEED") {
+            match value.parse::<u64>() {
                 Ok(seed) => {
                     info!(seed, "Initializing torus pad mapper with fixed seed");
-                    unsafe {
-                        unsafe {
-            std::env::set_var("TORUS_SEED", seed.to_string());
-        }
-                    }
                     TorusSeedStrategy::Fixed(seed)
                 }
                 Err(_) => {
                     warn!(value = %value, "Invalid TORUS_SEED value; using entropy seeding");
                     TorusSeedStrategy::Random
                 }
-            },
-            Err(_) => {
-                info!("Initializing torus pad mapper with entropy seed");
-                TorusSeedStrategy::Random
             }
+        } else {
+            info!("Initializing torus pad mapper with entropy seed");
+            TorusSeedStrategy::Random
         };
         let compass = Arc::new(AsyncMutex::new(CompassEngine::new(
             thresholds.mcts_c,
@@ -238,7 +242,7 @@ impl Pipeline {
         let tokenizer = Arc::new(
             DynamicTokenizerManager::initialise(
                 &tokenizer_path()?,
-                std::env::var("NODE_ID").unwrap_or_else(|_| "niodoo_real_integrated".to_string()),
+                env_value("NODE_ID").unwrap_or_else(|| "niodoo_real_integrated".to_string()),
                 config.token_promotion_interval,
             )
             .await?,
@@ -366,12 +370,11 @@ impl Pipeline {
     }
 
     pub async fn initialise_with_seed(args: CliArgs, seed: u64) -> Result<Self> {
-        unsafe {
-            unsafe {
-            std::env::set_var("TORUS_SEED", seed.to_string());
+        set_global_seed(seed);
+        if seed_manager().master_seed() != seed {
+            warn!(existing = seed_manager().master_seed(), requested = seed, "Seed override ignored; global seed already initialised");
         }
-        }
-        Self::initialise(args).await
+        Self::initialise_with_topology(args, None, Some(seed)).await
     }
 
     fn next_torus_mapper(&self) -> TorusPadMapper {
@@ -383,8 +386,7 @@ impl Pipeline {
         };
         let mut derived_rng = crate::util::seed_manager().get_rng(&scope);
         // Extract u64 seed by sampling from the derived RNG to initialize mapper RNG deterministically
-        use rand::Rng;
-        let derived_seed: u64 = derived_rng.r#gen();
+        let derived_seed: u64 = derived_rng.next_u64();
         TorusPadMapper::new(derived_seed)
     }
 
@@ -824,7 +826,7 @@ impl Pipeline {
         );
 
         // Emit per-cycle WebSocket event (best-effort)
-        if let Ok(ws_url) = std::env::var("NIODOO_WS_ENDPOINT") {
+        if let Some(ws_url) = env_value("NIODOO_WS_ENDPOINT") {
             let _ = tokio::spawn({
                 let ws_url = ws_url.clone();
                 let event = serde_json::json!({
@@ -1033,11 +1035,24 @@ impl Pipeline {
             };
 
             // Re-evaluate failure with new metrics
+            // OPTIMIZATION: Adjust ucb1_score based on ROUGE improvement to avoid infinite retry loops
+            // If ROUGE improved significantly, boost ucb1 to reflect successful retry
+            let adjusted_ucb1 = if retry_gen.rouge_score > current_gen.rouge_score + 0.1 {
+                // ROUGE improved by >0.1, boost ucb1 to reflect success
+                ucb1_score.max(0.2).min(1.0)
+            } else if retry_count > 3 {
+                // After 3 retries, if we're still here but ROUGE is reasonable, relax ucb1 check
+                // This prevents infinite loops from stale ucb1_score
+                ucb1_score.max(0.15)
+            } else {
+                ucb1_score
+            };
+            
             let (failure, _new_details) = FailureSignals::evaluate(
                 retry_gen.rouge_score,
                 entropy_delta,
                 curator_quality,
-                ucb1_score,
+                adjusted_ucb1,
             );
 
             current_gen = retry_gen;
@@ -1053,10 +1068,14 @@ impl Pipeline {
                 break;
             }
 
-            // Backoff delay before next retry (exponential with jitter)
+            // Backoff delay before next retry (exponential with jitter, but capped)
+            // OPTIMIZATION: Cap exponential backoff to prevent excessive delays
             if retry_count < max_retries {
-                let exponent = 2_u64.pow(retry_count.min(10));
-                let delay_ms = base_delay_ms * exponent;
+                let exponent = 2_u64.pow(retry_count.min(6)); // Cap at 2^6 = 64x instead of 2^10 = 1024x
+                let delay_ms = (base_delay_ms * exponent).min(5000); // Cap at 5 seconds max
+                if delay_ms > 100 {
+                    info!(retry = retry_count, delay_ms, "Backoff delay before next retry");
+                }
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             }
         }
@@ -1244,21 +1263,21 @@ fn cache_key(prompt: &str) -> u64 {
 }
 
 fn tokenizer_path() -> Result<PathBuf> {
-    if let Ok(value) = std::env::var("TOKENIZER_JSON") {
+    if let Some(value) = env_value("TOKENIZER_JSON") {
         let path = PathBuf::from(value);
         if path.exists() {
             return Ok(path);
         }
     }
 
-    if let Ok(value) = std::env::var("QWEN_TOKENIZER") {
+    if let Some(value) = env_value("QWEN_TOKENIZER") {
         let path = PathBuf::from(value);
         if path.exists() {
             return Ok(path);
         }
     }
 
-    if let Ok(models_dir) = std::env::var("MODELS_DIR") {
+    if let Some(models_dir) = env_value("MODELS_DIR") {
         let path = PathBuf::from(models_dir).join("tokenizer.json");
         if path.exists() {
             return Ok(path);

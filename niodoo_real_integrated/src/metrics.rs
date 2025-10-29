@@ -213,7 +213,9 @@ pub fn evaluate_failure(
             "soft".to_string(),
             "Low quality - needs improvement".to_string(),
         )
-    } else if ucb1 < 0.15 {
+    } else if ucb1 < 0.15 && rouge < 0.3 {
+        // OPTIMIZATION: Only trigger on low ucb1 if ROUGE is also low
+        // This prevents infinite retry loops when ROUGE is good but ucb1 is stale
         ("soft".to_string(), "Low search confidence".to_string())
     } else {
         ("none".to_string(), "".to_string())
