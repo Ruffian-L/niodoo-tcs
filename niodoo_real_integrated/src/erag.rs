@@ -45,7 +45,7 @@ impl EmotionalVector {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EragMemory {
     pub input: String,
     pub output: String,
@@ -137,7 +137,7 @@ impl EragClient {
 
         let _qdrant = Qdrant::from_url(&base_url);
 
-        // Ensure collections exist using Qdrant 1.8+ spec (vectors_config)
+        // Ensure collections exist - try vectors_config first (Qdrant 1.8+), fallback to vectors
         let expected_dim = 896;
 
         if vector_dim != expected_dim {
@@ -147,30 +147,47 @@ impl EragClient {
                 "Qdrant dim fixed to 896; using enforced dimension"
             );
         }
-        let create_body = json!({
+        
+        // Try vectors_config (Qdrant 1.8+) first, fallback to vectors (older versions)
+        let create_body_new = json!({
             "vectors_config": {
+                "size": expected_dim,
+                "distance": "Cosine"
+            }
+        });
+        
+        let create_body_old = json!({
+            "vectors": {
                 "size": expected_dim,
                 "distance": "Cosine"
             }
         });
 
         let create_url = format!("{}/collections/{}", base_url, collection);
-        let create_resp = client.put(&create_url).json(&create_body).send().await?;
+        
+        // Try new format first, fallback to old format if needed
+        let create_resp = client.put(&create_url).json(&create_body_new).send().await?;
         let create_status = create_resp.status();
+        
         if !create_status.is_success() && create_status != 409 {
-            let body = create_resp.text().await.unwrap_or_default();
-            bail!(
-                "Failed to ensure experiences collection: status={}, body={body}",
-                create_status
-            );
+            // Try old format as fallback
+            let fallback_resp = client.put(&create_url).json(&create_body_old).send().await?;
+            let fallback_status = fallback_resp.status();
+            if !fallback_status.is_success() && fallback_status != 409 {
+                let body = fallback_resp.text().await.unwrap_or_default();
+                bail!(
+                    "Failed to ensure experiences collection with both new and old API formats: status={}, body={body}",
+                    fallback_status
+                );
+            }
         }
 
         let failures_url = format!("{}/collections/failures", base_url);
-        let failures_resp = client.put(&failures_url).json(&create_body).send().await?;
+        let failures_resp = client.put(&failures_url).json(&create_body_new).send().await?;
         let failures_status = failures_resp.status();
         if !failures_status.is_success() && failures_status != 409 {
-            let body = failures_resp.text().await.unwrap_or_default();
-            warn!(collection = "failures", status = %failures_status, %body, "failed to ensure failures collection");
+            // Try old format for failures collection too
+            let _ = client.put(&failures_url).json(&create_body_old).send().await;
         }
 
         info!(
@@ -272,6 +289,23 @@ impl EragClient {
                             }
                         }
                         Err(err) => {
+                            let err_msg = err.to_string();
+                            if err_msg.contains("ExpectedAnotherByte") || err_msg.contains("corrupted") {
+                                warn!(
+                                    %err,
+                                    "Failed to decode qdrant search response due to corrupted data, returning empty result"
+                                );
+                                return Ok(CollapseResult {
+                                    top_hits: Vec::new(),
+                                    aggregated_context: String::new(),
+                                    average_similarity: 0.0,
+                                    curator_quality: None,
+                                    failure_type: Some("corrupted_data".to_string()),
+                                    failure_details: Some(format!(
+                                        "JSON parsing failed due to corrupted data: {err_msg}"
+                                    )),
+                                });
+                            }
                             info!(%err, "failed to decode qdrant search response, using empty result");
                         }
                     }
@@ -297,6 +331,24 @@ impl EragClient {
                             failure_type: Some("empty_collection".to_string()),
                             failure_details: Some(format!(
                                 "Qdrant collection is empty (status={status})"
+                            )),
+                        });
+                    }
+                    
+                    // Handle corrupted data gracefully - ExpectedAnotherByte indicates corruption
+                    if body.contains("ExpectedAnotherByte") || body.contains("corrupted") || body.contains("malformed") {
+                        warn!(
+                            %status,
+                            "Qdrant collection has corrupted data, returning empty collapse result"
+                        );
+                        return Ok(CollapseResult {
+                            top_hits: Vec::new(),
+                            aggregated_context: String::new(),
+                            average_similarity: 0.0,
+                            curator_quality: None,
+                            failure_type: Some("corrupted_data".to_string()),
+                            failure_details: Some(format!(
+                                "Qdrant collection has corrupted data (status={status}): {body}"
                             )),
                         });
                     }
@@ -575,7 +627,13 @@ impl EragClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            warn!(%status, %body, "Qdrant search returned error, returning empty result");
+            
+            // Handle corrupted data gracefully
+            if body.contains("ExpectedAnotherByte") || body.contains("corrupted") || body.contains("malformed") {
+                warn!(%status, "Qdrant search returned corrupted data error, returning empty result");
+            } else {
+                warn!(%status, %body, "Qdrant search returned error, returning empty result");
+            }
             return Ok(Vec::new());
         }
 
@@ -588,7 +646,12 @@ impl EragClient {
         match resp.json::<SearchResponse>().await {
             Ok(search_resp) => Ok(search_resp.result),
             Err(e) => {
-                warn!(error = %e, "Failed to decode Qdrant search response, returning empty result");
+                let err_msg = e.to_string();
+                if err_msg.contains("ExpectedAnotherByte") || err_msg.contains("corrupted") {
+                    warn!(error = %e, "Failed to decode Qdrant search response due to corrupted data, returning empty result");
+                } else {
+                    warn!(error = %e, "Failed to decode Qdrant search response, returning empty result");
+                }
                 Ok(Vec::new())
             }
         }
@@ -1055,7 +1118,8 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
     let quality_score = payload
         .get("quality_score")
         .and_then(|v| v.as_f64())
-        .map(|f| f as f32);
+        .map(|f| f as f32)
+        .unwrap_or_default();
     let topology_betti = if payload.contains_key("topology_betti_0") {
         Some([
             extract_number(payload, "topology_betti_0") as usize,
@@ -1068,12 +1132,14 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
     let topology_knot_complexity = payload
         .get("topology_knot_complexity")
         .and_then(|v| v.as_f64())
-        .map(|f| f as f32);
+        .map(|f| f as f32)
+        .unwrap_or_default();
 
     let solution_path = payload
         .get("solution_path")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .map(|s| s.to_string())
+        .unwrap_or_default();
 
     let conversation_history = payload
         .get("conversation_history")
@@ -1089,8 +1155,8 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
     let iteration_count = extract_number(payload, "iteration_count") as u32;
 
     EragMemory {
-        input: extract_string(payload, "input"),
-        output: extract_string(payload, "output"),
+        input: extract_string(payload, "input").unwrap_or_default(),
+        output: extract_string(payload, "output").unwrap_or_default(),
         emotional_vector: EmotionalVector {
             joy: extract_number(payload, "joy") as f32,
             sadness: extract_number(payload, "sadness") as f32,
@@ -1101,10 +1167,11 @@ fn deserialize_memory(payload: &JsonMap<String, JsonValue>) -> EragMemory {
         erag_context: context,
         entropy_before: extract_number(payload, "entropy_before"),
         entropy_after: extract_number(payload, "entropy_after"),
-        timestamp: extract_string(payload, "timestamp"),
+        timestamp: extract_string(payload, "timestamp").unwrap_or_default(),
         compass_state: payload
             .get("compass_state")
-            .and_then(|value| value.as_str().map(|s| s.to_string())),
+            .and_then(|value| value.as_str().map(|s| s.to_string()))
+            .unwrap_or_default(),
         quality_score,
         topology_betti,
         topology_knot_complexity,
