@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use niodoo_real_integrated::topology_crawler::TopologyCrawler;
-use tracing::{info, Level};
+use tracing::{Level, info};
 use tracing_subscriber;
 
 #[tokio::main]

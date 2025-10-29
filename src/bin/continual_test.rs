@@ -718,7 +718,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut writer = BufWriter::new(file);
 
     // Write CSV header
-    writeln!(writer, "cycle,timestamp,emotional_entropy,query_count,triple_threat_events,healing_events,latency_ms")?;
+    writeln!(
+        writer,
+        "cycle,timestamp,emotional_entropy,query_count,triple_threat_events,healing_events,latency_ms"
+    )?;
 
     // Run continual learning cycles
     for cycle in 0..max_cycles {

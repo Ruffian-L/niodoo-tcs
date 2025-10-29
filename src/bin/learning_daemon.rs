@@ -103,9 +103,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         results.avg_coherence_improvement
                                     );
                                     if results.avg_rouge_improvement > 0.1 {
-                                        info!("🎯 SUCCESS: Qwen shows significant improvement on emotional healing tasks!");
+                                        info!(
+                                            "🎯 SUCCESS: Qwen shows significant improvement on emotional healing tasks!"
+                                        );
                                     } else {
-                                        warn!("⚠️ Qwen improvement below threshold - may need more training data");
+                                        warn!(
+                                            "⚠️ Qwen improvement below threshold - may need more training data"
+                                        );
                                     }
                                 }
                                 Err(e) => {

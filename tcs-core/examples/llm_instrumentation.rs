@@ -58,11 +58,7 @@ fn calculate_entropy(text: &str) -> f64 {
         .values()
         .map(|&count| {
             let p = count as f64 / total;
-            if p > 0.0 {
-                -p * p.log2()
-            } else {
-                0.0
-            }
+            if p > 0.0 { -p * p.log2() } else { 0.0 }
         })
         .sum()
 }

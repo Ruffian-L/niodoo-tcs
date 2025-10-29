@@ -181,3 +181,28 @@ impl StageTimer {
         self.start.elapsed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::embeddings::EmbeddingBuffer;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn embedding_buffer_capacity_is_bounded(cap in 1usize..64, len in 0usize..256) {
+            let mut buf = EmbeddingBuffer::new(cap);
+
+            for i in 0..len {
+                let sample = vec![(i % 11) as f32; 3];
+                buf.push(sample);
+                prop_assert!(buf.len() <= cap);
+            }
+
+            if len < cap {
+                prop_assert!(!buf.is_ready());
+            } else {
+                prop_assert!(buf.is_ready());
+            }
+        }
+    }
+}

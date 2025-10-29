@@ -69,7 +69,9 @@ pub enum QwenError {
         #[source]
         source: ShapeError,
     },
-    #[error("unexpected KV cache lengths for {name}: previous={previous}, new_tokens={new_tokens}, present={present}")]
+    #[error(
+        "unexpected KV cache lengths for {name}: previous={previous}, new_tokens={new_tokens}, present={present}"
+    )]
     InvalidKvShape {
         name: String,
         previous: usize,

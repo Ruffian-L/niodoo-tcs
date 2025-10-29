@@ -15,6 +15,18 @@ pub struct PadGhostState {
     pub raw_stds: Vec<f64>,
 }
 
+impl Default for PadGhostState {
+    fn default() -> Self {
+        Self {
+            pad: [0.0; 7],
+            entropy: 0.0,
+            mu: [0.0; 7],
+            sigma: [1.0; 7],
+            raw_stds: vec![0.0; 7],
+        }
+    }
+}
+
 /// Differentiable torus projection approximated by a light-weight VAE head.
 /// Deterministic: Uses an owned, seeded StdRng
 pub struct TorusPadMapper {

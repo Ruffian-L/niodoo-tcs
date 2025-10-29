@@ -1,0 +1,9 @@
+[profile.default]
+retries = 1
+status-level = "fail"
+failure-output = "immediate"
+final-status-level = "flaky"
+
+[store]
+dir = "target/nextest"
+

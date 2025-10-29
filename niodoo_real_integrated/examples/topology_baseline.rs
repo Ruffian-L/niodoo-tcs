@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use niodoo_real_integrated::config::{prime_environment, CliArgs, OutputFormat};
+use niodoo_real_integrated::config::{CliArgs, OutputFormat, prime_environment};
 use niodoo_real_integrated::metrics::metrics;
 use niodoo_real_integrated::pipeline::Pipeline;
 use serde::Serialize;

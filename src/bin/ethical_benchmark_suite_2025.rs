@@ -9,7 +9,7 @@
  * resonance metrics, and Pham 2025d compliance validation.
  */
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
 use rand_distr::{Distribution, Normal};
 use std::time::Instant;

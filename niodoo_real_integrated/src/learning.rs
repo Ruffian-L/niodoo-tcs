@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -916,6 +917,27 @@ impl LearningLoop {
         let alpha_decay_rate = 0.0005;
         self.alpha = self.initial_alpha / (1.0 + episodes * alpha_decay_rate).max(1.0);
         self.alpha = self.alpha.max(0.001);
+    }
+
+    pub fn save_lora_adapter<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path_ref = path.as_ref();
+        if let Some(parent) = path_ref.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+        self.lora_trainer.save_adapter(path_ref)?;
+        info!(adapter = %path_ref.display(), "LoRA adapter saved");
+        Ok(())
+    }
+
+    pub fn load_lora_adapter<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let path_ref = path.as_ref();
+        let config = self.lora_trainer.adapter().config().clone();
+        let trainer = LoRATrainer::load_adapter(path_ref, config)?;
+        self.lora_trainer = trainer;
+        info!(adapter = %path_ref.display(), "LoRA adapter loaded");
+        Ok(())
     }
 
     /// Phase 5.2: Evolution step with topological guidance

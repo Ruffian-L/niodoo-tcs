@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use anyhow::{ensure, Result};
+use anyhow::{Result, ensure};
 use nalgebra::{DMatrix, DVector};
 
 /// Represents a multivariate Gaussian belief over the latent state.

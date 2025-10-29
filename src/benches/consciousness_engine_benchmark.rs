@@ -1,7 +1,7 @@
 //! Niodoo-TCS: Topological Cognitive System
 //! Copyright (c) 2025 Jason Van Pham
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;

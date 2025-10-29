@@ -4,17 +4,17 @@ use std::time::Duration;
 use anyhow::Result;
 use chrono::Utc;
 use niodoo_real_integrated::federated::proto::{
-    shard_telemetry_server::{ShardTelemetry, ShardTelemetryServer},
     FluxTrace, FluxTraceBatch, NodeSignatureBlob, ShardSignatureRequest, ShardSignatureResponse,
+    shard_telemetry_server::{ShardTelemetry, ShardTelemetryServer},
 };
 use niodoo_real_integrated::federated::{
-    orchestrate_federated_topology, FederatedResilienceOrchestrator, NodalDiagnostics, ShardClient,
+    FederatedResilienceOrchestrator, NodalDiagnostics, ShardClient, orchestrate_federated_topology,
 };
 use niodoo_real_integrated::tcs_analysis::TopologicalSignature;
 use prost::Message;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
 #[derive(Default)]
 struct TestTelemetry;

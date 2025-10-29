@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use futures::future::{abortable, AbortHandle};
 use niodoo_core::config::ConsciousnessConfig;
 use niodoo_core::memory::guessing_spheres::{
     EmotionalVector as CoreEmotion, GuessingMemorySystem, SphereId,
@@ -19,7 +20,6 @@ use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
 use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
-use tokio::signal;
 use tokio::{fs, sync::RwLock, time::interval};
 use tracing::{debug, info, instrument, warn};
 
@@ -42,6 +42,9 @@ impl Drop for DynamicTokenizerManager {
     fn drop(&mut self) {
         // Cooperative shutdown for background maintenance loop
         self.shutdown.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.abort_handle.lock().unwrap().take() {
+            handle.abort();
+        }
     }
 }
 
@@ -55,6 +58,7 @@ pub struct DynamicTokenizerManager {
     state_path: PathBuf,
     shutdown: Arc<AtomicBool>,
     promotion_active: Arc<AtomicBool>,
+    abort_handle: Arc<Mutex<Option<AbortHandle>>>,
 }
 
 struct TokenizationMetrics {
@@ -143,6 +147,7 @@ impl DynamicTokenizerManager {
             state_path,
             shutdown: Arc::new(AtomicBool::new(false)),
             promotion_active: Arc::new(AtomicBool::new(false)),
+            abort_handle: Arc::new(Mutex::new(None)),
         };
 
         manager.load_persisted_vocabulary().await?;
@@ -171,27 +176,35 @@ impl DynamicTokenizerManager {
         }
 
         let manager = Arc::clone(self);
-        tokio::spawn(async move {
+        let manager_for_abort = Arc::clone(self);
+
+        let task = async move {
             let mut ticker = interval(Duration::from_secs(manager.promotion_interval));
             let shutdown = manager.shutdown.clone();
 
             loop {
+                if shutdown.load(Ordering::Relaxed) {
+                    break;
+                }
+
                 tokio::select! {
                     _ = ticker.tick() => {
                         if shutdown.load(Ordering::Relaxed) { break; }
                         if let Err(err) = manager.run_promotion_cycle().await {
                             warn!(%err, "token promotion cycle failed");
                         }
-                    },
-                    _ = signal::ctrl_c() => {
-                        info!("Shutdown signal received");
-                        break;
                     }
                 }
             }
 
             manager.promotion_active.store(false, Ordering::Relaxed);
-        });
+        };
+        let (abortable_task, abort_handle) = abortable(task);
+        {
+            let mut slot = manager_for_abort.abort_handle.lock().unwrap();
+            *slot = Some(abort_handle);
+        }
+        let _ = tokio::spawn(abortable_task);
     }
 
     pub fn request_shutdown(&self) {

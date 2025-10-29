@@ -17,11 +17,40 @@ pub struct QwenStatefulEmbedder {
     max_chunk_chars: usize,
     concurrency_limiter: Arc<Semaphore>,
     mock_mode: bool,
+    candle: Option<CandleEmbed>,
 }
 
 #[derive(Deserialize)]
 struct OllamaEmbeddingResponse {
     embedding: Vec<f32>,
+}
+
+#[derive(Clone)]
+struct CandleEmbed {
+    model_dir: String,
+}
+
+impl CandleEmbed {
+    fn new(model_dir: &str) -> Result<Self> {
+        // Placeholder wiring: attempt to verify directory exists; real model loading can be added
+        let p = std::path::Path::new(model_dir);
+        anyhow::ensure!(p.exists(), "Candle model dir not found: {}", model_dir);
+        Ok(Self {
+            model_dir: model_dir.to_string(),
+        })
+    }
+
+    fn embed_sync(&self, text: &str, dim: usize) -> Result<Vec<f32>> {
+        // TODO: Load bge-small-en weights and compute CLS pooled embedding
+        // For now, fail to trigger Ollama fallback unless empty input (returns zeros)
+        if text.is_empty() {
+            return Ok(vec![0.0; dim]);
+        }
+        anyhow::bail!(
+            "Candle embedding not yet implemented for {}",
+            self.model_dir
+        )
+    }
 }
 
 impl QwenStatefulEmbedder {
@@ -70,7 +99,21 @@ impl QwenStatefulEmbedder {
             max_chunk_chars: chunk_limit,
             concurrency_limiter: semaphore,
             mock_mode: false,
+            candle: None,
         })
+    }
+
+    pub fn enable_candle(&mut self, model_dir: &str) {
+        match CandleEmbed::new(model_dir) {
+            Ok(c) => {
+                info!(dir = %model_dir, "Candle embeddings enabled");
+                self.candle = Some(c);
+            }
+            Err(err) => {
+                warn!(error = %err, "Failed to enable Candle embeddings; using Ollama");
+                self.candle = None;
+            }
+        }
     }
 
     pub fn set_mock_mode(&mut self, mock_mode: bool) {
@@ -89,6 +132,36 @@ impl QwenStatefulEmbedder {
         if self.mock_mode {
             return Ok(vec![0.0; self.expected_dim]);
         }
+
+        // Try Candle first if configured
+        if let Some(candle) = &self.candle {
+            match tokio::task::spawn_blocking({
+                let text = prompt.to_string();
+                let c = candle.clone();
+                let d = dim;
+                move || c.embed_sync(&text, d)
+            })
+            .await
+            .unwrap_or_else(|e| Err(anyhow::anyhow!("candle task join failed: {e}")))
+            {
+                Ok(v) => {
+                    if v.len() == dim {
+                        return Ok(v);
+                    }
+                    let mut adjusted = v;
+                    if adjusted.len() < dim {
+                        adjusted.resize(dim, 0.0);
+                    } else {
+                        adjusted.truncate(dim);
+                    }
+                    return Ok(adjusted);
+                }
+                Err(err) => {
+                    warn!(error = %err, "Candle embedding failed; falling back to Ollama");
+                }
+            }
+        }
+
         let chunks = chunk_text(prompt, self.max_chunk_chars);
         let chunk_count = chunks.len();
         if chunk_count > 1 {

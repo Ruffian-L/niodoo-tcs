@@ -9,7 +9,7 @@
  * style tracking, addressing Pham 2025d findings on ethical outcomes.
  */
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use candle_core::{Device, Tensor};
 use candle_nn::VarMap;
 use chrono::{DateTime, Utc};

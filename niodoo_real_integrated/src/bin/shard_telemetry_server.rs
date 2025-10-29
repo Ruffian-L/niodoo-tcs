@@ -5,12 +5,12 @@
 
 use anyhow::Result;
 use niodoo_real_integrated::federated::proto::{
-    shard_telemetry_server::{ShardTelemetry, ShardTelemetryServer},
     NodeSignatureBlob, ShardSignatureRequest, ShardSignatureResponse,
+    shard_telemetry_server::{ShardTelemetry, ShardTelemetryServer},
 };
 use niodoo_real_integrated::tcs_analysis::TopologicalSignature;
 use tcs_tqft::Cobordism;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 use tracing::{info, warn};
 
 #[derive(Debug, Default)]

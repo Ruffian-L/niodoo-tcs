@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use niodoo_real_integrated::torus::TorusPadMapper;
 
 fn bench_torus_projection(c: &mut Criterion) {

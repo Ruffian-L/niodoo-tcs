@@ -3,7 +3,7 @@ use anyhow::Result;
 #[cfg(feature = "qdrant")]
 use prost::Message;
 #[cfg(feature = "qdrant")]
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 #[cfg(feature = "qdrant")]
 use niodoo_real_integrated::config::{CliArgs, HardwareProfile, OutputFormat};

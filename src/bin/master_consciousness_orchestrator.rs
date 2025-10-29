@@ -211,7 +211,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!("   Total time: {:.2}ms\n", health_time);
 
     if failed_checks > 0 {
-        tracing::error!("⚠️  CRITICAL: Some subsystems are unavailable. Continuing with limited functionality.\n");
+        tracing::error!(
+            "⚠️  CRITICAL: Some subsystems are unavailable. Continuing with limited functionality.\n"
+        );
     }
 
     // ===== PHASE 3: INTEGRATED TESTS =====

@@ -275,10 +275,11 @@ impl TCSAnalyzer {
         // Use TQFT engine's proper inference method
         // This would need previous state, so for now use static inference
         // In production, track previous Betti numbers for comparison
-        static PREV_BETTI: std::sync::Mutex<Option<[usize; 3]>> = std::sync::Mutex::new(None);
+        use std::sync::RwLock;
+        static PREV_BETTI: RwLock<Option<[usize; 3]>> = RwLock::new(None);
 
-        let mut prev_guard = PREV_BETTI.lock().unwrap();
-        let cobordism = if let Some(prev) = *prev_guard {
+        let prev_opt = { PREV_BETTI.read().unwrap().clone() };
+        let cobordism = if let Some(prev) = prev_opt {
             TQFTEngine::infer_cobordism_from_betti(&prev, betti)
         } else {
             // First run - infer from structure
@@ -290,7 +291,10 @@ impl TCSAnalyzer {
                 Some(Cobordism::Identity)
             }
         };
-        *prev_guard = Some(*betti);
+        {
+            let mut w = PREV_BETTI.write().unwrap();
+            *w = Some(*betti);
+        }
 
         cobordism
     }
@@ -400,6 +404,30 @@ impl Default for TCSAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::torus::PadGhostState as PadState;
+
+    #[test]
+    fn test_betti_delta_signals_change() {
+        let mut analyzer = TCSAnalyzer::new().expect("init tcs analyzer");
+        let before = PadState {
+            pad: [0.1, -0.2, 0.3, 0.0, 0.0, 0.0, 0.0],
+            entropy: 0.4,
+            mu: [0.0; 7],
+            sigma: [0.1; 7],
+            raw_stds: [0.1; 7].to_vec(),
+        };
+        let after = PadState {
+            pad: [0.5, 0.2, -0.1, 0.0, 0.0, 0.0, 0.0],
+            entropy: 0.35,
+            mu: [0.0; 7],
+            sigma: [0.12; 7],
+            raw_stds: [0.12; 7].to_vec(),
+        };
+        let trans = analyzer
+            .analyze_transition(&before, &after)
+            .expect("transition");
+        assert_eq!(trans.betti_delta.len(), 3);
+    }
 
     #[test]
     fn test_tcs_delta() {

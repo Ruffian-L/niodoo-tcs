@@ -1,0 +1,33 @@
+[graph]
+all-features = true
+no-default-features = false
+features = []
+
+[advisories]
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn"
+ignore = []
+
+[licenses]
+unlicensed = "deny"
+copyleft = "warn"
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "BSD-2-Clause",
+  "ISC",
+  "Unicode-DFS-2016",
+]
+exceptions = []
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+highlight = "all"
+skip = []
+deny = []
+

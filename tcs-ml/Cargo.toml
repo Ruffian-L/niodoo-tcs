@@ -1,16 +1,22 @@
 [package]
 name = "tcs-ml"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Niodoo Topology Team <niodoo@dev>"]
 description = "Machine learning components for the Topological Cognitive System"
 license = "MIT"
 
 [features]
-default = []
+default = ["cpu"]
+cpu = []
+cuda = ["dep:cudarc", "dep:ort"]
+rocm = []
+webgpu = ["dep:wgpu"]
+wasm = []
 onnx = ["dep:ort", "dep:half"]
 tokenizers = ["dep:tokenizers"]
 onnx-with-tokenizers = ["onnx", "tokenizers"]
+onnx-cuda = ["onnx", "cuda"]
 legacy-examples = []
 
 [dependencies]
@@ -28,11 +34,14 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 tcs-core = { path = "../tcs-core" }
 nalgebra = { workspace = true, features = ["serde-serialize"] }
+wgpu = { version = "0.20", optional = true }
+cudarc = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 tcs-pipeline = { path = "../tcs-pipeline" }
+proptest = "1.4"
 
 # [[bin]]
 # name = "test_qwen_stateful"

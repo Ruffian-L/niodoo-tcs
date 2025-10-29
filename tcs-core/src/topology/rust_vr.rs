@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use super::{
     BettiCurve, DistanceMetric, PersistenceDiagram, PersistenceFeature, PersistenceResult, Point,
@@ -409,9 +409,5 @@ fn xor_columns(a: &[usize], b: &[usize]) -> Vec<usize> {
 
 #[inline]
 fn edge_key(u: usize, v: usize) -> (usize, usize) {
-    if u < v {
-        (u, v)
-    } else {
-        (v, u)
-    }
+    if u < v { (u, v) } else { (v, u) }
 }

@@ -14,7 +14,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 // Simple HTTP server for metrics
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Router};
+use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

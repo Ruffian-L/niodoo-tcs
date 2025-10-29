@@ -1,7 +1,7 @@
 [package]
 name = "niodoo_real_integrated"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Niodoo Torque Team <torque@niodoo.ai>"]
 description = "Full NIODOO pipeline integration with real Qwen embeddings, ERAG memory, tokenizer promotion, vLLM hybrid generation, and learning loop."
 license = "MIT"
@@ -16,6 +16,7 @@ beelink = []
 gauntlet = []
 examples = []
 qdrant = []
+embedded-qdrant = []
 
 [dependencies]
 # Existing deps from workspace
@@ -30,6 +31,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 qdrant-client = "1.7"
+# NOTE: qdrant-embedded crate needs to be configured when available
+# For now, embedded Qdrant functionality is feature-gated but requires
+# manual dependency setup. See: https://docs.rs/qdrant-client for embedded mode options
 reqwest = { version = "0.11", features = ["json"] }
 uuid = { workspace = true }
 chrono = { workspace = true }
@@ -127,6 +131,10 @@ path = "src/bin/federated_runtime.rs"
 [[bin]]
 name = "topology_bench"
 path = "src/bin/topology_bench.rs"
+
+[[bin]]
+name = "learning_demo"
+path = "src/bin/learning_demo.rs"
 
 [[example]]
 name = "topology_baseline"

@@ -9,7 +9,7 @@ use anyhow::Result;
 use niodoo_consciousness::config::AppConfig;
 use niodoo_consciousness::training_data_export::{ExportConfig, TrainingDataExporter};
 use std::env;
-use tracing::{info, Level};
+use tracing::{Level, info};
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]

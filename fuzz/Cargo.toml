@@ -1,0 +1,27 @@
+[package]
+name = "niodoo-fuzz"
+version = "0.1.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+tcs-ml = { path = "../tcs-ml" }
+nalgebra = { version = "0.33" }
+
+[build-dependencies]
+cargo-fuzz = "0.12"
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "equivariant_layer"
+path = "fuzz_targets/equivariant_layer.rs"
+test = false
+doc = false
+bench = false
+

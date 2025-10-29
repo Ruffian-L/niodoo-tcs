@@ -2,7 +2,7 @@
 //! Exposes /metrics endpoint on port 9091 for Prometheus scraping
 
 use anyhow::Result;
-use axum::{http::StatusCode, response::IntoResponse, routing::get, Router};
+use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;

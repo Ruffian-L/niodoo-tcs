@@ -416,9 +416,15 @@ pub struct RuntimeConfig {
     pub qdrant_url: String,
     pub qdrant_collection: String,
     pub qdrant_vector_dim: usize,
+    #[serde(default)]
+    pub qdrant_embedded: bool,
     pub ollama_endpoint: String,
     #[serde(default = "default_embedding_model_name")]
     pub embedding_model_name: String,
+    #[serde(default)]
+    pub embed_with_candle: bool,
+    #[serde(default)]
+    pub embed_model_dir: Option<String>,
     #[serde(default = "default_embedding_max_chars")]
     pub embedding_max_chars: usize,
     pub training_data_path: String,
@@ -599,6 +605,10 @@ impl RuntimeConfig {
             .trim_end_matches('/')
             .to_string();
 
+        let qdrant_embedded = env_with_fallback(&["QDRANT_EMBEDDED"])
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or(false);
+
         let qdrant_collection = env_with_fallback(&["QDRANT_COLLECTION", "QDRANT_COLLECTION_NAME"])
             .unwrap_or_else(|| "experiences".to_string());
 
@@ -630,6 +640,13 @@ impl RuntimeConfig {
             "EMBEDDING_MODEL",
         ])
         .unwrap_or_else(|| "qwen2:0.5b".to_string());
+
+        let embed_with_candle = env_with_fallback(&["EMBED_WITH_CANDLE"])
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or(false);
+
+        let embed_model_dir = env_with_fallback(&["EMBED_MODEL_DIR"])
+            .or_else(|| Some("./models/bge-small-en".to_string()));
 
         let embedding_max_chars = env_with_fallback(&[
             "EMBEDDING_MAX_CHARS",
@@ -837,8 +854,11 @@ impl RuntimeConfig {
             qdrant_url,
             qdrant_collection,
             qdrant_vector_dim,
+            qdrant_embedded,
             ollama_endpoint,
             embedding_model_name,
+            embed_with_candle,
+            embed_model_dir,
             embedding_max_chars,
             training_data_path,
             emotional_seed_path,

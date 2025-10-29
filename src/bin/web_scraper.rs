@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 /// Learning event scraped from web content
 #[derive(Debug, Clone, Serialize, Deserialize)]

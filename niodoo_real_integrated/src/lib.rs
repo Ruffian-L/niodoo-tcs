@@ -130,6 +130,10 @@ pub mod topology_crawler;
 /// Torus/state-space utilities and transforms.
 pub mod torus;
 
+/// Embedded Qdrant process management
+#[cfg(feature = "embedded-qdrant")]
+pub mod embedded_qdrant;
+
 /// Miscellaneous helpers and shared utilities.
 pub mod util;
 

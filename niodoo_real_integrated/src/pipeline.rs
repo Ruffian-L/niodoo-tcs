@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 use std::num::NonZeroUsize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -27,10 +27,12 @@ use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use parking_lot::RwLock;
-use qdrant_client::prelude::*;
 use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::{info, warn}; // Assume dep
+use tokio::process::Command;
+use tracing::{info, warn, error};
+#[allow(unused_imports)]
+use qdrant_client::qdrant::{CreateCollection, Distance, VectorsConfig};
 
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
@@ -118,6 +120,13 @@ pub struct Pipeline {
     embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
     collapse_cache: LruCache<u64, CacheEntry<CollapseResult>>,
     retry_count: Arc<AtomicU32>,
+    #[allow(dead_code)]
+    qdrant_process: Option<tokio::process::Child>,
+}
+
+/// Spawn embedded Qdrant as a managed child process
+#[cfg(feature = "embedded-qdrant")]
+async fn spawn_embedded_qdrant() -> Result<tokio::process::Child> {
 }
 
 impl Pipeline {
@@ -157,11 +166,16 @@ impl Pipeline {
             config.qdrant_vector_dim,
             config.embedding_max_chars,
         )?;
+        if config.embed_with_candle {
+            if let Some(dir) = &config.embed_model_dir {
+                embedder.enable_candle(dir);
+            }
+        }
         embedder.set_mock_mode(config.mock_mode);
         info!(
             endpoint = %config.ollama_endpoint,
             model = %config.embedding_model_name,
-            "Initialized Ollama embedding client"
+            "Initialized embedding client"
         );
         let embedder_arc = Arc::new(embedder.clone());
         let torus_strategy = match std::env::var("TORUS_SEED") {
@@ -185,6 +199,21 @@ impl Pipeline {
             thresholds.variance_spike,
             thresholds.variance_stagnation,
         )));
+
+        // Optional embedded Qdrant startup (spawns Qdrant as child process)
+        let qdrant_process = if config.qdrant_embedded {
+            info!("QDRANT_EMBEDDED enabled: spawning embedded Qdrant process");
+            match spawn_embedded_qdrant().await {
+                Ok(child) => Some(child),
+                Err(e) => {
+                    error!(error = %e, "Failed to spawn embedded Qdrant; falling back to external Qdrant");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let erag = EragClient::new(
             &config.qdrant_url,
             &config.qdrant_collection,
@@ -296,6 +325,7 @@ impl Pipeline {
             embedding_cache: LruCache::new(cache_capacity),
             collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
+            qdrant_process,
         })
     }
 
@@ -371,6 +401,22 @@ impl Pipeline {
 
     pub fn rut_prompts(&self) -> Vec<RutPrompt> {
         load_rut_gauntlet_prompts()
+    }
+
+    pub async fn save_lora_adapter(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path_buf = path.as_ref().to_path_buf();
+        let guard = self.learning.lock().await;
+        guard.save_lora_adapter(&path_buf)?;
+        info!(adapter = %path_buf.display(), "Pipeline persisted LoRA adapter");
+        Ok(())
+    }
+
+    pub async fn load_lora_adapter(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path_buf = path.as_ref().to_path_buf();
+        let mut guard = self.learning.lock().await;
+        guard.load_lora_adapter(&path_buf)?;
+        info!(adapter = %path_buf.display(), "Pipeline reloaded LoRA adapter");
+        Ok(())
     }
 
     pub async fn process_prompt(&mut self, prompt: &str) -> Result<PipelineCycle> {

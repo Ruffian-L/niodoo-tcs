@@ -147,6 +147,17 @@ async fn main() {
     println!("TCS Pipeline Benchmark: {:?}", elapsed);
 }
 
+EOF
+    
+    if cargo run --release --bin tcs_pipeline_test 2>&1 || rustc /tmp/test_tcs_pipeline.rs --edition 2021 -o /tmp/test_tcs_pipeline && /tmp/test_tcs_pipeline; then
+        print_success "TCS pipeline benchmark completed"
+        log_result "TCS Pipeline Benchmark - PASSED"
+    else
+        print_warning "TCS pipeline benchmark had issues"
+        log_result "TCS Pipeline Benchmark - ISSUES"
+    fi
+}
+
 # Run topology-aware pipeline comparison
 run_topology_benchmark() {
     print_header "Running Topology Mode Benchmark"
@@ -160,16 +171,6 @@ run_topology_benchmark() {
     else
         print_warning "Topology benchmark failed"
         log_result "Topology Benchmark - FAILED"
-    fi
-}
-EOF
-    
-    if cargo run --release --bin tcs_pipeline_test 2>&1 || rustc /tmp/test_tcs_pipeline.rs --edition 2021 -o /tmp/test_tcs_pipeline && /tmp/test_tcs_pipeline; then
-        print_success "TCS pipeline benchmark completed"
-        log_result "TCS Pipeline Benchmark - PASSED"
-    else
-        print_warning "TCS pipeline benchmark had issues"
-        log_result "TCS Pipeline Benchmark - ISSUES"
     fi
 }
 

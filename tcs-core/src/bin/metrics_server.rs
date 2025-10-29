@@ -1,7 +1,7 @@
 //! Metrics server for TCS monitoring
 //! Exposes Prometheus metrics on a configurable port (default 9091, fallback 9092)
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use prometheus::{Encoder, TextEncoder};
 use std::{env, net::SocketAddr};
 use tcs_core::metrics::{get_registry, init_metrics};

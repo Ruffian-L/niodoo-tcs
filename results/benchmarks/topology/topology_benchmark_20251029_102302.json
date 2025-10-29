@@ -1,0 +1,272 @@
+{
+  "generated_at": "2025-10-29T10:23:02.182192308+00:00",
+  "dataset_path": "data/goemotions_test.tsv",
+  "total_cycles": 8,
+  "hardware": "beelink",
+  "summary": {
+    "avg_latency_baseline_ms": 114178.570656,
+    "avg_latency_hybrid_ms": 117941.12414912501,
+    "avg_entropy_baseline": 1.9456972902552947,
+    "avg_entropy_hybrid": 1.9456972902552947,
+    "avg_rouge_baseline": 0.9999999995,
+    "avg_rouge_hybrid": 0.9999999995,
+    "avg_pad_similarity_baseline": 0.3246386796236038,
+    "avg_pad_similarity_hybrid": 0.3246386796236038,
+    "avg_knot_complexity_baseline": 0.029741765680112647,
+    "avg_knot_complexity_hybrid": 15.0,
+    "avg_persistence_entropy_baseline": 2.8058109839792222,
+    "avg_persistence_entropy_hybrid": 1.2397817894816399,
+    "avg_spectral_gap_baseline": 0.3341815210878849,
+    "avg_spectral_gap_hybrid": 1.2397817894816399
+  },
+  "records": [
+    {
+      "cycle": 0,
+      "prompt": "I'm so happy about this!",
+      "label": "joy",
+      "latency_baseline_ms": 112686.87994299999,
+      "latency_hybrid_ms": 112487.873007,
+      "entropy_baseline": 1.9456008759482089,
+      "entropy_hybrid": 1.9456008759482089,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": 0.6652228832244873,
+      "pad_similarity_hybrid": 0.6652228832244873,
+      "betti_baseline": [
+        7,
+        0,
+        2
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.05464359842202957,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.8047618199868114,
+      "persistence_entropy_hybrid": 1.1183308362960815,
+      "spectral_gap_baseline": 0.21334439516067505,
+      "spectral_gap_hybrid": 1.1183308362960815,
+      "confidence_baseline": 0.3514663746839304,
+      "confidence_hybrid": 0.3514663746839304
+    },
+    {
+      "cycle": 1,
+      "prompt": "This is disappointing.",
+      "label": "sadness",
+      "latency_baseline_ms": 110727.670285,
+      "latency_hybrid_ms": 114331.66592700001,
+      "entropy_baseline": 1.9452308042660476,
+      "entropy_hybrid": 1.9452308042660476,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": -0.8001415729522705,
+      "pad_similarity_hybrid": -0.8001415729522705,
+      "betti_baseline": [
+        7,
+        0,
+        3
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.09215969754483787,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.799906488271731,
+      "persistence_entropy_hybrid": 0.6761017441749573,
+      "spectral_gap_baseline": 0.4146747887134552,
+      "spectral_gap_hybrid": 0.6761017441749573,
+      "confidence_baseline": 0.3515897319113175,
+      "confidence_hybrid": 0.3515897319113175
+    },
+    {
+      "cycle": 2,
+      "prompt": "I'm frustrated with this situation.",
+      "label": "anger",
+      "latency_baseline_ms": 117358.791641,
+      "latency_hybrid_ms": 116227.087472,
+      "entropy_baseline": 1.9458087010860126,
+      "entropy_hybrid": 1.9458087010860126,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": 0.26228198409080505,
+      "pad_similarity_hybrid": 0.26228198409080505,
+      "betti_baseline": [
+        7,
+        0,
+        2
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.005902118542457739,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.807335166738864,
+      "persistence_entropy_hybrid": 1.137441873550415,
+      "spectral_gap_baseline": 0.41921254992485046,
+      "spectral_gap_hybrid": 1.137441873550415,
+      "confidence_baseline": 0.3513970996379958,
+      "confidence_hybrid": 0.3513970996379958
+    },
+    {
+      "cycle": 3,
+      "prompt": "I feel nervous about this.",
+      "label": "fear",
+      "latency_baseline_ms": 116153.960312,
+      "latency_hybrid_ms": 117979.983493,
+      "entropy_baseline": 1.9458726639308543,
+      "entropy_hybrid": 1.9458726639308543,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": -0.27247098088264465,
+      "pad_similarity_hybrid": -0.27247098088264465,
+      "betti_baseline": [
+        7,
+        0,
+        2
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.01925221564770291,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.8062705452219334,
+      "persistence_entropy_hybrid": 1.350915789604187,
+      "spectral_gap_baseline": 0.32561349868774414,
+      "spectral_gap_hybrid": 1.350915789604187,
+      "confidence_baseline": 0.35137577868971526,
+      "confidence_hybrid": 0.35137577868971526
+    },
+    {
+      "cycle": 4,
+      "prompt": "Wow, that's surprising!",
+      "label": "surprise",
+      "latency_baseline_ms": 112113.908936,
+      "latency_hybrid_ms": 113780.32301000001,
+      "entropy_baseline": 1.9457806996864462,
+      "entropy_hybrid": 1.9457806996864462,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": 0.5024106502532959,
+      "pad_similarity_hybrid": 0.5024106502532959,
+      "betti_baseline": [
+        7,
+        0,
+        3
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.008038919152694871,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.807186629035223,
+      "persistence_entropy_hybrid": 1.3915469646453857,
+      "spectral_gap_baseline": 0.30014875531196594,
+      "spectral_gap_hybrid": 1.3915469646453857,
+      "confidence_baseline": 0.3514064334378513,
+      "confidence_hybrid": 0.3514064334378513
+    },
+    {
+      "cycle": 5,
+      "prompt": "I love this so much!",
+      "label": "love",
+      "latency_baseline_ms": 111536.579989,
+      "latency_hybrid_ms": 117774.512265,
+      "entropy_baseline": 1.945772323206377,
+      "entropy_hybrid": 1.945772323206377,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": 0.7478221654891968,
+      "pad_similarity_hybrid": 0.7478221654891968,
+      "betti_baseline": [
+        7,
+        0,
+        3
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.005668329107039442,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.807316340586645,
+      "persistence_entropy_hybrid": 1.428155779838562,
+      "spectral_gap_baseline": 0.32008039951324463,
+      "spectral_gap_hybrid": 1.428155779838562,
+      "confidence_baseline": 0.35140922559787435,
+      "confidence_hybrid": 0.35140922559787435
+    },
+    {
+      "cycle": 6,
+      "prompt": "Thank you so much for your help.",
+      "label": "gratitude",
+      "latency_baseline_ms": 120951.447249,
+      "latency_hybrid_ms": 128687.015172,
+      "entropy_baseline": 1.9457154741565783,
+      "entropy_hybrid": 1.9457154741565783,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": 0.7222586274147034,
+      "pad_similarity_hybrid": 0.7222586274147034,
+      "betti_baseline": [
+        7,
+        0,
+        2
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.034308330746078475,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.806494123833238,
+      "persistence_entropy_hybrid": 1.2926290035247803,
+      "spectral_gap_baseline": 0.3614376485347748,
+      "spectral_gap_hybrid": 1.2926290035247803,
+      "confidence_baseline": 0.35142817528114056,
+      "confidence_hybrid": 0.35142817528114056
+    },
+    {
+      "cycle": 7,
+      "prompt": "I'm proud of what we accomplished.",
+      "label": "pride",
+      "latency_baseline_ms": 111899.32689299999,
+      "latency_hybrid_ms": 122260.532847,
+      "entropy_baseline": 1.945796779761832,
+      "entropy_hybrid": 1.945796779761832,
+      "rouge_baseline": 0.9999999995,
+      "rouge_hybrid": 0.9999999995,
+      "pad_similarity_baseline": 0.7697256803512573,
+      "pad_similarity_hybrid": 0.7697256803512573,
+      "betti_baseline": [
+        7,
+        0,
+        2
+      ],
+      "betti_hybrid": [
+        7,
+        15,
+        0
+      ],
+      "knot_complexity_baseline": 0.01796091627806033,
+      "knot_complexity_hybrid": 15.0,
+      "persistence_entropy_baseline": 2.8072167581593312,
+      "persistence_entropy_hybrid": 1.52313232421875,
+      "spectral_gap_baseline": 0.318940132856369,
+      "spectral_gap_hybrid": 1.52313232421875,
+      "confidence_baseline": 0.35140107341272264,
+      "confidence_hybrid": 0.35140107341272264
+    }
+  ]
+}

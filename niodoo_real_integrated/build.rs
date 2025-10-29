@@ -17,20 +17,27 @@ fn main() {
     }
 }
 
+fn set_protoc_env(path: &Path) {
+    let value = path.to_string_lossy().into_owned();
+    unsafe {
+        env::set_var("PROTOC", value);
+    }
+}
+
 fn build_protos() -> Result<(), Box<dyn Error>> {
-    let proto = Path::new("src/proto/niodoo.proto");
-    if !proto.exists() {
+    let path = Path::new("src/proto/niodoo.proto");
+    if !path.exists() {
         return Ok(());
     }
 
     let protoc_path = protoc_bin_vendored::protoc_bin_path()?;
-    env::set_var("PROTOC", protoc_path);
+    set_protoc_env(&protoc_path);
 
     let include_dirs = ["src/"];
-    match prost_build::Config::new().compile_protos(&[proto], &include_dirs) {
+    match prost_build::Config::new().compile_protos(&[path], &include_dirs) {
         Ok(()) => Ok(()),
         Err(err) => {
-            let out_file = PathBuf::from(std::env::var("OUT_DIR")?).join("niodoo.rs");
+            let out_file = PathBuf::from(env::var("OUT_DIR")?).join("niodoo.rs");
             fs::copy("src/proto/niodoo_fallback.rs", &out_file)?;
             Err(Box::new(err))
         }
@@ -38,18 +45,18 @@ fn build_protos() -> Result<(), Box<dyn Error>> {
 }
 
 fn build_federated_proto() -> Result<(), Box<dyn Error>> {
-    let proto = Path::new("src/federated.proto");
-    if !proto.exists() {
+    let path = Path::new("src/federated.proto");
+    if !path.exists() {
         return Ok(());
     }
 
     let protoc_path = protoc_bin_vendored::protoc_bin_path()?;
-    env::set_var("PROTOC", protoc_path);
+    set_protoc_env(&protoc_path);
 
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .compile(&[proto], &["src/"])?;
+        .compile_protos(&[path], &["src/"])?;
 
     Ok(())
 }

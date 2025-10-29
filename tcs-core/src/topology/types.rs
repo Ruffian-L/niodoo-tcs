@@ -137,11 +137,7 @@ impl PersistenceDiagram {
         lifetimes.iter().fold(
             0.0,
             |acc, p| {
-                if *p > 0.0 {
-                    acc - (*p * p.ln())
-                } else {
-                    acc
-                }
+                if *p > 0.0 { acc - (*p * p.ln()) } else { acc }
             },
         )
     }

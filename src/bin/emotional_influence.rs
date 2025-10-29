@@ -11,7 +11,7 @@
  */
 
 use niodoo_consciousness::{
-    config::{system_config::ConsciousnessConfig, AppConfig},
+    config::{AppConfig, system_config::ConsciousnessConfig},
     consciousness::{ConsciousnessState, EmotionType},
     vllm_bridge::VLLMBridge,
 };

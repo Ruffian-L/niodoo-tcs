@@ -1023,6 +1023,7 @@ struct InputPatterns {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn exploration_agent_is_deterministic_with_seed() {
@@ -1103,5 +1104,36 @@ mod tests {
 
         assert_eq!(knot.crossing_number, 3);
         assert!(knot.complexity_score > 0.0);
+    }
+
+    proptest! {
+        #[test]
+        fn pairwise_distances_translation_invariant(
+            n in 1usize..6,
+            m in 1usize..6,
+            shift in prop::collection::vec(-10.0f32..10.0, 0..6)
+        ) {
+            // Build a simple positions matrix (n rows, m cols)
+            let mut data: Vec<f32> = (0..(n*m)).map(|i| (i as f32 % 7.0) / 3.0).collect();
+            let positions = nalgebra::DMatrix::<f32>::from_row_slice(n, m, &data);
+
+            // Create a shifted copy: add same scalar to every element (translation in embedding space)
+            let delta = if shift.is_empty() { 0.0 } else { shift[0] };
+            let mut shifted_data = data.clone();
+            for v in &mut shifted_data { *v += delta; }
+            let shifted = nalgebra::DMatrix::<f32>::from_row_slice(n, m, &shifted_data);
+
+            let d1 = EquivariantLayer::pairwise_squared_distances(&positions);
+            let d2 = EquivariantLayer::pairwise_squared_distances(&shifted);
+
+            prop_assert_eq!(d1.nrows(), d2.nrows());
+            prop_assert_eq!(d1.ncols(), d2.ncols());
+
+            for i in 0..d1.nrows() { for j in 0..d1.ncols() {
+                let a = d1[(i,j)];
+                let b = d2[(i,j)];
+                prop_assert!((a - b).abs() < 1e-5, "mismatch at ({},{}) {} vs {}", i, j, a, b);
+            }}
+        }
     }
 }

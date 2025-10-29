@@ -1,7 +1,7 @@
 //! Niodoo-TCS: Topological Cognitive System
 //! Copyright (c) 2025 Jason Van Pham
 
-use ndarray::{concatenate, s, Array2, Array4, Axis, CowArray};
+use ndarray::{Array2, Array4, Axis, CowArray, concatenate, s};
 use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -487,7 +487,7 @@ impl QwenEmbedder {
                 Err(_) => {
                     return Err(QwenError::UnsupportedTensorType {
                         name: "logits".to_string(),
-                    })
+                    });
                 }
             },
         };
