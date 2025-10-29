@@ -1,29 +1,43 @@
-use crate::federated::FederatedResilienceOrchestrator;
+use anyhow::Result;
 
-type MeshMetrics = f64; // Placeholder for metrics type
+/// Simple orchestration experiment that stitches together several prompts and
+/// inspects the pipeline response quality. This runs in mock mode so it is
+/// deterministic and CI-friendly while still exercising the full pipeline
+/// surface.
+#[tokio::main]
+async fn main() -> Result<()> {
+    let mut harness = niodoo_real_integrated::test_support::mock_pipeline("embed").await?;
 
-// ArgoIstioOrchestrator trait for meshed orchestration
-pub trait ArgoIstioOrchestrator {
-    fn weave_istio_mesh(&self, blueprint: &str, knot_iqr: &[f64]) -> MeshMetrics;
-}
+    let blueprint_steps = [
+        "Argo mesh gateway handshake with Möbius resilience",
+        "Istio traffic policy to stabilise emotional variance",
+        "Federated healing loop verifying consensus across pods",
+    ];
 
-// Impl for FederatedResilienceOrchestrator: Mesh weaving
-impl ArgoIstioOrchestrator for FederatedResilienceOrchestrator {
-    fn weave_istio_mesh(&self, blueprint: &str, knot_iqr: &[f64]) -> MeshMetrics {
-        if knot_iqr.is_empty() {
-            return 1.0; // Neutral
-        }
-        let mean_iqr = knot_iqr.iter().sum::<f64>() / knot_iqr.len() as f64;
-        // Simulate mesh metrics (expand with actual Argo/Istio logic)
-        mean_iqr * 0.38 // Projected efficacy factor
+    let mut mesh_scores = Vec::with_capacity(blueprint_steps.len());
+
+    for step in blueprint_steps {
+        let cycle = harness.pipeline_mut().process_prompt(step).await?;
+        let compass = &cycle.compass;
+        let score = compass.ucb1_score.unwrap_or_else(|| {
+            compass
+                .mcts_branches
+                .iter()
+                .map(|b| b.ucb_score)
+                .sum::<f64>()
+                / compass.mcts_branches.len().max(1) as f64
+        });
+        mesh_scores.push((step, score, cycle.rouge));
     }
+
+    let average_score =
+        mesh_scores.iter().map(|(_, score, _)| score).sum::<f64>() / mesh_scores.len() as f64;
+
+    println!("Argo-Istio mesh synthesis summary:\n");
+    for (step, score, rouge) in mesh_scores {
+        println!("- {step}: ucb1={score:.3}, rouge={rouge:.3}");
+    }
+    println!("\nCohesion score: {:.3}", average_score);
+
+    Ok(())
 }
-
-// Placeholder stubs for Argo rollouts and Istio gateways
-mod stubs {
-    pub fn deploy_argo_rollout(_blueprint: &str) {} // Implement Argo CD integration
-    pub fn configure_istio_gateway(_iqr: &[f64]) {} // Implement Istio config
-}
-// Bind in federated.rs as: let metrics = self.weave_istio_mesh(blueprint, &knot_iqr);
-
-

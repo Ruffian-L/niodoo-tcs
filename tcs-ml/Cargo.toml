@@ -19,7 +19,7 @@ async-trait = { workspace = true }
 ndarray = { workspace = true }
 ndarray-linalg = { workspace = true }
 ort = { workspace = true, optional = true }
-tokenizers = { version = "0.20", optional = true, default-features = false, features = ["onig"] }
+tokenizers = { version = "0.20", optional = true, default-features = false, features = ["unstable_wasm"] }
 half = { version = "2.3", optional = true }
 rand = { workspace = true }
 serde = { workspace = true }

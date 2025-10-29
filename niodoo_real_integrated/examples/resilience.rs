@@ -1,49 +1,40 @@
 // future
-use crate::compass::CompassEngine;
-use crate::config::RuntimeConfig;
-use crate::learning::LearningLoop;
-use std::collections::HashMap;
+use anyhow::Result;
 
-// Cleaned ResilienceDispatcher
-pub trait ResilienceDispatcher {
-    fn dispatch_recovery(
-        &self,
-        state: &mut dyn std::any::Any,
-        config: &RuntimeConfig,
-    ) -> HashMap<String, f64>;
-}
+#[tokio::main]
+async fn main() -> Result<()> {
+    let mut harness = niodoo_real_integrated::test_support::mock_pipeline("embed").await?;
 
-impl ResilienceDispatcher for LearningLoop {
-    fn dispatch_recovery(
-        &self,
-        state: &mut dyn std::any::Any,
-        config: &RuntimeConfig,
-    ) -> HashMap<String, f64> {
-        let mut params = HashMap::new();
-        if low_innovation {
-            // Derived check
-            params.insert(
-                "mutation_rate".to_string(),
-                1.0 + config.emergency_multiplier,
-            );
+    let scenarios = [
+        "Stabilise Möbius drift when resilience falters",
+        "Escalate regenerative response during entropy spike",
+        "Diffuse recursive loop with compassionate debrief",
+    ];
+
+    let mut outcomes = Vec::with_capacity(scenarios.len());
+    let mut recovery_successes = 0usize;
+
+    for scenario in scenarios {
+        let cycle = harness.pipeline_mut().process_prompt(scenario).await?;
+        let failure = cycle.failure != "none";
+        let resilience_gain = 1.0 - cycle.pad_state.entropy;
+        if !failure {
+            recovery_successes += 1;
         }
-        params
+        outcomes.push((scenario, failure, resilience_gain));
     }
-}
 
-impl ResilienceDispatcher for CompassEngine {
-    fn dispatch_recovery(
-        &self,
-        state: &mut dyn std::any::Any,
-        config: &RuntimeConfig,
-    ) -> HashMap<String, f64> {
-        let mut params = HashMap::new();
-        if low_variance {
-            // Derived check
-            params.insert("exploration_amp".to_string(), 1.5);
-        }
-        params
+    println!("Resilience audit across {} scenarios:\n", outcomes.len());
+    for (scenario, failure, resilience_gain) in &outcomes {
+        println!(
+            "- {scenario}: status={}, resilience_gain={:.3}",
+            if *failure { "retry" } else { "stable" },
+            resilience_gain
+        );
     }
+
+    let stability_ratio = recovery_successes as f64 / outcomes.len() as f64;
+    println!("\nStability ratio: {:.3}", stability_ratio);
+
+    Ok(())
 }
-
-

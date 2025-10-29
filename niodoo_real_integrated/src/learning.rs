@@ -2,9 +2,9 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use anyhow::Result;
+use parking_lot::RwLock;
 use rand::prelude::*;
 use rayon::prelude::*;
-use parking_lot::RwLock;
 use tracing::{info, warn};
 
 use crate::compass::CompassOutcome;
@@ -105,6 +105,7 @@ pub struct ReplayTuple {
 
 #[derive(Default)]
 struct CuratedSample {
+    #[allow(dead_code)]
     input: String,
     output: String,
     reward: f64,
@@ -307,7 +308,25 @@ impl LearningLoop {
         let history_dist =
             self.compute_history_distance(pad_state.entropy, collapse.top_hits.as_slice());
 
-        let shaped_reward = base_reward;
+        let mode = match compass.quadrant {
+            crate::compass::CompassQuadrant::Discover => "Discover",
+            crate::compass::CompassQuadrant::Master => "Master",
+            crate::compass::CompassQuadrant::Persist => "Persist",
+            crate::compass::CompassQuadrant::Panic => "Panic",
+        };
+
+        let shaped_reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist);
+
+        if (shaped_reward - base_reward).abs() > f64::EPSILON {
+            adjusted_params.insert(
+                "tcs_reward_adjustment".to_string(),
+                shaped_reward - base_reward,
+            );
+            events.push(format!(
+                "TCS reward reshaped in mode {mode}: base={:.3} → shaped={:.3}",
+                base_reward, shaped_reward
+            ));
+        }
 
         let predictor_delta = self
             .predictor
@@ -333,13 +352,7 @@ impl LearningLoop {
         next_state.metrics[3] = fallback_ucb;
         next_state.metrics[4] = fallback_curator;
 
-        let mode = match compass.quadrant {
-            crate::compass::CompassQuadrant::Discover => "Discover",
-            crate::compass::CompassQuadrant::Master => "Master",
-            crate::compass::CompassQuadrant::Persist => "Persist",
-            crate::compass::CompassQuadrant::Panic => "Panic",
-        };
-        let reward = base_reward;
+        let reward = shaped_reward;
         let blended_reward = reward + (predicted_reward_delta * 0.3);
 
         self.dqn_update(
@@ -616,20 +629,6 @@ impl LearningLoop {
         }
     }
 
-    fn apply_action_to_config(config: &mut RuntimeConfig, action: &DqnAction) {
-        match action.param.as_str() {
-            "temperature" => config.temperature += action.delta,
-            "top_p" => config.top_p += action.delta,
-            "mcts_c" => config.phase2_mcts_c_increment += action.delta,
-            "retrieval_top_k" => {
-                config.phase2_retrieval_top_k_increment += action.delta as i32;
-            }
-            "novelty_threshold" => config.novelty_threshold += action.delta,
-            "self_awareness_level" => config.self_awareness_level += action.delta,
-            _ => {}
-        }
-    }
-
     async fn dqn_update(
         &mut self,
         state: DqnState,
@@ -672,8 +671,7 @@ impl LearningLoop {
 
                 let entry = table.entry(s_key).or_insert_with(HashMap::new);
                 let current_q = entry.get(&a_key).copied().unwrap_or(0.0);
-                let updated =
-                    current_q + alpha * (tuple.reward + gamma * max_next_q - current_q);
+                let updated = current_q + alpha * (tuple.reward + gamma * max_next_q - current_q);
                 entry.insert(a_key, updated);
             }
             Ok(())

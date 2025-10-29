@@ -151,6 +151,7 @@ csv = "1.3"
 walkdir = "2.5"
 reqwest = { version = "0.12.23", default-features = false, features = ["json", "gzip", "stream", "multipart", "native-tls"] }
 scraper = "0.19"
+tokenizers = { workspace = true }
 
 # TCS (Topological Cognitive System) dependencies
 # tcs-ml = { path = "../tcs-ml", features = ["onnx"] }

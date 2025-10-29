@@ -18,16 +18,16 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::metrics::{metrics, FailureSignals, RetryContext};
+use crate::metrics::{metrics, FailureSignals};
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
+use parking_lot::RwLock;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tcs_core::topology::PersistenceFeature;
-use parking_lot::RwLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
 
@@ -99,7 +99,6 @@ pub struct Pipeline {
     embedder: QwenStatefulEmbedder,
     torus_strategy: TorusSeedStrategy,
     torus_counter: AtomicU64,
-    rng_seed: u64,
     compass: Arc<AsyncMutex<CompassEngine>>,
     erag: Arc<EragClient>,
     tokenizer: Arc<DynamicTokenizerManager>,
@@ -110,7 +109,6 @@ pub struct Pipeline {
     embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
     collapse_cache: LruCache<u64, CacheEntry<CollapseResult>>,
     retry_count: Arc<AtomicU32>,
-    retry_context: Arc<AsyncMutex<RetryContext>>,
 }
 
 impl Pipeline {
@@ -256,7 +254,6 @@ impl Pipeline {
             embedder,
             torus_strategy,
             torus_counter: AtomicU64::new(0),
-            rng_seed: config.rng_seed,
             compass,
             erag: erag_arc.clone(),
             tokenizer: tokenizer_arc.clone(),
@@ -267,13 +264,6 @@ impl Pipeline {
             embedding_cache: LruCache::new(cache_capacity),
             collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
-            retry_context: Arc::new(AsyncMutex::new(RetryContext {
-                soft_retries: 0,
-                hard_retries: 0,
-                total_retries: 0,
-                reflection_buffer: None,
-                rng_seed: config.rng_seed,
-            })),
         })
     }
 
@@ -1119,39 +1109,6 @@ fn cache_key(prompt: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     digest.as_bytes().hash(&mut hasher);
     hasher.finish()
-}
-
-fn locate_qwen_model() -> Result<PathBuf> {
-    let candidates = ["QWEN_MODEL_PATH", "QWEN_CODER_ONNX", "QWEN_STATEFUL_ONNX"];
-    for key in candidates {
-        if let Ok(value) = std::env::var(key) {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                let path = PathBuf::from(trimmed);
-                if path.exists() {
-                    return Ok(path);
-                }
-            }
-        }
-    }
-
-    if let Ok(models_dir) = std::env::var("MODELS_DIR") {
-        let base = PathBuf::from(models_dir)
-            .join("qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx");
-        if base.exists() {
-            return Ok(base);
-        }
-    }
-
-    let fallback =
-        PathBuf::from("../models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx");
-    if fallback.exists() {
-        Ok(fallback)
-    } else {
-        anyhow::bail!(
-            "Qwen model path not provided or found; set QWEN_MODEL_PATH or QWEN_CODER_ONNX"
-        )
-    }
 }
 
 fn tokenizer_path() -> Result<PathBuf> {

@@ -105,7 +105,6 @@ use crate::personal_memory::{PersonalConsciousnessStats, PersonalInsight, Person
 use crate::personality::{PersonalityManager, PersonalityType};
 use crate::qt_mock::QtEmotionBridge;
 use crate::soul_resonance::SoulResonanceEngine;
-use crate::token_promotion::dynamic_tokenizer::Tokenizer;
 use crate::token_promotion::{
     ConsensusEngine, DynamicTokenizer, PatternDiscoveryEngine, PromotionConfig,
     TokenPromotionEngine,
@@ -463,7 +462,7 @@ impl PersonalNiodooConsciousness {
         //         None
         //     }
         // };
-        let token_promotion_engine = None; // Temporarily disabled due to onig linking issues
+        let token_promotion_engine = None; // TODO: re-enable after token promotion engine wiring is complete
 
         Ok(Self {
             consciousness_state: consciousness_state.clone(),
@@ -513,7 +512,7 @@ impl PersonalNiodooConsciousness {
     async fn initialize_token_promotion() -> Result<TokenPromotionEngine, NiodoError> {
         use crate::token_promotion::spatial::SpatialHash;
         use crate::topology::persistent_homology::PersistentHomologyCalculator;
-        // use tokenizers::Tokenizer; // Temporarily disabled due to onig linking issues
+        use tokenizers::Tokenizer;
 
         let config = ConsciousnessConfig::default();
 

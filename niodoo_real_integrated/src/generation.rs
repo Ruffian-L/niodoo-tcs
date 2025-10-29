@@ -327,7 +327,7 @@ impl GenerationEngine {
         tokenizer_output: &TokenizerOutput,
         compass: &CompassOutcome,
         topology: Option<&crate::tcs_analysis::TopologicalSignature>,
-        adaptive_mode: bool,
+        _adaptive_mode: bool,
     ) -> Result<GenerationResult> {
         let start = Instant::now();
 
@@ -388,7 +388,7 @@ impl GenerationEngine {
             tokio::try_join!(baseline_future, claude_future)?;
 
         let echoes: Vec<LensEcho> = vec![claude];
-        let mut hybrid = synthesize_hybrid(&baseline, &echoes);
+        let hybrid = synthesize_hybrid(&baseline, &echoes);
 
         // Adaptive resilience logic is experimental and disabled for now.
         // if adaptive_mode {
@@ -1258,18 +1258,21 @@ fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho]) -> String {
     if echoes.is_empty() {
         return baseline.to_string();
     }
-    
+
     // Find the best echo (longest, highest quality proxy)
     let best_echo = echoes
         .iter()
         .max_by_key(|e| e.response.len())
         .map(|e| e.response.as_str())
         .unwrap_or("");
-    
+
     // If echo is significantly better (30% longer), use weighted merge
     if !best_echo.is_empty() && best_echo.len() as f64 > baseline.len() as f64 * 1.3 {
         // Weighted merge: take first 60% from baseline, append echo for remaining
-        let baseline_part = baseline.chars().take((baseline.len() as f64 * 0.6) as usize).collect::<String>();
+        let baseline_part = baseline
+            .chars()
+            .take((baseline.len() as f64 * 0.6) as usize)
+            .collect::<String>();
         format!("{}{}", baseline_part, best_echo)
     } else {
         // Return baseline if echo is not significantly better
@@ -1353,12 +1356,7 @@ struct LogProbs {
 struct LogProbToken {
     #[serde(default)]
     logprob: f64,
+    #[allow(dead_code)]
     #[serde(default)]
     token: String,
-}
-
-// NEW: Variance adjustment helper
-fn adjust_variance(text: &str, scalar: f64) -> String {
-    // Placeholder: In production, apply variance modulation logic
-    format!("{} (variance scaled by {:.2})", text, scalar)
 }

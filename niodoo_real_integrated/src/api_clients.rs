@@ -135,6 +135,7 @@ impl ClaudeClient {
         let model = self.model.clone();
         let client = self.client.clone();
         let prompt = prompt.to_string();
+        let timeout_secs = self.timeout_secs;
 
         execute_with_retry(move || {
             let api_key = api_key.clone();
@@ -142,6 +143,7 @@ impl ClaudeClient {
             let model = model.clone();
             let client = client.clone();
             let prompt = prompt.clone();
+            let timeout_secs = timeout_secs;
 
             Box::pin(async move {
                 let payload = ClaudeRequest {
@@ -153,14 +155,17 @@ impl ClaudeClient {
                     }],
                 };
 
-                let response = client
-                    .post(&endpoint)
-                    .header("x-api-key", &api_key)
-                    .header("anthropic-version", "2023-06-01")
-                    .json(&payload)
-                    .send()
-                    .await
-                    .context("Claude API request failed")?;
+                let response = tokio::time::timeout(
+                    Duration::from_secs(timeout_secs),
+                    client
+                        .post(&endpoint)
+                        .header("x-api-key", &api_key)
+                        .header("anthropic-version", "2023-06-01")
+                        .json(&payload)
+                        .send(),
+                )
+                .await
+                .context("Claude API request timed out")??;
 
                 // Handle 429 rate limit responses
                 if response.status() == StatusCode::TOO_MANY_REQUESTS {
@@ -262,6 +267,7 @@ impl GptClient {
         let model = self.model.clone();
         let client = self.client.clone();
         let prompt = prompt.to_string();
+        let timeout_secs = self.timeout_secs;
 
         execute_with_retry(move || {
             let api_key = api_key.clone();
@@ -269,6 +275,7 @@ impl GptClient {
             let model = model.clone();
             let client = client.clone();
             let prompt = prompt.clone();
+            let timeout_secs = timeout_secs;
 
             Box::pin(async move {
                 let payload = GptRequest {
@@ -281,13 +288,16 @@ impl GptClient {
                     max_tokens: 1024,
                 };
 
-                let response = client
-                    .post(&endpoint)
-                    .header("Authorization", format!("Bearer {}", api_key))
-                    .json(&payload)
-                    .send()
-                    .await
-                    .context("GPT API request failed")?;
+                let response = tokio::time::timeout(
+                    Duration::from_secs(timeout_secs),
+                    client
+                        .post(&endpoint)
+                        .header("Authorization", format!("Bearer {}", api_key))
+                        .json(&payload)
+                        .send(),
+                )
+                .await
+                .context("GPT API request timed out")??;
 
                 // Handle 429 rate limit responses
                 if response.status() == StatusCode::TOO_MANY_REQUESTS {

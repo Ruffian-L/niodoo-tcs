@@ -1,8 +1,12 @@
 use anyhow::Result;
+use blake3::Hasher;
 use rand::prelude::*;
 use rand::rngs::StdRng;
+use rand_distr::StandardNormal;
+use std::time::{Duration, Instant};
 use tracing::instrument;
 
+use crate::mcts::MctsAction;
 use crate::torus::PadGhostState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -29,6 +33,19 @@ pub struct MctsBranch {
     pub ucb_score: f64,
     pub entropy_projection: f64,
 }
+
+const MCTS_ACTIONS: [MctsAction; 4] = [
+    MctsAction::Retrieve,
+    MctsAction::Decompose,
+    MctsAction::DirectAnswer,
+    MctsAction::Explore,
+];
+
+const MCTS_MAX_ITERATIONS: usize = 256;
+const MCTS_MAX_DURATION: Duration = Duration::from_millis(120);
+const MIN_ROLLOUT_DEPTH: usize = 3;
+const MAX_ROLLOUT_DEPTH: usize = 9;
+const PAD_CORE_DIMS: usize = 3;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CompassRuntimeParams {
@@ -271,6 +288,15 @@ impl CompassEngine {
             return ((0.0, 0.05, self.variance_spike), (0.25, 0.05));
         }
 
+        let entropy_avg = self
+            .recent_window
+            .iter()
+            .rev()
+            .take(32)
+            .map(|snapshot| snapshot.entropy)
+            .sum::<f64>()
+            / 32.0;
+
         let recent_threat_rate = self
             .recent_window
             .iter()
@@ -290,7 +316,7 @@ impl CompassEngine {
 
         let target_threat = 0.4;
         let threat_delta = recent_threat_rate - target_threat;
-        let pleasure_floor = (0.0 - threat_delta * 0.5).clamp(-0.3, 0.2);
+        let pleasure_floor = (entropy_avg * 0.1 - threat_delta * 0.5).clamp(-0.3, 0.2);
         let arousal_floor = (0.05 + threat_delta * 0.3).clamp(-0.1, 0.3);
         let var_floor = (self.variance_spike + threat_delta * variance_avg * 0.2)
             .clamp(self.variance_stagnation * 1.2, self.variance_spike * 1.5);
@@ -316,8 +342,30 @@ impl CompassEngine {
 
     /// Perform MCTS search and convert results to MctsBranch objects
     fn perform_mcts_search(&mut self, state: &PadGhostState) -> Vec<MctsBranch> {
-        // MCTS engine implementation pending - use fallback heuristic for now
-        self.fallback_mcts_heuristic(state)
+        let mut arena = Vec::<SearchNode>::new();
+        let mut rng = StdRng::seed_from_u64(Self::derive_mcts_seed(state));
+        arena.push(SearchNode::new_root(state.clone()));
+
+        let start = Instant::now();
+        let mut iterations = 0usize;
+        while iterations < MCTS_MAX_ITERATIONS && start.elapsed() < MCTS_MAX_DURATION {
+            let mut path = self.mcts_select_path(&arena);
+            let selected_idx = *path.last().expect("path always contains root");
+            let expanded_idx = self.mcts_expand(&mut arena, selected_idx, &mut rng);
+            if expanded_idx != selected_idx {
+                path.push(expanded_idx);
+            }
+            let reward = self.mcts_rollout(&mut rng, &arena[expanded_idx].state);
+            self.mcts_backpropagate(&mut arena, &path, reward);
+            iterations += 1;
+        }
+
+        let mut branches = self.mcts_branches_from_root(&arena);
+        if branches.is_empty() {
+            branches = self.fallback_mcts_heuristic(state);
+        }
+
+        branches
     }
 
     /// Fallback heuristic if MCTS search fails
@@ -347,5 +395,277 @@ impl CompassEngine {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         branches
+    }
+
+    fn mcts_select_path(&self, arena: &[SearchNode]) -> Vec<usize> {
+        let mut path = Vec::new();
+        if arena.is_empty() {
+            return path;
+        }
+
+        let mut current_idx = 0usize;
+        path.push(current_idx);
+        loop {
+            let node = &arena[current_idx];
+            if node.children.is_empty() || !node.is_fully_expanded() {
+                break;
+            }
+
+            let parent_visits = node.visits.max(1);
+            let next = node
+                .children
+                .iter()
+                .copied()
+                .max_by(|&a, &b| {
+                    let score_a = ucb_score(&arena[a], parent_visits, self.exploration_c);
+                    let score_b = ucb_score(&arena[b], parent_visits, self.exploration_c);
+                    score_a
+                        .partial_cmp(&score_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .expect("fully expanded node must have children");
+            current_idx = next;
+            path.push(current_idx);
+        }
+
+        path
+    }
+
+    fn mcts_expand(&self, arena: &mut Vec<SearchNode>, node_idx: usize, rng: &mut StdRng) -> usize {
+        if arena.is_empty() {
+            return node_idx;
+        }
+
+        if arena[node_idx].untried_actions.is_empty() {
+            return node_idx;
+        }
+
+        let action_idx = rng.gen_range(0..arena[node_idx].untried_actions.len());
+        let action = arena[node_idx].untried_actions.swap_remove(action_idx);
+        let next_state = self.transition_state(&arena[node_idx].state, action, rng);
+        let child_idx = arena.len();
+        arena.push(SearchNode::new_child(action, next_state, node_idx));
+        arena[node_idx].children.push(child_idx);
+        child_idx
+    }
+
+    fn mcts_rollout(&self, rng: &mut StdRng, state: &PadGhostState) -> f64 {
+        let mut cursor = state.clone();
+        let depth = Self::determine_rollout_depth(state);
+        for _ in 0..depth {
+            let action = MCTS_ACTIONS[rng.gen_range(0..MCTS_ACTIONS.len())];
+            cursor = self.transition_state(&cursor, action, rng);
+        }
+        self.evaluate_state_reward(&cursor)
+    }
+
+    fn mcts_branches_from_root(&self, arena: &[SearchNode]) -> Vec<MctsBranch> {
+        if arena.is_empty() {
+            return Vec::new();
+        }
+
+        let root = &arena[0];
+        let parent_visits = root.visits.max(1);
+        let mut branches = Vec::with_capacity(root.children.len());
+        for &child_idx in &root.children {
+            let child = &arena[child_idx];
+            let score = ucb_score(child, parent_visits, self.exploration_c);
+            branches.push(MctsBranch {
+                label: child.action.to_string(),
+                ucb_score: score,
+                entropy_projection: child.state.entropy,
+            });
+        }
+
+        branches.sort_by(|a, b| {
+            b.ucb_score
+                .partial_cmp(&a.ucb_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        branches
+    }
+
+    fn transition_state(
+        &self,
+        base: &PadGhostState,
+        action: MctsAction,
+        rng: &mut StdRng,
+    ) -> PadGhostState {
+        let mut next = base.clone();
+        let pad_dims = base.pad.len() as f64;
+        let sigma_mean = base.sigma.iter().copied().sum::<f64>() / base.sigma.len() as f64;
+        let mu_mean = base.mu.iter().copied().sum::<f64>() / base.mu.len() as f64;
+        let entropy_delta = (sigma_mean + mu_mean.abs() + self.variance_spike) / pad_dims;
+
+        next.entropy = match action {
+            MctsAction::Retrieve => (base.entropy - entropy_delta).clamp(0.0, 1.0),
+            MctsAction::Decompose => (base.entropy - entropy_delta * 0.5).clamp(0.0, 1.0),
+            MctsAction::DirectAnswer => (base.entropy - entropy_delta / 3.0).clamp(0.0, 1.0),
+            MctsAction::Explore => (base.entropy + entropy_delta).clamp(0.0, 1.0),
+        };
+
+        let noise_scale = (sigma_mean + self.variance_spike).max(f64::EPSILON);
+        let mut noise_l1 = 0.0;
+        for (idx, value) in next.pad.iter_mut().enumerate() {
+            let component_weight = 1.0 / (idx as f64 + 1.0);
+            let noise: f64 = StandardNormal.sample(rng) * noise_scale * component_weight;
+            noise_l1 += noise.abs();
+
+            *value = (*value + noise).clamp(-1.0, 1.0);
+            next.mu[idx] = (next.mu[idx] + noise * component_weight).clamp(-1.0, 1.0);
+
+            let sigma_adjustment = 1.0 + noise.abs() * component_weight;
+            next.sigma[idx] = (next.sigma[idx] * sigma_adjustment).max(self.variance_stagnation);
+        }
+
+        if !next.raw_stds.is_empty() {
+            let adjustment = 1.0 + noise_l1 / (next.raw_stds.len() as f64 + 1.0);
+            for value in &mut next.raw_stds {
+                *value = (*value * adjustment).max(self.variance_stagnation.min(1.0));
+            }
+        }
+
+        next
+    }
+
+    fn evaluate_state_reward(&self, state: &PadGhostState) -> f64 {
+        let stability = (1.0 - state.entropy).clamp(0.0, 1.0);
+        let affect_balance =
+            state.pad[..PAD_CORE_DIMS].iter().copied().sum::<f64>() / PAD_CORE_DIMS as f64;
+
+        let variance_mean = state.sigma.iter().copied().sum::<f64>() / state.sigma.len() as f64;
+        let raw_std_mean = if state.raw_stds.is_empty() {
+            0.0
+        } else {
+            state.raw_stds.iter().copied().sum::<f64>() / state.raw_stds.len() as f64
+        };
+
+        let penalty = (variance_mean + raw_std_mean) / 2.0;
+        let raw_score = stability + affect_balance - penalty;
+        ((raw_score + 1.0) / 2.0).clamp(0.0, 1.0)
+    }
+
+    fn mcts_backpropagate(&self, arena: &mut [SearchNode], path: &[usize], reward: f64) {
+        for &idx in path.iter().rev() {
+            if let Some(node) = arena.get_mut(idx) {
+                node.visits += 1;
+                node.total_reward += reward;
+            }
+        }
+    }
+
+    fn determine_rollout_depth(state: &PadGhostState) -> usize {
+        let entropy_scaled = (state.entropy * state.pad.len() as f64).round() as usize;
+        entropy_scaled.clamp(MIN_ROLLOUT_DEPTH, MAX_ROLLOUT_DEPTH)
+    }
+
+    fn derive_mcts_seed(state: &PadGhostState) -> u64 {
+        let mut hasher = Hasher::new();
+        hasher.update(&state.entropy.to_le_bytes());
+        for value in &state.pad {
+            hasher.update(&value.to_le_bytes());
+        }
+        for value in &state.mu {
+            hasher.update(&value.to_le_bytes());
+        }
+        for value in &state.sigma {
+            hasher.update(&value.to_le_bytes());
+        }
+        for value in &state.raw_stds {
+            hasher.update(&value.to_le_bytes());
+        }
+
+        let digest = hasher.finalize();
+        let mut seed_bytes = [0u8; 8];
+        seed_bytes.copy_from_slice(&digest.as_bytes()[..8]);
+        u64::from_le_bytes(seed_bytes)
+    }
+}
+
+#[derive(Clone)]
+struct SearchNode {
+    action: MctsAction,
+    state: PadGhostState,
+    parent: Option<usize>,
+    children: Vec<usize>,
+    untried_actions: Vec<MctsAction>,
+    visits: usize,
+    total_reward: f64,
+}
+
+impl SearchNode {
+    fn new_root(state: PadGhostState) -> Self {
+        Self {
+            action: MctsAction::Retrieve,
+            state,
+            parent: None,
+            children: Vec::new(),
+            untried_actions: MCTS_ACTIONS.to_vec(),
+            visits: 0,
+            total_reward: 0.0,
+        }
+    }
+
+    fn new_child(action: MctsAction, state: PadGhostState, parent: usize) -> Self {
+        Self {
+            action,
+            state,
+            parent: Some(parent),
+            children: Vec::new(),
+            untried_actions: MCTS_ACTIONS.to_vec(),
+            visits: 0,
+            total_reward: 0.0,
+        }
+    }
+
+    fn is_fully_expanded(&self) -> bool {
+        self.untried_actions.is_empty()
+    }
+
+    fn avg_reward(&self) -> f64 {
+        if self.visits == 0 {
+            0.0
+        } else {
+            self.total_reward / self.visits as f64
+        }
+    }
+}
+
+fn ucb_score(node: &SearchNode, parent_visits: usize, exploration_c: f64) -> f64 {
+    if node.visits == 0 {
+        return f64::INFINITY;
+    }
+
+    let exploitation = node.avg_reward();
+    let exploration = if parent_visits > 0 {
+        exploration_c * ((parent_visits as f64).ln() / node.visits as f64).sqrt()
+    } else {
+        0.0
+    };
+
+    exploitation + exploration
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_state() -> PadGhostState {
+        PadGhostState {
+            pad: [0.1, -0.2, 0.3, 0.05, -0.1, 0.08, 0.0],
+            entropy: 0.42,
+            mu: [0.0; 7],
+            sigma: [0.18; 7],
+            raw_stds: vec![0.14; 7],
+        }
+    }
+
+    #[test]
+    fn mcts_search_produces_branches() {
+        let mut engine = CompassEngine::new(1.2, 0.35, 0.05);
+        let state = sample_state();
+        let branches = engine.perform_mcts_search(&state);
+        assert!(!branches.is_empty());
+        assert!(branches.iter().all(|b| b.ucb_score.is_finite()));
     }
 }

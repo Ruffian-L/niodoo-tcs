@@ -406,23 +406,24 @@ impl LoRATrainer {
                 * (1.0 + (epoch as f32 * std::f32::consts::PI / epochs as f32).cos())
                 / 2.0;
 
-        for batch_start in (0..data.len()).step_by(batch_size) {
-            let batch_end = (batch_start + batch_size).min(data.len());
-            let batch = &data[batch_start..batch_end];
+            for batch_start in (0..data.len()).step_by(batch_size) {
+                let batch_end = (batch_start + batch_size).min(data.len());
+                let batch = &data[batch_start..batch_end];
 
-            for (input_vec, target_vec) in batch {
-                let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
-                let target = self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
+                for (input_vec, target_vec) in batch {
+                    let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
+                    let target =
+                        self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
 
-                let output = self.adapter.forward(&input)?;
-                let diff = output.sub(&target)?;
-                let loss = diff.sqr()?.mean_all()?;
-                let loss_val = loss.to_scalar::<f32>()?;
+                    let output = self.adapter.forward(&input)?;
+                    let diff = output.sub(&target)?;
+                    let loss = diff.sqr()?.mean_all()?;
+                    let loss_val = loss.to_scalar::<f32>()?;
 
-                total_loss += loss_val;
-                sample_count += 1;
+                    total_loss += loss_val;
+                    sample_count += 1;
+                }
             }
-        }
 
             // Sequential gradient updates (if needed) - batched for performance
             if epoch > 0 && total_loss > 0.001 {
@@ -432,10 +433,13 @@ impl LoRATrainer {
                     let batch = &data[batch_start..batch_end];
 
                     for (input_vec, target_vec) in batch {
-                        let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
-                        let target = self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
+                        let input =
+                            self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
+                        let target =
+                            self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
                         let output = self.adapter.forward(&input)?;
-                        let loss_val = output.sub(&target)?.sqr()?.mean_all()?.to_scalar::<f32>()?;
+                        let loss_val =
+                            output.sub(&target)?.sqr()?.mean_all()?.to_scalar::<f32>()?;
 
                         if loss_val > 0.001 {
                             let (grad_a, grad_b) =
