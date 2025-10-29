@@ -73,11 +73,7 @@ async fn main() -> Result<()> {
         topology: Some(TopologyState {
             entropy: cycle.entropy as f32,
             iit_phi: topology.persistence_entropy as f32,
-            knots: topology
-                .knots
-                .iter()
-                .map(|value| *value as f32)
-                .collect::<Vec<_>>(),
+            knots: vec![topology.knot_complexity as f32],
             betti_numbers: topology
                 .betti_numbers
                 .iter()

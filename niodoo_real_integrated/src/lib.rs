@@ -134,7 +134,6 @@ pub mod torus;
 pub mod util;
 
 /// Vector store implementation for binary protobuf storage
-#[cfg(feature = "qdrant")]
 pub mod vector_store;
 
 pub mod test_support;

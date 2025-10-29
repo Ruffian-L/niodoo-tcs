@@ -1,3 +1,4 @@
+#![cfg(feature = "qdrant")]
 use anyhow::Result;
 use prost::Message;
 use tracing::{info, Level};

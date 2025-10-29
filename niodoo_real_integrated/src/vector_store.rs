@@ -1,11 +1,13 @@
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use base64::Engine;
+use reqwest::Client;
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::collections::HashMap;
+use std::convert::TryInto;
+use std::time::Duration;
 use std::time::SystemTime;
 use tracing::info;
-use async_trait::async_trait;
-use reqwest::Client;
-use std::time::Duration;
 
 /// Document returned from vector store retrieval
 #[derive(Debug, Clone)]
@@ -19,7 +21,7 @@ pub struct Document {
 pub trait VectorStore: Send + Sync {
     /// Retrieve similar documents
     async fn retrieve(&self, embedding: &[f32], k: usize) -> Result<Vec<Document>>;
-    
+
     /// Upsert binary payload with embedding
     async fn upsert_binary(&self, id: &str, payload: &[u8], embedding: &[f32]) -> Result<()>;
 }
@@ -39,18 +41,18 @@ impl RealQdrantClient {
             .unwrap_or_else(|_| url.to_string())
             .trim_end_matches('/')
             .to_string();
-        
+
         let client = Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
-        
+
         info!(
             collection = %collection,
             url = %base_url,
             "RealQdrantClient initialized"
         );
-        
+
         Ok(Self {
             client,
             base_url,
@@ -73,13 +75,17 @@ impl VectorStore for RealQdrantClient {
             "{}/collections/{}/points/search",
             self.base_url, self.collection
         );
-        
+
         let response = self.client.post(&url).json(&request_json).send().await?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(anyhow!("Qdrant search failed: status={}, body={}", status, body));
+            return Err(anyhow!(
+                "Qdrant search failed: status={}, body={}",
+                status,
+                body
+            ));
         }
 
         #[derive(serde::Deserialize)]
@@ -95,30 +101,30 @@ impl VectorStore for RealQdrantClient {
         }
 
         let search_resp: SearchResponse = response.json().await?;
-        
+
         let docs = search_resp
             .result
             .into_iter()
             .map(|hit| {
                 let payload = hit.payload;
                 let mut metadata = HashMap::new();
-                
+
                 // Extract content if available
                 let content = payload
                     .get("content")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string())
                     .unwrap_or_default();
-                
+
                 // Store all payload as metadata
                 for (key, value) in payload {
                     metadata.insert(key, value);
                 }
-                
+
                 Document { content, metadata }
             })
             .collect();
-        
+
         Ok(docs)
     }
 
@@ -128,34 +134,29 @@ impl VectorStore for RealQdrantClient {
         let point_id = u64::from_le_bytes(
             hash.as_bytes()[..8]
                 .try_into()
-                .map_err(|_| anyhow!("Hash conversion failed"))?
+                .map_err(|_| anyhow!("Hash conversion failed"))?,
         );
-        
+
         // Build payload map with binary proto blob as base64
         let mut payload_map = JsonMap::new();
-        
+
         // Store binary proto as base64 string
+        use base64::engine::general_purpose;
         payload_map.insert(
             "state_proto".to_string(),
-            JsonValue::String(base64::engine::general_purpose::STANDARD.encode(payload))
+            JsonValue::String(general_purpose::STANDARD.encode(payload)),
         );
-        
+
         // Add timestamp
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        payload_map.insert(
-            "timestamp".to_string(),
-            JsonValue::Number(timestamp.into())
-        );
-        
+        payload_map.insert("timestamp".to_string(), JsonValue::Number(timestamp.into()));
+
         // Add original ID for reference
-        payload_map.insert(
-            "id".to_string(),
-            JsonValue::String(id.to_string())
-        );
-        
+        payload_map.insert("id".to_string(), JsonValue::String(id.to_string()));
+
         // Create upsert request
         let request_body = json!({
             "points": [
@@ -166,22 +167,26 @@ impl VectorStore for RealQdrantClient {
                 }
             ]
         });
-        
+
         let url = format!("{}/collections/{}/points", self.base_url, self.collection);
         let response = self.client.put(&url).json(&request_body).send().await?;
-        
+
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(anyhow!("Qdrant upsert failed: status={}, body={}", status, body));
+            return Err(anyhow!(
+                "Qdrant upsert failed: status={}, body={}",
+                status,
+                body
+            ));
         }
-        
+
         info!(
             id = %id,
             size_bytes = payload.len(),
             "Upserted binary proto state to Qdrant"
         );
-        
+
         Ok(())
     }
 }
