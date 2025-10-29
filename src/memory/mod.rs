@@ -61,12 +61,12 @@ pub struct EmotionalTransformParams {
 impl Default for EmotionalTransformParams {
     fn default() -> Self {
         let config = ConsciousnessConfig::default();
-        let entropy = 0.5; // Simple proxy for system entropy, derive from hash or random
+        let entropy = config.memory.default_entropy;
         Self {
             novelty_bounds: (
                 config.novelty_threshold_min * (1.0 - entropy),
                 config.novelty_threshold_max * (1.0 + entropy),
-            ), // Dynamic from entropy
+            ),
             stability_target: config.ethical_bounds * config.memory.stability_target_multiplier,
             learning_rate: config.consciousness_step_size * config.memory.learning_rate_multiplier,
             decay_rate: config.emotional_plasticity * config.memory.decay_rate_multiplier,
@@ -151,7 +151,7 @@ impl MobiusMemorySystem {
 
         // Calculate initial emotional vector based on content and weight
         let emotional_vector =
-            self.calculate_emotional_vector(&content, emotional_weight, &config.consciousness);
+            self.calculate_emotional_vector(&content, emotional_weight, config);
 
         // Calculate initial topology position
         let topology_position = self.calculate_topology_position(&content, &initial_layer, config);
@@ -306,10 +306,10 @@ impl MobiusMemorySystem {
         emotional_vector: &(f64, f64, f64),
         config: &ConsciousnessConfig,
     ) -> f64 {
-        let entropy = 0.5; // Derive
+        let entropy = config.memory.default_entropy;
         let (r, g, b) = *emotional_vector;
         let distance_from_neutral =
-            ((r - config.default_authenticity).powi(2) + (g - 0.5).powi(2) + (b - 0.5).powi(2))
+            ((r - config.default_authenticity).powi(2) + (g - config.memory.emotional_neutral_g).powi(2) + (b - config.memory.emotional_neutral_b).powi(2))
                 .sqrt();
         distance_from_neutral * (1.0 + entropy * config.emotional_plasticity)
     }
@@ -391,10 +391,10 @@ impl MobiusMemorySystem {
         &self,
         content: &str,
         weight: f64,
-        config: &ConsciousnessConfig,
+        config: &AppConfig,
     ) -> (f64, f64, f64) {
-        let entropy = self.simple_hash(content) as f64 / u64::MAX as f64; // Entropy proxy
-        let emotional_pattern = entropy * config.emotional_intensity_factor;
+        let entropy = self.simple_hash(content, config) as f64 / u64::MAX as f64; // Entropy proxy
+        let emotional_pattern = entropy * config.consciousness.emotional_intensity_factor;
         (
             emotional_pattern * weight,
             (1.0 - emotional_pattern) * weight,
@@ -410,7 +410,7 @@ impl MobiusMemorySystem {
         config: &AppConfig,
     ) -> (f64, f64, f64) {
         // Simple hash-based positioning
-        let hash = self.simple_hash(content);
+        let hash = self.simple_hash(content, config);
 
         // Map hash to topology coordinates
         let x = ((hash % config.memory.hash_mod) as f64 / (config.memory.hash_mod as f64))
@@ -439,7 +439,7 @@ impl MobiusMemorySystem {
     }
 
     /// Simple hash function for deterministic positioning
-    fn simple_hash(&self, content: &str) -> u64 {
+    fn simple_hash(&self, content: &str, config: &AppConfig) -> u64 {
         let mut hash = 0u64;
         for byte in content.bytes() {
             hash = hash.wrapping_mul(config.memory.hash_multiplier).wrapping_add(byte as u64);

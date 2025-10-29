@@ -9,7 +9,7 @@ use anyhow::Context;
 use anyhow::Result;
 
 use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant, CompassRuntimeParams};
-use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
+use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode};
 use crate::curator::Curator;
 use crate::data::{
     compute_dataset_stats, load_emotional_dataset, load_rut_gauntlet_prompts, DatasetStats,

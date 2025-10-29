@@ -291,8 +291,8 @@ fn persistent_reduction(simplices: &[Simplex], target_dim: u8) -> Result<Persist
                 let dim = simplex.dimension as usize;
                 let feature_idx = diagrams[dim].features.len();
                 diagrams[dim].features.push(PersistenceFeature {
-                    birth: simplex.filtration,
-                    death: f32::INFINITY,
+                    birth: simplex.filtration as f64,
+                    death: f64::INFINITY,
                     dimension: dim,
                 });
                 creators.insert(j, (dim, feature_idx));
@@ -302,7 +302,7 @@ fn persistent_reduction(simplices: &[Simplex], target_dim: u8) -> Result<Persist
             low_map.insert(low_simplex, j);
             if let Some((dim, feature_idx)) = creators.remove(&low_simplex) {
                 if dim <= target_dim {
-                    diagrams[dim].features[feature_idx].death = simplex.filtration;
+                    diagrams[dim].features[feature_idx].death = simplex.filtration as f64;
                 }
             }
         }

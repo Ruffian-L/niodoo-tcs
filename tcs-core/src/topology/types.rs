@@ -67,7 +67,7 @@ pub struct PersistenceFeature {
 impl PersistenceFeature {
     #[inline]
     pub fn persistence(&self) -> f32 {
-        (self.death - self.birth).abs()
+        (self.death - self.birth).abs() as f32
     }
 
     #[inline]
@@ -107,7 +107,7 @@ impl PersistenceDiagram {
             .iter()
             .filter_map(|f| {
                 if f.death.is_finite() {
-                    Some((f.death - f.birth).max(0.0))
+                    Some(((f.death - f.birth).max(0.0)) as f32)
                 } else {
                     None
                 }
@@ -156,9 +156,9 @@ impl BettiCurve {
     fn from_diagram(diagram: &PersistenceDiagram) -> Self {
         let mut events: Vec<(f32, i32)> = Vec::with_capacity(diagram.features.len() * 2);
         for feature in &diagram.features {
-            events.push((feature.birth, 1));
+            events.push((feature.birth as f32, 1));
             if feature.death.is_finite() {
-                events.push((feature.death, -1));
+                events.push((feature.death as f32, -1));
             }
         }
         events.sort_by(|a, b| match a.0.partial_cmp(&b.0) {

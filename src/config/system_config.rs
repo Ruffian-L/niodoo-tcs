@@ -2034,6 +2034,13 @@ pub struct MemoryConfig {
     
     /// Hash multiplier for deterministic positioning
     pub hash_multiplier: u64,
+    
+    /// Default entropy value for initial calculations
+    pub default_entropy: f64,
+    
+    /// Emotional vector neutral values (RGB coordinates)
+    pub emotional_neutral_g: f64,
+    pub emotional_neutral_b: f64,
 }
 
 impl Default for MemoryConfig {
@@ -2095,6 +2102,9 @@ impl Default for MemoryConfig {
             time_decay_divisor: 3600.0,
             access_bonus_stability_multiplier: 10.0,
             hash_multiplier: 31,
+            default_entropy: 0.5,
+            emotional_neutral_g: 0.5,
+            emotional_neutral_b: 0.5,
         }
     }
 }

@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
@@ -217,6 +218,47 @@ impl Default for BackendType {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TopologyMode {
+    #[serde(rename = "hybrid")]
+    Hybrid,
+    #[serde(rename = "baseline")]
+    Baseline,
+}
+
+impl Default for TopologyMode {
+    fn default() -> Self {
+        TopologyMode::Hybrid
+    }
+}
+
+impl TopologyMode {
+    pub fn from_env() -> Self {
+        match env_with_fallback(&["TOPOLOGY_MODE", "TCS_TOPOLOGY_MODE"]) {
+            Some(value) => match TopologyMode::from_str(&value) {
+                Ok(mode) => mode,
+                Err(error) => {
+                    warn!(%value, %error, "Invalid topology mode; defaulting to hybrid");
+                    TopologyMode::Hybrid
+                }
+            },
+            None => TopologyMode::Hybrid,
+        }
+    }
+}
+
+impl FromStr for TopologyMode {
+    type Err = anyhow::Error;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "hybrid" => Ok(TopologyMode::Hybrid),
+            "baseline" => Ok(TopologyMode::Baseline),
+            other => Err(anyhow::anyhow!("unsupported topology mode '{other}'")),
+        }
+    }
+}
+
 fn default_max_retries() -> u32 {
     10 // Further increased to allow learning through degraded responses
 }
@@ -387,6 +429,8 @@ pub struct RuntimeConfig {
     pub enable_consistency_voting: bool,
     #[serde(default)]
     pub mock_mode: bool,
+    #[serde(default)]
+    pub topology_mode: TopologyMode,
 
     // Phase 2 retry configuration
     #[serde(default = "default_max_retries")]
@@ -634,6 +678,8 @@ impl RuntimeConfig {
             warn!("MOCK_MODE enabled; external services will return stubbed responses");
         }
 
+        let topology_mode = TopologyMode::from_env();
+
         let generation_backend = BackendType::from_env();
 
         let enable_curator = env_with_fallback(&["ENABLE_CURATOR"])
@@ -800,6 +846,7 @@ impl RuntimeConfig {
             entropy_cycles_for_baseline,
             enable_consistency_voting,
             mock_mode,
+            topology_mode,
             phase2_max_retries,
             phase2_retry_base_delay_ms,
             similarity_threshold,
@@ -854,6 +901,7 @@ impl RuntimeConfig {
         };
 
         info!(model = %runtime.curator_model_name, "Config loaded: CURATOR_MODEL={}", runtime.curator_model_name);
+        info!(mode = ?runtime.topology_mode, "Topology mode configured");
 
         Ok(runtime)
     }
