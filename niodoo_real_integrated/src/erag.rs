@@ -1,12 +1,14 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
-use rand::{thread_rng, Rng};
+use rand::{rngs::StdRng, SeedableRng};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
+use lru::LruCache;
 
 use crate::compass::CompassOutcome;
 use crate::embedding::QwenStatefulEmbedder;
@@ -27,10 +29,10 @@ pub struct EmotionalVector {
 
 impl EmotionalVector {
     pub fn from_pad(state: &PadGhostState) -> Self {
-        let mut rng = thread_rng();
-        let joy = (state.pad[0] + rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
-        let arousal = (state.pad[1] + rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
-        let surprise = (state.pad[2] + rng.gen_range(-0.3..0.3)).clamp(-1.0, 1.0);
+        // Use deterministic transformation instead of thread_rng
+        let joy = state.pad[0];
+        let arousal = state.pad[1];
+        let surprise = state.pad[2];
 
         Self {
             joy: joy as f32,
@@ -70,6 +72,8 @@ pub struct EragClient {
     pub similarity_threshold: f32,
     embedder: Arc<QwenStatefulEmbedder>,
     mock_mode: bool,
+    collapse_cache: Arc<tokio::sync::Mutex<LruCache<u64, CollapseResult>>>,
+    rng: Arc<tokio::sync::Mutex<StdRng>>,
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +118,17 @@ impl EragClient {
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
 
+        // Initialize RNG with seed from environment or default
+        let rng_seed = std::env::var("RNG_SEED")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(42);
+        let rng = Arc::new(tokio::sync::Mutex::new(StdRng::seed_from_u64(rng_seed)));
+        
+        // Initialize collapse cache
+        let cache_capacity = NonZeroUsize::new(256).unwrap();
+        let collapse_cache = Arc::new(tokio::sync::Mutex::new(LruCache::new(cache_capacity)));
+
         if mock_mode {
             info!("Qdrant mock mode active; skipping collection provisioning");
             return Ok(Self {
@@ -124,6 +139,8 @@ impl EragClient {
                 similarity_threshold,
                 embedder,
                 mock_mode,
+                collapse_cache,
+                rng,
             });
         }
 
@@ -179,6 +196,8 @@ impl EragClient {
             similarity_threshold,
             embedder,
             mock_mode,
+            collapse_cache,
+            rng,
         })
     }
 

@@ -64,7 +64,6 @@ parking_lot = "0.12"
 
 qdrant-client = "1.9"
 urlencoding = "2.1"
-pyo3 = { version = "0.22", features = ["auto-initialize"] }
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 [dev-dependencies]
 serde_json = "1.0"

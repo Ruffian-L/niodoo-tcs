@@ -17,3 +17,5 @@ async fn mobius_prompt_smoke() -> Result<()> {
     assert!(cycle.rouge >= 0.0);
     Ok(())
 }
+
+

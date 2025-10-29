@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
 use rand::prelude::*;
@@ -123,7 +123,7 @@ pub struct LearningLoop {
     gamma: f64, // discount
     alpha: f64, // learning rate
     erag: Arc<EragClient>,
-    config: Arc<Mutex<RuntimeConfig>>,
+    config: Arc<RwLock<RuntimeConfig>>,
     episode_count: u32,
     initial_epsilon: f64,
     initial_alpha: f64,
@@ -149,12 +149,12 @@ impl LearningLoop {
         gamma: f64,
         alpha: f64,
         erag: Arc<EragClient>,
-        config: Arc<Mutex<RuntimeConfig>>,
+        config: Arc<RwLock<RuntimeConfig>>,
         tokenizer: Arc<DynamicTokenizerManager>,
         rng_seed: u64,
     ) -> Self {
         let action_space: Vec<DqnAction> = {
-            let guard = config.lock().unwrap();
+            let guard = config.read();
             guard
                 .dqn_actions
                 .clone()
@@ -165,7 +165,7 @@ impl LearningLoop {
 
         // Initialize LoRA trainer with correct embedding dimensions from config
         let lora_trainer = {
-            let guard = config.lock().unwrap();
+            let guard = config.read();
             let embedding_dim = guard.qdrant_vector_dim;
             let lora_config = LoRAConfig {
                 rank: 8,     // Default LoRA rank
@@ -285,7 +285,7 @@ impl LearningLoop {
             self.recent_topologies.pop_front();
         }
 
-        let config_snapshot = self.config.lock().unwrap().clone();
+        let config_snapshot = self.config.read().clone();
         let fallback_ucb = compass.ucb1_score.unwrap_or(config_snapshot.mcts_c_scale) as f64;
         let fallback_curator = collapse
             .curator_quality
@@ -442,7 +442,7 @@ impl LearningLoop {
 
         // Get embedding dimension from config
         let embedding_dim = {
-            let guard = self.config.lock().unwrap();
+            let guard = self.config.read();
             guard.qdrant_vector_dim
         };
 
@@ -744,7 +744,7 @@ impl LearningLoop {
         }
 
         // Outer meta-update: average deltas and apply to config
-        let mut config = self.config.lock().unwrap();
+        let mut config = self.config.write();
         for (param, total_delta) in &param_deltas {
             let avg_delta = total_delta / batch_len as f64;
             match param.as_str() {
@@ -785,7 +785,7 @@ impl LearningLoop {
         {
             // Step 1: Collect low-reward tuples from ERAG
             let low_tuples = self.erag.query_low_reward_tuples(-0.5, 16).await?;
-            let embedding_dim = self.config.lock().unwrap().qdrant_vector_dim;
+            let embedding_dim = self.config.read().qdrant_vector_dim;
 
             // Step 2: Prepare training data from replay buffer + topological features
             let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
@@ -855,7 +855,7 @@ impl LearningLoop {
                                 .or_insert(0.0) += amplified_delta;
                         }
                         let avg_len = low_tuples.len() as f64;
-                        let mut config = self.config.lock().unwrap();
+                        let mut config = self.config.write();
                         for (param, total) in &param_deltas {
                             let avg_delta = total / avg_len * 0.3; // Reduced impact after LoRA training
                             match param.as_str() {
@@ -970,7 +970,7 @@ impl LearningLoop {
     /// Phase 5.2: Evolution step with topological guidance
     async fn evolution_step(&mut self) -> Result<()> {
         let current = {
-            let guard = self.config.lock().unwrap();
+            let guard = self.config.read();
             guard.clone()
         };
         let recent: Vec<(f64, f64)> = self.recent_metrics.iter().cloned().collect();
@@ -1011,7 +1011,7 @@ impl LearningLoop {
             .evolve_with_topology(&current, mixed_episodes, recent_topologies)
             .await?;
         {
-            let mut guard = self.config.lock().unwrap();
+            let mut guard = self.config.write();
             *guard = best;
         }
         info!(

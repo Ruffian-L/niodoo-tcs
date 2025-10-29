@@ -1254,12 +1254,27 @@ impl GenerationEngine {
 }
 
 fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho]) -> String {
-    // Return the best actual response, not a summary
-    echoes
+    // Weighted merge: baseline gets 60%, best echo gets 40%
+    if echoes.is_empty() {
+        return baseline.to_string();
+    }
+    
+    // Find the best echo (longest, highest quality proxy)
+    let best_echo = echoes
         .iter()
-        .find(|e| e.lens == "Claude")
-        .map(|e| e.response.clone())
-        .unwrap_or_else(|| baseline.to_string())
+        .max_by_key(|e| e.response.len())
+        .map(|e| e.response.as_str())
+        .unwrap_or("");
+    
+    // If echo is significantly better (30% longer), use weighted merge
+    if !best_echo.is_empty() && best_echo.len() as f64 > baseline.len() as f64 * 1.3 {
+        // Weighted merge: take first 60% from baseline, append echo for remaining
+        let baseline_part = baseline.chars().take((baseline.len() as f64 * 0.6) as usize).collect::<String>();
+        format!("{}{}", baseline_part, best_echo)
+    } else {
+        // Return baseline if echo is not significantly better
+        baseline.to_string()
+    }
 }
 
 fn snippet(text: &str, limit: usize) -> String {
