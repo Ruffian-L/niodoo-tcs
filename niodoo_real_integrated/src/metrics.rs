@@ -122,9 +122,7 @@ impl RetryStrategy for PipelineMetrics {
     fn compute_backoff(&self, attempt: u32, is_hard: bool) -> Duration {
         let base = if is_hard { 500 } else { 200 };
         let exp = 2u64.pow(attempt.min(5));
-        use rand::rngs::StdRng;
-        use rand::SeedableRng;
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = crate::util::seed_manager().get_rng("metrics/retry_backoff");
         let jitter = rng.gen_range(0..100);
         Duration::from_millis(base * exp + jitter)
     }

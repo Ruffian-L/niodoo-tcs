@@ -172,7 +172,7 @@ pub fn load_rut_gauntlet_prompts() -> Vec<RutPrompt> {
 }
 
 pub fn sample_prompts(prompts: &[RutPrompt], count: usize) -> Vec<RutPrompt> {
-    let mut rng = StdRng::seed_from_u64(42);
+    let mut rng = crate::util::seed_manager().get_rng("data/sample_prompts");
     let mut cloned = prompts.to_vec();
     cloned.shuffle(&mut rng);
     cloned.into_iter().take(count).collect()

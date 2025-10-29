@@ -1,7 +1,8 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use rayon::prelude::*;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;

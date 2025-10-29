@@ -1,5 +1,7 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 use anyhow::Result;
 use parking_lot::RwLock;
@@ -226,6 +228,12 @@ impl LearningLoop {
             }
             Err(_) => None,
         };
+
+        let mut rng = StdRng::seed_from_u64(config.rng_seed);
+        let q_table = Arc::new(RwLock::new(HashMap::new()));
+        if replay_buffer.len() > 1000 {
+            replay_buffer.pop_front();
+        }
 
         Self {
             entropy_history: VecDeque::with_capacity(window),

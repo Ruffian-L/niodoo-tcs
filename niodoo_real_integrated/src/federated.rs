@@ -155,27 +155,40 @@ impl NodalDiagnostics {
         let mut sorted = samples.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
 
-        Some((
-            percentile(&sorted, 0.25),
-            percentile(&sorted, 0.50),
-            percentile(&sorted, 0.75),
-        ))
+        let median = median(&sorted);
+        let mid = sorted.len() / 2;
+        let (lower_half, upper_half) = if sorted.len() % 2 == 0 {
+            (&sorted[..mid], &sorted[mid..])
+        } else {
+            (&sorted[..mid], &sorted[mid + 1..])
+        };
+
+        let q1 = if lower_half.is_empty() {
+            median
+        } else {
+            median(lower_half)
+        };
+
+        let q3 = if upper_half.is_empty() {
+            median
+        } else {
+            median(upper_half)
+        };
+
+        Some((q1, median, q3))
     }
 }
 
-fn percentile(sorted: &[f64], p: f64) -> f64 {
+fn median(sorted: &[f64]) -> f64 {
     debug_assert!(!sorted.is_empty());
-    let clamped = p.clamp(0.0, 1.0);
-    let rank = clamped * (sorted.len() - 1) as f64;
-    let lower = rank.floor() as usize;
-    let upper = rank.ceil() as usize;
-
-    if lower == upper {
-        return sorted[lower];
+    let len = sorted.len();
+    if len % 2 == 1 {
+        sorted[len / 2]
+    } else {
+        let upper = len / 2;
+        let lower = upper - 1;
+        (sorted[lower] + sorted[upper]) * 0.5
     }
-
-    let weight = rank - lower as f64;
-    sorted[lower] + weight * (sorted[upper] - sorted[lower])
 }
 
 // FederatedResilienceOrchestrator trait for distributed recovery

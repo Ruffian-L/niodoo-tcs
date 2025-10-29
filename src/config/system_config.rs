@@ -2015,6 +2015,25 @@ pub struct MemoryConfig {
     pub frustration_coherence_threshold: f64,
     pub joy_valence_threshold: f64,
     pub joy_stability_boost: f64,
+
+    /// Stability calculation multipliers
+    pub stability_target_multiplier: f64,
+    pub learning_rate_multiplier: f64,
+    pub decay_rate_multiplier: f64,
+    pub consolidation_threshold_multiplier: f64,
+    
+    /// Layer capacity multipliers
+    pub layer_capacity_base_multiplier: f64,
+    pub layer_capacity_per_layer_multiplier: f64,
+    
+    /// Time decay divisor (converts seconds to hours)
+    pub time_decay_divisor: f64,
+    
+    /// Access bonus multiplier for stability calculation
+    pub access_bonus_stability_multiplier: f64,
+    
+    /// Hash multiplier for deterministic positioning
+    pub hash_multiplier: u64,
 }
 
 impl Default for MemoryConfig {
@@ -2067,6 +2086,15 @@ impl Default for MemoryConfig {
             frustration_coherence_threshold: 0.5,
             joy_valence_threshold: 0.5,
             joy_stability_boost: 1.05,
+            stability_target_multiplier: 0.9951,
+            learning_rate_multiplier: 10.0,
+            decay_rate_multiplier: 0.95,
+            consolidation_threshold_multiplier: 0.8,
+            layer_capacity_base_multiplier: 1000.0,
+            layer_capacity_per_layer_multiplier: 100.0,
+            time_decay_divisor: 3600.0,
+            access_bonus_stability_multiplier: 10.0,
+            hash_multiplier: 31,
         }
     }
 }

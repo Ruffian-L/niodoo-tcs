@@ -100,3 +100,23 @@ async fn test_process_prompt_with_mock_clients() -> Result<()> {
     assert_eq!(collapse.failure_type, None);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockall::mock;
+
+    #[tokio::test]
+    async fn test_mock_pipeline() {
+        let result = mock_pipeline("embed").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_process_prompt() {
+        let embed = mock_embed();
+        let erag = mock_erag();
+        let result = process_prompt("test", embed, erag).await;
+        assert!(result.is_ok());
+    }
+}

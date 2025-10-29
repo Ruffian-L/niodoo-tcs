@@ -107,7 +107,7 @@ clap = { version = "4.0", features = ["derive"] }
 qmetaobject = { version = "0.2", optional = true }
 
 # Real AI inference dependencies
-ort = { version = "1.16.3", features = ["cuda"], optional = true }
+ort = { workspace = true, optional = true }
 hf-hub = { version = "0.3", optional = true }
 # ring = "=0.16.20"  # Pin to working version to avoid linking issues with 0.17.14
 # tokenizers = { version = "0.20", default-features = false, features = ["http", "fancy-regex"] }  # Use fancy-regex instead of onig

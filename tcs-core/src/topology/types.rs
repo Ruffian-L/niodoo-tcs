@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use nalgebra::DVector;
 
 /// Simple point wrapper so downstream code can swap in tensors later without
 /// touching the topology engine API.
@@ -58,8 +59,8 @@ impl Default for TopologyParams {
 /// Persistent homology feature (a single barcode interval).
 #[derive(Debug, Clone)]
 pub struct PersistenceFeature {
-    pub birth: f32,
-    pub death: f32,
+    pub birth: f64,
+    pub death: f64,
     pub dimension: usize,
 }
 
@@ -73,6 +74,15 @@ impl PersistenceFeature {
     pub fn is_infinite(&self) -> bool {
         !self.death.is_finite()
     }
+}
+
+pub fn compute_persistence(data: &DVector<f64>) -> Vec<PersistenceFeature> {
+    // Merged stub: dummy homology with 3 features
+    vec![
+        PersistenceFeature { birth: 0.0, death: f64::INFINITY, dimension: 0 },
+        PersistenceFeature { birth: 0.0, death: 2.0, dimension: 1 },
+        PersistenceFeature { birth: 0.0, death: 2.0, dimension: 2 },
+    ]
 }
 
 /// Collection of persistence features for a single homology dimension.
