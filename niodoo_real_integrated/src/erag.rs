@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::SeedableRng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
@@ -73,7 +73,6 @@ pub struct EragClient {
     embedder: Arc<QwenStatefulEmbedder>,
     mock_mode: bool,
     collapse_cache: Arc<tokio::sync::Mutex<LruCache<u64, CollapseResult>>>,
-    rng: Arc<tokio::sync::Mutex<StdRng>>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,13 +117,6 @@ impl EragClient {
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
 
-        // Initialize RNG with seed from environment or default
-        let rng_seed = std::env::var("RNG_SEED")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(42);
-        let rng = Arc::new(tokio::sync::Mutex::new(StdRng::seed_from_u64(rng_seed)));
-        
         // Initialize collapse cache
         let cache_capacity = NonZeroUsize::new(256).unwrap();
         let collapse_cache = Arc::new(tokio::sync::Mutex::new(LruCache::new(cache_capacity)));
@@ -140,7 +132,6 @@ impl EragClient {
                 embedder,
                 mock_mode,
                 collapse_cache,
-                rng,
             });
         }
 
@@ -197,7 +188,6 @@ impl EragClient {
             embedder,
             mock_mode,
             collapse_cache,
-            rng,
         })
     }
 
