@@ -29,18 +29,12 @@ pub struct RagRuntimeConfig {
     pub similarity_threshold: f32,
     pub token_adjustment: f32,
     pub mock_generation: bool,
-    pub emotional_resonance_threshold: f32,
-    pub coherence_threshold: f32,
-    pub coherence_update_multiplier: f64,
-    pub emotional_resonance_update_multiplier: f64,
-    pub metacognitive_depth_increment: f64,
-    pub max_snippet_length: usize,
 }
 
 impl Default for RagRuntimeConfig {
     fn default() -> Self {
         Self {
-            vllm_endpoint: env_or("NIODOO_VLLM_ENDPOINT", "http://127.0.0.1:8000"),
+            vllm_endpoint: env_or("NIODOO_VLLM_ENDPOINT", "http://127.0.0.1:5001"),
             vllm_model: env_or("NIODOO_VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ"),
             generation_timeout_secs: env_or_parse("NIODOO_GENERATION_TIMEOUT", 30),
             generation_max_tokens: env_or_parse("NIODOO_GENERATION_MAX_TOKENS", 512),

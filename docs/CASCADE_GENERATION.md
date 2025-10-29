@@ -26,7 +26,7 @@ export OPENAI_MODEL="gpt-4o-mini"  # Default
 export OPENAI_ENDPOINT="https://api.openai.com/v1/chat/completions"  # Default
 
 # vLLM (Local fallback)
-export NIODOO_VLLM_ENDPOINT="http://127.0.0.1:8000"  # Default
+export NIODOO_VLLM_ENDPOINT="http://127.0.0.1:5001"  # Default (matches .env)
 export NIODOO_VLLM_MODEL="Qwen/Qwen2.5-7B-Instruct-AWQ"  # Default
 ```
 
