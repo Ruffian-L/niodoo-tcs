@@ -5,10 +5,10 @@ use anyhow::Result;
 use candle_core::{Device, Tensor};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
-use std::sync::{Arc, Mutex};
 
 use crate::torus::PadGhostState;
 use tcs_core::metrics::record_topology_metrics;
@@ -405,12 +405,12 @@ mod tests {
     fn test_tcs_delta() {
         let mut analyzer = TCSAnalyzer::new().unwrap();
         let mut pad_state = PadGhostState::default();
-        pad_state.pad[0] = 0.5;  // Simple state
+        pad_state.pad[0] = 0.5; // Simple state
         let signature = analyzer.analyze_state(&pad_state).unwrap();
         // Basic check: entropy should be computed
         assert!(signature.persistence_entropy >= 0.0);
         // Delta proxy: knot complexity
-        let delta = signature.knot_complexity;  // Assume baseline 0
+        let delta = signature.knot_complexity; // Assume baseline 0
         assert!(delta.is_finite());
     }
 }

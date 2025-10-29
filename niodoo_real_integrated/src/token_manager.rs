@@ -157,14 +157,31 @@ impl DynamicTokenizerManager {
         }
     }
 
-    pub async fn spawn_maintenance(&self) {
-        let shutdown = self.shutdown.clone();
+    pub async fn spawn_maintenance(self: &Arc<Self>) {
+        if self.promotion_interval == 0 {
+            return;
+        }
+
+        if self
+            .promotion_active
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+
+        let manager = Arc::clone(self);
         tokio::spawn(async move {
+            let mut ticker = interval(Duration::from_secs(manager.promotion_interval));
+            let shutdown = manager.shutdown.clone();
+
             loop {
                 tokio::select! {
-                    _ = interval(Duration::from_secs(self.promotion_interval)) => {
+                    _ = ticker.tick() => {
                         if shutdown.load(Ordering::Relaxed) { break; }
-                        // run promotion
+                        if let Err(err) = manager.run_promotion_cycle().await {
+                            warn!(%err, "token promotion cycle failed");
+                        }
                     },
                     _ = signal::ctrl_c() => {
                         info!("Shutdown signal received");
@@ -172,6 +189,8 @@ impl DynamicTokenizerManager {
                     }
                 }
             }
+
+            manager.promotion_active.store(false, Ordering::Relaxed);
         });
     }
 

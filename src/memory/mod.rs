@@ -70,7 +70,8 @@ impl Default for EmotionalTransformParams {
             stability_target: config.ethical_bounds * config.memory.stability_target_multiplier,
             learning_rate: config.consciousness_step_size * config.memory.learning_rate_multiplier,
             decay_rate: config.emotional_plasticity * config.memory.decay_rate_multiplier,
-            consolidation_threshold: (config.memory_threshold as f64) * config.memory.consolidation_threshold_multiplier,
+            consolidation_threshold: (config.memory_threshold as f64)
+                * config.memory.consolidation_threshold_multiplier,
         }
     }
 }
@@ -103,13 +104,18 @@ impl MobiusMemorySystem {
                 config_cons.novelty_threshold_min,
                 config_cons.novelty_threshold_max,
             ),
-            stability_target: config_cons.ethical_bounds * config.memory.stability_target_multiplier,
-            learning_rate: config_cons.consciousness_step_size * config.memory.learning_rate_multiplier,
+            stability_target: config_cons.ethical_bounds
+                * config.memory.stability_target_multiplier,
+            learning_rate: config_cons.consciousness_step_size
+                * config.memory.learning_rate_multiplier,
             decay_rate: config_cons.emotional_plasticity * config.memory.decay_rate_multiplier,
-            consolidation_threshold: (config_cons.memory_threshold as f64) * config.memory.consolidation_threshold_multiplier,
+            consolidation_threshold: (config_cons.memory_threshold as f64)
+                * config.memory.consolidation_threshold_multiplier,
         };
 
-        let mut layers = HashMap::with_capacity((config_cons.memory_threshold * config.memory.layer_capacity_base_multiplier) as usize);
+        let mut layers = HashMap::with_capacity(
+            (config_cons.memory_threshold * config.memory.layer_capacity_base_multiplier) as usize,
+        );
         for layer in [
             MemoryLayer::CoreBurned,
             MemoryLayer::Procedural,
@@ -120,7 +126,11 @@ impl MobiusMemorySystem {
         ] {
             layers.insert(
                 layer,
-                Vec::with_capacity((config_cons.memory_threshold * config.memory.layer_capacity_per_layer_multiplier) as usize),
+                Vec::with_capacity(
+                    (config_cons.memory_threshold
+                        * config.memory.layer_capacity_per_layer_multiplier)
+                        as usize,
+                ),
             );
         }
 
@@ -150,8 +160,7 @@ impl MobiusMemorySystem {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         // Calculate initial emotional vector based on content and weight
-        let emotional_vector =
-            self.calculate_emotional_vector(&content, emotional_weight, config);
+        let emotional_vector = self.calculate_emotional_vector(&content, emotional_weight, config);
 
         // Calculate initial topology position
         let topology_position = self.calculate_topology_position(&content, &initial_layer, config);
@@ -213,7 +222,8 @@ impl MobiusMemorySystem {
                     if g > config.memory.emotional_neutral {
                         // joy memories
                         // Reduce decay and boost stability for joy memories
-                        memory.stability = (memory.stability * config.memory.joy_stability_boost).min(1.0);
+                        memory.stability =
+                            (memory.stability * config.memory.joy_stability_boost).min(1.0);
                         // Flip retention strategy: slower decay for positive memories
                         // This would integrate with Gaussian decay model for faster convergence
                     }
@@ -252,9 +262,12 @@ impl MobiusMemorySystem {
         config: &ConsciousnessConfig,
     ) {
         let time_since_access = current_time - memory.last_accessed;
-        let time_decay = (-config.emotional_plasticity * time_since_access as f64 / config.memory.time_decay_divisor).exp();
-        let access_bonus =
-            (memory.access_count as f64).ln().max(0.0) * config.consciousness_step_size * config.memory.access_bonus_stability_multiplier;
+        let time_decay = (-config.emotional_plasticity * time_since_access as f64
+            / config.memory.time_decay_divisor)
+            .exp();
+        let access_bonus = (memory.access_count as f64).ln().max(0.0)
+            * config.consciousness_step_size
+            * config.memory.access_bonus_stability_multiplier;
         let time_penalty = (1.0 - time_decay) as f32 * config.memory_threshold;
         memory.stability = (memory.stability + access_bonus - time_penalty as f64).clamp(0.0, 1.0);
     }
@@ -266,9 +279,12 @@ impl MobiusMemorySystem {
         config: &ConsciousnessConfig,
     ) {
         let time_since_access = current_time - memory.last_accessed;
-        let time_decay = (-config.emotional_plasticity * time_since_access as f64 / config.memory.time_decay_divisor).exp();
-        let access_bonus =
-            (memory.access_count as f64).ln().max(0.0) * config.consciousness_step_size * config.memory.access_bonus_stability_multiplier;
+        let time_decay = (-config.emotional_plasticity * time_since_access as f64
+            / config.memory.time_decay_divisor)
+            .exp();
+        let access_bonus = (memory.access_count as f64).ln().max(0.0)
+            * config.consciousness_step_size
+            * config.memory.access_bonus_stability_multiplier;
         let time_penalty = (1.0 - time_decay) as f32 * config.memory_threshold;
         memory.stability = (memory.stability + access_bonus - time_penalty as f64).clamp(0.0, 1.0);
     }
@@ -278,8 +294,7 @@ impl MobiusMemorySystem {
         let (r, g, b) = memory.emotional_vector;
 
         // Calculate novelty based on emotional vector
-        let novelty =
-            Self::calculate_novelty_static(&memory.emotional_vector, config);
+        let novelty = Self::calculate_novelty_static(&memory.emotional_vector, config);
 
         // Ensure novelty stays within bounds
         let target_novelty = if novelty < config.memory.novelty_bounds_min {
@@ -302,15 +317,13 @@ impl MobiusMemorySystem {
     }
 
     /// Calculate novelty of emotional vector
-    fn calculate_novelty_static(
-        emotional_vector: &(f64, f64, f64),
-        config: &AppConfig,
-    ) -> f64 {
+    fn calculate_novelty_static(emotional_vector: &(f64, f64, f64), config: &AppConfig) -> f64 {
         let entropy = config.memory.default_entropy;
         let (r, g, b) = *emotional_vector;
-        let distance_from_neutral =
-            ((r - config.consciousness.default_authenticity).powi(2) + (g - config.memory.emotional_neutral_g).powi(2) + (b - config.memory.emotional_neutral_b).powi(2))
-                .sqrt();
+        let distance_from_neutral = ((r - config.consciousness.default_authenticity).powi(2)
+            + (g - config.memory.emotional_neutral_g).powi(2)
+            + (b - config.memory.emotional_neutral_b).powi(2))
+        .sqrt();
         distance_from_neutral * (1.0 + entropy * config.consciousness.emotional_plasticity)
     }
 
@@ -442,7 +455,9 @@ impl MobiusMemorySystem {
     fn simple_hash(&self, content: &str, config: &AppConfig) -> u64 {
         let mut hash = 0u64;
         for byte in content.bytes() {
-            hash = hash.wrapping_mul(config.memory.hash_multiplier).wrapping_add(byte as u64);
+            hash = hash
+                .wrapping_mul(config.memory.hash_multiplier)
+                .wrapping_add(byte as u64);
         }
         hash
     }

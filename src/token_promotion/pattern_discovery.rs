@@ -153,8 +153,7 @@ impl PatternDiscoveryEngine {
                 let frequency = self.calculate_frequency(seq, memory_system);
                 let emotional_coherence =
                     self.calculate_emotional_coherence(seq, memory_system).await;
-                let spatial_locality =
-                    self.calculate_spatial_locality(seq, memory_system).await;
+                let spatial_locality = self.calculate_spatial_locality(seq, memory_system).await;
 
                 candidates.push(TokenCandidate {
                     bytes: seq.clone(),

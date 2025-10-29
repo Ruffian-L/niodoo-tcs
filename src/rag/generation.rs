@@ -147,8 +147,7 @@ impl RagGeneration {
         let outcome = self.generator.generate(&self.runtime, &prompt)?;
         info!(
             source = outcome.source,
-            "🧠 RAG generation complete (confidence {:.2})",
-            confidence
+            "🧠 RAG generation complete (confidence {:.2})", confidence
         );
         self.update_consciousness_state(state, &retrieved)?;
         Ok(outcome.text)
@@ -253,20 +252,27 @@ impl CascadeGenerator {
             .build()
             .context("failed to build HTTP client for RAG generator")?;
 
-        let claude = std::env::var("ANTHROPIC_API_KEY").ok().map(|api_key| ClaudeConfig {
-            api_key,
-            model: env_or("ANTHROPIC_MODEL", "claude-3-opus-20240229"),
-            endpoint: env_or(
-                "ANTHROPIC_ENDPOINT",
-                "https://api.anthropic.com/v1/messages",
-            ),
-        });
+        let claude = std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .map(|api_key| ClaudeConfig {
+                api_key,
+                model: env_or("ANTHROPIC_MODEL", "claude-3-opus-20240229"),
+                endpoint: env_or(
+                    "ANTHROPIC_ENDPOINT",
+                    "https://api.anthropic.com/v1/messages",
+                ),
+            });
 
-        let openai = std::env::var("OPENAI_API_KEY").ok().map(|api_key| OpenAiConfig {
-            api_key,
-            model: env_or("OPENAI_MODEL", "gpt-4o-mini"),
-            endpoint: env_or("OPENAI_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
-        });
+        let openai = std::env::var("OPENAI_API_KEY")
+            .ok()
+            .map(|api_key| OpenAiConfig {
+                api_key,
+                model: env_or("OPENAI_MODEL", "gpt-4o-mini"),
+                endpoint: env_or(
+                    "OPENAI_ENDPOINT",
+                    "https://api.openai.com/v1/chat/completions",
+                ),
+            });
 
         Ok(Self {
             client,
@@ -286,7 +292,10 @@ impl CascadeGenerator {
 
     async fn generate_async(&self, prompt: &str) -> Result<GenerationOutcome> {
         if self.mock_mode {
-            return Ok(GenerationOutcome::new(format!("Mock response: {}", prompt), "mock"));
+            return Ok(GenerationOutcome::new(
+                format!("Mock response: {}", prompt),
+                "mock",
+            ));
         }
 
         if let Some(claude) = &self.claude {

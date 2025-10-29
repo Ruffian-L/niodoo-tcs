@@ -2027,47 +2027,47 @@ pub struct MemoryConfig {
     pub learning_rate_multiplier: f64,
     pub decay_rate_multiplier: f64,
     pub consolidation_threshold_multiplier: f64,
-    
+
     /// Layer capacity multipliers
     pub layer_capacity_base_multiplier: f64,
     pub layer_capacity_per_layer_multiplier: f64,
-    
+
     /// Time decay divisor (converts seconds to hours)
     pub time_decay_divisor: f64,
-    
+
     /// Access bonus multiplier for stability calculation
     pub access_bonus_stability_multiplier: f64,
-    
+
     /// Hash multiplier for deterministic positioning
     pub hash_multiplier: u64,
-    
+
     /// Default entropy value for initial calculations
     pub default_entropy: f64,
-    
+
     /// Emotional vector neutral values (RGB coordinates)
     pub emotional_neutral_g: f64,
     pub emotional_neutral_b: f64,
-    
+
     /// Novelty score blending weights
     pub novelty_semantic_weight: f64,
     pub novelty_emotional_weight: f64,
-    
+
     /// Range transformation factors for cosine similarity
     pub cosine_range_offset: f64,
     pub cosine_range_multiplier: f64,
-    
+
     /// Philosophical meditation thresholds
     pub meditation_warmth_threshold: f64,
     pub meditation_authenticity_threshold: f64,
     pub meditation_empathy_threshold: f64,
-    
+
     /// Memory consolidation similarity threshold
     pub consolidation_similarity_threshold: f64,
-    
+
     /// Emotional analysis normalization factors
     pub entropy_confidence_divisor: f64,
     pub entropy_intensity_divisor: f64,
-    
+
     /// State metric intensity bases
     pub intensity_base_intensive: f64,
     pub intensity_base_processing_warm: f64,

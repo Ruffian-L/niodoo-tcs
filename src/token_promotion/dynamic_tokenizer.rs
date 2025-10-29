@@ -22,11 +22,11 @@ pub struct DynamicTokenizer {
 impl DynamicTokenizer {
     pub fn load_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         use std::path::Path;
-        
+
         let path = path.as_ref();
         let base_tokenizer = Tokenizer::from_file(path)
             .map_err(|e| anyhow!("Failed to load tokenizer from {}: {}", path.display(), e))?;
-        
+
         Ok(Self::new(base_tokenizer))
     }
 
@@ -111,19 +111,19 @@ impl DynamicTokenizer {
                         .next()
                         .map(|ch| ch.len_utf8())
                         .unwrap_or(1);
-                    
+
                     // Safety check: ensure we actually advance
                     if char_len == 0 {
                         index += 1;
                         continue;
                     }
-                    
+
                     let fallback_slice = &remaining[..char_len];
                     let fallback_ids = self
                         .base_tokenizer
                         .encode(fallback_slice, false)
                         .map_err(|err| anyhow!("tokenizer encoding failed: {err}"))?;
-                    
+
                     // Safety check: ensure fallback consumes something
                     if !fallback_ids.get_ids().is_empty() {
                         tokens.extend_from_slice(fallback_ids.get_ids());

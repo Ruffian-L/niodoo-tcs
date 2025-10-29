@@ -147,7 +147,7 @@ impl EragClient {
                 "Qdrant dim fixed to 896; using enforced dimension"
             );
         }
-        
+
         // Try vectors_config (Qdrant 1.8+) first, fallback to vectors (older versions)
         let create_body_new = json!({
             "vectors_config": {
@@ -155,7 +155,7 @@ impl EragClient {
                 "distance": "Cosine"
             }
         });
-        
+
         let create_body_old = json!({
             "vectors": {
                 "size": expected_dim,
@@ -164,14 +164,22 @@ impl EragClient {
         });
 
         let create_url = format!("{}/collections/{}", base_url, collection);
-        
+
         // Try new format first, fallback to old format if needed
-        let create_resp = client.put(&create_url).json(&create_body_new).send().await?;
+        let create_resp = client
+            .put(&create_url)
+            .json(&create_body_new)
+            .send()
+            .await?;
         let create_status = create_resp.status();
-        
+
         if !create_status.is_success() && create_status != 409 {
             // Try old format as fallback
-            let fallback_resp = client.put(&create_url).json(&create_body_old).send().await?;
+            let fallback_resp = client
+                .put(&create_url)
+                .json(&create_body_old)
+                .send()
+                .await?;
             let fallback_status = fallback_resp.status();
             if !fallback_status.is_success() && fallback_status != 409 {
                 let body = fallback_resp.text().await.unwrap_or_default();
@@ -183,11 +191,19 @@ impl EragClient {
         }
 
         let failures_url = format!("{}/collections/failures", base_url);
-        let failures_resp = client.put(&failures_url).json(&create_body_new).send().await?;
+        let failures_resp = client
+            .put(&failures_url)
+            .json(&create_body_new)
+            .send()
+            .await?;
         let failures_status = failures_resp.status();
         if !failures_status.is_success() && failures_status != 409 {
             // Try old format for failures collection too
-            let _ = client.put(&failures_url).json(&create_body_old).send().await;
+            let _ = client
+                .put(&failures_url)
+                .json(&create_body_old)
+                .send()
+                .await;
         }
 
         info!(
@@ -290,7 +306,9 @@ impl EragClient {
                         }
                         Err(err) => {
                             let err_msg = err.to_string();
-                            if err_msg.contains("ExpectedAnotherByte") || err_msg.contains("corrupted") {
+                            if err_msg.contains("ExpectedAnotherByte")
+                                || err_msg.contains("corrupted")
+                            {
                                 warn!(
                                     %err,
                                     "Failed to decode qdrant search response due to corrupted data, returning empty result"
@@ -334,9 +352,12 @@ impl EragClient {
                             )),
                         });
                     }
-                    
+
                     // Handle corrupted data gracefully - ExpectedAnotherByte indicates corruption
-                    if body.contains("ExpectedAnotherByte") || body.contains("corrupted") || body.contains("malformed") {
+                    if body.contains("ExpectedAnotherByte")
+                        || body.contains("corrupted")
+                        || body.contains("malformed")
+                    {
                         warn!(
                             %status,
                             "Qdrant collection has corrupted data, returning empty collapse result"
@@ -627,9 +648,12 @@ impl EragClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            
+
             // Handle corrupted data gracefully
-            if body.contains("ExpectedAnotherByte") || body.contains("corrupted") || body.contains("malformed") {
+            if body.contains("ExpectedAnotherByte")
+                || body.contains("corrupted")
+                || body.contains("malformed")
+            {
                 warn!(%status, "Qdrant search returned corrupted data error, returning empty result");
             } else {
                 warn!(%status, %body, "Qdrant search returned error, returning empty result");

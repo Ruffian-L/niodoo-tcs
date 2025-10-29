@@ -297,7 +297,8 @@ impl MultiLayerMemoryQuery {
             // Filter by emotional resonance > 0.2 (tunable threshold)
             if emotional_score > 0.2 {
                 // Calculate novelty score: configurable blend for 15-20% variance
-                let novelty_score = (semantic_score * self.config.memory.novelty_semantic_weight) + (emotional_score * self.config.memory.novelty_emotional_weight);
+                let novelty_score = (semantic_score * self.config.memory.novelty_semantic_weight)
+                    + (emotional_score * self.config.memory.novelty_emotional_weight);
 
                 combined_results.push(MemoryWithResonance {
                     id: doc.id.clone(),

@@ -23,7 +23,9 @@ async fn main() -> Result<()> {
         rng_seed_override: None,
     };
 
-    let mut pipeline = Pipeline::initialise_with_mode(args, niodoo_real_integrated::config::TopologyMode::Hybrid).await?;
+    let mut pipeline =
+        Pipeline::initialise_with_mode(args, niodoo_real_integrated::config::TopologyMode::Hybrid)
+            .await?;
 
     // Process sample
     let prompt = "test query";
@@ -31,6 +33,9 @@ async fn main() -> Result<()> {
     info!("Smoke complete: Hybrid response: {}", cycle.hybrid_response);
 
     // Print brief result
-    info!("✅ Smoke complete. Rouge {:.3}, Quadrant {:?}", cycle.rouge, cycle.compass.quadrant);
+    info!(
+        "✅ Smoke complete. Rouge {:.3}, Quadrant {:?}",
+        cycle.rouge, cycle.compass.quadrant
+    );
     Ok(())
 }

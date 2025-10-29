@@ -5,9 +5,9 @@
 use anyhow::{anyhow, Result};
 use candle_core::{Device, Shape, Tensor};
 use chrono::{DateTime, Utc};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use rayon::prelude::*;
 use std::time::Instant;
 
 /// Configuration for LoRA adapter

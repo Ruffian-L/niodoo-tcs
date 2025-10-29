@@ -1,8 +1,8 @@
+use rayon::prelude::*;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use rayon::prelude::*;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
@@ -27,10 +27,10 @@ use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use parking_lot::RwLock;
+use qdrant_client::prelude::*;
 use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::{info, warn};
-use qdrant_client::prelude::*;  // Assume dep
+use tracing::{info, warn}; // Assume dep
 
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
@@ -407,27 +407,25 @@ impl Pipeline {
 
         let tcs_start = Instant::now();
         let (topology, analysis_label) = match self.config.topology_mode {
-            TopologyMode::Hybrid => {
-                match self.tcs_analyzer.as_mut() {
-                    Some(analyzer) => match analyzer.analyze_state(&pad_state) {
-                        Ok(signature) => (signature, "hybrid"),
-                        Err(error) => {
-                            warn!(%error, "TCS analyzer failed; using analytic baseline signature");
-                            (
-                                baseline_topological_signature(&pad_state, &embedding),
-                                "hybrid_fallback",
-                            )
-                        }
-                    },
-                    None => {
-                        warn!("Hybrid mode requested but TCS analyzer unavailable; using analytic baseline signature");
+            TopologyMode::Hybrid => match self.tcs_analyzer.as_mut() {
+                Some(analyzer) => match analyzer.analyze_state(&pad_state) {
+                    Ok(signature) => (signature, "hybrid"),
+                    Err(error) => {
+                        warn!(%error, "TCS analyzer failed; using analytic baseline signature");
                         (
                             baseline_topological_signature(&pad_state, &embedding),
                             "hybrid_fallback",
                         )
                     }
+                },
+                None => {
+                    warn!("Hybrid mode requested but TCS analyzer unavailable; using analytic baseline signature");
+                    (
+                        baseline_topological_signature(&pad_state, &embedding),
+                        "hybrid_fallback",
+                    )
                 }
-            }
+            },
             TopologyMode::Baseline => (
                 baseline_topological_signature(&pad_state, &embedding),
                 "baseline",
@@ -468,7 +466,11 @@ impl Pipeline {
         let compass_task = tokio::task::spawn_blocking(move || {
             let mut engine = compass_guard;
             let mut rng = crate::util::seed_manager().get_rng(&compass_scope);
-            engine.evaluate_with_rng(&pad_state_for_compass, Some(&topology_for_compass), &mut rng)
+            engine.evaluate_with_rng(
+                &pad_state_for_compass,
+                Some(&topology_for_compass),
+                &mut rng,
+            )
         });
 
         let (compass, collapse) = tokio::try_join!(
@@ -1264,7 +1266,9 @@ fn baseline_topological_signature(
     let betti2 = sigma
         .iter()
         .zip(pad_state.raw_stds.iter())
-        .filter(|(sigma_value, raw_std)| **sigma_value > sigma_threshold && **sigma_value > **raw_std)
+        .filter(|(sigma_value, raw_std)| {
+            **sigma_value > sigma_threshold && **sigma_value > **raw_std
+        })
         .count();
 
     let knot_complexity = if pad.len() > 1 {
@@ -1309,7 +1313,10 @@ fn baseline_topological_signature(
         })
         .sum::<f64>();
 
-    let mut spectral_basis: Vec<f64> = embedding.iter().map(|value| (*value as f64).abs()).collect();
+    let mut spectral_basis: Vec<f64> = embedding
+        .iter()
+        .map(|value| (*value as f64).abs())
+        .collect();
     spectral_basis.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
     let spectral_gap = match spectral_basis.len() {
         0 => 0.0,

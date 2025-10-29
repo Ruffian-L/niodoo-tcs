@@ -1,7 +1,7 @@
-use std::collections::HashSet;
-use once_cell::sync::OnceCell;
 use blake3::hash as blake3_hash;
+use once_cell::sync::OnceCell;
 use rand::{rngs::StdRng, SeedableRng};
+use std::collections::HashSet;
 
 /// Compute Shannon entropy (base e) for a slice of probabilities.
 pub fn shannon_entropy(probs: &[f64]) -> f64 {
@@ -128,7 +128,11 @@ impl SeedManager {
         let seed = std::env::var("NIODOO_SEED")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
-            .or_else(|| std::env::var("RNG_SEED").ok().and_then(|v| v.parse::<u64>().ok()))
+            .or_else(|| {
+                std::env::var("RNG_SEED")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+            })
             .unwrap_or(42);
         Self::new(seed)
     }

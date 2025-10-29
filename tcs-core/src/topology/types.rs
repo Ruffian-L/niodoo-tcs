@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use nalgebra::DVector;
+use std::cmp::Ordering;
 
 /// Simple point wrapper so downstream code can swap in tensors later without
 /// touching the topology engine API.
@@ -79,9 +79,21 @@ impl PersistenceFeature {
 pub fn compute_persistence(data: &DVector<f64>) -> Vec<PersistenceFeature> {
     // Merged stub: dummy homology with 3 features
     vec![
-        PersistenceFeature { birth: 0.0, death: f64::INFINITY, dimension: 0 },
-        PersistenceFeature { birth: 0.0, death: 2.0, dimension: 1 },
-        PersistenceFeature { birth: 0.0, death: 2.0, dimension: 2 },
+        PersistenceFeature {
+            birth: 0.0,
+            death: f64::INFINITY,
+            dimension: 0,
+        },
+        PersistenceFeature {
+            birth: 0.0,
+            death: 2.0,
+            dimension: 1,
+        },
+        PersistenceFeature {
+            birth: 0.0,
+            death: 2.0,
+            dimension: 2,
+        },
     ]
 }
 

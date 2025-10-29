@@ -389,12 +389,7 @@ impl GenerationEngine {
 
         let echoes: Vec<LensEcho> = vec![claude];
         // Pass topology and MCTS branches to synthesize_hybrid for weighted merge
-        let hybrid = synthesize_hybrid(
-            &baseline,
-            &echoes,
-            &compass.mcts_branches,
-            topology,
-        );
+        let hybrid = synthesize_hybrid(&baseline, &echoes, &compass.mcts_branches, topology);
 
         // Adaptive resilience logic is experimental and disabled for now.
         // if adaptive_mode {
@@ -1298,8 +1293,7 @@ fn synthesize_hybrid(
 
     // If echo is significantly better (adjusted threshold), use weighted merge
     if !best_echo.is_empty()
-        && best_echo.len() as f64
-            > baseline.len() as f64 * (0.7 * threshold_multiplier)
+        && best_echo.len() as f64 > baseline.len() as f64 * (0.7 * threshold_multiplier)
     {
         // Baseline share decreases as alpha increases (more weight toward echo)
         let baseline_weight = (1.0 - alpha).clamp(0.2, 0.6);

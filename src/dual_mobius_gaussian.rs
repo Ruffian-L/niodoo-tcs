@@ -3057,7 +3057,7 @@ mod tests {
         let diag = kernel.diag();
         let var = diag.var(0.0);
         assert!(var < 0.0001); // No jitter
-                                   // Mock warn log
+                               // Mock warn log
 
         config.consent_jitter = true;
         let kernel_jitter = compute_rbf_kernel(&x, &x, &Array1::from_elem(x.len(), 1.0), 0.0);

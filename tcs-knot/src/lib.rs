@@ -145,10 +145,10 @@ mod tests {
     fn cache_memoization() {
         let mut analyzer = JonesPolynomial::new(DEFAULT_CACHE_CAPACITY);
         let trefoil = KnotDiagram::trefoil();
-        
+
         let result1 = analyzer.analyze(&trefoil);
         let result2 = analyzer.analyze(&trefoil);
-        
+
         assert_eq!(result1.polynomial, result2.polynomial);
         assert_eq!(result1.complexity_score, result2.complexity_score);
     }
@@ -156,28 +156,28 @@ mod tests {
     #[test]
     fn complexity_increases_with_crossings() {
         let mut analyzer = JonesPolynomial::new(DEFAULT_CACHE_CAPACITY);
-        
+
         let unknot = KnotDiagram::unknot();
         let trefoil = KnotDiagram::trefoil();
-        
+
         let unknot_result = analyzer.analyze(&unknot);
         let trefoil_result = analyzer.analyze(&trefoil);
-        
+
         assert!(trefoil_result.complexity_score > unknot_result.complexity_score);
     }
 
     #[test]
     fn different_knots_have_different_polynomials() {
         let mut analyzer = JonesPolynomial::new(DEFAULT_CACHE_CAPACITY);
-        
+
         let trefoil = KnotDiagram::trefoil();
         let figure_eight = KnotDiagram {
             crossings: vec![1, -1, 1, -1],
         };
-        
+
         let trefoil_result = analyzer.analyze(&trefoil);
         let figure_eight_result = analyzer.analyze(&figure_eight);
-        
+
         assert_ne!(trefoil_result.polynomial, figure_eight_result.polynomial);
     }
 }

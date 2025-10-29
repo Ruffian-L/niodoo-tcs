@@ -530,7 +530,10 @@ impl ExplorationAgent {
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(42);
-        Self { rng: StdRng::seed_from_u64(seed), action_space: DEFAULT_ACTION_SPACE }
+        Self {
+            rng: StdRng::seed_from_u64(seed),
+            action_space: DEFAULT_ACTION_SPACE,
+        }
     }
 }
 
@@ -1034,11 +1037,11 @@ mod tests {
         let mut agent_a = ExplorationAgent::with_seed(42);
         let mut agent_b = ExplorationAgent::with_seed(99);
         let state = vec![0.1, 0.4, -0.2];
-        
+
         // Not guaranteed to be different, but very likely
         let action_a = agent_a.select_action(&state);
         let action_b = agent_b.select_action(&state);
-        
+
         // At least verify they're valid actions (within action space)
         assert!(action_a < DEFAULT_ACTION_SPACE + ENERGY_PERTURBATION_MOD);
         assert!(action_b < DEFAULT_ACTION_SPACE + ENERGY_PERTURBATION_MOD);
@@ -1073,7 +1076,7 @@ mod tests {
         let layer = EquivariantLayer::new(3, 4);
         let positions = DMatrix::<f32>::from_row_slice(2, 3, &[1.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
         let features = DMatrix::<f32>::from_row_slice(2, 3, &[0.5, 0.3, 0.2, 0.4, 0.6, 0.1]);
-        
+
         let output = layer.forward(&positions, &features);
         assert_eq!(output.nrows(), 2);
         assert_eq!(output.ncols(), 4);
@@ -1083,7 +1086,7 @@ mod tests {
     fn pairwise_distances_positive() {
         let positions = DMatrix::<f32>::from_row_slice(2, 2, &[0.0, 0.0, 1.0, 1.0]);
         let distances = EquivariantLayer::pairwise_squared_distances(&positions);
-        
+
         assert_eq!(distances.nrows(), 2);
         assert_eq!(distances.ncols(), 2);
         assert!(distances[(0, 0)] >= 0.0);
@@ -1097,7 +1100,7 @@ mod tests {
             crossing_number: 3,
             complexity_score: 1.5,
         };
-        
+
         assert_eq!(knot.crossing_number, 3);
         assert!(knot.complexity_score > 0.0);
     }

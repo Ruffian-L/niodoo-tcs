@@ -47,7 +47,10 @@ impl TCSOrchestrator {
             config.takens_delay,
             config.takens_data_dim,
         );
-        let rl_agent = match std::env::var("NIODOO_SEED").ok().and_then(|v| v.parse::<u64>().ok()) {
+        let rl_agent = match std::env::var("NIODOO_SEED")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+        {
             Some(seed) => ExplorationAgent::with_seed(seed),
             None => ExplorationAgent::new(),
         };
@@ -258,7 +261,7 @@ mod tests {
     fn orchestrator_ready_state() {
         let mut orchestrator = TCSOrchestrator::new(8).unwrap();
         assert!(!orchestrator.ready());
-        
+
         // Add enough samples to fill buffer
         for _ in 0..8 {
             orchestrator.ingest_sample(vec![0.1, 0.2, 0.3]);
@@ -269,13 +272,13 @@ mod tests {
     #[test]
     fn orchestrator_reset_brain_context() {
         let mut orchestrator = TCSOrchestrator::new(8).unwrap();
-        
+
         // Add some data
         for _ in 0..8 {
             orchestrator.ingest_sample(vec![0.1, 0.2, 0.3]);
         }
         assert!(orchestrator.ready());
-        
+
         // Reset and verify
         orchestrator.reset_brain_context();
         assert!(!orchestrator.ready());
@@ -284,12 +287,12 @@ mod tests {
     #[tokio::test]
     async fn orchestrator_process_empty_input() {
         let mut orchestrator = TCSOrchestrator::new(8).unwrap();
-        
+
         // Fill buffer
         for _ in 0..8 {
             orchestrator.ingest_sample(vec![0.1, 0.2, 0.3]);
         }
-        
+
         let result = orchestrator.process("").await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
@@ -298,7 +301,7 @@ mod tests {
     #[tokio::test]
     async fn orchestrator_process_not_ready() {
         let mut orchestrator = TCSOrchestrator::new(8).unwrap();
-        
+
         // Don't fill buffer
         let result = orchestrator.process("test input").await;
         assert!(result.is_ok());

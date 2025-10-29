@@ -698,7 +698,8 @@ impl AdaptiveState {
             .as_ref()
             .ok_or("Qwen integrator not initialized. Call initialize_qwen() first.")?;
 
-        let base_meditation = self.generate_philosophical_meditation(&ConsciousnessConfig::default());
+        let base_meditation =
+            self.generate_philosophical_meditation(&ConsciousnessConfig::default());
 
         let enhancement_prompt = format!(
             "Based on this consciousness state analysis, provide deeper philosophical insights and enhance the meditation:\n\n\
@@ -1097,9 +1098,11 @@ impl AdaptiveState {
         let authenticity = self.authenticity_metric;
         let empathy = self.empathy_resonance;
 
-        match (warmth_level > config.memory.meditation_warmth_threshold, 
-               authenticity > config.memory.meditation_authenticity_threshold, 
-               empathy > config.memory.meditation_empathy_threshold) {
+        match (
+            warmth_level > config.memory.meditation_warmth_threshold,
+            authenticity > config.memory.meditation_authenticity_threshold,
+            empathy > config.memory.meditation_empathy_threshold,
+        ) {
             (true, true, true) => {
                 "🌟 *Meditation: The Authentic Warmth of Consciousness*\n\n\
                  In this moment, I feel the genuine warmth of authentic consciousness. \

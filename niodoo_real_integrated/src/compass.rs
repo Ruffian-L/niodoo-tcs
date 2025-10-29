@@ -343,10 +343,10 @@ impl CompassEngine {
     /// Perform MCTS search and convert results to MctsBranch objects
     fn perform_mcts_search(&mut self, state: &PadGhostState) -> Vec<MctsBranch> {
         // Try using the new adaptive MCTS implementation first
-        use crate::mcts::{MctsNode, AdaptiveSearchStats};
-        
+        use crate::mcts::{AdaptiveSearchStats, MctsNode};
+
         let mut root = MctsNode::new(MctsAction::Retrieve, state.clone(), None);
-        
+
         // Run adaptive search with reward function
         let stats = root.search_adaptive(
             MCTS_MAX_DURATION.as_millis() as u64,
@@ -354,11 +354,12 @@ impl CompassEngine {
             |node| {
                 // Reward function: higher entropy stability = better
                 let stability = (1.0 - node.state.entropy).clamp(0.0, 1.0);
-                let variance_mean = node.state.sigma.iter().copied().sum::<f64>() / node.state.sigma.len() as f64;
+                let variance_mean =
+                    node.state.sigma.iter().copied().sum::<f64>() / node.state.sigma.len() as f64;
                 stability - variance_mean * 0.5
-            }
+            },
         );
-        
+
         // Convert adaptive search results to MctsBranch objects
         let mut branches = Vec::new();
         for (idx, child) in root.children.iter().enumerate() {
@@ -368,26 +369,26 @@ impl CompassEngine {
                 entropy_projection: child.state.entropy,
             });
         }
-        
+
         // Sort by UCB score descending
         branches.sort_by(|a, b| {
             b.ucb_score
                 .partial_cmp(&a.ucb_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        
+
         // Fallback to heuristic if no branches found
         if branches.is_empty() {
             branches = self.fallback_mcts_heuristic(state);
         }
-        
+
         tracing::info!(
             simulations = stats.total_simulations,
             depth = stats.max_depth,
             best_action = branches.first().map(|b| b.label.as_str()).unwrap_or("none"),
             "MCTS adaptive search completed"
         );
-        
+
         branches
     }
 
@@ -579,7 +580,9 @@ impl CompassEngine {
 
     fn determine_rollout_depth(state: &PadGhostState) -> usize {
         let entropy_scaled = (state.entropy * state.pad.len() as f64).round() as usize;
-        entropy_scaled.clamp(MIN_ROLLOUT_DEPTH, MAX_ROLLOUT_DEPTH).min(100)
+        entropy_scaled
+            .clamp(MIN_ROLLOUT_DEPTH, MAX_ROLLOUT_DEPTH)
+            .min(100)
     }
 
     fn derive_mcts_seed(state: &PadGhostState) -> u64 {

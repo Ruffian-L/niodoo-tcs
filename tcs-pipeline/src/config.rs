@@ -96,7 +96,7 @@ mod tests {
             default_coherence = 0.8
             enable_tqft_checks = false
         "#;
-        
+
         let config: Result<TCSConfig, _> = toml::from_str(toml_str);
         assert!(config.is_ok());
         let config = config.unwrap();
@@ -109,14 +109,14 @@ mod tests {
     fn config_from_file() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("test_config.toml");
-        
+
         let config = TCSConfig::default();
         let toml_str = toml::to_string(&config).unwrap();
         fs::write(&config_path, toml_str).unwrap();
-        
+
         let loaded_config = TCSConfig::from_file(&config_path);
         assert!(loaded_config.is_ok());
-        
+
         let loaded = loaded_config.unwrap();
         assert_eq!(loaded.takens_dimension, config.takens_dimension);
         assert_eq!(loaded.consensus_threshold, config.consensus_threshold);

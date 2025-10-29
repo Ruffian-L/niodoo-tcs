@@ -25,25 +25,25 @@ pub struct ThresholdConfig {
     pub memory_pressure_factor: f64,
     /// Load factor for dynamic adjustment (0.1-2.0)
     pub load_factor: f64,
-    
+
     // CPU/Memory weighting factors
     /// CPU usage weight for load calculation
     pub cpu_weight: f64,
     /// Memory usage weight for load calculation
     pub memory_weight: f64,
-    
+
     // Load scaling factors
     /// Minimum load scaling value
     pub min_load_scale: f64,
     /// Maximum load scaling multiplier
     pub max_load_scale_multiplier: f64,
-    
+
     // Performance calculation parameters
     /// Core count log multiplier
     pub core_log_multiplier: f64,
     /// Memory GB sqrt multiplier
     pub memory_sqrt_multiplier: f64,
-    
+
     // Threshold base values
     /// Base emotion threshold
     pub base_emotion_threshold: f64,
@@ -53,7 +53,7 @@ pub struct ThresholdConfig {
     pub base_pattern_sensitivity: f64,
     /// Base stability threshold
     pub base_stability_threshold: f64,
-    
+
     // Threshold ranges (min, max)
     /// Emotion threshold range
     pub emotion_threshold_range: (f64, f64),
@@ -67,11 +67,11 @@ pub struct ThresholdConfig {
     pub confidence_threshold_range: (f64, f64),
     /// Performance factor range
     pub performance_factor_range: (f64, f64),
-    
+
     // Memory pressure adjustment
     /// Memory pressure adjustment factor
     pub memory_pressure_adjustment: f64,
-    
+
     // Timeout durations (milliseconds)
     /// Critical timeout duration
     pub timeout_critical_ms: u64,
@@ -81,7 +81,7 @@ pub struct ThresholdConfig {
     pub timeout_normal_ms: u64,
     /// Low priority timeout duration
     pub timeout_low_ms: u64,
-    
+
     // Retry configuration
     /// Base retry delay in milliseconds
     pub retry_base_delay_ms: u64,
@@ -98,25 +98,25 @@ impl Default for ThresholdConfig {
             performance_factor: 0.8,
             memory_pressure_factor: 0.9,
             load_factor: 1.0,
-            
+
             // CPU/Memory weighting
             cpu_weight: 0.6,
             memory_weight: 0.4,
-            
+
             // Load scaling
             min_load_scale: 0.1,
             max_load_scale_multiplier: 1.9,
-            
+
             // Performance calculation
             core_log_multiplier: 0.3,
             memory_sqrt_multiplier: 0.1,
-            
+
             // Threshold bases
             base_emotion_threshold: 0.7,
             base_memory_threshold: 0.6,
             base_pattern_sensitivity: 0.7,
             base_stability_threshold: 0.95,
-            
+
             // Threshold ranges
             emotion_threshold_range: (0.3, 0.9),
             memory_threshold_range: (0.4, 0.8),
@@ -124,16 +124,16 @@ impl Default for ThresholdConfig {
             stability_threshold_range: (0.8, 0.99),
             confidence_threshold_range: (0.5, 0.99),
             performance_factor_range: (0.1, 1.0),
-            
+
             // Memory pressure
             memory_pressure_adjustment: 0.2,
-            
+
             // Timeouts
             timeout_critical_ms: 100,
             timeout_high_ms: 500,
             timeout_normal_ms: 2000,
             timeout_low_ms: 10000,
-            
+
             // Retry
             retry_base_delay_ms: 100,
             retry_multiplier: 2.0,
@@ -175,10 +175,12 @@ impl ThresholdCalculator {
             1.0 - (self.system.available_memory() as f64 / self.system.total_memory() as f64);
 
         // Combine CPU and memory usage with weighting
-        let load_factor = (cpu_usage * self.config.cpu_weight) + (memory_usage * self.config.memory_weight);
+        let load_factor =
+            (cpu_usage * self.config.cpu_weight) + (memory_usage * self.config.memory_weight);
 
         // Scale to reasonable range
-        let scaled_load = self.config.min_load_scale + (load_factor * self.config.max_load_scale_multiplier);
+        let scaled_load =
+            self.config.min_load_scale + (load_factor * self.config.max_load_scale_multiplier);
         debug!(
             "System load factor: {:.3} (CPU: {:.1}%, Memory: {:.1}%)",
             scaled_load,
@@ -195,7 +197,8 @@ impl ThresholdCalculator {
         let total_memory_gb = self.system.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
 
         // Base performance factor from cores and memory
-        let base_perf = (logical_cores.log10() * self.config.core_log_multiplier) + (total_memory_gb.sqrt() * self.config.memory_sqrt_multiplier);
+        let base_perf = (logical_cores.log10() * self.config.core_log_multiplier)
+            + (total_memory_gb.sqrt() * self.config.memory_sqrt_multiplier);
 
         // Adjust for current load
         let load_factor = self.get_system_load_factor();
@@ -206,7 +209,10 @@ impl ThresholdCalculator {
             adaptive_perf, logical_cores, total_memory_gb, load_factor
         );
 
-        adaptive_perf.clamp(self.config.performance_factor_range.0, self.config.performance_factor_range.1)
+        adaptive_perf.clamp(
+            self.config.performance_factor_range.0,
+            self.config.performance_factor_range.1,
+        )
     }
 
     /// Calculate confidence threshold using Gaussian process principles
@@ -230,7 +236,10 @@ impl ThresholdCalculator {
             adaptive_confidence, confidence, perf_factor, load_factor
         );
 
-        adaptive_confidence.clamp(self.config.confidence_threshold_range.0, self.config.confidence_threshold_range.1)
+        adaptive_confidence.clamp(
+            self.config.confidence_threshold_range.0,
+            self.config.confidence_threshold_range.1,
+        )
     }
 
     /// Calculate emotion threshold based on system state
@@ -239,7 +248,10 @@ impl ThresholdCalculator {
         let adaptive_threshold = base_threshold * self.get_performance_factor();
 
         debug!("Emotion threshold: {:.3}", adaptive_threshold);
-        adaptive_threshold.clamp(self.config.emotion_threshold_range.0, self.config.emotion_threshold_range.1) as f32
+        adaptive_threshold.clamp(
+            self.config.emotion_threshold_range.0,
+            self.config.emotion_threshold_range.1,
+        ) as f32
     }
 
     /// Calculate memory threshold for consolidation
@@ -249,13 +261,18 @@ impl ThresholdCalculator {
         let memory_pressure =
             1.0 - (self.system.available_memory() as f64 / self.system.total_memory() as f64);
 
-        let adaptive_threshold = base_threshold * perf_factor * (1.0 + memory_pressure * self.config.memory_pressure_adjustment);
+        let adaptive_threshold = base_threshold
+            * perf_factor
+            * (1.0 + memory_pressure * self.config.memory_pressure_adjustment);
 
         debug!(
             "Memory threshold: {:.3} (perf: {:.3}, memory_pressure: {:.3})",
             adaptive_threshold, perf_factor, memory_pressure
         );
-        adaptive_threshold.clamp(self.config.memory_threshold_range.0, self.config.memory_threshold_range.1) as f32
+        adaptive_threshold.clamp(
+            self.config.memory_threshold_range.0,
+            self.config.memory_threshold_range.1,
+        ) as f32
     }
 
     /// Calculate pattern sensitivity threshold
@@ -264,7 +281,10 @@ impl ThresholdCalculator {
         let adaptive_sensitivity = base_sensitivity * self.get_performance_factor();
 
         debug!("Pattern sensitivity: {:.3}", adaptive_sensitivity);
-        adaptive_sensitivity.clamp(self.config.pattern_sensitivity_range.0, self.config.pattern_sensitivity_range.1) as f32
+        adaptive_sensitivity.clamp(
+            self.config.pattern_sensitivity_range.0,
+            self.config.pattern_sensitivity_range.1,
+        ) as f32
     }
 
     /// Calculate consciousness stability threshold
@@ -273,7 +293,10 @@ impl ThresholdCalculator {
         let adaptive_stability = base_stability * self.get_performance_factor();
 
         debug!("Stability threshold: {:.3}", adaptive_stability);
-        adaptive_stability.clamp(self.config.stability_threshold_range.0, self.config.stability_threshold_range.1)
+        adaptive_stability.clamp(
+            self.config.stability_threshold_range.0,
+            self.config.stability_threshold_range.1,
+        )
     }
 
     /// Calculate timeout duration based on operation criticality

@@ -16,8 +16,8 @@ use crate::tcs_analysis::TopologicalSignature;
 use crate::tcs_predictor::TcsPredictor;
 use crate::token_manager::DynamicTokenizerManager;
 use crate::torus::PadGhostState;
-use tcs_ml::InferenceModelBackend;
 use ndarray::Array1;
+use tcs_ml::InferenceModelBackend;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -1039,9 +1039,17 @@ pub fn dqn_step(state: Vec<f32>) -> u32 {
         return 0;
     }
     let q_values = Array1::from_vec(state);
-    q_values.iter().enumerate().fold((0, f32::MIN), |max_idx, (i, &val)| {
-        if val > max_idx.1 { (i as u32, val) } else { max_idx }
-    }).0
+    q_values
+        .iter()
+        .enumerate()
+        .fold((0, f32::MIN), |max_idx, (i, &val)| {
+            if val > max_idx.1 {
+                (i as u32, val)
+            } else {
+                max_idx
+            }
+        })
+        .0
 }
 
 pub struct GaussianProcess {
