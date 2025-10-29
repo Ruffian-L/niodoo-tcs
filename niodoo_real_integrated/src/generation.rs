@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use once_cell::sync::OnceCell;
 use reqwest::Client;
 use reqwest::StatusCode;
@@ -360,8 +360,10 @@ impl GenerationEngine {
         } else if let Some(topo) = topology {
             if topo.knot_complexity > 0.6 {
                 // High complexity - need more structured reasoning
-                format!("{}\n[Note: Complex topological structure detected (knot={:.2}). Apply systematic reasoning.]", 
-                    tokenizer_output.augmented_prompt, topo.knot_complexity)
+                format!(
+                    "{}\n[Note: Complex topological structure detected (knot={:.2}). Apply systematic reasoning.]",
+                    tokenizer_output.augmented_prompt, topo.knot_complexity
+                )
             } else if topo.spectral_gap > 0.7 {
                 // High spectral gap - encourage exploration
                 format!(
@@ -978,7 +980,9 @@ impl GenerationEngine {
         detail: &str,
         retry_index: u32,
     ) -> Result<GenerationResult> {
-        let augmented = format!("{prompt}\n\n[CoT Repair #{retry_index}]: Re-evaluate {detail}. Step-by-step: 1. Identify flaw. 2. Correct logic. 3. Verify.");
+        let augmented = format!(
+            "{prompt}\n\n[CoT Repair #{retry_index}]: Re-evaluate {detail}. Step-by-step: 1. Identify flaw. 2. Correct logic. 3. Verify."
+        );
         let mut temp = self.temperature + 0.1 * retry_index as f64;
         temp = temp.min(1.0);
         // In production: regenerate with augmented and temp
@@ -1010,7 +1014,9 @@ impl GenerationEngine {
             ""
         };
 
-        let augmented = format!("{prompt}\n\n[CoT Repair #{retry_index}]: Re-evaluate {detail}. {topology_hint}\nStep-by-step: 1. Identify flaw. 2. Correct logic. 3. Verify.");
+        let augmented = format!(
+            "{prompt}\n\n[CoT Repair #{retry_index}]: Re-evaluate {detail}. {topology_hint}\nStep-by-step: 1. Identify flaw. 2. Correct logic. 3. Verify."
+        );
 
         // Adjust temperature based on topology
         let mut temp = self.temperature + 0.1 * retry_index as f64;
@@ -1078,7 +1084,15 @@ impl GenerationEngine {
         detail: &str,
         retry_index: u32,
     ) -> Result<GenerationResult> {
-        let reflection = format!("Previous (ROUGE {previous_rouge:.2}): {prev_text}\nFailed due to {detail}.\nHypothesis: [error analysis]. Corrected approach:", previous_rouge = previous_gen.rouge_score, prev_text = previous_gen.baseline_response.chars().take(200).collect::<String>());
+        let reflection = format!(
+            "Previous (ROUGE {previous_rouge:.2}): {prev_text}\nFailed due to {detail}.\nHypothesis: [error analysis]. Corrected approach:",
+            previous_rouge = previous_gen.rouge_score,
+            prev_text = previous_gen
+                .baseline_response
+                .chars()
+                .take(200)
+                .collect::<String>()
+        );
         let augmented = format!("{reflection}\n\n{prompt}");
         let mut top_p = self.top_p - 0.05 * retry_index as f64;
         top_p = top_p.max(0.5);

@@ -529,8 +529,12 @@ mod tests {
 
     #[test]
     fn test_rag_generation_mock() -> Result<()> {
-        std::env::set_var("NIODOO_EMBEDDINGS_MOCK", "1");
-        std::env::set_var("NIODOO_GENERATION_MOCK", "1");
+        if std::env::var("REAL_TEST").is_err() {
+            unsafe {
+                std::env::set_var("NIODOO_EMBEDDINGS_MOCK", "1");
+                std::env::set_var("NIODOO_GENERATION_MOCK", "1");
+            }
+        }
         let mut rag = RagGeneration::new(RagRuntimeConfig::default())?;
 
         let documents = vec![Document {

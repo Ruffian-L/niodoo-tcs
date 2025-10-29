@@ -11,9 +11,9 @@ use anyhow::Context;
 use anyhow::Result;
 use async_trait::async_trait;
 use nalgebra::{DMatrix, DVector};
+use rand::SeedableRng;
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
-use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tracing::{info, warn};
@@ -54,16 +54,13 @@ mod inference_backend {
         use std::sync::{Arc, Mutex};
 
         use crate::f16;
-        use anyhow::{anyhow, Context, Result};
+        use anyhow::{Context, Result, anyhow};
         use ndarray::{Array2, CowArray};
         use ort::{
             environment::Environment,
             session::{Session, SessionBuilder},
             value::Value,
         };
-        use ort::execution_providers::ExecutionProvider;
-        #[cfg(feature = "cuda")]
-        use ort::execution_providers::CUDAExecutionProvider;
         #[cfg(feature = "tokenizers")]
         use tokenizers::Tokenizer;
 
@@ -95,27 +92,8 @@ mod inference_backend {
             }
 
             pub fn load(&self, model_path: &str) -> Result<()> {
-                let builder = SessionBuilder::new(&self.environment)
-                    .context("failed to create ORT session builder")?;
-
-                #[cfg(feature = "cuda")]
-                let builder = match builder
-                    .with_execution_providers([CUDAExecutionProvider::default().build()?])
-                {
-                    Ok(b) => {
-                        tracing::info!("Enabled CUDA Execution Provider for ONNX Runtime");
-                        b
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to enable CUDA EP: {}. Falling back to available providers", e);
-                        builder.with_execution_providers(ExecutionProvider::all()?)?
-                    }
-                };
-
-                #[cfg(not(feature = "cuda"))]
-                let builder = builder.with_execution_providers(ExecutionProvider::all()?)?;
-
-                let session = builder
+                let session = SessionBuilder::new(&self.environment)
+                    .context("failed to create ORT session builder")?
                     .with_model_from_file(model_path)
                     .with_context(|| format!("failed to load ONNX model from {model_path}"))?;
 
@@ -426,7 +404,7 @@ mod inference_backend {
                                 return Err(anyhow!(
                                     "Failed to extract tensor as f32 or f16: {}",
                                     e
-                                ))
+                                ));
                             }
                         }
                     }

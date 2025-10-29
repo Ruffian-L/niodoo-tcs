@@ -4,9 +4,7 @@ use std::io::BufReader;
 use crate::util::shannon_entropy;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
-use rand::{seq::SliceRandom, Rng};
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

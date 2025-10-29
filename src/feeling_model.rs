@@ -1049,7 +1049,7 @@ impl FeelingReasoner {
         let noise_data: Vec<f32> = (0..(noise_shape.0 * noise_shape.1))
             .map(|_| {
                 use rand::Rng; // Import Rng trait for the random method
-                rng.gen::<f32>() * 2.0 - 1.0 // Generate values in [-1, 1]
+                rng.r#gen::<f32>() * 2.0 - 1.0 // Generate values in [-1, 1]
             })
             .collect();
         let random_noise = Array2::<f32>::from_shape_vec(noise_shape, noise_data)
@@ -1098,7 +1098,7 @@ impl FeelingReasoner {
         let mut rng = rand::thread_rng();
         let noise_shape = input.dim();
         let noise_data: Vec<f32> = (0..(noise_shape.0 * noise_shape.1))
-            .map(|_| rng.gen::<f32>())
+            .map(|_| rng.r#gen::<f32>())
             .collect();
         let random_noise = Array2::<f32>::from_shape_vec(noise_shape, noise_data).unwrap();
         let intuitive_input = input + random_noise;

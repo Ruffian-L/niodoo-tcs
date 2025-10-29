@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use blake3::Hasher;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand_distr::StandardNormal;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing::instrument;
 
 use crate::mcts::MctsAction;
@@ -343,7 +345,7 @@ impl CompassEngine {
     /// Perform MCTS search and convert results to MctsBranch objects
     fn perform_mcts_search(&mut self, state: &PadGhostState) -> Vec<MctsBranch> {
         // Try using the new adaptive MCTS implementation first
-        use crate::mcts::{AdaptiveSearchStats, MctsNode};
+        use crate::mcts::MctsNode;
 
         let mut root = MctsNode::new(MctsAction::Retrieve, state.clone(), None);
 
@@ -362,7 +364,7 @@ impl CompassEngine {
 
         // Convert adaptive search results to MctsBranch objects
         let mut branches = Vec::new();
-        for (idx, child) in root.children.iter().enumerate() {
+        for child in root.children.iter() {
             branches.push(MctsBranch {
                 label: child.action.to_string(),
                 ucb_score: child.ucb1(self.exploration_c),

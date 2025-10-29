@@ -12,6 +12,12 @@ impl GudhiEngine {
     }
 }
 
+impl Default for GudhiEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TopologyEngine for GudhiEngine {
     fn compute_persistence(
         &self,

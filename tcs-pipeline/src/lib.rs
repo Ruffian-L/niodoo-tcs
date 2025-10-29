@@ -9,7 +9,7 @@ mod config;
 use anyhow::Result;
 use tcs_consensus::{ThresholdConsensus, TokenProposal};
 use tcs_core::embeddings::EmbeddingBuffer;
-use tcs_core::events::{snapshot_event, TopologicalEvent};
+use tcs_core::events::{TopologicalEvent, snapshot_event};
 use tcs_core::state::CognitiveState;
 use tcs_core::{PersistentFeature, StageTimer};
 use tcs_knot::{CognitiveKnot, JonesPolynomial, KnotDiagram};

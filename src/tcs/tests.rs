@@ -222,7 +222,7 @@ mod integration_tests {
             .iter()
             .map(|p| {
                 p.iter()
-                    .map(|&v| v + rng.gen::<f32>() * noise_level)
+                    .map(|&v| v + rng.r#gen::<f32>() * noise_level)
                     .collect()
             })
             .collect()

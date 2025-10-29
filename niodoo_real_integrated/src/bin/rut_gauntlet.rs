@@ -514,11 +514,26 @@ fn export_csv(results: &[TestResult], path: &Path) -> Result<()> {
         "coherence_rouge",
         "rouge_l",
         "generation_source",
+        "quadrant",
         "raw_stds",
     ])?;
 
     for result in results {
-        writer.serialize(result)?;
+        writer.write_record(&[
+            result.cycle.to_string(),
+            result.prompt.clone(),
+            result.response.clone(),
+            result.entropy.to_string(),
+            result.is_threat.to_string(),
+            result.is_healing.to_string(),
+            result.latency_ms.to_string(),
+            serde_json::to_string(&result.learning_events)?,
+            result.coherence_rouge.to_string(),
+            result.rouge_l.to_string(),
+            result.generation_source.clone(),
+            result.quadrant.clone(),
+            serde_json::to_string(&result.raw_stds)?,
+        ])?;
     }
 
     writer.flush()?;

@@ -6,10 +6,10 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
-use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 
 static ENV_OVERRIDES: OnceCell<RwLock<HashMap<String, String>>> = OnceCell::new();
 
@@ -26,7 +26,11 @@ where
 }
 
 pub fn env_value(key: &str) -> Option<String> {
-    env_store().read().get(key).cloned().or_else(|| env::var(key).ok())
+    env_store()
+        .read()
+        .get(key)
+        .cloned()
+        .or_else(|| env::var(key).ok())
 }
 
 pub fn env_var(key: &str) -> std::result::Result<String, std::env::VarError> {

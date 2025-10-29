@@ -30,9 +30,7 @@ members = [
     "constants_core",
     "niodoo_real_integrated",
     "tcs-core-wasm",
-    "tcs-code-tools",
-    # Transitional member until all modules migrate
-    "src",
+    "tcs-code-tools"
 ]
 exclude = [
     "candle-feeling-core-v2",
@@ -50,7 +48,7 @@ resolver = "2"
 [workspace.package]
 authors = ["NiodO.o Topology Team <niodoo@dev>"]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.87"
 license-file = "LICENSE"
 repository = "https://github.com/Ruffian-L/niodoo-tcs"
 version = "0.1.0"

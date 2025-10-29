@@ -58,8 +58,8 @@ pub mod hotstuff {
     use std::collections::HashSet;
     use std::error::Error;
     use std::fmt;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_PROPOSAL_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -262,7 +262,7 @@ pub mod hotstuff {
 
 #[cfg(test)]
 mod hotstuff_tests {
-    use super::hotstuff::{commit, propose, supermajority_threshold, vote, FakeNode};
+    use super::hotstuff::{FakeNode, commit, propose, supermajority_threshold, vote};
     use std::future::Future;
     use std::pin::Pin;
     use std::ptr;

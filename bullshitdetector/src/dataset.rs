@@ -125,7 +125,7 @@ impl DatasetGenerator {
         ];
 
         let mut cumulative = 0.0;
-        let random_value = self.rng.gen::<f32>();
+        let random_value = self.rng.r#gen::<f32>();
 
         for (bs_type, weight) in types {
             cumulative += weight;

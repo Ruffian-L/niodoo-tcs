@@ -1,7 +1,7 @@
 use anyhow::Result;
 use nalgebra::SVector;
 use rand::Rng;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 use tracing::{debug, instrument};
 
 use crate::util::shannon_entropy;

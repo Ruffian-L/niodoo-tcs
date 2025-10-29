@@ -65,7 +65,7 @@ impl EmbeddingEngine {
         let mut rng = rand::thread_rng();
         for i in 4..self.dimension {
             let noise_factor = (i as f64 / self.dimension as f64) * std::f64::consts::PI;
-            embedding[i] = (noise_factor.sin() * rng.gen::<f64>()).abs();
+            embedding[i] = (noise_factor.sin() * rng.r#gen::<f64>()).abs();
         }
 
         embedding.normalize() // Normalize for cosine similarity

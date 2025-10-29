@@ -104,7 +104,7 @@ fn generate_random_points(n: usize) -> Vec<Vec<f32>> {
     let mut rng = rand::thread_rng();
 
     (0..n)
-        .map(|_| vec![rng.gen::<f32>() * 10.0, rng.gen::<f32>() * 10.0, rng.gen::<f32>() * 10.0])
+        .map(|_| vec![rng.r#gen::<f32>() * 10.0, rng.r#gen::<f32>() * 10.0, rng.r#gen::<f32>() * 10.0])
         .collect()
 }
 
@@ -116,9 +116,9 @@ fn generate_time_series(length: usize) -> Vec<Vec<f32>> {
         .map(|i| {
             let t = i as f32 * 0.1;
             vec![
-                (t * 0.5).sin() + rng.gen::<f32>() * 0.1,
-                (t * 0.7).cos() + rng.gen::<f32>() * 0.1,
-                (t * 0.3).sin() + (t * 0.4).cos() + rng.gen::<f32>() * 0.1,
+                (t * 0.5).sin() + rng.r#gen::<f32>() * 0.1,
+                (t * 0.7).cos() + rng.r#gen::<f32>() * 0.1,
+                (t * 0.3).sin() + (t * 0.4).cos() + rng.r#gen::<f32>() * 0.1,
             ]
         })
         .collect()

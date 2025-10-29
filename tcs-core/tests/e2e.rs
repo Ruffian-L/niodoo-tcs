@@ -7,7 +7,7 @@ use csv::Writer;
 use rand::Rng;
 use std::fs::File;
 use std::time::Instant;
-use tcs_core::{init_metrics, TopologicalEngine};
+use tcs_core::{TopologicalEngine, init_metrics};
 
 #[test]
 fn e2e_benchmark() {
@@ -33,7 +33,7 @@ fn e2e_benchmark() {
         let start = std::time::Instant::now();
         let state: Vec<f32> = (0..128).map(|_| rng.gen_range(-1.0..1.0)).collect();
 
-        let rag_acc = if rng.gen::<f64>() > 0.15 { 0.85 } else { 0.2 };
+        let rag_acc = if rng.r#gen::<f64>() > 0.15 { 0.85 } else { 0.2 };
 
         let tda_start = Instant::now();
         let output = engine.predict_reward(&state).unwrap();
@@ -99,8 +99,10 @@ fn e2e_benchmark() {
         }
 
         if run % 100 == 0 {
-            println!("Run {}: Overhead {:.2}%, Stuck {:.3}, RAG {:.3}, Drop {:.2}%, Var {:.3}, TDA {:.2}ms", 
-                run, overhead, stuck_rate, rag_acc, drop, var, tda_latency);
+            println!(
+                "Run {}: Overhead {:.2}%, Stuck {:.3}, RAG {:.3}, Drop {:.2}%, Var {:.3}, TDA {:.2}ms",
+                run, overhead, stuck_rate, rag_acc, drop, var, tda_latency
+            );
         }
     }
 

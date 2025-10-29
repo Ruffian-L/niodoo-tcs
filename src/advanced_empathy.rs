@@ -555,7 +555,7 @@ impl EmpathyQNetwork {
             // Epsilon-greedy with empathy bias
             use rand::Rng; // Import Rng trait for random and random_range methods
             let mut rng = rand::thread_rng();
-            if rng.gen::<f64>() < self.epsilon {
+            if rng.r#gen::<f64>() < self.epsilon {
                 rng.gen_range(0..self.action_dim)
             } else {
                 enhanced_q

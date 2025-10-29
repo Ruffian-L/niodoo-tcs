@@ -85,7 +85,7 @@ impl CompassEngine {
             if state.entropy <= 0.0 {
                 tracing::warn!("Non-positive entropy detected in mcts_explore: {}", state.entropy);
             }
-            let exploration_bonus = self.mcts_c * (safe_entropy.ln() / (1.0 + rng.gen::<f64>())).sqrt();
+            let exploration_bonus = self.mcts_c * (safe_entropy.ln() / (1.0 + rng.r#gen::<f64>())).sqrt();
 
             // Generate branch based on emotional state + exploration
             let branch = format!("explore_{:.2}_{:.2}",

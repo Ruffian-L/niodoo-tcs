@@ -1,7 +1,7 @@
 //! Response parser trait system for curator quality assessment
 //! Modular parsing strategies with fallback cascading
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use regex::Regex;
 use serde_json::Value;
 use tracing::{debug, warn};

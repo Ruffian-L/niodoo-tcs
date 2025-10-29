@@ -2,7 +2,7 @@
 ///
 /// Implements a real LoRA adapter using candle-core for efficient fine-tuning
 /// with rank-8 low-rank decomposition and Kaiming initialization.
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use candle_core::{Device, Shape, Tensor};
 use chrono::{DateTime, Utc};
 use rayon::prelude::*;
@@ -27,7 +27,7 @@ impl Default for LoRAConfig {
     fn default() -> Self {
         Self {
             rank: 8,
-            alpha: 16.0,
+            alpha: 16.0f32,
             input_dim: 896,
             output_dim: 896,
         }
@@ -65,14 +65,14 @@ impl LoRAAdapter {
         // Initialize lora_a with Kaiming uniform distribution
         // Kaiming initialization: std = sqrt(2 / fan_in)
         let fan_in = config.input_dim as f32;
-        let kaiming_std = (2.0 / fan_in).sqrt();
+        let kaiming_std = (2.0_f32 / fan_in).sqrt();
         let kaiming_bound = kaiming_std * (6.0_f32).sqrt(); // sqrt(3) * std for uniform
 
         // Create lora_a with random values from Kaiming distribution
         let lora_a_data = {
-            use rand::rngs::StdRng;
             use rand::Rng;
             use rand::SeedableRng;
+            use rand::rngs::StdRng;
             let mut rng = StdRng::seed_from_u64(42); // Deterministic seed
             let mut values = vec![0.0_f32; config.input_dim * config.rank];
             for val in &mut values {
@@ -399,7 +399,7 @@ impl LoRATrainer {
             candle_core::DType::F32,
             &device,
         )?;
-        let momentum_factor = 0.9;
+        let momentum_factor = 0.9f32;
 
         let training_start = Instant::now();
         for epoch in 0..epochs {
@@ -514,7 +514,7 @@ impl LoRATrainer {
                         // Compute gradients for batched input (avg over batch)
                         let scaling = self.config.alpha / self.config.rank as f32;
                         let diff = batched_output.sub(&batched_target)?;
-                        let grad_output = diff.broadcast_mul(&Tensor::new(&[2.0], &device)?)?;
+                        let grad_output = diff.broadcast_mul(&Tensor::new(&[2.0f32], &device)?)?;
                         let grad_output_scaled =
                             grad_output.broadcast_mul(&Tensor::new(&[scaling], &device)?)?;
 
@@ -593,6 +593,7 @@ impl LoRATrainer {
     /// Compute proper gradients using chain rule for LoRA
     /// For LoRA: output = scaling * (input @ A @ B)
     /// Backpropagation computes dL/dB and dL/dA correctly
+    #[allow(dead_code)]
     fn compute_gradients(
         &self,
         input: &Tensor,
@@ -604,7 +605,7 @@ impl LoRATrainer {
 
         // dL/doutput = 2 * (output - target) for MSE loss
         let diff = output.sub(target)?;
-        let grad_output = diff.broadcast_mul(&Tensor::new(&[2.0], device)?)?;
+        let grad_output = diff.broadcast_mul(&Tensor::new(&[2.0f32], device)?)?;
 
         // Scale by LoRA scaling factor
         let grad_output_scaled = grad_output.broadcast_mul(&Tensor::new(&[scaling], device)?)?;

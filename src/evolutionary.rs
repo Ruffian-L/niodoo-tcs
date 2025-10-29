@@ -110,65 +110,65 @@ impl PersonalityGenes {
         let mut rng = rand::thread_rng();
 
         // Mutate personality weights
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.analyst_weight = (self.analyst_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.intuitive_weight =
                 (self.intuitive_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.visionary_weight =
                 (self.visionary_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.engineer_weight =
                 (self.engineer_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.sage_weight = (self.sage_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.risk_assessor_weight =
                 (self.risk_assessor_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.diplomat_weight =
                 (self.diplomat_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.philosopher_weight =
                 (self.philosopher_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.learner_weight = (self.learner_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.balancer_weight =
                 (self.balancer_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.rebel_weight = (self.rebel_weight + rng.gen_range(-0.1..0.1)).clamp(0.0, 1.0);
         }
 
         // Mutate emotional parameters
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.empathy_sensitivity =
                 (self.empathy_sensitivity + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.authenticity_threshold =
                 (self.authenticity_threshold + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.masking_detection_sensitivity =
                 (self.masking_detection_sensitivity + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.hyperfocus_adaptation =
                 (self.hyperfocus_adaptation + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
-        if rng.gen::<f32>() < mutation_rate {
+        if rng.r#gen::<f32>() < mutation_rate {
             self.sensory_overload_response =
                 (self.sensory_overload_response + rng.gen_range(-0.05..0.05)).clamp(0.0, 1.0);
         }
@@ -181,7 +181,7 @@ impl PersonalityGenes {
         let mut child2 = other.clone();
 
         // Single-point crossover for personality weights
-        if rng.gen::<f32>() < CROSSOVER_RATE {
+        if rng.r#gen::<f32>() < CROSSOVER_RATE {
             let crossover_point = rng.gen_range(0..11);
 
             if crossover_point <= 0 {

@@ -810,7 +810,7 @@ impl SelfModificationFramework {
         let success_probability = self.config.validation_success_probability;
 
         let mut rng = rand::thread_rng();
-        let status = if rng.gen::<f32>() < success_probability {
+        let status = if rng.r#gen::<f32>() < success_probability {
             ValidationStatus::Success { confidence: self.config.validation_confidence_threshold }
         } else {
             ValidationStatus::Failed {

@@ -151,6 +151,10 @@ pub mod embeddings {
             self.queue.len()
         }
 
+        pub fn is_empty(&self) -> bool {
+            self.len() == 0
+        }
+
         pub fn is_ready(&self) -> bool {
             self.queue.len() == self.capacity
         }

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use csv::Writer;
-use niodoo_real_integrated::config::CliArgs;
+use niodoo_real_integrated::config::{CliArgs, set_env_override};
 use niodoo_real_integrated::eval::synthetic::{generate_prompts, reference_for};
 use niodoo_real_integrated::pipeline::Pipeline;
 use niodoo_real_integrated::tcs_analysis::TCSAnalyzer;
@@ -46,26 +46,26 @@ async fn main() -> Result<()> {
 
     for mode in args.modes.iter() {
         // Configure ablation toggles via env vars used internally BEFORE init
-        std::env::set_var(
+        set_env_override(
             "ENABLE_CURATOR",
             if mode == "erag" { "false" } else { "true" },
         );
-        std::env::set_var(
+        set_env_override(
             "ENABLE_CONSISTENCY_VOTING",
             if mode == "full" { "true" } else { "false" },
         );
         match mode.as_str() {
             "erag" => {
-                std::env::set_var("DISABLE_LORA", "true");
-                std::env::set_var("DISABLE_TOPOLOGY_AUGMENTATION", "true");
+                set_env_override("DISABLE_LORA", "true");
+                set_env_override("DISABLE_TOPOLOGY_AUGMENTATION", "true");
             }
             "erag+lora" => {
-                std::env::set_var("DISABLE_LORA", "false");
-                std::env::set_var("DISABLE_TOPOLOGY_AUGMENTATION", "true");
+                set_env_override("DISABLE_LORA", "false");
+                set_env_override("DISABLE_TOPOLOGY_AUGMENTATION", "true");
             }
             _ => {
-                std::env::set_var("DISABLE_LORA", "false");
-                std::env::set_var("DISABLE_TOPOLOGY_AUGMENTATION", "false");
+                set_env_override("DISABLE_LORA", "false");
+                set_env_override("DISABLE_TOPOLOGY_AUGMENTATION", "false");
             }
         }
 

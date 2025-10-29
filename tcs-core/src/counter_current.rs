@@ -39,7 +39,7 @@ impl ProbabilisticBelief {
     /// Differential entropy of the Gaussian belief (in nats).
     pub fn entropy(&self) -> f32 {
         let dim = self.dimension() as f32;
-        let det = self.covariance.determinant().max(std::f32::MIN_POSITIVE);
+        let det = self.covariance.determinant().max(f32::MIN_POSITIVE);
         // 0.5 * ln((2πe)^k * det(Sigma))
         0.5 * (dim * (2.0 * std::f32::consts::PI * std::f32::consts::E).ln() + det.ln())
     }

@@ -36,11 +36,11 @@ impl StateVector {
         let phi_inv = consciousness::base_coherence() as f32;
 
         Self {
-            positive: rng.gen::<f32>() * phi_inv,
-            negative: rng.gen::<f32>() * phi_inv,
-            alert: rng.gen::<f32>() * phi_inv,
-            caution: rng.gen::<f32>() * phi_inv,
-            novelty: rng.gen::<f32>() * phi_inv,
+            positive: rng.r#gen::<f32>() * phi_inv,
+            negative: rng.r#gen::<f32>() * phi_inv,
+            alert: rng.r#gen::<f32>() * phi_inv,
+            caution: rng.r#gen::<f32>() * phi_inv,
+            novelty: rng.r#gen::<f32>() * phi_inv,
         }
     }
 

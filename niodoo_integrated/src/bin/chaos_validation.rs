@@ -31,9 +31,9 @@ async fn main() -> Result<()> {
     
     info!("🔀 Generating emotional samples...");
     for i in 0..1000 {
-        let entropy = 2.0 + rng.gen::<f64>() * 2.0; // Range: 2.0-4.0
-        let variance = 0.01 + rng.gen::<f64>() * 0.2; // Range: 0.01-0.21
-        let temp = 0.5 + rng.gen::<f64>() * 1.0; // Range: 0.5-1.5
+        let entropy = 2.0 + rng.r#gen::<f64>() * 2.0; // Range: 2.0-4.0
+        let variance = 0.01 + rng.r#gen::<f64>() * 0.2; // Range: 0.01-0.21
+        let temp = 0.5 + rng.r#gen::<f64>() * 1.0; // Range: 0.5-1.5
         
         emotional_samples.push(EmotionalSample {
             pad_vector: vec![0.0, 0.0, 0.0], // Will be filled by mapping

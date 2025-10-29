@@ -21,16 +21,10 @@ impl Point {
 }
 
 /// Distance functions available to the topology engine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub enum DistanceMetric {
-    /// Standard Euclidean distance.
+    #[default]
     Euclidean,
-}
-
-impl Default for DistanceMetric {
-    fn default() -> Self {
-        DistanceMetric::Euclidean
-    }
 }
 
 /// Tunable parameters that influence the sparsified Vietoris–Rips filtration.
@@ -76,7 +70,7 @@ impl PersistenceFeature {
     }
 }
 
-pub fn compute_persistence(data: &DVector<f64>) -> Vec<PersistenceFeature> {
+pub fn compute_persistence(_data: &DVector<f64>) -> Vec<PersistenceFeature> {
     // Merged stub: dummy homology with 3 features
     vec![
         PersistenceFeature {

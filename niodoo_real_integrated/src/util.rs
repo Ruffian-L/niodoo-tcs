@@ -1,6 +1,6 @@
 use blake3::hash as blake3_hash;
 use once_cell::sync::OnceCell;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 use std::collections::HashSet;
 
 /// Compute Shannon entropy (base e) for a slice of probabilities.

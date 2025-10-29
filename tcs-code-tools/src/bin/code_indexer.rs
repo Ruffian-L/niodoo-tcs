@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use qdrant_client::prelude::*;
-use qdrant_client::qdrant::{vectors_config, CreateCollection, Distance, PointStruct, VectorsConfig, VectorParams};
+use qdrant_client::qdrant::{
+    CreateCollection, Distance, PointStruct, VectorParams, VectorsConfig, vectors_config,
+};
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -24,11 +25,11 @@ async fn main() -> Result<()> {
     let collection = env::var("QDRANT_COLLECTION").unwrap_or_else(|_| "code_index".to_string());
     let qdrant_url = env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
 
-    let client = QdrantClient::from_url(qdrant_url).build()?;
+    let client = qdrant_client::Qdrant::from_url(&qdrant_url).build()?;
 
     // Ensure collection exists
     let _ = client
-        .create_collection(&CreateCollection {
+        .create_collection(CreateCollection {
             collection_name: collection.clone(),
             vectors_config: Some(VectorsConfig {
                 config: Some(vectors_config::Config::Params(VectorParams {
@@ -37,6 +38,8 @@ async fn main() -> Result<()> {
                     hnsw_config: None,
                     quantization_config: None,
                     on_disk: None,
+                    datatype: None,
+                    multivector_config: None,
                 })),
             }),
             ..Default::default()
@@ -53,27 +56,49 @@ async fn main() -> Result<()> {
         if path.is_file() && should_index(&path) {
             let content = fs::read_to_string(&path)
                 .with_context(|| format!("failed to read {}", path.display()))?;
-            let text = if content.len() > 16 * 1024 { content[..16 * 1024].to_string() } else { content };
+            let text = if content.len() > 16 * 1024 {
+                content[..16 * 1024].to_string()
+            } else {
+                content
+            };
             let vector = backend.extract_embeddings(&text)?;
-            if vector.len() != DIMS { continue; }
+            if vector.len() != DIMS {
+                continue;
+            }
             let id = idx;
             idx += 1;
-            let payload = serde_json::json!({
-                "path": path.display().to_string(),
-            });
-            points.push(PointStruct::new(id.into(), vector, payload));
+            let mut map = serde_json::Map::new();
+            map.insert(
+                "path".to_string(),
+                serde_json::Value::String(path.display().to_string()),
+            );
+            points.push(PointStruct::new(id, vector, map));
             if points.len() >= 64 {
-                client.upsert_points_blocking(collection.clone(), None, points.drain(..).collect()).await?;
+                let batch: Vec<PointStruct> = points.drain(..).collect();
+                client
+                    .upsert_points(qdrant_client::qdrant::UpsertPoints {
+                        collection_name: collection.clone(),
+                        wait: Some(true),
+                        points: batch,
+                        ..Default::default()
+                    })
+                    .await?;
             }
         }
     }
 
     if !points.is_empty() {
-        client.upsert_points_blocking(collection, None, points).await?;
+        client
+            .upsert_points(qdrant_client::qdrant::UpsertPoints {
+                collection_name: collection,
+                wait: Some(true),
+                points,
+                ..Default::default()
+            })
+            .await?;
     }
 
     Ok(())
 }
 
 //
-

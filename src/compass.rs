@@ -55,7 +55,7 @@ impl CompassEngine {
 
         for _ in 0..num_branches {
             // UCB1 selection for exploration
-            let exploration_bonus = self.mcts_c * (state.entropy.ln() / (1.0 + rng.gen::<f64>())).sqrt();
+            let exploration_bonus = self.mcts_c * (state.entropy.ln() / (1.0 + rng.r#gen::<f64>())).sqrt();
 
             // Generate branch based on emotional state + exploration
             let branch = format!("explore_{:.2}_{:.2}",

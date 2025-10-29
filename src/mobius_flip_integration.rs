@@ -180,9 +180,9 @@ impl MobiusFlipProcessor {
         // Step 2: Add novelty jitter (15-20% perturbation)
         let jitter_strength = (1.0 - confidence) * self.config.novelty_variance;
         let jitter = EmotionalVector::new(
-            (rng.gen::<f32>() - 0.5) * jitter_strength,
-            (rng.gen::<f32>() - 0.5) * jitter_strength,
-            (rng.gen::<f32>() - 0.5) * jitter_strength,
+            (rng.r#gen::<f32>() - 0.5) * jitter_strength,
+            (rng.r#gen::<f32>() - 0.5) * jitter_strength,
+            (rng.r#gen::<f32>() - 0.5) * jitter_strength,
         );
 
         flipped.x += jitter.x;
@@ -270,7 +270,7 @@ impl MobiusFlipProcessor {
             let base_y = angle.cos() * 200.0 * (1.0 + resonance);
 
             // Apply jitter with novelty variance (line 86)
-            let jitter = (rng.gen::<f32>() - 0.5) * self.config.novelty_variance;
+            let jitter = (rng.r#gen::<f32>() - 0.5) * self.config.novelty_variance;
             let z = jitter * 50.0 * (1.0 + resonance);
 
             positions.push((base_x, base_y, z));

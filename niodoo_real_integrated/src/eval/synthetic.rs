@@ -1,4 +1,4 @@
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 /// Deterministically generate synthetic prompts for evaluation
 pub fn generate_prompts(num: usize, seed: u64) -> Vec<String> {

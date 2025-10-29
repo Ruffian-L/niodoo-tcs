@@ -4,11 +4,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use futures::future::{abortable, AbortHandle};
+use futures::future::{AbortHandle, abortable};
 use niodoo_core::config::ConsciousnessConfig;
 use niodoo_core::memory::guessing_spheres::{
     EmotionalVector as CoreEmotion, GuessingMemorySystem, SphereId,
 };
+use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::token_promotion::consensus::{ConsensusEngine, NodeId};
 use niodoo_core::token_promotion::dynamic_tokenizer::{
     DynamicTokenizer, MergeStats, RemoteVocabulary, TokenizerStats,
@@ -18,7 +19,6 @@ use niodoo_core::token_promotion::engine::{
 };
 use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
-use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
 use tokio::{fs, sync::RwLock, time::interval};
 use tracing::{debug, info, instrument, warn};

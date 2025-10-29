@@ -147,7 +147,7 @@ impl Handler<ProcessCognitiveInput> for CognitiveNode {
         if emotional_state.entropy <= 0.0 {
             tracing::warn!("Non-positive entropy detected in empathy network: {}", emotional_state.entropy);
         }
-        let exploration_bonus = self.mcts_c * (safe_entropy.ln() / (1.0 + rng.gen::<f64>())).sqrt();
+        let exploration_bonus = self.mcts_c * (safe_entropy.ln() / (1.0 + rng.r#gen::<f64>())).sqrt();
         let branch = format!("explore_{:.2}_{:.2}",
             emotional_state.pad_vector[0] + exploration_bonus,
             emotional_state.entropy + rng.gen_range(-ENTROPY_EXPLORATION_RANGE..ENTROPY_EXPLORATION_RANGE)

@@ -315,7 +315,11 @@ mod tests {
     use super::*;
 
     fn ensure_local_backend() {
-        std::env::set_var("NIODOO_EMBEDDINGS_MOCK", "1");
+        if std::env::var("REAL_TEST").is_err() {
+            unsafe {
+                std::env::set_var("NIODOO_EMBEDDINGS_MOCK", "1");
+            }
+        }
     }
 
     #[test]

@@ -207,7 +207,7 @@ fn add_random_offset(embedding: &[f32], offset_scale: f32) -> Vec<f32> {
     let mut rng = rand::thread_rng();
 
     embedding.iter()
-        .map(|&x| x + rng.gen::<f32>() * 2.0 * offset_scale - offset_scale)
+        .map(|&x| x + rng.r#gen::<f32>() * 2.0 * offset_scale - offset_scale)
         .map(|x| x.clamp(-1.0, 1.0))
         .collect()
 }

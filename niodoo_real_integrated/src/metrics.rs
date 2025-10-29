@@ -4,8 +4,8 @@ use anyhow::{Error, Result};
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use prometheus::{
-    register_counter, register_gauge, register_gauge_vec, register_histogram, Counter, Encoder,
-    Gauge, GaugeVec, Histogram, HistogramOpts, TextEncoder,
+    Counter, Encoder, Gauge, GaugeVec, Histogram, HistogramOpts, TextEncoder, register_counter,
+    register_gauge, register_gauge_vec, register_histogram,
 };
 use rand::Rng;
 use std::collections::VecDeque;
@@ -28,11 +28,10 @@ impl PipelineMetrics {
     fn new() -> Result<Self> {
         let entropy_gauge = register_gauge!("niodoo_entropy_bits", "Current consciousness entropy")
             .map_err(Error::from)?;
-        let latency_histogram = register_histogram!(HistogramOpts::new(
-            "niodoo_latency_ms",
-            "Pipeline latency in milliseconds",
+        let latency_histogram = register_histogram!(
+            HistogramOpts::new("niodoo_latency_ms", "Pipeline latency in milliseconds",)
+                .buckets(vec![50.0, 100.0, 150.0, 250.0, 500.0, 1000.0])
         )
-        .buckets(vec![50.0, 100.0, 150.0, 250.0, 500.0, 1000.0]))
         .map_err(Error::from)?;
         let rouge_gauge = register_gauge!(
             "niodoo_rouge_l",

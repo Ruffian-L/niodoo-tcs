@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use niodoo_real_integrated::config::{self, env_value, set_env_override, CliArgs};
+use niodoo_real_integrated::config::{self, CliArgs, env_value, set_env_override};
 use niodoo_real_integrated::pipeline::Pipeline;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -19,11 +19,17 @@ async fn main() -> Result<()> {
 
     #[cfg(feature = "otel")]
     let registry = {
-        let mut base = tracing_subscriber::registry().with(env_filter).with(fmt_layer);
+        let mut base = tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt_layer);
         if let Ok(endpoint) = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT") {
             match opentelemetry_otlp::new_pipeline()
                 .tracing()
-                .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint(endpoint))
+                .with_exporter(
+                    opentelemetry_otlp::new_exporter()
+                        .tonic()
+                        .with_endpoint(endpoint),
+                )
                 .install_simple()
             {
                 Ok(tracer) => {
@@ -39,7 +45,9 @@ async fn main() -> Result<()> {
     };
 
     #[cfg(not(feature = "otel"))]
-    let registry = tracing_subscriber::registry().with(env_filter).with(fmt_layer);
+    let registry = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer);
 
     registry.init();
 

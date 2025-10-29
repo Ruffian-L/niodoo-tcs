@@ -18,7 +18,6 @@ use crate::tcs_predictor::TcsPredictor;
 use crate::token_manager::DynamicTokenizerManager;
 use crate::torus::PadGhostState;
 use ndarray::Array1;
-use tcs_ml::InferenceModelBackend;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -139,7 +138,6 @@ pub struct LearningLoop {
     tokenizer: Option<Arc<DynamicTokenizerManager>>,
     curated_buffer: Vec<CuratedSample>,
     lora_epochs: usize,
-    lora_rank: usize,
     #[allow(dead_code)]
     rng: rand::rngs::StdRng,
 }
@@ -166,13 +164,26 @@ impl LearningLoop {
                 .collect()
         };
 
+        let lora_epochs = std::env::var("LORA_EPOCHS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(5);
+        let lora_rank = std::env::var("LORA_RANK")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(8);
+        let lora_alpha = std::env::var("LORA_ALPHA")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .unwrap_or((lora_rank as f32) * 2.0);
+
         // Initialize LoRA trainer with correct embedding dimensions from config
         let lora_trainer = {
             let guard = config.read();
             let embedding_dim = guard.qdrant_vector_dim;
             let lora_config = LoRAConfig {
-                rank: 8,     // Default LoRA rank
-                alpha: 16.0, // Default LoRA alpha
+                rank: lora_rank,
+                alpha: lora_alpha,
                 input_dim: embedding_dim,
                 output_dim: embedding_dim,
             };
@@ -182,16 +193,7 @@ impl LearningLoop {
             })
         };
 
-        let lora_epochs = std::env::var("LORA_EPOCHS")
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(5);
-        let lora_rank = std::env::var("LORA_RANK")
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(8);
-
-        let mut rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
+        let rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
 
         Self {
             entropy_history: VecDeque::with_capacity(window),
@@ -217,7 +219,6 @@ impl LearningLoop {
             tokenizer: Some(tokenizer.clone()),
             curated_buffer: Vec::new(),
             lora_epochs,
-            lora_rank,
             #[allow(dead_code)]
             rng,
         }

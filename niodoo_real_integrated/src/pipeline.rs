@@ -1,24 +1,27 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use anyhow::Result;
 
-use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant, CompassRuntimeParams};
-use crate::config::{env_value, set_env_override, CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode};
+use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant};
+use crate::config::{
+    CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode, env_value,
+    set_env_override,
+};
 use crate::curator::Curator;
 use crate::data::{
-    compute_dataset_stats, load_emotional_dataset, load_rut_gauntlet_prompts, DatasetStats,
-    Experience, RutPrompt,
+    DatasetStats, Experience, RutPrompt, compute_dataset_stats, load_emotional_dataset,
+    load_rut_gauntlet_prompts,
 };
 use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::metrics::{metrics, FailureSignals};
+use crate::metrics::{FailureSignals, metrics};
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
@@ -26,12 +29,12 @@ use crate::util::{rouge_l, seed_manager, set_global_seed};
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use parking_lot::RwLock;
-use tcs_core::topology::PersistenceFeature;
-use tokio::sync::Mutex as AsyncMutex;
-use rand::RngCore;
-use tracing::{info, warn};
 #[allow(unused_imports)]
 use qdrant_client::qdrant::{CreateCollection, Distance, VectorsConfig};
+use rand::RngCore;
+use tcs_core::topology::PersistenceFeature;
+use tokio::sync::Mutex as AsyncMutex;
+use tracing::{info, warn};
 
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
@@ -44,10 +47,10 @@ pub mod proto {
 struct CuratedExperience {
     refined_response: String,
     quality_score: f32,
-    solution_path: Option<String>,
-    emotional_context: PadGhostState,
     promoted_tokens: Vec<String>,
     learned: bool,
+    #[allow(dead_code)]
+    reason: String,
 }
 
 #[derive(Debug, Clone)]
@@ -123,7 +126,6 @@ pub struct Pipeline {
     qdrant_process: Option<tokio::process::Child>,
 }
 
-
 impl Pipeline {
     pub async fn initialise(args: CliArgs) -> Result<Self> {
         Self::initialise_with_topology(args, None, None).await
@@ -183,7 +185,10 @@ impl Pipeline {
         );
         let embedder_arc = Arc::new(embedder.clone());
         let torus_strategy = if let Some(seed) = seed_override {
-            info!(seed, "Initializing torus pad mapper with fixed seed override");
+            info!(
+                seed,
+                "Initializing torus pad mapper with fixed seed override"
+            );
             TorusSeedStrategy::Fixed(seed)
         } else if let Some(value) = env_value("TORUS_SEED") {
             match value.parse::<u64>() {
@@ -220,7 +225,7 @@ impl Pipeline {
         } else {
             None
         };
-        
+
         #[cfg(not(feature = "embedded-qdrant"))]
         let qdrant_process: Option<tokio::process::Child> = None;
 
@@ -373,7 +378,11 @@ impl Pipeline {
     pub async fn initialise_with_seed(args: CliArgs, seed: u64) -> Result<Self> {
         set_global_seed(seed);
         if seed_manager().master_seed() != seed {
-            warn!(existing = seed_manager().master_seed(), requested = seed, "Seed override ignored; global seed already initialised");
+            warn!(
+                existing = seed_manager().master_seed(),
+                requested = seed,
+                "Seed override ignored; global seed already initialised"
+            );
         }
         Self::initialise_with_topology(args, None, Some(seed)).await
     }
@@ -482,7 +491,9 @@ impl Pipeline {
                     }
                 },
                 None => {
-                    warn!("Hybrid mode requested but TCS analyzer unavailable; using analytic baseline signature");
+                    warn!(
+                        "Hybrid mode requested but TCS analyzer unavailable; using analytic baseline signature"
+                    );
                     (
                         baseline_topological_signature(&pad_state, &embedding),
                         "hybrid_fallback",
@@ -519,11 +530,6 @@ impl Pipeline {
         // Evaluate compass on blocking thread without locking inside closure
         let pad_state_for_compass = pad_state.clone();
         let topology_for_compass = topology.clone();
-        let compass_params = CompassRuntimeParams::new(
-            self.thresholds.mcts_c,
-            self.thresholds.variance_spike,
-            self.thresholds.variance_stagnation,
-        );
         let compass_guard = self.compass.clone().lock_owned().await;
         let compass_scope = format!("compass/{}", cache_key);
         let compass_task = tokio::task::spawn_blocking(move || {
@@ -1053,7 +1059,7 @@ impl Pipeline {
             } else {
                 ucb1_score
             };
-            
+
             let (failure, _new_details) = FailureSignals::evaluate(
                 retry_gen.rouge_score,
                 entropy_delta,
@@ -1080,7 +1086,10 @@ impl Pipeline {
                 let exponent = 2_u64.pow(retry_count.min(6)); // Cap at 2^6 = 64x instead of 2^10 = 1024x
                 let delay_ms = (base_delay_ms * exponent).min(5000); // Cap at 5 seconds max
                 if delay_ms > 100 {
-                    info!(retry = retry_count, delay_ms, "Backoff delay before next retry");
+                    info!(
+                        retry = retry_count,
+                        delay_ms, "Backoff delay before next retry"
+                    );
                 }
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
             }
@@ -1194,50 +1203,69 @@ impl Pipeline {
             || (topology.betti_numbers[1] > 5 && compass.quadrant != CompassQuadrant::Discover)  // Too many loops outside exploration
             || topology.persistence_entropy > 0.8; // Too chaotic structure
 
-        let (refined, learned) =
-            if quality_score < refinement_threshold || topology_needs_refinement {
-                // Attempt refinement for low-quality or topologically problematic responses
-                if let Some(ref curator) = self.curator {
-                    // Call curator.refine with topology context
-                    let (refined_output, learned_flag) = match curator
-                        .refine(
-                            output,
-                            quality_score as f64,
-                            topology.knot_complexity,
-                            topology.persistence_entropy,
-                        )
-                        .await
-                    {
-                        Ok(result) => result,
-                        Err(e) => {
-                            warn!("Curator refinement failed: {}, using original", e);
-                            (output.to_string(), false)
-                        }
-                    };
+        let refinement_reason = if quality_score < refinement_threshold && topology_needs_refinement
+        {
+            "quality_below_threshold+topology_alert"
+        } else if quality_score < refinement_threshold {
+            "quality_below_threshold"
+        } else if topology_needs_refinement {
+            "topology_alert"
+        } else {
+            "stable"
+        };
 
-                    info!(
-                        "Curator refined response (quality={:.3}, knot={:.3}, learned={})",
-                        quality_score, topology.knot_complexity, learned_flag
-                    );
-                    (refined_output, learned_flag)
-                } else {
-                    (output.to_string(), false)
+        let mut reason = refinement_reason.to_string();
+        let (refined, learned) = if quality_score < refinement_threshold
+            || topology_needs_refinement
+        {
+            // Attempt refinement for low-quality or topologically problematic responses
+            if let Some(ref curator) = self.curator {
+                // Call curator.refine with topology context
+                match curator
+                    .refine(
+                        output,
+                        quality_score as f64,
+                        topology.knot_complexity,
+                        topology.persistence_entropy,
+                    )
+                    .await
+                {
+                    Ok(result) => {
+                        reason = result.reason.clone();
+                        info!(
+                            "Curator refined response (quality={:.3}, knot={:.3}, learned={}, reason={})",
+                            quality_score, topology.knot_complexity, result.learned, result.reason
+                        );
+                        (result.refined, result.learned)
+                    }
+                    Err(e) => {
+                        reason = format!("curator_error:{e}");
+                        warn!("Curator refinement failed: {}, using original", e);
+                        (output.to_string(), false)
+                    }
                 }
             } else {
+                reason = "curator_disabled".to_string();
                 (output.to_string(), false)
-            };
+            }
+        } else {
+            (output.to_string(), false)
+        };
+
+        if self.curator.is_none() && !reason.contains("curator_disabled") {
+            reason = format!("{}|curator_disabled", reason);
+        }
 
         Ok(CuratedExperience {
             refined_response: refined,
             quality_score,
-            solution_path: crate::data::extract_code_blocks(output),
-            emotional_context: pad_state.clone(),
             promoted_tokens: tokenizer_output
                 .promoted_tokens
                 .iter()
                 .map(|token| String::from_utf8_lossy(&token.bytes).to_string())
                 .collect(),
             learned,
+            reason,
         })
     }
 }
@@ -1385,11 +1413,7 @@ fn baseline_topological_signature(
         .iter()
         .map(|value| {
             let p = value.abs() / pad_energy;
-            if p > 0.0 {
-                -p * p.log2()
-            } else {
-                0.0
-            }
+            if p > 0.0 { -p * p.log2() } else { 0.0 }
         })
         .sum::<f64>();
 
