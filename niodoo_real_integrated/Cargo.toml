@@ -17,6 +17,7 @@ gauntlet = []
 examples = []
 qdrant = []
 embedded-qdrant = []
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
 
 [dependencies]
 # Existing deps from workspace
@@ -30,6 +31,7 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+tracing-opentelemetry = { version = "0.26", optional = true }
 qdrant-client = "1.7"
 # NOTE: qdrant-embedded crate needs to be configured when available
 # For now, embedded Qdrant functionality is feature-gated but requires
@@ -63,6 +65,8 @@ tonic = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+opentelemetry = { version = "0.24", optional = true, features = ["trace"] }
+opentelemetry-otlp = { version = "0.17", optional = true, features = ["tonic", "tls"] }
 bincode = { workspace = true }
 base64 = { workspace = true }
 niodoo-core = { path = "../niodoo-core" }

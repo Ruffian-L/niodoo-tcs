@@ -92,7 +92,15 @@ pub mod state {
 
         pub fn increment_cycle(&mut self) {
             self.cycles_processed += 1;
-            self.last_updated_ms = chrono::Utc::now().timestamp_millis() as u128;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                self.last_updated_ms = chrono::Utc::now().timestamp_millis() as u128;
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                // Fallback: monotonic-ish stamp via Instant since wall time may be unavailable
+                self.last_updated_ms = 0;
+            }
         }
 
         pub fn snapshot(&self) -> StateSnapshot {

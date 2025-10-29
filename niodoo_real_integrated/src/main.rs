@@ -8,22 +8,49 @@ use niodoo_real_integrated::config::{self, CliArgs};
 use niodoo_real_integrated::pipeline::Pipeline;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .with_target(false)
-        .init();
+    // Compose subscriber with optional OpenTelemetry layer if enabled and configured
+    let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
+
+    #[cfg(feature = "otel")]
+    let registry = {
+        let mut base = tracing_subscriber::registry().with(env_filter).with(fmt_layer);
+        if let Ok(endpoint) = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT") {
+            match opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint(endpoint))
+                .install_simple()
+            {
+                Ok(tracer) => {
+                    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+                    base = base.with(otel_layer);
+                }
+                Err(err) => {
+                    warn!(error = %err, "Failed to initialize OpenTelemetry; continuing without it");
+                }
+            }
+        }
+        base
+    };
+
+    #[cfg(not(feature = "otel"))]
+    let registry = tracing_subscriber::registry().with(env_filter).with(fmt_layer);
+
+    registry.init();
 
     config::prime_environment();
 
     let args = CliArgs::parse();
 
     if let Some(seed) = args.rng_seed_override {
-        std::env::set_var("RNG_SEED", seed.to_string());
+        unsafe {
+            std::env::set_var("RNG_SEED", seed.to_string());
+        }
     }
 
     let rng_seed = std::env::var("RNG_SEED")

@@ -124,10 +124,6 @@ pub struct Pipeline {
     qdrant_process: Option<tokio::process::Child>,
 }
 
-/// Spawn embedded Qdrant as a managed child process
-#[cfg(feature = "embedded-qdrant")]
-async fn spawn_embedded_qdrant() -> Result<tokio::process::Child> {
-}
 
 impl Pipeline {
     pub async fn initialise(args: CliArgs) -> Result<Self> {
@@ -182,6 +178,11 @@ impl Pipeline {
             Ok(value) => match value.parse::<u64>() {
                 Ok(seed) => {
                     info!(seed, "Initializing torus pad mapper with fixed seed");
+                    unsafe {
+                        unsafe {
+            std::env::set_var("TORUS_SEED", seed.to_string());
+        }
+                    }
                     TorusSeedStrategy::Fixed(seed)
                 }
                 Err(_) => {
@@ -201,18 +202,22 @@ impl Pipeline {
         )));
 
         // Optional embedded Qdrant startup (spawns Qdrant as child process)
-        let qdrant_process = if config.qdrant_embedded {
+        #[cfg(feature = "embedded-qdrant")]
+        let qdrant_process: Option<tokio::process::Child> = if config.qdrant_embedded {
             info!("QDRANT_EMBEDDED enabled: spawning embedded Qdrant process");
-            match spawn_embedded_qdrant().await {
+            match crate::embedded_qdrant::spawn_embedded_qdrant().await {
                 Ok(child) => Some(child),
                 Err(e) => {
-                    error!(error = %e, "Failed to spawn embedded Qdrant; falling back to external Qdrant");
+                    warn!(error = %e, "Failed to spawn embedded Qdrant; falling back to external Qdrant");
                     None
                 }
             }
         } else {
             None
         };
+        
+        #[cfg(not(feature = "embedded-qdrant"))]
+        let qdrant_process: Option<tokio::process::Child> = None;
 
         let erag = EragClient::new(
             &config.qdrant_url,
@@ -361,7 +366,11 @@ impl Pipeline {
     }
 
     pub async fn initialise_with_seed(args: CliArgs, seed: u64) -> Result<Self> {
-        std::env::set_var("TORUS_SEED", seed.to_string());
+        unsafe {
+            unsafe {
+            std::env::set_var("TORUS_SEED", seed.to_string());
+        }
+        }
         Self::initialise(args).await
     }
 
@@ -375,7 +384,7 @@ impl Pipeline {
         let mut derived_rng = crate::util::seed_manager().get_rng(&scope);
         // Extract u64 seed by sampling from the derived RNG to initialize mapper RNG deterministically
         use rand::Rng;
-        let derived_seed: u64 = derived_rng.gen();
+        let derived_seed: u64 = derived_rng.r#gen();
         TorusPadMapper::new(derived_seed)
     }
 

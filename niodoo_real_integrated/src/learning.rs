@@ -560,7 +560,7 @@ impl LearningLoop {
     }
 
     fn choose_action(&mut self, state: &DqnState) -> DqnAction {
-        if self.rng.gen::<f64>() < self.epsilon {
+        if self.rng.gen_range(0.0..1.0) < self.epsilon {
             self.action_space.choose(&mut self.rng).cloned().unwrap()
         } else {
             let s_key = state.to_key();
@@ -933,8 +933,7 @@ impl LearningLoop {
 
     pub fn load_lora_adapter<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path_ref = path.as_ref();
-        let config = self.lora_trainer.adapter().config().clone();
-        let trainer = LoRATrainer::load_adapter(path_ref, config)?;
+        let trainer = LoRATrainer::load_adapter(path_ref)?;
         self.lora_trainer = trainer;
         info!(adapter = %path_ref.display(), "LoRA adapter loaded");
         Ok(())
@@ -1095,7 +1094,7 @@ impl GaussianProcess {
     }
 
     pub fn suggest_next(&mut self, n: usize) -> Vec<Vec<f64>> {
-        if let (Some(ref x_train), Some(ref y_train)) = (&self.x_train, &self.y_train) {
+        if let (Some(x_train), Some(y_train)) = (&self.x_train, &self.y_train) {
             if !x_train.is_empty() {
                 if let Some(max_entry) = y_train
                     .iter()

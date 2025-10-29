@@ -1,7 +1,7 @@
-use std::env;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::env;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -17,13 +17,6 @@ fn main() {
     }
 }
 
-fn set_protoc_env(path: &Path) {
-    let value = path.to_string_lossy().into_owned();
-    unsafe {
-        env::set_var("PROTOC", value);
-    }
-}
-
 fn build_protos() -> Result<(), Box<dyn Error>> {
     let path = Path::new("src/proto/niodoo.proto");
     if !path.exists() {
@@ -31,10 +24,12 @@ fn build_protos() -> Result<(), Box<dyn Error>> {
     }
 
     let protoc_path = protoc_bin_vendored::protoc_bin_path()?;
-    set_protoc_env(&protoc_path);
 
     let include_dirs = ["src/"];
-    match prost_build::Config::new().compile_protos(&[path], &include_dirs) {
+    let mut config = prost_build::Config::new();
+    config.protoc_executable(protoc_path);
+
+    match config.compile_protos(&[path], &include_dirs) {
         Ok(()) => Ok(()),
         Err(err) => {
             let out_file = PathBuf::from(env::var("OUT_DIR")?).join("niodoo.rs");
@@ -51,12 +46,14 @@ fn build_federated_proto() -> Result<(), Box<dyn Error>> {
     }
 
     let protoc_path = protoc_bin_vendored::protoc_bin_path()?;
-    set_protoc_env(&protoc_path);
+
+    let mut config = prost_build::Config::new();
+    config.protoc_executable(protoc_path);
 
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .compile_protos(&[path], &["src/"])?;
+        .compile_protos_with_config(config, &[path], &["src/"])?;
 
     Ok(())
 }

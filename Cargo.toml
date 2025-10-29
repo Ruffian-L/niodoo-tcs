@@ -29,6 +29,7 @@ members = [
     "niodoo-core",
     "constants_core",
     "niodoo_real_integrated",
+    "tcs-core-wasm",
     # Transitional member until all modules migrate
     "src",
 ]
@@ -47,7 +48,7 @@ resolver = "2"
 # Workspace-wide package metadata
 [workspace.package]
 authors = ["NiodO.o Topology Team <niodoo@dev>"]
-edition = "2024"
+edition = "2021"
 rust-version = "1.82"
 license-file = "LICENSE"
 repository = "https://github.com/Ruffian-L/niodoo-tcs"

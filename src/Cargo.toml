@@ -2,7 +2,7 @@
 [package]
 name = "niodoo-consciousness"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["ruffian <niodoo@dev>"]
 description = "🧠 NiodO.o Unified Rust Consciousness Engine - Neurodivergent AI Companion"
 

@@ -1,7 +1,7 @@
 [package]
 name = "tcs-ml"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["Niodoo Topology Team <niodoo@dev>"]
 description = "Machine learning components for the Topological Cognitive System"
 license = "MIT"
@@ -9,7 +9,7 @@ license = "MIT"
 [features]
 default = ["cpu"]
 cpu = []
-cuda = ["dep:cudarc", "dep:ort"]
+cuda = ["dep:cudarc", "ort/cuda"]
 rocm = []
 webgpu = ["dep:wgpu"]
 wasm = []

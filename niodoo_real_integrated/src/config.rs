@@ -1055,7 +1055,9 @@ fn load_env_file(path: &Path) -> Result<()> {
         }
         let raw_value = parts.next().unwrap_or("").trim();
         let value = normalise_env_value(raw_value);
-        env::set_var(key, value);
+        unsafe {
+            env::set_var(key, value);
+        }
     }
 
     Ok(())

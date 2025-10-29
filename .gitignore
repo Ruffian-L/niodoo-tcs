@@ -3,6 +3,10 @@
 **/target/
 target-ci/
 **/target-ci/
+.cargo-target/
+target-cursor/
+target_old_*/
+target_local/
 Cargo.lock
 **/*.rs.bk
 *.pdb

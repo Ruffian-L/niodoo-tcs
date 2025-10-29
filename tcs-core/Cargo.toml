@@ -7,10 +7,11 @@ description = "Core cognitive state machines and embeddings for the Topological 
 license = "MIT"
 
 [features]
-default = ["tda_rust"]
+default = ["tda_rust", "runtime"]
 tda_rust = []
 tda_gudhi = []
 legacy_e2e = []
+runtime = ["dep:tokio"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -26,7 +27,7 @@ ndarray = { workspace = true }
 rand.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 nsga = "0.1.2"

@@ -96,9 +96,9 @@ impl NodalDiagnostics {
         }
 
         let (median_gap, interquartile_range) = match Self::compute_quartiles(interquartile_gaps) {
-            Some((q1, median, q3)) => {
+            Some((q1, median_value, q3)) => {
                 let iqr = (q3 - q1).max(f64::EPSILON);
-                (median, iqr)
+                (median_value, iqr)
             }
             None => (1.0, 1.0),
         };
@@ -360,10 +360,10 @@ mod tests {
     #[test]
     fn quartile_matches_expected() {
         let samples = [1.0, 3.0, 5.0, 7.0];
-        let (q1, median, q3) =
+        let (q1, median_value, q3) =
             NodalDiagnostics::compute_quartiles(&samples).expect("quartiles must exist");
         assert!((q1 - 2.0).abs() < 1e-9);
-        assert!((median - 4.0).abs() < 1e-9);
+        assert!((median_value - 4.0).abs() < 1e-9);
         assert!((q3 - 6.0).abs() < 1e-9);
     }
 }
