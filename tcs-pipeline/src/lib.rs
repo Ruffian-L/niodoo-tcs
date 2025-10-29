@@ -178,8 +178,8 @@ impl TCSOrchestrator {
             }
             if feature.persistence() > self.config.persistence_event_threshold {
                 let pf = PersistentFeature {
-                    birth: feature.birth,
-                    death: feature.death,
+                    birth: feature.birth as f64,
+                    death: feature.death as f64,
                     dimension: feature.dimension,
                 };
                 self.state.register_feature(pf.clone());

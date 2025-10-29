@@ -2,6 +2,7 @@
 //! Copyright (c) 2025 Jason Van Pham
 
 use super::guessing_spheres::{EmotionalVector, GuessingMemorySystem, MemoryQuery, SphereId};
+use crate::config::AppConfig;
 use crate::consciousness::ConsciousnessState;
 use crate::rag::RetrievalEngine;
 use crate::token_promotion::{run_promotion_cycle, PromotionResult};
@@ -88,6 +89,7 @@ pub struct MultiLayerMemoryQuery {
     checkpoint_dir: PathBuf,
     // MMN detection: Recent queries for fast-path deviant detection
     recent_queries: Vec<EmotionalVector>,
+    config: AppConfig,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -117,6 +119,7 @@ impl MultiLayerMemoryQuery {
     pub fn new(
         rag_engine: Arc<Mutex<RetrievalEngine>>,
         gaussian_system: GuessingMemorySystem,
+        config: AppConfig,
     ) -> Self {
         Self {
             rag_engine,
@@ -126,6 +129,7 @@ impl MultiLayerMemoryQuery {
             cycle_counter: 0,
             checkpoint_dir: PathBuf::from("./checkpoints/learning_events"),
             recent_queries: Vec::new(),
+            config,
         }
     }
 
@@ -292,8 +296,8 @@ impl MultiLayerMemoryQuery {
 
             // Filter by emotional resonance > 0.2 (tunable threshold)
             if emotional_score > 0.2 {
-                // Calculate novelty score: 50/50 blend for 15-20% variance
-                let novelty_score = (semantic_score * 0.5) + (emotional_score * 0.5);
+                // Calculate novelty score: configurable blend for 15-20% variance
+                let novelty_score = (semantic_score * self.config.memory.novelty_semantic_weight) + (emotional_score * self.config.memory.novelty_emotional_weight);
 
                 combined_results.push(MemoryWithResonance {
                     id: doc.id.clone(),
@@ -347,7 +351,7 @@ impl MultiLayerMemoryQuery {
                     mean_score
                 );
 
-                let cycle_result = run_promotion_cycle(&mut self.gaussian_system);
+                let cycle_result = run_promotion_cycle(&mut self.gaussian_system, 0.55, 0.25);
 
                 let denom = (cycle_result.promoted_count + cycle_result.pruned_count) as f64;
                 let ratio = if denom > f64::EPSILON {
@@ -406,7 +410,7 @@ impl MultiLayerMemoryQuery {
 
                 // NOTE: Could implement softer promotion logic here (promote fewer tokens)
                 // For now, using standard cycle but logging the stagnation case
-                let cycle_result = run_promotion_cycle(&mut self.gaussian_system);
+                let cycle_result = run_promotion_cycle(&mut self.gaussian_system, 0.55, 0.25);
 
                 let denom = (cycle_result.promoted_count + cycle_result.pruned_count) as f64;
                 let ratio = if denom > f64::EPSILON {
@@ -460,7 +464,7 @@ impl MultiLayerMemoryQuery {
                     coherence_std_dev, emotional_entropy
                 );
 
-                let cycle_result = run_promotion_cycle(&mut self.gaussian_system);
+                let cycle_result = run_promotion_cycle(&mut self.gaussian_system, 0.55, 0.25);
 
                 let denom = (cycle_result.promoted_count + cycle_result.pruned_count) as f64;
                 let ratio = if denom > f64::EPSILON {

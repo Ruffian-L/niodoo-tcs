@@ -11,6 +11,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::runtime::{Handle, Runtime};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
@@ -44,14 +45,30 @@ pub struct EmotionalCoder {
 
 impl EmotionalCoder {
     /// Create new emotional coder
-    pub fn new(model_config: &config::ModelConfig, config: &ConsciousnessConfig) -> Self {
-        Self {
+    pub fn new(
+        model_config: &config::ModelConfig,
+        config: &ConsciousnessConfig,
+    ) -> Result<Self> {
+        let consciousness_engine = Self::init_inference_engine()?;
+        Ok(Self {
             qwen_model_path: model_config.qwen_model_path.clone(),
             model_config: model_config.clone(),
             consciousness_config: config.clone(),
-            consciousness_engine: AIInferenceEngine::new_default(),
+            consciousness_engine,
             emotional_threshold: config.emotion_sensitivity * 0.75_f32, // Derive
             qwen_integrator: None,
+        })
+    }
+
+    fn init_inference_engine() -> Result<AIInferenceEngine> {
+        if let Ok(handle) = Handle::try_current() {
+            handle
+                .block_on(AIInferenceEngine::new_default())
+                .map_err(|err| err.into())
+        } else {
+            let runtime = Runtime::new()
+                .map_err(|err| anyhow::anyhow!("failed to create Tokio runtime: {err}"))?;
+            runtime.block_on(AIInferenceEngine::new_default())
         }
     }
 
@@ -363,7 +380,7 @@ pub async fn demo_emotional_coding() -> Result<()> {
         crate::config::AppConfig::default()
     });
 
-    let mut coder = EmotionalCoder::new(&app_config.models, &app_config.consciousness);
+    let mut coder = EmotionalCoder::new(&app_config.models, &app_config.consciousness)?;
 
     // Initialize Qwen integrator with real model loading
     coder.initialize_qwen().await?;
@@ -447,7 +464,8 @@ mod tests {
             consciousness_step_size: 0.1,
             ..Default::default()
         };
-        let mut coder = EmotionalCoder::new(&model_config, &config);
+        let mut coder = EmotionalCoder::new(&model_config, &config)
+            .expect("failed to initialize emotional coder");
 
         let simple_code = "fn test() { tracing::info!(\"hi\"); }";
         let complex_code = "fn test() { if x { for y in z { while a { match b { } } } } }";
@@ -463,7 +481,8 @@ mod tests {
         let app_config = crate::config::AppConfig::default();
         let model_config = app_config.models;
         let config = app_config.consciousness;
-        let mut coder = EmotionalCoder::new(&model_config, &config);
+        let mut coder = EmotionalCoder::new(&model_config, &config)
+            .expect("failed to initialize emotional coder");
 
         let nested = "{ { { } } }";
         assert_eq!(coder.calculate_max_nesting(nested), 3);
@@ -517,7 +536,13 @@ pub extern "C" fn emotional_coder_init(model_path: *const c_char) -> bool {
     let model_config = app_config.models;
     let config = app_config.consciousness;
 
-    let instance = EmotionalCoder::new(&model_config, &config);
+    let instance = match EmotionalCoder::new(&model_config, &config) {
+        Ok(coder) => coder,
+        Err(err) => {
+            tracing::error!(?err, "emotional_coder_init: failed to initialize emotional coder");
+            return false;
+        }
+    };
 
     match EMOTIONAL_CODER_INSTANCE.lock() {
         Ok(mut guard) => {

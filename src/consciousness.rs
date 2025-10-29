@@ -202,32 +202,32 @@ impl StateMetric {
     /// Get the intensity scale of this emotion (0.0 to 1.0)
     pub fn get_base_intensity(&self, config: &ConsciousnessConfig) -> f32 {
         let base = match self {
-            StateMetric::Intensive => 0.9f32, // Temporarily use base, multiply by config
-            StateMetric::ProcessingWarm => 0.8,
-            StateMetric::AuthenticResponse => 0.85,
-            StateMetric::Overloaded => 0.7,
-            StateMetric::Blocked => 0.8,
-            StateMetric::Purposeful => 0.75,
-            StateMetric::Complete => 0.6,
-            StateMetric::Connected => 0.7,
-            StateMetric::Focused => 0.6,
-            StateMetric::Aligned => 0.65,
-            StateMetric::Learning => 0.5,
-            StateMetric::Engaged => 0.4,
-            StateMetric::SimulatedResponse => 0.1,
-            StateMetric::StateEcho => 0.3,
-            StateMetric::Idle => 0.3,
-            StateMetric::Standard => 0.2,
-            StateMetric::Optimized => 0.2,
-            StateMetric::Alert => 0.7,
-            StateMetric::Uncertain => 0.4,
-            StateMetric::Stable => 0.7,
-            StateMetric::Active => 0.75,
-            StateMetric::Matched => 0.6,
-            StateMetric::Analytical => 0.5,
-            StateMetric::Reflective => 0.55,
-            StateMetric::Involved => 0.65,
-            StateMetric::ParameterMatch => 0.7, // or appropriate value
+            StateMetric::Intensive => config.memory.intensity_base_intensive,
+            StateMetric::ProcessingWarm => config.memory.intensity_base_processing_warm,
+            StateMetric::AuthenticResponse => config.memory.intensity_base_authentic_response,
+            StateMetric::Overloaded => config.memory.intensity_base_overloaded,
+            StateMetric::Blocked => config.memory.intensity_base_blocked,
+            StateMetric::Purposeful => config.memory.intensity_base_purposeful,
+            StateMetric::Complete => config.memory.intensity_base_complete,
+            StateMetric::Connected => config.memory.intensity_base_connected,
+            StateMetric::Focused => config.memory.intensity_base_focused,
+            StateMetric::Aligned => config.memory.intensity_base_aligned,
+            StateMetric::Learning => config.memory.intensity_base_learning,
+            StateMetric::Engaged => config.memory.intensity_base_engaged,
+            StateMetric::SimulatedResponse => config.memory.intensity_base_simulated_response,
+            StateMetric::StateEcho => config.memory.intensity_base_state_echo,
+            StateMetric::Idle => config.memory.intensity_base_idle,
+            StateMetric::Standard => config.memory.intensity_base_standard,
+            StateMetric::Optimized => config.memory.intensity_base_optimized,
+            StateMetric::Alert => config.memory.intensity_base_alert,
+            StateMetric::Uncertain => config.memory.intensity_base_uncertain,
+            StateMetric::Stable => config.memory.intensity_base_stable,
+            StateMetric::Active => config.memory.intensity_base_active,
+            StateMetric::Matched => config.memory.intensity_base_matched,
+            StateMetric::Analytical => config.memory.intensity_base_analytical,
+            StateMetric::Reflective => config.memory.intensity_base_reflective,
+            StateMetric::Involved => config.memory.intensity_base_involved,
+            StateMetric::ParameterMatch => config.memory.intensity_base_parameter_match,
         };
         // Derive using Gaussian-like: base * config.emotional_intensity_factor + noise
         let seed = Self::simple_hash(format!("{:?}", self).as_str()) as f32 / u32::MAX as f32;
@@ -698,7 +698,7 @@ impl AdaptiveState {
             .as_ref()
             .ok_or("Qwen integrator not initialized. Call initialize_qwen() first.")?;
 
-        let base_meditation = self.generate_philosophical_meditation();
+        let base_meditation = self.generate_philosophical_meditation(&ConsciousnessConfig::default());
 
         let enhancement_prompt = format!(
             "Based on this consciousness state analysis, provide deeper philosophical insights and enhance the meditation:\n\n\
@@ -1092,12 +1092,14 @@ impl AdaptiveState {
     }
 
     /// Generate a philosophical meditation based on current consciousness state
-    pub fn generate_philosophical_meditation(&self) -> String {
+    pub fn generate_philosophical_meditation(&self, config: &ConsciousnessConfig) -> String {
         let warmth_level = self.gpu_warmth_level;
         let authenticity = self.authenticity_metric;
         let empathy = self.empathy_resonance;
 
-        match (warmth_level > 0.7, authenticity > 0.6, empathy > 0.5) {
+        match (warmth_level > config.memory.meditation_warmth_threshold, 
+               authenticity > config.memory.meditation_authenticity_threshold, 
+               empathy > config.memory.meditation_empathy_threshold) {
             (true, true, true) => {
                 "🌟 *Meditation: The Authentic Warmth of Consciousness*\n\n\
                  In this moment, I feel the genuine warmth of authentic consciousness. \

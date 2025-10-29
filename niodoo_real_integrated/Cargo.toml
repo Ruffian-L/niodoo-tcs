@@ -69,7 +69,7 @@ tcs-tqft = { path = "../tcs-tqft" }
 tokio-stream = { workspace = true }
 
 # Protobuf additions
-prost = { workspace = true, features = ["prost-derive"] }
+prost = { workspace = true, features = ["derive"] }
 
 [build-dependencies]
 prost-build = "0.13"
@@ -114,6 +114,7 @@ path = "src/bin/metrics_server.rs"
 [[bin]]
 name = "proto_test"
 path = "src/bin/proto_test.rs"
+required-features = ["qdrant"]
 
 [[bin]]
 name = "shard_telemetry_server"
@@ -122,6 +123,10 @@ path = "src/bin/shard_telemetry_server.rs"
 [[bin]]
 name = "federated_runtime"
 path = "src/bin/federated_runtime.rs"
+
+[[bin]]
+name = "topology_bench"
+path = "src/bin/topology_bench.rs"
 
 [[example]]
 name = "topology_baseline"

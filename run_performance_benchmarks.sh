@@ -86,10 +86,11 @@ run_rust_benchmarks() {
     
     # Run specific benchmarks
     BENCHES=(
-        "topological_bench"
         "consciousness_engine_benchmark"
         "rag_optimization_benchmark"
         "sparse_gp_benchmark"
+        "kv_cache_benchmark"
+        "critical_paths"
     )
     
     for bench in "${BENCHES[@]}"; do
@@ -144,6 +145,22 @@ async fn main() {
     
     let elapsed = start.elapsed();
     println!("TCS Pipeline Benchmark: {:?}", elapsed);
+}
+
+# Run topology-aware pipeline comparison
+run_topology_benchmark() {
+    print_header "Running Topology Mode Benchmark"
+
+    cd "$PROJECT_ROOT"
+
+    print_step "Executing topology_bench (baseline vs hybrid)"
+    if cargo run -p niodoo_real_integrated --release --bin topology_bench -- --cycles 32 2>&1 | tee /tmp/topology_bench.log; then
+        print_success "Topology benchmark completed"
+        log_result "Topology Benchmark - PASSED"
+    else
+        print_warning "Topology benchmark failed"
+        log_result "Topology Benchmark - FAILED"
+    fi
 }
 EOF
     
@@ -215,6 +232,7 @@ main() {
     check_system_resources
     run_rust_benchmarks
     run_tcs_benchmarks
+    run_topology_benchmark
     run_memory_profiling
     collect_performance_metrics
     generate_report

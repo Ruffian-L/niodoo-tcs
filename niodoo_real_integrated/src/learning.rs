@@ -1,7 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, RwLock};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use std::sync::Arc;
 
 use anyhow::Result;
 use parking_lot::RwLock;
@@ -19,6 +17,7 @@ use crate::tcs_predictor::TcsPredictor;
 use crate::token_manager::DynamicTokenizerManager;
 use crate::torus::PadGhostState;
 use tcs_ml::InferenceModelBackend;
+use ndarray::Array1;
 
 #[derive(Debug, Clone)]
 pub struct LearningOutcome {
@@ -141,7 +140,6 @@ pub struct LearningLoop {
     lora_epochs: usize,
     lora_rank: usize,
     #[allow(dead_code)]
-    ml_backend: Option<InferenceModelBackend>,
     rng: rand::rngs::StdRng,
 }
 
@@ -192,48 +190,7 @@ impl LearningLoop {
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(8);
 
-        let ml_backend = match std::env::var("TCS_MODEL_PATH") {
-            Ok(path) => {
-                let trimmed_path = path.trim();
-                if trimmed_path.is_empty() {
-                    None
-                } else {
-                    match InferenceModelBackend::new("tcs-learning") {
-                        Ok(backend) => match backend.load(trimmed_path) {
-                            Ok(_) => {
-                                info!(
-                                    path = trimmed_path,
-                                    "Loaded TCS ONNX model for learning loop backend"
-                                );
-                                Some(backend)
-                            }
-                            Err(error) => {
-                                warn!(
-                                    path = trimmed_path,
-                                    %error,
-                                    "Failed to load TCS ONNX model; continuing without backend"
-                                );
-                                None
-                            }
-                        },
-                        Err(error) => {
-                            warn!(
-                                %error,
-                                "Failed to construct TCS ONNX backend; continuing without backend"
-                            );
-                            None
-                        }
-                    }
-                }
-            }
-            Err(_) => None,
-        };
-
-        let mut rng = StdRng::seed_from_u64(config.rng_seed);
-        let q_table = Arc::new(RwLock::new(HashMap::new()));
-        if replay_buffer.len() > 1000 {
-            replay_buffer.pop_front();
-        }
+        let mut rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
 
         Self {
             entropy_history: VecDeque::with_capacity(window),
@@ -261,8 +218,7 @@ impl LearningLoop {
             lora_epochs,
             lora_rank,
             #[allow(dead_code)]
-            ml_backend,
-            rng: rand::rngs::StdRng::seed_from_u64(rng_seed),
+            rng,
         }
     }
 
@@ -1076,6 +1032,16 @@ impl LearningLoop {
             .sum::<f64>()
             / self.recent_metrics.len() as f64
     }
+}
+
+pub fn dqn_step(state: Vec<f32>) -> u32 {
+    if state.is_empty() {
+        return 0;
+    }
+    let q_values = Array1::from_vec(state);
+    q_values.iter().enumerate().fold((0, f32::MIN), |max_idx, (i, &val)| {
+        if val > max_idx.1 { (i as u32, val) } else { max_idx }
+    }).0
 }
 
 pub struct GaussianProcess {

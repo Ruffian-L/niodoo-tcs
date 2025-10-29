@@ -4,6 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/proto/niodoo.proto");
+    println!("cargo:rerun-if-changed=src/federated.proto");
     if let Err(err) = build_protos() {
         println!("cargo:warning=Skipping proto compilation: {err}");
     }

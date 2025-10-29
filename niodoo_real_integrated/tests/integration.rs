@@ -1,6 +1,8 @@
 use anyhow::Result;
 
 use niodoo_real_integrated::test_support::mock_pipeline;
+use niodoo_real_integrated::pipeline::Pipeline;
+use niodoo_real_integrated::config::{CliArgs, HardwareProfile, TopologyMode};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mobius_prompt_smoke() -> Result<()> {
@@ -20,4 +22,18 @@ async fn mobius_prompt_smoke() -> Result<()> {
     );
     assert!(cycle.rouge >= 0.0);
     Ok(())
+}
+
+#[tokio::test]
+async fn smoke_pipeline() {
+    let args = CliArgs {
+        hardware: HardwareProfile::Beelink,  // CPU
+        ..Default::default()
+    };
+    let mut pipeline = Pipeline::initialise_with_mode(args, TopologyMode::Hybrid).await.unwrap();
+    let prompt = "test query";
+    let cycle = pipeline.process_prompt(prompt).await.unwrap();
+    assert!(!cycle.hybrid_response.is_empty());
+    assert!(cycle.latency_ms > 0.0);
+    assert!(cycle.entropy.is_finite());
 }

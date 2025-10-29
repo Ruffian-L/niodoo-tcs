@@ -155,7 +155,7 @@ impl NodalDiagnostics {
         let mut sorted = samples.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
 
-        let median = median(&sorted);
+        let median_value = median(&sorted);
         let mid = sorted.len() / 2;
         let (lower_half, upper_half) = if sorted.len() % 2 == 0 {
             (&sorted[..mid], &sorted[mid..])
@@ -164,18 +164,18 @@ impl NodalDiagnostics {
         };
 
         let q1 = if lower_half.is_empty() {
-            median
+            median_value
         } else {
             median(lower_half)
         };
 
         let q3 = if upper_half.is_empty() {
-            median
+            median_value
         } else {
             median(upper_half)
         };
 
-        Some((q1, median, q3))
+        Some((q1, median_value, q3))
     }
 }
 

@@ -8,6 +8,7 @@ use std::cmp::Ordering;
 use std::time::Instant;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
+use std::sync::{Arc, Mutex};
 
 use crate::torus::PadGhostState;
 use tcs_core::metrics::record_topology_metrics;
@@ -71,6 +72,17 @@ impl TopologicalSignature {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct TCSState {
+    // Add fields as needed, e.g., persistence_features: Vec<PersistenceFeature>,
+    // but keep minimal for now
+    pad: Vec<f64>,
+    mu: Vec<f64>,
+    sigma: Vec<f64>,
+}
+
+pub type TCSHandle = Arc<Mutex<TCSState>>;
+
 /// TCS Analysis Engine
 pub struct TCSAnalyzer {
     topology_engine: RustVREngine,
@@ -129,7 +141,14 @@ impl TCSAnalyzer {
     pub fn analyze_state(&mut self, pad_state: &PadGhostState) -> Result<TopologicalSignature> {
         let start = Instant::now();
 
-        let points = self.pad_to_points(pad_state);
+        let tcs_state = Arc::new(Mutex::new(TCSState::default()));
+        let mut guard = tcs_state.lock().unwrap();
+        // Use guard for computations, e.g., populate from pad_state
+        guard.pad = pad_state.pad.iter().map(|&v| v as f64).collect();
+        guard.mu = pad_state.mu.iter().map(|&v| v as f64).collect();
+        guard.sigma = pad_state.sigma.iter().map(|&v| v as f64).collect();
+
+        let points = self.pad_to_points(&guard);
         // Scaling guards: cap KNN and filtration for performance with configurable defaults
         let k = std::env::var("TCS_KNN_K")
             .ok()
@@ -169,7 +188,7 @@ impl TCSAnalyzer {
         info!("IIT Φ (approx): {:.6}", phi);
 
         // Keep existing knot polynomial computation
-        let knot_diagram = self.pad_to_knot_diagram(pad_state);
+        let knot_diagram = self.pad_to_knot_diagram(&guard);
         let knot_analysis = self.knot_analyzer.analyze(&knot_diagram);
         let knot_polynomial = knot_analysis.polynomial;
 
@@ -201,14 +220,14 @@ impl TCSAnalyzer {
     }
 
     /// Convert PAD state to point cloud for homology computation
-    fn pad_to_points(&self, pad_state: &PadGhostState) -> Vec<Point> {
+    fn pad_to_points(&self, pad_state: &TCSState) -> Vec<Point> {
         let mut points = Vec::new();
         for i in 0..7 {
             // Create point from PAD coordinates with mu/sigma as extra dimensions
             let mut coords = Vec::with_capacity(7);
-            coords.push(pad_state.pad[i] as f64);
-            coords.push(pad_state.mu[i] as f64);
-            coords.push(pad_state.sigma[i] as f64);
+            coords.push(pad_state.pad[i]);
+            coords.push(pad_state.mu[i]);
+            coords.push(pad_state.sigma[i]);
             // Pad to 7D
             while coords.len() < 7 {
                 coords.push(0.0);
@@ -231,7 +250,7 @@ impl TCSAnalyzer {
     }
 
     /// Convert PAD state to simplified knot diagram
-    fn pad_to_knot_diagram(&self, pad_state: &PadGhostState) -> KnotDiagram {
+    fn pad_to_knot_diagram(&self, pad_state: &TCSState) -> KnotDiagram {
         // Map PAD values to crossings (over/under crossings)
         let crossings: Vec<i32> = pad_state
             .pad
@@ -375,5 +394,23 @@ pub struct TransitionAnalysis {
 impl Default for TCSAnalyzer {
     fn default() -> Self {
         Self::new().expect("Failed to initialize TCS analyzer")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tcs_delta() {
+        let mut analyzer = TCSAnalyzer::new().unwrap();
+        let mut pad_state = PadGhostState::default();
+        pad_state.pad[0] = 0.5;  // Simple state
+        let signature = analyzer.analyze_state(&pad_state).unwrap();
+        // Basic check: entropy should be computed
+        assert!(signature.persistence_entropy >= 0.0);
+        // Delta proxy: knot complexity
+        let delta = signature.knot_complexity;  // Assume baseline 0
+        assert!(delta.is_finite());
     }
 }

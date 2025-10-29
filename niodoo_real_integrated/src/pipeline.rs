@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use rayon::prelude::*;
 use std::time::{Duration, Instant};
 
@@ -30,6 +30,7 @@ use parking_lot::RwLock;
 use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
+use qdrant_client::prelude::*;  // Assume dep
 
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
@@ -76,6 +77,7 @@ pub struct PipelineCycle {
     pub failure: String, // "soft", "hard", "none"
     pub pad_state: PadGhostState,
     pub topology: TopologicalSignature,
+    pub topology_mode: TopologyMode,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -120,7 +122,22 @@ pub struct Pipeline {
 
 impl Pipeline {
     pub async fn initialise(args: CliArgs) -> Result<Self> {
-        let config = RuntimeConfig::load(&args)?;
+        Self::initialise_with_topology(args, None).await
+    }
+
+    pub async fn initialise_with_mode(args: CliArgs, mode: TopologyMode) -> Result<Self> {
+        Self::initialise_with_topology(args, Some(mode)).await
+    }
+
+    async fn initialise_with_topology(
+        args: CliArgs,
+        override_mode: Option<TopologyMode>,
+    ) -> Result<Self> {
+        let mut config = RuntimeConfig::load(&args)?;
+        if let Some(mode) = override_mode {
+            config.topology_mode = mode;
+        }
+
         let samples =
             load_emotional_dataset(&config.training_data_path, config.training_data_sample_cap)?;
         let stats = compute_dataset_stats(&samples);
@@ -179,8 +196,10 @@ impl Pipeline {
         .await?;
 
         // Log collection state for diagnostics
-        if let Err(e) = erag.check_collection_info().await {
-            warn!(error = %e, "Failed to check Qdrant collection info");
+        if !config.mock_mode {
+            if let Err(e) = erag.check_collection_info().await {
+                warn!(error = %e, "Failed to check Qdrant collection info");
+            }
         }
         let tokenizer = Arc::new(
             DynamicTokenizerManager::initialise(
@@ -217,16 +236,21 @@ impl Pipeline {
             config.rng_seed,
         );
 
-        // Initialize TCS analyzer
-        let tcs_analyzer = match TCSAnalyzer::new() {
-            Ok(analyzer) => {
-                info!("TCS topology analyzer initialized");
-                Some(analyzer)
+        // Initialize TCS analyzer only when topology mode requires it
+        let tcs_analyzer = if matches!(config.topology_mode, TopologyMode::Hybrid) {
+            match TCSAnalyzer::new() {
+                Ok(analyzer) => {
+                    info!("TCS topology analyzer initialized");
+                    Some(analyzer)
+                }
+                Err(error) => {
+                    warn!(%error, "Failed to initialize TCS analyzer; using analytic fallback");
+                    None
+                }
             }
-            Err(error) => {
-                warn!(%error, "Failed to initialize TCS analyzer; falling back to mocked signatures");
-                None
-            }
+        } else {
+            info!("Topology mode set to baseline; skipping TCS analyzer initialization");
+            None
         };
 
         // Initialize curator if enabled
@@ -273,6 +297,37 @@ impl Pipeline {
             collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
         })
+    }
+
+    pub fn set_topology_mode(&mut self, mode: TopologyMode) -> Result<()> {
+        if self.config.topology_mode == mode {
+            return Ok(());
+        }
+
+        self.config.topology_mode = mode;
+        {
+            let mut guard = self.config_arc.write();
+            guard.topology_mode = mode;
+        }
+
+        self.tcs_analyzer = match mode {
+            TopologyMode::Hybrid => match TCSAnalyzer::new() {
+                Ok(analyzer) => {
+                    info!("TCS analyzer re-initialized for hybrid mode");
+                    Some(analyzer)
+                }
+                Err(error) => {
+                    warn!(%error, "Failed to initialize TCS analyzer; analytic fallback remains active");
+                    None
+                }
+            },
+            TopologyMode::Baseline => {
+                info!("Topology mode changed to baseline; disabling TCS analyzer");
+                None
+            }
+        };
+
+        Ok(())
     }
 
     pub async fn initialise_with_seed(args: CliArgs, seed: u64) -> Result<Self> {
@@ -351,25 +406,36 @@ impl Pipeline {
         timings.torus_ms = torus_start.elapsed().as_secs_f64() * 1000.0;
 
         let tcs_start = Instant::now();
-        let (topology, used_fallback) = match self.tcs_analyzer.as_mut() {
-            Some(analyzer) => match analyzer.analyze_state(&pad_state) {
-                Ok(signature) => (signature, false),
-                Err(error) => {
-                    warn!(%error, "TCS analyzer failed; using mocked topology signature");
-                    (mocked_topological_signature(), true)
+        let (topology, analysis_label) = match self.config.topology_mode {
+            TopologyMode::Hybrid => {
+                match self.tcs_analyzer.as_mut() {
+                    Some(analyzer) => match analyzer.analyze_state(&pad_state) {
+                        Ok(signature) => (signature, "hybrid"),
+                        Err(error) => {
+                            warn!(%error, "TCS analyzer failed; using analytic baseline signature");
+                            (
+                                baseline_topological_signature(&pad_state, &embedding),
+                                "hybrid_fallback",
+                            )
+                        }
+                    },
+                    None => {
+                        warn!("Hybrid mode requested but TCS analyzer unavailable; using analytic baseline signature");
+                        (
+                            baseline_topological_signature(&pad_state, &embedding),
+                            "hybrid_fallback",
+                        )
+                    }
                 }
-            },
-            None => {
-                warn!("TCS analyzer unavailable; using mocked topology signature");
-                (mocked_topological_signature(), true)
             }
+            TopologyMode::Baseline => (
+                baseline_topological_signature(&pad_state, &embedding),
+                "baseline",
+            ),
         };
         timings.tcs_ms = tcs_start.elapsed().as_secs_f64() * 1000.0;
-        if used_fallback {
-            info!("Mocked topology signature injected");
-        }
         info!(
-            "Pipeline stage: TCS topology analysis completed in {:.2}ms",
+            "Pipeline stage: topology analysis completed in {:.2}ms ({analysis_label})",
             timings.tcs_ms
         );
 
@@ -671,6 +737,7 @@ impl Pipeline {
                 failure: final_failure,
                 pad_state: pad_state.clone(),
                 topology: topology.clone(),
+                topology_mode: self.config.topology_mode,
             });
         }
 
@@ -741,6 +808,7 @@ impl Pipeline {
             failure: final_failure,
             pad_state,
             topology,
+            topology_mode: self.config.topology_mode,
         })
     }
 
@@ -1143,24 +1211,123 @@ fn tokenizer_path() -> Result<PathBuf> {
     anyhow::bail!("Tokenizer JSON not found; set TOKENIZER_JSON or QWEN_TOKENIZER")
 }
 
-fn mocked_topological_signature() -> TopologicalSignature {
-    let persistence_features: Vec<PersistenceFeature> = (0..=2)
-        .map(|dimension| PersistenceFeature {
-            birth: 0.0,
-            death: 2.0,
-            dimension,
+fn baseline_topological_signature(
+    pad_state: &PadGhostState,
+    embedding: &[f32],
+) -> TopologicalSignature {
+    let analysis_start = Instant::now();
+
+    let pad: Vec<f64> = pad_state.pad.iter().map(|v| *v as f64).collect();
+    let mu: Vec<f64> = pad_state.mu.iter().map(|v| *v as f64).collect();
+    let sigma: Vec<f64> = pad_state.sigma.iter().map(|v| *v as f64).collect();
+
+    let pad_min = pad.iter().fold(f64::INFINITY, |acc, value| acc.min(*value));
+    let pad_max = pad
+        .iter()
+        .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
+    let mu_min = mu.iter().fold(f64::INFINITY, |acc, value| acc.min(*value));
+    let mu_max = mu
+        .iter()
+        .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
+    let sigma_min = sigma
+        .iter()
+        .fold(f64::INFINITY, |acc, value| acc.min(*value));
+    let sigma_max = sigma
+        .iter()
+        .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
+
+    let persistence_features = vec![
+        PersistenceFeature {
+            birth: pad_min,
+            death: pad_max,
+            dimension: 0,
+        },
+        PersistenceFeature {
+            birth: mu_min,
+            death: mu_max,
+            dimension: 1,
+        },
+        PersistenceFeature {
+            birth: sigma_min,
+            death: sigma_max,
+            dimension: 2,
+        },
+    ];
+
+    let betti0 = pad.iter().filter(|value| **value >= 0.0).count();
+    let betti1 = pad.iter().filter(|value| **value < 0.0).count();
+    let sigma_threshold = if sigma.is_empty() {
+        0.0
+    } else {
+        sigma.iter().sum::<f64>() / sigma.len() as f64
+    };
+    let betti2 = sigma
+        .iter()
+        .zip(pad_state.raw_stds.iter())
+        .filter(|(sigma_value, raw_std)| **sigma_value > sigma_threshold && **sigma_value > **raw_std)
+        .count();
+
+    let knot_complexity = if pad.len() > 1 {
+        pad.windows(2)
+            .map(|window| (window[1] - window[0]).abs())
+            .sum::<f64>()
+            / (pad.len() - 1) as f64
+    } else {
+        0.0
+    };
+
+    let pad_mean = if pad.is_empty() {
+        0.0
+    } else {
+        pad.iter().sum::<f64>() / pad.len() as f64
+    };
+    let pad_variance = if pad.len() > 1 {
+        pad.iter()
+            .map(|value| (value - pad_mean).powi(2))
+            .sum::<f64>()
+            / (pad.len() - 1) as f64
+    } else {
+        0.0
+    };
+
+    let knot_polynomial = format!("λ² + {:.3}λ + {:.3}", pad_mean, pad_variance);
+
+    let pad_energy = pad
+        .iter()
+        .map(|value| value.abs())
+        .sum::<f64>()
+        .max(f64::EPSILON);
+    let persistence_entropy = pad
+        .iter()
+        .map(|value| {
+            let p = value.abs() / pad_energy;
+            if p > 0.0 {
+                -p * p.log2()
+            } else {
+                0.0
+            }
         })
-        .collect();
+        .sum::<f64>();
+
+    let mut spectral_basis: Vec<f64> = embedding.iter().map(|value| (*value as f64).abs()).collect();
+    spectral_basis.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    let spectral_gap = match spectral_basis.len() {
+        0 => 0.0,
+        1 => spectral_basis[0],
+        _ => spectral_basis[0] - spectral_basis[1],
+    };
+
+    let computation_time_ms = analysis_start.elapsed().as_secs_f64() * 1000.0;
 
     TopologicalSignature::new(
         persistence_features,
-        [1, 1, 0],
-        0.5,
-        "mocked_jones".to_string(),
+        [betti0, betti1, betti2],
+        knot_complexity,
+        knot_polynomial,
         2,
         None,
-        0.0,
-        1.0,
-        0.5,
+        computation_time_ms,
+        persistence_entropy,
+        spectral_gap,
     )
 }

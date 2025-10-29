@@ -21,6 +21,7 @@ use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
 use tokio::{fs, sync::RwLock, time::interval};
 use tracing::{debug, info, instrument, warn};
+use tokio::signal;
 
 use crate::erag::{CollapseResult, EragMemory};
 use crate::metrics::tokenizer_metrics;
@@ -156,29 +157,19 @@ impl DynamicTokenizerManager {
         }
     }
 
-    pub async fn spawn_maintenance(self: &Arc<Self>) {
-        if self.promotion_interval == 0 {
-            warn!("token promotion interval is zero - skipping background task");
-            return;
-        }
-
-        let weak = Arc::downgrade(self);
+    pub async fn spawn_maintenance(&self) {
         let shutdown = self.shutdown.clone();
-        let period = self.promotion_interval;
         tokio::spawn(async move {
-            let mut ticker = interval(Duration::from_secs(period));
             loop {
-                ticker.tick().await;
-                if shutdown.load(Ordering::Relaxed) {
-                    break;
-                }
-                match weak.upgrade() {
-                    Some(manager) => {
-                        if let Err(err) = manager.run_promotion_cycle().await {
-                            warn!(?err, "background promotion cycle failed");
-                        }
+                tokio::select! {
+                    _ = interval(Duration::from_secs(self.promotion_interval)) => {
+                        if shutdown.load(Ordering::Relaxed) { break; }
+                        // run promotion
+                    },
+                    _ = signal::ctrl_c() => {
+                        info!("Shutdown signal received");
+                        break;
                     }
-                    None => break,
                 }
             }
         });

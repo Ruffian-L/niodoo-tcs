@@ -18,11 +18,12 @@ pub struct PromotionResult {
     pub cycle_latency_ms: f64,
 }
 
-const PROMOTION_THRESHOLD: f32 = 0.55;
-const PRUNE_THRESHOLD: f32 = 0.25;
-
 /// Run a lightweight promotion simulation directly against the Gaussian memory system.
-pub fn run_promotion_cycle(memory_system: &mut GuessingMemorySystem) -> PromotionResult {
+pub fn run_promotion_cycle(
+    memory_system: &mut GuessingMemorySystem,
+    promotion_threshold: f32,
+    prune_threshold: f32,
+) -> PromotionResult {
     let cycle_start = Instant::now();
     let total_spheres = memory_system.sphere_count();
 
@@ -70,9 +71,9 @@ pub fn run_promotion_cycle(memory_system: &mut GuessingMemorySystem) -> Promotio
     let mut pruned: HashSet<SphereId> = HashSet::new();
 
     for (sphere_id, score) in recall {
-        if score >= PROMOTION_THRESHOLD {
+        if score >= promotion_threshold {
             promoted.insert(sphere_id);
-        } else if score <= PRUNE_THRESHOLD {
+        } else if score <= prune_threshold {
             pruned.insert(sphere_id);
         }
     }

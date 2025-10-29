@@ -129,8 +129,10 @@ impl SimilarityEngine {
     /// Uses AI model for real emotional analysis
     pub async fn process(&self, input: &str) -> Result<EmotionalState, Box<dyn std::error::Error>> {
         use super::ai_inference::AIInferenceEngine;
-        let ai_engine = AIInferenceEngine::new_default();
-        self.process_with_engine(input, &ai_engine).await
+        let mut ai_engine = AIInferenceEngine::new_default()
+            .await
+            .map_err(|err| -> Box<dyn std::error::Error> { Box::new(err) })?;
+        self.process_with_engine(input, &mut ai_engine).await
     }
 
     /// Internal method that accepts an AI engine for testability.
@@ -139,7 +141,7 @@ impl SimilarityEngine {
     pub(crate) async fn process_with_engine(
         &self,
         input: &str,
-        ai_engine: &super::ai_inference::AIInferenceEngine,
+        ai_engine: &mut super::ai_inference::AIInferenceEngine,
     ) -> Result<EmotionalState, Box<dyn std::error::Error>> {
         tracing::info!("🧠 SimilarityEngine: Analyzing input -> '{}'", input);
 
@@ -349,12 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empathy_engine_analysis() {
-        use crate::ai_inference::AIInferenceEngine;
         use crate::feeling_model::EmotionalAnalysis;
-
-        // Create mock AI engine that returns high frustration/anger
-        let mut mock_engine = AIInferenceEngine::new_default();
-        mock_engine.confidence = 1.0;
 
         let engine = SimilarityEngine::new();
 

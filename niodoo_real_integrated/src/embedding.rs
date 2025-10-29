@@ -82,6 +82,10 @@ impl QwenStatefulEmbedder {
 
     #[instrument(skip_all, fields(chars = prompt.len()))]
     pub async fn embed(&self, prompt: &str) -> Result<Vec<f32>> {
+        let dim = self.expected_dim;
+        if prompt.is_empty() {
+            return Ok(vec![0.0; dim]);
+        }
         if self.mock_mode {
             return Ok(vec![0.0; self.expected_dim]);
         }

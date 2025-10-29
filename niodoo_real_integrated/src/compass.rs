@@ -579,7 +579,7 @@ impl CompassEngine {
 
     fn determine_rollout_depth(state: &PadGhostState) -> usize {
         let entropy_scaled = (state.entropy * state.pad.len() as f64).round() as usize;
-        entropy_scaled.clamp(MIN_ROLLOUT_DEPTH, MAX_ROLLOUT_DEPTH)
+        entropy_scaled.clamp(MIN_ROLLOUT_DEPTH, MAX_ROLLOUT_DEPTH).min(100)
     }
 
     fn derive_mcts_seed(state: &PadGhostState) -> u64 {
