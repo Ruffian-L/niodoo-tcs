@@ -58,8 +58,8 @@ fn generate_synthetic_signature(
     endpoint: &str,
 ) -> TopologicalSignature {
     use rand::Rng;
-
-    let mut rng = rand::thread_rng();
+    let scope = format!("shard_telemetry/{shard_id}/{endpoint}/{idx}");
+    let mut rng = niodoo_real_integrated::util::seed_manager().get_rng(&scope);
     let spectral_gap = 0.6 + rng.gen_range(0.0..1.0) + idx as f64 * 0.05;
     let knot_complexity = 0.2 + idx as f64 * 0.03;
     let persistence_entropy = 0.15 + rng.gen_range(0.0..0.2);

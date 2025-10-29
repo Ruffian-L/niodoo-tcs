@@ -280,20 +280,17 @@ impl Pipeline {
     }
 
     fn next_torus_mapper(&self) -> TorusPadMapper {
-        // Derive a fresh mapper each request to avoid locking entropy across iterations.
-        match self.torus_strategy {
-            TorusSeedStrategy::Fixed(seed) => {
-                let counter = self.torus_counter.fetch_add(1, Ordering::Relaxed) + 1;
-                let derived_seed = seed ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-                TorusPadMapper::new(derived_seed)
-            }
-            TorusSeedStrategy::Random => {
-                // Still deterministic even in "random" mode - derive from counter
-                let counter = self.torus_counter.fetch_add(1, Ordering::Relaxed) + 1;
-                let seed = 0xCAFE_BABE ^ counter.wrapping_mul(0xDEAD_BEEF);
-                TorusPadMapper::new(seed)
-            }
-        }
+        // Derive a fresh mapper using the global seed manager and a stable scope
+        let counter = self.torus_counter.fetch_add(1, Ordering::Relaxed) + 1;
+        let scope = match self.torus_strategy {
+            TorusSeedStrategy::Fixed(seed) => format!("torus/fixed/{seed}/{counter}"),
+            TorusSeedStrategy::Random => format!("torus/derived/{counter}"),
+        };
+        let mut derived_rng = crate::util::seed_manager().get_rng(&scope);
+        // Extract u64 seed by sampling from the derived RNG to initialize mapper RNG deterministically
+        use rand::Rng;
+        let derived_seed: u64 = derived_rng.gen();
+        TorusPadMapper::new(derived_seed)
     }
 
     /// Recompute thresholds from updated config (called after learning updates)
@@ -400,13 +397,11 @@ impl Pipeline {
             self.thresholds.variance_stagnation,
         );
         let compass_guard = self.compass.clone().lock_owned().await;
+        let compass_scope = format!("compass/{}", cache_key);
         let compass_task = tokio::task::spawn_blocking(move || {
             let mut engine = compass_guard;
-            engine.evaluate_with_params(
-                compass_params,
-                &pad_state_for_compass,
-                Some(&topology_for_compass),
-            )
+            let mut rng = crate::util::seed_manager().get_rng(&compass_scope);
+            engine.evaluate_with_rng(&pad_state_for_compass, Some(&topology_for_compass), &mut rng)
         });
 
         let (compass, collapse) = tokio::try_join!(

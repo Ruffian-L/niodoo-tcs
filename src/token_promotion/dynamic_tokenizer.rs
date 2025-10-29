@@ -20,6 +20,16 @@ pub struct DynamicTokenizer {
 }
 
 impl DynamicTokenizer {
+    pub fn load_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+        use std::path::Path;
+        
+        let path = path.as_ref();
+        let base_tokenizer = Tokenizer::from_file(path)
+            .map_err(|e| anyhow!("Failed to load tokenizer from {}: {}", path.display(), e))?;
+        
+        Ok(Self::new(base_tokenizer))
+    }
+
     pub fn new(base_tokenizer: Tokenizer) -> Self {
         let next_token_id = base_tokenizer.get_vocab_size(false) as u32;
         Self {
@@ -101,12 +111,23 @@ impl DynamicTokenizer {
                         .next()
                         .map(|ch| ch.len_utf8())
                         .unwrap_or(1);
+                    
+                    // Safety check: ensure we actually advance
+                    if char_len == 0 {
+                        index += 1;
+                        continue;
+                    }
+                    
                     let fallback_slice = &remaining[..char_len];
                     let fallback_ids = self
                         .base_tokenizer
                         .encode(fallback_slice, false)
                         .map_err(|err| anyhow!("tokenizer encoding failed: {err}"))?;
-                    tokens.extend_from_slice(fallback_ids.get_ids());
+                    
+                    // Safety check: ensure fallback consumes something
+                    if !fallback_ids.get_ids().is_empty() {
+                        tokens.extend_from_slice(fallback_ids.get_ids());
+                    }
                     index += char_len;
                     continue;
                 }
@@ -126,7 +147,12 @@ impl DynamicTokenizer {
                             .unwrap_or(1)
                     });
 
-                index += consumed;
+                // Safety check: ensure we always make progress
+                if consumed == 0 {
+                    index += 1;
+                } else {
+                    index += consumed;
+                }
             }
         }
 

@@ -1,12 +1,18 @@
-#![cfg(feature = "qdrant")]
+#[cfg(feature = "qdrant")]
 use anyhow::Result;
+#[cfg(feature = "qdrant")]
 use prost::Message;
+#[cfg(feature = "qdrant")]
 use tracing::{info, Level};
 
+#[cfg(feature = "qdrant")]
 use niodoo_real_integrated::config::{CliArgs, HardwareProfile, OutputFormat};
+#[cfg(feature = "qdrant")]
 use niodoo_real_integrated::pipeline::Pipeline;
+#[cfg(feature = "qdrant")]
 use niodoo_real_integrated::vector_store::{RealQdrantClient, VectorStore};
 
+#[cfg(feature = "qdrant")]
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
@@ -51,7 +57,12 @@ async fn main() -> Result<()> {
             entropy: cycle.entropy as f32,
             iit_phi: cycle.topology.knot_complexity as f32, // Real knot complexity as IIT phi approximation
             knots: vec![cycle.topology.knot_complexity as f32], // Real knot complexity
-            betti_numbers: cycle.topology.betti_numbers.iter().map(|&x| x as i32).collect(),
+            betti_numbers: cycle
+                .topology
+                .betti_numbers
+                .iter()
+                .map(|&x| x as i32)
+                .collect(),
             spectral_gap: cycle.topology.spectral_gap as f32,
             persistent_entropy: cycle.topology.persistence_entropy as f32,
         }),
@@ -119,25 +130,21 @@ async fn main() -> Result<()> {
     info!("Pad values: {:?}", decoded.pad_ghost.as_ref().unwrap().pad);
 
     // Upsert binary proto state to Qdrant
-    let qdrant_url = std::env::var("QDRANT_URL")
-        .unwrap_or_else(|_| "http://localhost:6334".to_string());
-    let collection = std::env::var("QDRANT_COLLECTION")
-        .unwrap_or_else(|_| "experiences".to_string());
-    
+    let qdrant_url =
+        std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".to_string());
+    let collection =
+        std::env::var("QDRANT_COLLECTION").unwrap_or_else(|_| "experiences".to_string());
+
     match RealQdrantClient::new(&qdrant_url, &collection) {
         Ok(client) => {
             // Get embedding for the prompt - we need to embed it again
             // For production, you'd cache this from the pipeline
             use niodoo_real_integrated::embedding::QwenStatefulEmbedder;
             use std::sync::Arc;
-            
-            let embedder = QwenStatefulEmbedder::new(
-                "http://127.0.0.1:11434",
-                "qwen2.5-7b",
-                896,
-                10000,
-            )?;
-            
+
+            let embedder =
+                QwenStatefulEmbedder::new("http://127.0.0.1:11434", "qwen2.5-7b", 896, 10000)?;
+
             match embedder.embed(prompt).await {
                 Ok(embedding) => {
                     if let Err(e) = client.upsert_binary(prompt, &bytes, &embedding).await {
@@ -152,10 +159,18 @@ async fn main() -> Result<()> {
             }
         }
         Err(e) => {
-            info!("Could not initialize Qdrant client: {} (skipping upsert)", e);
+            info!(
+                "Could not initialize Qdrant client: {} (skipping upsert)",
+                e
+            );
         }
     }
 
     info!("✅ Test complete – Protobuf integration verified with REAL topology flow!");
     Ok(())
+}
+
+#[cfg(not(feature = "qdrant"))]
+fn main() {
+    eprintln!("Enable the 'qdrant' feature to run proto_test");
 }

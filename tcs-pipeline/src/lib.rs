@@ -47,6 +47,11 @@ impl TCSOrchestrator {
             config.takens_delay,
             config.takens_data_dim,
         );
+        let rl_agent = match std::env::var("NIODOO_SEED").ok().and_then(|v| v.parse::<u64>().ok()) {
+            Some(seed) => ExplorationAgent::with_seed(seed),
+            None => ExplorationAgent::new(),
+        };
+
         Ok(Self {
             buffer: EmbeddingBuffer::new(window),
             takens,
@@ -55,7 +60,7 @@ impl TCSOrchestrator {
                 config.homology_max_edge_length,
             ),
             knot_analyzer: JonesPolynomial::new(config.jones_cache_capacity),
-            rl_agent: ExplorationAgent::new(),
+            rl_agent,
             consensus: ThresholdConsensus::new(config.consensus_threshold),
             tqft: FrobeniusAlgebra::new(config.tqft_algebra_dimension),
             state: CognitiveState::default(),

@@ -526,10 +526,11 @@ pub struct ExplorationAgent {
 
 impl ExplorationAgent {
     pub fn new() -> Self {
-        Self {
-            rng: StdRng::from_entropy(),
-            action_space: DEFAULT_ACTION_SPACE,
-        }
+        let seed = std::env::var("NIODOO_SEED")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(42);
+        Self { rng: StdRng::seed_from_u64(seed), action_space: DEFAULT_ACTION_SPACE }
     }
 }
 

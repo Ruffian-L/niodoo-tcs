@@ -7,6 +7,8 @@ use candle_core::{Device, Shape, Tensor};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use rayon::prelude::*;
+use std::time::Instant;
 
 /// Configuration for LoRA adapter
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -399,6 +401,7 @@ impl LoRATrainer {
         )?;
         let momentum_factor = 0.9;
 
+        let training_start = Instant::now();
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
             let mut sample_count = 0;
@@ -413,27 +416,26 @@ impl LoRATrainer {
                 let batch_end = (batch_start + batch_size).min(data.len());
                 let batch = &data[batch_start..batch_end];
 
-                // Stack all inputs and targets into batched tensors
-                let mut batched_inputs = Vec::new();
-                let mut batched_targets = Vec::new();
+                // Parallelize input/target preparation on CPU with rayon
+                let (batched_inputs, batched_targets): (Vec<Vec<f32>>, Vec<Vec<f32>>) = batch
+                    .par_iter()
+                    .map(|(input_vec, target_vec)| {
+                        let mut input_values = input_vec.clone();
+                        if input_values.len() < self.config.input_dim {
+                            input_values.resize(self.config.input_dim, 0.0);
+                        } else if input_values.len() > self.config.input_dim {
+                            input_values.truncate(self.config.input_dim);
+                        }
 
-                for (input_vec, target_vec) in batch {
-                    let mut input_values = input_vec.to_vec();
-                    if input_values.len() < self.config.input_dim {
-                        input_values.resize(self.config.input_dim, 0.0);
-                    } else if input_values.len() > self.config.input_dim {
-                        input_values.truncate(self.config.input_dim);
-                    }
-                    batched_inputs.push(input_values);
-
-                    let mut target_values = target_vec.to_vec();
-                    if target_values.len() < self.config.output_dim {
-                        target_values.resize(self.config.output_dim, 0.0);
-                    } else if target_values.len() > self.config.output_dim {
-                        target_values.truncate(self.config.output_dim);
-                    }
-                    batched_targets.push(target_values);
-                }
+                        let mut target_values = target_vec.clone();
+                        if target_values.len() < self.config.output_dim {
+                            target_values.resize(self.config.output_dim, 0.0);
+                        } else if target_values.len() > self.config.output_dim {
+                            target_values.truncate(self.config.output_dim);
+                        }
+                        (input_values, target_values)
+                    })
+                    .unzip();
 
                 // Create batched tensors: (batch_size, dim)
                 let batch_size_actual = batched_inputs.len();
@@ -468,27 +470,26 @@ impl LoRATrainer {
                 for (batch_start, batch_end) in batch_ranges {
                     let batch = &data[batch_start..batch_end];
 
-                    // Stack batch for efficient processing
-                    let mut batched_inputs = Vec::new();
-                    let mut batched_targets = Vec::new();
+                    // Parallelize input/target preparation on CPU with rayon
+                    let (batched_inputs, batched_targets): (Vec<Vec<f32>>, Vec<Vec<f32>>) = batch
+                        .par_iter()
+                        .map(|(input_vec, target_vec)| {
+                            let mut input_values = input_vec.clone();
+                            if input_values.len() < self.config.input_dim {
+                                input_values.resize(self.config.input_dim, 0.0);
+                            } else if input_values.len() > self.config.input_dim {
+                                input_values.truncate(self.config.input_dim);
+                            }
 
-                    for (input_vec, target_vec) in batch {
-                        let mut input_values = input_vec.to_vec();
-                        if input_values.len() < self.config.input_dim {
-                            input_values.resize(self.config.input_dim, 0.0);
-                        } else if input_values.len() > self.config.input_dim {
-                            input_values.truncate(self.config.input_dim);
-                        }
-                        batched_inputs.push(input_values);
-
-                        let mut target_values = target_vec.to_vec();
-                        if target_values.len() < self.config.output_dim {
-                            target_values.resize(self.config.output_dim, 0.0);
-                        } else if target_values.len() > self.config.output_dim {
-                            target_values.truncate(self.config.output_dim);
-                        }
-                        batched_targets.push(target_values);
-                    }
+                            let mut target_values = target_vec.clone();
+                            if target_values.len() < self.config.output_dim {
+                                target_values.resize(self.config.output_dim, 0.0);
+                            } else if target_values.len() > self.config.output_dim {
+                                target_values.truncate(self.config.output_dim);
+                            }
+                            (input_values, target_values)
+                        })
+                        .unzip();
 
                     let batch_size_actual = batched_inputs.len();
                     let batched_input = Tensor::from_vec(
@@ -559,6 +560,9 @@ impl LoRATrainer {
                 }
             }
         }
+
+        let total_ms = training_start.elapsed().as_secs_f64() * 1000.0;
+        tracing::info!(latency_ms = total_ms, "LoRA training completed");
 
         Ok(final_loss)
     }

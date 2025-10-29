@@ -1,4 +1,7 @@
 use std::collections::HashSet;
+use once_cell::sync::OnceCell;
+use blake3::hash as blake3_hash;
+use rand::{rngs::StdRng, SeedableRng};
 
 /// Compute Shannon entropy (base e) for a slice of probabilities.
 pub fn shannon_entropy(probs: &[f64]) -> f64 {
@@ -105,4 +108,44 @@ pub fn unique_tokens(text: &str) -> Vec<String> {
         }
     }
     result
+}
+
+/// Seed manager for deterministic RNG across the integrated runtime
+#[derive(Debug, Clone, Copy)]
+pub struct SeedManager {
+    master_seed: u64,
+}
+
+impl SeedManager {
+    /// Create a new seed manager from a master seed
+    pub fn new(master_seed: u64) -> Self {
+        Self { master_seed }
+    }
+
+    /// Initialize from environment variables. Falls back to 42 if unset/invalid.
+    /// Recognized vars: NIODOO_SEED, RNG_SEED
+    pub fn from_env() -> Self {
+        let seed = std::env::var("NIODOO_SEED")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .or_else(|| std::env::var("RNG_SEED").ok().and_then(|v| v.parse::<u64>().ok()))
+            .unwrap_or(42);
+        Self::new(seed)
+    }
+
+    /// Derive a deterministic StdRng for a given scope string
+    pub fn get_rng(&self, scope: &str) -> StdRng {
+        let digest = blake3_hash(scope.as_bytes());
+        let mut scope_seed_bytes = [0u8; 8];
+        scope_seed_bytes.copy_from_slice(&digest.as_bytes()[..8]);
+        let scope_seed = u64::from_le_bytes(scope_seed_bytes);
+        StdRng::seed_from_u64(self.master_seed ^ scope_seed)
+    }
+}
+
+static GLOBAL_SEED_MANAGER: OnceCell<SeedManager> = OnceCell::new();
+
+/// Global access to the process-level seed manager, initialized from env
+pub fn seed_manager() -> &'static SeedManager {
+    GLOBAL_SEED_MANAGER.get_or_init(SeedManager::from_env)
 }

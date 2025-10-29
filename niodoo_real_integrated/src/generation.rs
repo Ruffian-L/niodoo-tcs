@@ -388,8 +388,13 @@ impl GenerationEngine {
             tokio::try_join!(baseline_future, claude_future)?;
 
         let echoes: Vec<LensEcho> = vec![claude];
-        // Pass MCTS branches to synthesize_hybrid for weighted merge (MCTS-aware synthesis)
-        let hybrid = synthesize_hybrid(&baseline, &echoes, &compass.mcts_branches);
+        // Pass topology and MCTS branches to synthesize_hybrid for weighted merge
+        let hybrid = synthesize_hybrid(
+            &baseline,
+            &echoes,
+            &compass.mcts_branches,
+            topology,
+        );
 
         // Adaptive resilience logic is experimental and disabled for now.
         // if adaptive_mode {
@@ -1254,8 +1259,12 @@ impl GenerationEngine {
     }
 }
 
-fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho], mcts_branches: &[crate::compass::MctsBranch]) -> String {
-    // Weighted merge: baseline gets 60%, best echo gets 40%
+fn synthesize_hybrid(
+    baseline: &str,
+    echoes: &[LensEcho],
+    mcts_branches: &[crate::compass::MctsBranch],
+    topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+) -> String {
     if echoes.is_empty() {
         return baseline.to_string();
     }
@@ -1275,14 +1284,25 @@ fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho], mcts_branches: &[crate
     } else {
         0.5 // Default middle weight
     };
-    
+
+    // Topology-confidence scaled alpha in [0.4, 0.8]
+    let alpha = if let Some(topo) = topology {
+        let confidence = topo.knot_complexity.min(topo.spectral_gap).clamp(0.0, 1.0);
+        0.4 + 0.4 * confidence
+    } else {
+        0.6
+    };
+
     // Adjust merge threshold based on MCTS confidence
     let threshold_multiplier = 1.0 + mcts_weight;
-    
+
     // If echo is significantly better (adjusted threshold), use weighted merge
-    if !best_echo.is_empty() && best_echo.len() as f64 > baseline.len() as f64 * (1.3 * threshold_multiplier) {
-        // Weighted merge: baseline portion depends on MCTS confidence
-        let baseline_weight = 0.6 + (1.0 - mcts_weight) * 0.2; // 0.6-0.8 range
+    if !best_echo.is_empty()
+        && best_echo.len() as f64
+            > baseline.len() as f64 * (0.7 * threshold_multiplier)
+    {
+        // Baseline share decreases as alpha increases (more weight toward echo)
+        let baseline_weight = (1.0 - alpha).clamp(0.2, 0.6);
         let baseline_part = baseline
             .chars()
             .take((baseline.len() as f64 * baseline_weight) as usize)
