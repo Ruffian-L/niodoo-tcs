@@ -406,49 +406,59 @@ impl LoRATrainer {
                 * (1.0 + (epoch as f32 * std::f32::consts::PI / epochs as f32).cos())
                 / 2.0;
 
-            // Process in batches
-            for batch_start in (0..data.len()).step_by(batch_size) {
-                let batch_end = (batch_start + batch_size).min(data.len());
-                let batch = &data[batch_start..batch_end];
+        for batch_start in (0..data.len()).step_by(batch_size) {
+            let batch_end = (batch_start + batch_size).min(data.len());
+            let batch = &data[batch_start..batch_end];
 
-                for (input_vec, target_vec) in batch {
-                    // Proper dimension handling with padding/truncation
-                    let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
-                    let target =
-                        self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
+            for (input_vec, target_vec) in batch {
+                let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
+                let target = self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
 
-                    // Forward pass
-                    let output = self.adapter.forward(&input)?;
+                let output = self.adapter.forward(&input)?;
+                let diff = output.sub(&target)?;
+                let loss = diff.sqr()?.mean_all()?;
+                let loss_val = loss.to_scalar::<f32>()?;
 
-                    // Compute loss (MSE)
-                    let diff = output.sub(&target)?;
-                    let loss = diff.sqr()?.mean_all()?;
-                    let loss_val = loss.to_scalar::<f32>()?;
-                    total_loss += loss_val;
-                    sample_count += 1;
+                total_loss += loss_val;
+                sample_count += 1;
+            }
+        }
 
-                    // Compute gradients using proper chain rule (backpropagation)
-                    if epoch > 0 && loss_val > 0.001 {
-                        let (grad_a, grad_b) =
-                            self.compute_gradients(&input, &target, &output, &device)?;
+            // Sequential gradient updates (if needed) - batched for performance
+            if epoch > 0 && total_loss > 0.001 {
+                // Perform gradient updates sequentially
+                for batch_start in (0..data.len()).step_by(batch_size) {
+                    let batch_end = (batch_start + batch_size).min(data.len());
+                    let batch = &data[batch_start..batch_end];
 
-                        // Apply gradient clipping to prevent explosion
-                        let grad_a_clipped = self.clip_gradients(grad_a, 1.0)?;
-                        let grad_b_clipped = self.clip_gradients(grad_b, 1.0)?;
+                    for (input_vec, target_vec) in batch {
+                        let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
+                        let target = self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
+                        let output = self.adapter.forward(&input)?;
+                        let loss_val = output.sub(&target)?.sqr()?.mean_all()?.to_scalar::<f32>()?;
 
-                        // Update momentum (SGD with momentum)
-                        let momentum_factor_tensor = Tensor::new(&[momentum_factor], &device)?;
-                        let lr_tensor = Tensor::new(&[current_lr], &device)?;
+                        if loss_val > 0.001 {
+                            let (grad_a, grad_b) =
+                                self.compute_gradients(&input, &target, &output, &device)?;
 
-                        momentum_a = momentum_a
-                            .broadcast_mul(&momentum_factor_tensor)?
-                            .broadcast_add(&grad_a_clipped.broadcast_mul(&lr_tensor)?)?;
-                        momentum_b = momentum_b
-                            .broadcast_mul(&momentum_factor_tensor)?
-                            .broadcast_add(&grad_b_clipped.broadcast_mul(&lr_tensor)?)?;
+                            // Apply gradient clipping to prevent explosion
+                            let grad_a_clipped = self.clip_gradients(grad_a, 1.0)?;
+                            let grad_b_clipped = self.clip_gradients(grad_b, 1.0)?;
 
-                        // Apply gradient updates
-                        self.apply_gradient_updates(momentum_a.clone(), momentum_b.clone())?;
+                            // Update momentum (SGD with momentum)
+                            let momentum_factor_tensor = Tensor::new(&[momentum_factor], &device)?;
+                            let lr_tensor = Tensor::new(&[current_lr], &device)?;
+
+                            momentum_a = momentum_a
+                                .broadcast_mul(&momentum_factor_tensor)?
+                                .broadcast_add(&grad_a_clipped.broadcast_mul(&lr_tensor)?)?;
+                            momentum_b = momentum_b
+                                .broadcast_mul(&momentum_factor_tensor)?
+                                .broadcast_add(&grad_b_clipped.broadcast_mul(&lr_tensor)?)?;
+
+                            // Apply gradient updates
+                            self.apply_gradient_updates(momentum_a.clone(), momentum_b.clone())?;
+                        }
                     }
                 }
             }

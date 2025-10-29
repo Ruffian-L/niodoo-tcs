@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
@@ -27,7 +27,8 @@ use blake3::hash as blake3_hash;
 use lru::LruCache;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tcs_core::topology::PersistenceFeature;
-use tokio::sync::{Mutex as AsyncMutex, RwLock};
+use parking_lot::RwLock;
+use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
 
 // Define CuratedExperience struct
@@ -98,6 +99,7 @@ pub struct Pipeline {
     embedder: QwenStatefulEmbedder,
     torus_strategy: TorusSeedStrategy,
     torus_counter: AtomicU64,
+    rng_seed: u64,
     compass: Arc<AsyncMutex<CompassEngine>>,
     erag: Arc<EragClient>,
     tokenizer: Arc<DynamicTokenizerManager>,
@@ -195,9 +197,8 @@ impl Pipeline {
         )?;
         generator.set_mock_mode(config.mock_mode);
         generator.set_system_prompt(config.system_prompt.clone());
-        let config_arc = Arc::new(RwLock::new(config.clone()));
+        let config_arc = Arc::new(parking_lot::RwLock::new(config.clone()));
         let erag_arc = Arc::new(erag.clone());
-        let config_sync = Arc::new(Mutex::new(config.clone()));
         let learning = LearningLoop::new(
             config.learning_window,
             config.breakthrough_threshold,
@@ -205,7 +206,7 @@ impl Pipeline {
             config.dqn_gamma,
             config.dqn_alpha,
             erag_arc.clone(),
-            config_sync.clone(),
+            config_arc.clone(),
             tokenizer_arc.clone(),
             config.rng_seed,
         );
@@ -255,6 +256,7 @@ impl Pipeline {
             embedder,
             torus_strategy,
             torus_counter: AtomicU64::new(0),
+            rng_seed: config.rng_seed,
             compass,
             erag: erag_arc.clone(),
             tokenizer: tokenizer_arc.clone(),
@@ -270,7 +272,7 @@ impl Pipeline {
                 hard_retries: 0,
                 total_retries: 0,
                 reflection_buffer: None,
-                rng_seed: 42,
+                rng_seed: config.rng_seed,
             })),
         })
     }
@@ -453,7 +455,7 @@ impl Pipeline {
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
         // Update generation engine with latest config params (before generation)
-        let current_config = self.config_arc.read().await.clone();
+        let current_config = self.config_arc.read().clone();
         self.generator.apply_runtime_from_config(&current_config);
         self.generator.update_params(
             current_config.temperature,
@@ -469,7 +471,7 @@ impl Pipeline {
         let generation_start = Instant::now();
         // Apply latest runtime parameters before generation
         {
-            let cfg = self.config_arc.read().await.clone();
+            let cfg = self.config_arc.read().clone();
             self.generator.apply_runtime_from_config(&cfg);
             self.recompute_thresholds();
             self.config = cfg;
