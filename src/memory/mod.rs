@@ -279,7 +279,7 @@ impl MobiusMemorySystem {
 
         // Calculate novelty based on emotional vector
         let novelty =
-            Self::calculate_novelty_static(&memory.emotional_vector, &config.consciousness);
+            Self::calculate_novelty_static(&memory.emotional_vector, config);
 
         // Ensure novelty stays within bounds
         let target_novelty = if novelty < config.memory.novelty_bounds_min {
@@ -304,14 +304,14 @@ impl MobiusMemorySystem {
     /// Calculate novelty of emotional vector
     fn calculate_novelty_static(
         emotional_vector: &(f64, f64, f64),
-        config: &ConsciousnessConfig,
+        config: &AppConfig,
     ) -> f64 {
         let entropy = config.memory.default_entropy;
         let (r, g, b) = *emotional_vector;
         let distance_from_neutral =
-            ((r - config.default_authenticity).powi(2) + (g - config.memory.emotional_neutral_g).powi(2) + (b - config.memory.emotional_neutral_b).powi(2))
+            ((r - config.consciousness.default_authenticity).powi(2) + (g - config.memory.emotional_neutral_g).powi(2) + (b - config.memory.emotional_neutral_b).powi(2))
                 .sqrt();
-        distance_from_neutral * (1.0 + entropy * config.emotional_plasticity)
+        distance_from_neutral * (1.0 + entropy * config.consciousness.emotional_plasticity)
     }
 
     /// Check if memory should transition between layers

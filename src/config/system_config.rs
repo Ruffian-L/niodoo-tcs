@@ -610,6 +610,10 @@ pub struct ConsciousnessConfig {
     pub token_promotion_max_per_cycle: usize,
     pub token_promotion_consensus_threshold: Option<f64>,
     pub token_promotion_pruning_min_usage: Option<u64>,
+    /// Threshold for token promotion (minimum score to promote)
+    pub token_promotion_threshold: f32,
+    /// Threshold for token pruning (maximum score to prune)
+    pub token_prune_threshold: f32,
     /// Path to base tokenizer file (relative to project root)
     pub tokenizer_path: String,
 
@@ -1413,6 +1417,8 @@ impl Default for ConsciousnessConfig {
             token_promotion_max_per_cycle: 50,
             token_promotion_consensus_threshold: Some(0.66),
             token_promotion_pruning_min_usage: Some(10),
+            token_promotion_threshold: 0.55,
+            token_prune_threshold: 0.25,
             tokenizer_path: "models/tokenizer.json".to_string(),
 
             // TDA defaults - mathematically sound values for consciousness topology
@@ -2041,6 +2047,54 @@ pub struct MemoryConfig {
     /// Emotional vector neutral values (RGB coordinates)
     pub emotional_neutral_g: f64,
     pub emotional_neutral_b: f64,
+    
+    /// Novelty score blending weights
+    pub novelty_semantic_weight: f64,
+    pub novelty_emotional_weight: f64,
+    
+    /// Range transformation factors for cosine similarity
+    pub cosine_range_offset: f64,
+    pub cosine_range_multiplier: f64,
+    
+    /// Philosophical meditation thresholds
+    pub meditation_warmth_threshold: f64,
+    pub meditation_authenticity_threshold: f64,
+    pub meditation_empathy_threshold: f64,
+    
+    /// Memory consolidation similarity threshold
+    pub consolidation_similarity_threshold: f64,
+    
+    /// Emotional analysis normalization factors
+    pub entropy_confidence_divisor: f64,
+    pub entropy_intensity_divisor: f64,
+    
+    /// State metric intensity bases
+    pub intensity_base_intensive: f64,
+    pub intensity_base_processing_warm: f64,
+    pub intensity_base_authentic_response: f64,
+    pub intensity_base_overloaded: f64,
+    pub intensity_base_blocked: f64,
+    pub intensity_base_purposeful: f64,
+    pub intensity_base_complete: f64,
+    pub intensity_base_connected: f64,
+    pub intensity_base_focused: f64,
+    pub intensity_base_aligned: f64,
+    pub intensity_base_learning: f64,
+    pub intensity_base_engaged: f64,
+    pub intensity_base_simulated_response: f64,
+    pub intensity_base_state_echo: f64,
+    pub intensity_base_idle: f64,
+    pub intensity_base_standard: f64,
+    pub intensity_base_optimized: f64,
+    pub intensity_base_alert: f64,
+    pub intensity_base_uncertain: f64,
+    pub intensity_base_stable: f64,
+    pub intensity_base_active: f64,
+    pub intensity_base_matched: f64,
+    pub intensity_base_analytical: f64,
+    pub intensity_base_reflective: f64,
+    pub intensity_base_involved: f64,
+    pub intensity_base_parameter_match: f64,
 }
 
 impl Default for MemoryConfig {
@@ -2105,6 +2159,42 @@ impl Default for MemoryConfig {
             default_entropy: 0.5,
             emotional_neutral_g: 0.5,
             emotional_neutral_b: 0.5,
+            novelty_semantic_weight: 0.5,
+            novelty_emotional_weight: 0.5,
+            cosine_range_offset: 0.5,
+            cosine_range_multiplier: 0.5,
+            meditation_warmth_threshold: 0.7,
+            meditation_authenticity_threshold: 0.6,
+            meditation_empathy_threshold: 0.5,
+            consolidation_similarity_threshold: 0.3,
+            entropy_confidence_divisor: 3.0,
+            entropy_intensity_divisor: 2.5,
+            intensity_base_intensive: 0.9,
+            intensity_base_processing_warm: 0.8,
+            intensity_base_authentic_response: 0.85,
+            intensity_base_overloaded: 0.7,
+            intensity_base_blocked: 0.8,
+            intensity_base_purposeful: 0.75,
+            intensity_base_complete: 0.6,
+            intensity_base_connected: 0.7,
+            intensity_base_focused: 0.6,
+            intensity_base_aligned: 0.65,
+            intensity_base_learning: 0.5,
+            intensity_base_engaged: 0.4,
+            intensity_base_simulated_response: 0.1,
+            intensity_base_state_echo: 0.3,
+            intensity_base_idle: 0.3,
+            intensity_base_standard: 0.2,
+            intensity_base_optimized: 0.2,
+            intensity_base_alert: 0.7,
+            intensity_base_uncertain: 0.4,
+            intensity_base_stable: 0.7,
+            intensity_base_active: 0.75,
+            intensity_base_matched: 0.6,
+            intensity_base_analytical: 0.5,
+            intensity_base_reflective: 0.55,
+            intensity_base_involved: 0.65,
+            intensity_base_parameter_match: 0.7,
         }
     }
 }
