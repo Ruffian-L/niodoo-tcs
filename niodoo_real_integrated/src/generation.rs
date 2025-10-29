@@ -1356,12 +1356,7 @@ struct LogProbs {
 struct LogProbToken {
     #[serde(default)]
     logprob: f64,
+    #[allow(dead_code)]
     #[serde(default)]
     token: String,
-}
-
-// NEW: Variance adjustment helper
-fn adjust_variance(text: &str, scalar: f64) -> String {
-    // Placeholder: In production, apply variance modulation logic
-    format!("{} (variance scaled by {:.2})", text, scalar)
 }

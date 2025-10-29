@@ -105,6 +105,7 @@ pub struct ReplayTuple {
 
 #[derive(Default)]
 struct CuratedSample {
+    #[allow(dead_code)]
     input: String,
     output: String,
     reward: f64,
@@ -625,20 +626,6 @@ impl LearningLoop {
             } else {
                 self.action_space[0].clone()
             }
-        }
-    }
-
-    fn apply_action_to_config(config: &mut RuntimeConfig, action: &DqnAction) {
-        match action.param.as_str() {
-            "temperature" => config.temperature += action.delta,
-            "top_p" => config.top_p += action.delta,
-            "mcts_c" => config.phase2_mcts_c_increment += action.delta,
-            "retrieval_top_k" => {
-                config.phase2_retrieval_top_k_increment += action.delta as i32;
-            }
-            "novelty_threshold" => config.novelty_threshold += action.delta,
-            "self_awareness_level" => config.self_awareness_level += action.delta,
-            _ => {}
         }
     }
 

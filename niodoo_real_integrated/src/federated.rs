@@ -1,24 +1,181 @@
-use crate::tcs_analysis::TopologicalSignature;  // For NodeSig alias
-use crate::pipeline::Pipeline;
+use std::cmp::Ordering;
+use std::time::Duration;
 
-type NodeSig = TopologicalSignature;
+use bincode::deserialize;
+use chrono::{DateTime, TimeZone, Utc};
+use prost::Message;
+use thiserror::Error;
+use tokio::time;
+use tracing::instrument;
+
+use crate::pipeline::Pipeline;
+use crate::tcs_analysis::TopologicalSignature;
+
+pub mod proto {
+    tonic::include_proto!("niodoo.federated");
+}
+
+pub type NodeSig = TopologicalSignature;
 type FluxCoeff = f64;
 
-// Stub protobuf types
+/// Maximum number of telemetry samples retained to bound memory while
+/// keeping an adequate rolling horizon for resilience calculations.
+const MAX_TRACE_MEMORY: usize = 512;
+
 #[derive(Debug, Clone)]
-struct FluxTrace {
+struct FluxObservation {
     value: f64,
+    timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone)]
-struct FluxTraceBatch {
-    traces: Vec<FluxTrace>,
+#[derive(Debug, Clone, Default)]
+pub struct FluxMetrics {
+    pub fused_flux: f64,
+    pub shard_count: u32,
+    pub interquartile_range: f64,
+    pub median_gap: f64,
+    pub shard_id: Option<String>,
+    pub latest_timestamp: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone)]
-struct FluxMetrics {
-    fused_flux: f64,
-    shard_count: u32,
+#[derive(Debug, Error)]
+pub enum FederatedError {
+    #[error("failed to decode flux telemetry: {0}")]
+    FluxDecode(#[from] prost::DecodeError),
+    #[error("invalid telemetry timestamp: {0}")]
+    InvalidTimestamp(i64),
+    #[error("failed to deserialize shard signature: {0}")]
+    SignatureDecode(#[from] bincode::Error),
+    #[error("transport setup failed: {0}")]
+    Transport(#[from] tonic::transport::Error),
+    #[error("gRPC request failed: {0}")]
+    Rpc(#[from] tonic::Status),
+    #[error("fetch_shard_signatures exceeded timeout of {0:?}")]
+    RpcTimeout(Duration),
+}
+
+pub type FederatedResult<T> = Result<T, FederatedError>;
+
+#[derive(Debug, Clone, Default)]
+pub struct NodalDiagnostics {
+    flux_traces: Vec<FluxObservation>,
+}
+
+impl NodalDiagnostics {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[instrument(skip(self, proto_flux, interquartile_gaps))]
+    pub fn merge_shard_metrics(
+        &mut self,
+        proto_flux: &[u8],
+        interquartile_gaps: &[f64],
+    ) -> FederatedResult<FluxMetrics> {
+        let proto_batch = proto::FluxTraceBatch::decode(proto_flux)?;
+        let shard_identifier = (!proto_batch.shard_id.is_empty())
+            .then(|| proto_batch.shard_id.clone());
+
+        let mut shard_samples = 0u32;
+        for trace in proto_batch.traces {
+            let timestamp = Utc
+                .timestamp_millis_opt(trace.timestamp_ms)
+                .single()
+                .ok_or(FederatedError::InvalidTimestamp(trace.timestamp_ms))?;
+
+            self.flux_traces.push(FluxObservation {
+                value: trace.value,
+                timestamp,
+            });
+            shard_samples += 1;
+        }
+
+        if self.flux_traces.len() > MAX_TRACE_MEMORY {
+            let excess = self.flux_traces.len() - MAX_TRACE_MEMORY;
+            self.flux_traces.drain(0..excess);
+        }
+
+        let (median_gap, interquartile_range) = match Self::compute_quartiles(interquartile_gaps) {
+            Some((q1, median, q3)) => {
+                let iqr = (q3 - q1).max(f64::EPSILON);
+                (median, iqr)
+            }
+            None => (1.0, 1.0),
+        };
+        let gap_weight = 1.0 + median_gap / interquartile_range;
+
+        let latest_timestamp = self.flux_traces.last().map(|obs| obs.timestamp);
+        let timespan_ms = match (self.flux_traces.first(), latest_timestamp) {
+            (Some(first), Some(last)) => last
+                .signed_duration_since(first.timestamp)
+                .num_milliseconds()
+                .abs()
+                .max(1) as f64,
+            _ => 1.0,
+        };
+
+        let mut weighted_sum = 0.0;
+        let mut weight_total = 0.0;
+
+        for observation in &self.flux_traces {
+            let age_ms = latest_timestamp
+                .map(|latest| {
+                    latest
+                        .signed_duration_since(observation.timestamp)
+                        .num_milliseconds()
+                        .abs() as f64
+                })
+                .unwrap_or_default();
+            let recency_weight = 1.0 - (age_ms / timespan_ms).min(1.0);
+            let weight = gap_weight * (recency_weight + f64::EPSILON);
+            weighted_sum += observation.value * weight;
+            weight_total += weight;
+        }
+
+        let fused_flux = if weight_total > f64::EPSILON {
+            weighted_sum / weight_total
+        } else {
+            0.0
+        };
+
+        Ok(FluxMetrics {
+            fused_flux,
+            shard_count: shard_samples,
+            interquartile_range,
+            median_gap,
+            shard_id: shard_identifier,
+            latest_timestamp,
+        })
+    }
+
+    fn compute_quartiles(samples: &[f64]) -> Option<(f64, f64, f64)> {
+        if samples.is_empty() {
+            return None;
+        }
+        let mut sorted = samples.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
+
+        Some((
+            percentile(&sorted, 0.25),
+            percentile(&sorted, 0.50),
+            percentile(&sorted, 0.75),
+        ))
+    }
+}
+
+fn percentile(sorted: &[f64], p: f64) -> f64 {
+    debug_assert!(!sorted.is_empty());
+    let clamped = p.clamp(0.0, 1.0);
+    let rank = clamped * (sorted.len() - 1) as f64;
+    let lower = rank.floor() as usize;
+    let upper = rank.ceil() as usize;
+
+    if lower == upper {
+        return sorted[lower];
+    }
+
+    let weight = rank - lower as f64;
+    sorted[lower] + weight * (sorted[upper] - sorted[lower])
 }
 
 // FederatedResilienceOrchestrator trait for distributed recovery
@@ -30,63 +187,130 @@ pub trait FederatedResilienceOrchestrator {
 impl FederatedResilienceOrchestrator for Pipeline {
     fn aggregate_topology(&self, shards: &[NodeSig]) -> FluxCoeff {
         if shards.is_empty() {
-            return 1.0;  // Neutral default
+            return 1.0;
         }
-        let sum_gaps = shards.iter().map(|sig| sig.spectral_gap).sum::<f64>();
+        let sum_gaps = shards
+            .iter()
+            .map(|sig| sig.spectral_gap)
+            .sum::<f64>();
         sum_gaps / shards.len() as f64
     }
 }
 
-// NEW: NodalDiagnostics for federated telemetry
 #[derive(Debug, Clone)]
-pub struct NodalDiagnostics {
-    flux_traces: Vec<FluxTrace>,  // Assume FluxTrace protobuf type
+pub struct ShardClient {
+    client: proto::shard_telemetry_client::ShardTelemetryClient<tonic::transport::Channel>,
+    request_timeout: Duration,
 }
 
-impl NodalDiagnostics {
-    pub fn new() -> Self { Self { flux_traces: Vec::new() } }
+impl ShardClient {
+    const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 
-    pub fn merge_shard_metrics(&mut self, proto_flux: &[u8], interquartile_gaps: &[f64]) -> FluxMetrics {
-        // Stub protobuf deserialization
-        let batch = FluxTraceBatch { traces: Vec::new() };
-        self.flux_traces.extend(batch.traces);
+    pub async fn connect(endpoint: &str) -> FederatedResult<Self> {
+        Self::connect_with_timeout(endpoint, Self::DEFAULT_TIMEOUT).await
+    }
 
-        // Compute metrics with IQR fusion
-        let mean_gap = if interquartile_gaps.is_empty() {
-            0.0
-        } else {
-            interquartile_gaps.iter().sum::<f64>() / interquartile_gaps.len() as f64
+    pub async fn connect_with_timeout(
+        endpoint: &str,
+        request_timeout: Duration,
+    ) -> FederatedResult<Self> {
+        let channel = tonic::transport::Endpoint::from_shared(endpoint.to_string())?
+            .connect_timeout(request_timeout)
+            .concurrency_limit(32)
+            .tcp_nodelay(true)
+            .connect()
+            .await?;
+        let client = proto::shard_telemetry_client::ShardTelemetryClient::new(channel);
+
+        Ok(Self {
+            client,
+            request_timeout,
+        })
+    }
+
+    pub async fn fetch_shard_signatures(
+        &self,
+        endpoints: &[String],
+    ) -> FederatedResult<Vec<NodeSig>> {
+        if endpoints.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut client = self.client.clone();
+        let request = proto::ShardSignatureRequest {
+            endpoints: endpoints.to_vec(),
         };
-        let fused_flux = if self.flux_traces.is_empty() {
-            0.0
-        } else {
-            self.flux_traces.iter().map(|t| t.value * mean_gap).sum::<f64>() / self.flux_traces.len() as f64
-        };
 
-        FluxMetrics { fused_flux, shard_count: batch.traces.len() as u32 }
+        let response = time::timeout(
+            self.request_timeout,
+            client.pull_signatures(request),
+        )
+        .await
+        .map_err(|_| FederatedError::RpcTimeout(self.request_timeout))??;
+
+        let payload = response.into_inner();
+
+        let mut result = Vec::with_capacity(payload.signatures.len());
+        for blob in payload.signatures {
+            let signature: NodeSig = deserialize(&blob.payload)?;
+            result.push(signature);
+        }
+
+        Ok(result)
     }
 }
 
-// Bind to tests/integration.rs (placeholder emulation)
 #[cfg(test)]
 mod tests {
-    #[tokio::test]
-    async fn test_nodal_diagnostics() {
-        let mut diagnostics = NodalDiagnostics::new();
-        let proto = vec![];  // Mock protobuf
-        let gaps = vec![0.1, 0.2, 0.3];
-        let metrics = diagnostics.merge_shard_metrics(&proto, &gaps);
-        assert!(metrics.fused_flux > 0.28);  // Fidelity assertion
-        // Simulate 20 shards
-        for _ in 0..20 { diagnostics.merge_shard_metrics(&proto, &gaps); }
-    }
-}
+    use super::*;
+    use chrono::{Duration, Utc};
+    use prost::Message;
 
-// Placeholder gRPC stubs (expand as needed)
-mod grpc {
-    // Stub for shard communication
-    pub fn fetch_shard_signatures(_endpoints: &[String]) -> Vec<super::NodeSig> {
-        vec![]  // Implement actual gRPC calls
+    #[test]
+    fn test_merge_shard_metrics() {
+        let mut diagnostics = NodalDiagnostics::new();
+        let now = Utc::now();
+
+        let batch = proto::FluxTraceBatch {
+            shard_id: "alpha".into(),
+            traces: vec![
+                proto::FluxTrace {
+                    value: 0.72,
+                    timestamp_ms: now.timestamp_millis(),
+                },
+                proto::FluxTrace {
+                    value: 0.64,
+                    timestamp_ms: (now + Duration::milliseconds(8)).timestamp_millis(),
+                },
+                proto::FluxTrace {
+                    value: 0.91,
+                    timestamp_ms: (now + Duration::milliseconds(16)).timestamp_millis(),
+                },
+            ],
+        };
+
+        let payload = batch.encode_to_vec();
+        let gaps = vec![0.12, 0.18, 0.22, 0.34, 0.40];
+
+        let metrics = diagnostics
+            .merge_shard_metrics(&payload, &gaps)
+            .expect("telemetry decode must succeed");
+
+        assert_eq!(metrics.shard_count, 3);
+        assert!(metrics.fused_flux.is_finite());
+        assert!(metrics.fused_flux > 0.0);
+        assert_eq!(metrics.shard_id.as_deref(), Some("alpha"));
+        assert!(metrics.interquartile_range >= f64::EPSILON);
+        assert!(metrics.median_gap > 0.0);
+    }
+
+    #[test]
+    fn quartile_matches_expected() {
+        let samples = [1.0, 3.0, 5.0, 7.0];
+        let (q1, median, q3) =
+            NodalDiagnostics::compute_quartiles(&samples).expect("quartiles must exist");
+        assert!((q1 - 2.0).abs() < 1e-9);
+        assert!((median - 4.0).abs() < 1e-9);
+        assert!((q3 - 6.0).abs() < 1e-9);
     }
 }
-// Integrate in pipeline.rs as: let flux = self.aggregate_topology(&shards);

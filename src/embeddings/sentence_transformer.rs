@@ -8,48 +8,10 @@ use candle_transformers::models::bert::{BertModel, Config};
 use lru::LruCache;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-// use tokenizers::Tokenizer; // Temporarily disabled due to onig linking issues
-
-// Stub type for Tokenizer
-#[derive(Clone)]
-pub struct Tokenizer;
-
-impl Tokenizer {
-    pub fn from_file(_path: impl Into<std::path::PathBuf>) -> Result<Self> {
-        Ok(Tokenizer)
-    }
-
-    pub fn encode(&self, _text: &str, _add_special_tokens: bool) -> Result<Encoding> {
-        Ok(Encoding {
-            ids: vec![],
-            attention_mask: vec![],
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct Encoding {
-    pub ids: Vec<u32>,
-    pub attention_mask: Vec<u32>,
-}
-
-impl Encoding {
-    pub fn map_err<F, O>(self, _f: F) -> Result<Self, O>
-    where
-        F: FnOnce(anyhow::Error) -> O,
-    {
-        Ok(self)
-    }
-
-    pub fn get_ids(&self) -> &[u32] {
-        &self.ids
-    }
-
-    pub fn get_attention_mask(&self) -> &[u32] {
-        &self.attention_mask
-    }
-}
+use tokenizers::{models::bpe::BPE, pre_tokenizers::whitespace::Whitespace, Tokenizer};
+use tracing::warn;
 
 // Use a trait for future flexibility
 pub trait SentenceEmbedder {
@@ -70,8 +32,7 @@ impl SemanticTransformer {
         let vb = VarBuilder::from_pth(model_path, DType::F32, &device)?;
         let model = BertModel::load(vb, &config)?;
 
-        let tokenizer = Tokenizer::from_file(model_path)
-            .map_err(|e| anyhow::anyhow!("Tokenizer error: {}", e))?;
+        let tokenizer = Self::load_tokenizer(model_path)?;
 
         Ok(Self {
             model,
@@ -80,6 +41,49 @@ impl SemanticTransformer {
                 std::num::NonZeroUsize::new(1024).unwrap(),
             ))),
         })
+    }
+
+    fn load_tokenizer(model_path: &str) -> Result<Tokenizer> {
+        let path = Path::new(model_path);
+
+        let mut candidates: Vec<PathBuf> = Vec::new();
+
+        if path.is_file() {
+            if path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("json"))
+                .unwrap_or(false)
+            {
+                candidates.push(path.to_path_buf());
+            }
+
+            if let Some(parent) = path.parent() {
+                candidates.push(parent.join("tokenizer.json"));
+            }
+        } else {
+            candidates.push(path.join("tokenizer.json"));
+        }
+
+        for candidate in &candidates {
+            if candidate.exists() {
+                return Tokenizer::from_file(candidate).map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to load tokenizer from {}: {}",
+                        candidate.display(),
+                        e
+                    )
+                });
+            }
+        }
+
+        warn!(
+            "Tokenizer JSON not found near '{}'; using fallback whitespace tokenizer",
+            model_path
+        );
+        let mut tokenizer = Tokenizer::new(BPE::default());
+        tokenizer.with_pre_tokenizer(Some(Whitespace::default()));
+        Ok(tokenizer)
     }
 
     fn preprocess(&self, text: &str) -> Result<(Tensor, Tensor)> {

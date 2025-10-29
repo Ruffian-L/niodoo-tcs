@@ -16,43 +16,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-// use tokenizers::Tokenizer; // Temporarily disabled due to onig linking issues
-
-// Stub type for Tokenizer
-#[derive(Clone)]
-pub struct Tokenizer;
-
-impl Tokenizer {
-    pub fn from_file(_path: impl Into<std::path::PathBuf>) -> Result<Self> {
-        Ok(Tokenizer)
-    }
-
-    pub fn encode(&self, _text: &str, _add_special_tokens: bool) -> Result<Encoding> {
-        Ok(Encoding {
-            ids: vec![],
-            attention_mask: vec![],
-        })
-    }
-}
-
-#[derive(Clone)]
-pub struct Encoding {
-    pub ids: Vec<u32>,
-    pub attention_mask: Vec<u32>,
-}
-
-impl Encoding {
-    pub fn get_ids(&self) -> &[u32] {
-        &self.ids
-    }
-
-    pub fn map_err<F, O>(self, _f: F) -> Result<Self, O>
-    where
-        F: FnOnce(anyhow::Error) -> O,
-    {
-        Ok(self)
-    }
-}
+use tokenizers::{
+    decoders::byte_level::ByteLevel, models::bpe::BPE, pre_tokenizers::whitespace::Whitespace,
+    Tokenizer,
+};
 use tracing::{debug, info, warn};
 
 /// Document structure for RAG operations
@@ -305,42 +272,40 @@ impl LocalEmbeddingGenerator {
 
         #[cfg(not(feature = "hf-hub"))]
         {
-            warn!("HF-hub feature not enabled, using stub tokenizer for local embeddings");
-            // Create stub tokenizer
-            let mut vocab = HashMap::new();
-            vocab.insert("[PAD]".to_string(), 0);
-            vocab.insert("[UNK]".to_string(), 100);
-            vocab.insert("[CLS]".to_string(), 101);
-            vocab.insert("[SEP]".to_string(), 102);
-            vocab.insert("[MASK]".to_string(), 103);
+            use std::fs;
 
-            let mut counter = 104i64;
-            for ch in b'a'..=b'z' {
-                vocab.insert((ch as char).to_string(), counter);
-                counter += 1;
-            }
-            for ch in b'A'..=b'Z' {
-                vocab.insert((ch as char).to_string(), counter);
-                counter += 1;
-            }
-            for ch in b'0'..=b'9' {
-                vocab.insert((ch as char).to_string(), counter);
-                counter += 1;
-            }
-            vocab.insert(" ".to_string(), counter);
-            counter += 1;
-            vocab.insert(".".to_string(), counter);
-            counter += 1;
-            vocab.insert(",".to_string(), counter);
-            counter += 1;
+            let candidate_paths = [
+                PathBuf::from(model_id),
+                PathBuf::from("models")
+                    .join(model_id)
+                    .join("tokenizer.json"),
+                PathBuf::from("models").join("tokenizer.json"),
+            ];
 
-            // Create a simple tokenizer from vocab
-            let tokenizer_json = serde_json::to_string(&vocab).unwrap();
-            let tokenizer_path = PathBuf::from("/tmp/stub_tokenizer.json");
-            std::fs::write(&tokenizer_path, tokenizer_json).unwrap();
+            for path in candidate_paths {
+                if path.exists() {
+                    info!("Using local tokenizer file: {}", path.display());
+                    return Tokenizer::from_file(&path).map_err(|e| {
+                        anyhow::anyhow!("Failed to load tokenizer from {}: {}", path.display(), e)
+                    });
+                }
+            }
 
-            Tokenizer::from_file(&tokenizer_path)
-                .map_err(|e| anyhow::anyhow!("Failed to create stub tokenizer: {}", e))
+            warn!("HF-hub feature not enabled, falling back to whitespace BPE tokenizer");
+            let mut tokenizer = Tokenizer::new(BPE::default());
+            tokenizer.with_pre_tokenizer(Some(Whitespace::default()));
+            tokenizer.with_decoder(Some(ByteLevel::default()));
+            // Persist fallback tokenizer so subsequent runs reuse identical configuration
+            let fallback_path = std::env::temp_dir().join("niodoo_fallback_tokenizer.json");
+            if let Some(parent) = fallback_path.parent() {
+                if let Err(err) = fs::create_dir_all(parent) {
+                    warn!("Failed to create fallback tokenizer directory: {}", err);
+                }
+            }
+            if let Err(err) = tokenizer.save(&fallback_path, false) {
+                warn!("Failed to persist fallback tokenizer: {}", err);
+            }
+            Ok(tokenizer)
         }
     }
 
@@ -540,7 +505,7 @@ impl LocalEmbeddingGenerator {
                 let mut input_ids: Vec<i64> =
                     encoding.get_ids().iter().map(|&id| id as i64).collect();
                 let mut attention_mask: Vec<i64> = encoding
-                    .attention_mask
+                    .get_attention_mask()
                     .iter()
                     .map(|&id| id as i64)
                     .collect();
@@ -608,18 +573,13 @@ impl LocalEmbeddingGenerator {
 pub struct FastEmbeddingGenerator {
     /// Simple hash-based embedding for performance testing
     embedding_dim: usize,
-    // tokenizer: Tokenizer, // Temporarily disabled due to onig linking issues
 }
 
 impl FastEmbeddingGenerator {
     pub fn new(embedding_dim: usize) -> Result<Self> {
         // Use a simple tokenizer for fast operations
-        // let tokenizer = Tokenizer::new(tokenizers::models::bpe::BPE::default()); // Temporarily disabled due to onig linking issues
 
-        Ok(Self {
-            embedding_dim,
-            // tokenizer, // Temporarily disabled due to onig linking issues
-        })
+        Ok(Self { embedding_dim })
     }
 
     /// Generate fast embedding using simple hash-based approach
@@ -682,7 +642,7 @@ mod tests {
         let mock_tokenize =
             |text: &str, _tokenizer: &Tokenizer, _max_len: usize| (vec![1, 2, 3], vec![1, 1, 1]);
 
-        let tokenizer = Tokenizer::new(tokenizers::models::bpe::BPE::default());
+        let tokenizer = Tokenizer::new(BPE::default());
 
         // First call should compute
         let result1 = cache.get_or_compute("test", &tokenizer, 10, mock_tokenize);

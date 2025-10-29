@@ -199,7 +199,7 @@ impl TrainingDataExporter {
 
             // Load base tokenizer (Qwen2.5)
             let tokenizer_path = base_dir.join("models/Qwen2.5-0.5B-Instruct/tokenizer.json");
-            // match tokenizers::Tokenizer::from_file(&tokenizer_path) { // Temporarily disabled due to onig linking issues
+            // match tokenizers::Tokenizer::from_file(&tokenizer_path) {
             //     Ok(base_tokenizer) => {
             //         let dynamic_tokenizer = DynamicTokenizer::new(base_tokenizer);
             //         let tokenizer_arc = Arc::new(RwLock::new(dynamic_tokenizer));
@@ -237,7 +237,7 @@ impl TrainingDataExporter {
             //         (None, None)
             //     }
             // }
-            warn!("⚠️  Dynamic tokenizer temporarily disabled due to onig linking issues");
+            warn!("⚠️  Dynamic tokenizer temporarily disabled pending promotion engine refactor");
             (None, None)
         } else {
             info!("📝 Dynamic tokenizer disabled");

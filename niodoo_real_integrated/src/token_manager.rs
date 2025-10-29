@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread::Builder;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -20,7 +19,7 @@ use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
 use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
-use tokio::{fs, runtime::Handle, sync::RwLock, task::block_in_place, time::interval};
+use tokio::{fs, sync::RwLock, time::interval};
 use tracing::{debug, info, instrument, warn};
 
 use crate::erag::{CollapseResult, EragMemory};

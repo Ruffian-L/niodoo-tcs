@@ -354,11 +354,19 @@ impl PersistentHomologyCalculator {
 
         let mut parent: Vec<usize> = (0..n).collect();
 
-        fn find(parent: &mut [usize], x: usize) -> usize {
-            if parent[x] != x {
-                parent[x] = find(parent, x);
+        fn find(parent: &mut [usize], mut x: usize) -> usize {
+            // Iterative find with path compression to avoid recursion
+            let mut root = x;
+            while parent[root] != root {
+                root = parent[root];
             }
-            parent[x]
+            // Path compression
+            while parent[x] != x {
+                let next = parent[x];
+                parent[x] = root;
+                x = next;
+            }
+            root
         }
 
         fn union(parent: &mut [usize], x: usize, y: usize) {

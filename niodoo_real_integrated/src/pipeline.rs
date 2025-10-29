@@ -1111,39 +1111,6 @@ fn cache_key(prompt: &str) -> u64 {
     hasher.finish()
 }
 
-fn locate_qwen_model() -> Result<PathBuf> {
-    let candidates = ["QWEN_MODEL_PATH", "QWEN_CODER_ONNX", "QWEN_STATEFUL_ONNX"];
-    for key in candidates {
-        if let Ok(value) = std::env::var(key) {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                let path = PathBuf::from(trimmed);
-                if path.exists() {
-                    return Ok(path);
-                }
-            }
-        }
-    }
-
-    if let Ok(models_dir) = std::env::var("MODELS_DIR") {
-        let base = PathBuf::from(models_dir)
-            .join("qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx");
-        if base.exists() {
-            return Ok(base);
-        }
-    }
-
-    let fallback =
-        PathBuf::from("../models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx");
-    if fallback.exists() {
-        Ok(fallback)
-    } else {
-        anyhow::bail!(
-            "Qwen model path not provided or found; set QWEN_MODEL_PATH or QWEN_CODER_ONNX"
-        )
-    }
-}
-
 fn tokenizer_path() -> Result<PathBuf> {
     if let Ok(value) = std::env::var("TOKENIZER_JSON") {
         let path = PathBuf::from(value);
