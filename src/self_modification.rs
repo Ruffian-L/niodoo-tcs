@@ -806,12 +806,12 @@ impl SelfModificationFramework {
         // 3. Check for stability issues
         // 4. Run test scenarios
 
-        // For now, simulate validation with configurable success rate
-        let success_probability = 0.8; // TODO: Make this configurable
+        // Simulate validation with configurable success rate
+        let success_probability = self.config.validation_success_probability;
 
         let mut rng = rand::thread_rng();
         let status = if rng.gen::<f32>() < success_probability {
-            ValidationStatus::Success { confidence: 0.85 }
+            ValidationStatus::Success { confidence: self.config.validation_confidence_threshold }
         } else {
             ValidationStatus::Failed {
                 reason: "Performance validation failed - metrics below threshold".to_string(),
@@ -826,7 +826,7 @@ impl SelfModificationFramework {
                 memory_delta_mb: 0.0,  // Would be measured
                 accuracy_delta: 0.0,   // Would be measured
                 stability_delta: 0.0,  // Would be measured
-                confidence: 0.8,
+                confidence: self.config.default_performance_confidence,
             },
             validation_duration_ms: self.config.validation_duration_seconds * 1000,
             recommendations: Vec::new(),
@@ -876,9 +876,9 @@ impl SelfModificationFramework {
             if let Some(component) = self.cognitive_components.get(&active_modification.component_id) {
                 active_modification.rollback_info = Some(RollbackInfo {
                     original_config: component.configuration.clone(),
-                    rollback_deadline: SystemTime::now() + Duration::from_secs(300), // 5 minutes
+                    rollback_deadline: SystemTime::now() + Duration::from_secs(self.config.rollback_deadline_seconds),
                     rollback_attempts: 0,
-                    max_rollback_attempts: self.parameters.max_rollback_attempts,
+                    max_rollback_attempts: self.config.max_rollback_attempts,
                 });
             }
         }
@@ -899,8 +899,8 @@ impl SelfModificationFramework {
 
     /// Record a self-modification event
     fn record_event(&mut self, event: SelfModificationEvent) {
-        // Keep only last 1000 events to prevent memory bloat
-        if self.modification_history.len() >= 1000 {
+        // Keep only last N events to prevent memory bloat (configurable)
+        if self.modification_history.len() >= self.config.history_retention_limit {
             self.modification_history.pop_front();
         }
 

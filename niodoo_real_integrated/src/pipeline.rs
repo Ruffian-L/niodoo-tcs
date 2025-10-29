@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use anyhow::Result;
 
-use crate::compass::{CompassEngine, CompassOutcome, CompassRuntimeParams};
+use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant, CompassRuntimeParams};
 use crate::config::{CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig};
 use crate::curator::Curator;
 use crate::data::{
@@ -26,10 +26,15 @@ use crate::util::rouge_l;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use parking_lot::RwLock;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
+
+// Proto module - include generated proto code from OUT_DIR during build
+#[allow(dead_code)]
+pub mod proto {
+    include!(concat!(env!("OUT_DIR"), "/niodoo.rs"));
+}
 
 // Define CuratedExperience struct
 #[derive(Debug, Clone)]
@@ -69,6 +74,7 @@ pub struct PipelineCycle {
     pub last_entropy: f64,
     pub failure: String, // "soft", "hard", "none"
     pub pad_state: PadGhostState,
+    pub topology: TopologicalSignature,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -175,14 +181,15 @@ impl Pipeline {
         if let Err(e) = erag.check_collection_info().await {
             warn!(error = %e, "Failed to check Qdrant collection info");
         }
-        let tokenizer = DynamicTokenizerManager::initialise(
-            &tokenizer_path()?,
-            std::env::var("NODE_ID").unwrap_or_else(|_| "niodoo_real_integrated".to_string()),
-            config.token_promotion_interval,
-        )
-        .await?;
-        let tokenizer_arc = Arc::new(tokenizer);
-        tokenizer_arc.spawn_maintenance().await;
+        let tokenizer = Arc::new(
+            DynamicTokenizerManager::initialise(
+                &tokenizer_path()?,
+                std::env::var("NODE_ID").unwrap_or_else(|_| "niodoo_real_integrated".to_string()),
+                config.token_promotion_interval,
+            )
+            .await?,
+        );
+        tokenizer.spawn_maintenance().await;
         let mut generator = GenerationEngine::new_with_config(
             &config.vllm_endpoint,
             &config.vllm_model,
@@ -205,7 +212,7 @@ impl Pipeline {
             config.dqn_alpha,
             erag_arc.clone(),
             config_arc.clone(),
-            tokenizer_arc.clone(),
+            tokenizer.clone(),
             config.rng_seed,
         );
 
@@ -256,7 +263,7 @@ impl Pipeline {
             torus_counter: AtomicU64::new(0),
             compass,
             erag: erag_arc.clone(),
-            tokenizer: tokenizer_arc.clone(),
+            tokenizer: tokenizer.clone(),
             generator,
             learning: AsyncMutex::new(learning),
             curator,
@@ -281,8 +288,10 @@ impl Pipeline {
                 TorusPadMapper::new(derived_seed)
             }
             TorusSeedStrategy::Random => {
-                let mut rng = StdRng::from_entropy();
-                TorusPadMapper::new(rng.next_u64())
+                // Still deterministic even in "random" mode - derive from counter
+                let counter = self.torus_counter.fetch_add(1, Ordering::Relaxed) + 1;
+                let seed = 0xCAFE_BABE ^ counter.wrapping_mul(0xDEAD_BEEF);
+                TorusPadMapper::new(seed)
             }
         }
     }
@@ -665,6 +674,7 @@ impl Pipeline {
                 last_entropy: pad_state.entropy,
                 failure: final_failure,
                 pad_state: pad_state.clone(),
+                topology: topology.clone(),
             });
         }
 
@@ -734,6 +744,7 @@ impl Pipeline {
             last_entropy: pad_state.entropy,
             failure: final_failure,
             pad_state,
+            topology,
         })
     }
 
@@ -1009,7 +1020,7 @@ impl Pipeline {
         // High Betti-1 indicates many loops/cycles - check if intentional
         if topology.betti_numbers[1] > 3 {
             // In Discover quadrant, loops are good (exploration)
-            if compass.quadrant == crate::compass::CompassQuadrant::Discover {
+            if compass.quadrant == CompassQuadrant::Discover {
                 adjusted_quality *= 1.05;
             } else {
                 // In other quadrants, too many loops might indicate confusion
@@ -1034,7 +1045,7 @@ impl Pipeline {
 
         // Force refinement if topology shows problematic patterns
         let topology_needs_refinement = topology.knot_complexity > 0.7  // Too tangled
-            || (topology.betti_numbers[1] > 5 && compass.quadrant != crate::compass::CompassQuadrant::Discover)  // Too many loops outside exploration
+            || (topology.betti_numbers[1] > 5 && compass.quadrant != CompassQuadrant::Discover)  // Too many loops outside exploration
             || topology.persistence_entropy > 0.8; // Too chaotic structure
 
         let (refined, learned) =

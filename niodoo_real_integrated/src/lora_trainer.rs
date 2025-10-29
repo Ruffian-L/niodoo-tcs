@@ -68,8 +68,10 @@ impl LoRAAdapter {
 
         // Create lora_a with random values from Kaiming distribution
         let lora_a_data = {
+            use rand::rngs::StdRng;
             use rand::Rng;
-            let mut rng = rand::thread_rng();
+            use rand::SeedableRng;
+            let mut rng = StdRng::seed_from_u64(42); // Deterministic seed
             let mut values = vec![0.0_f32; config.input_dim * config.rank];
             for val in &mut values {
                 *val = rng.gen_range(-kaiming_bound..kaiming_bound);
@@ -406,63 +408,139 @@ impl LoRATrainer {
                 * (1.0 + (epoch as f32 * std::f32::consts::PI / epochs as f32).cos())
                 / 2.0;
 
+            // Batched processing: stack all samples in batch into single tensor operation
             for batch_start in (0..data.len()).step_by(batch_size) {
                 let batch_end = (batch_start + batch_size).min(data.len());
                 let batch = &data[batch_start..batch_end];
 
+                // Stack all inputs and targets into batched tensors
+                let mut batched_inputs = Vec::new();
+                let mut batched_targets = Vec::new();
+
                 for (input_vec, target_vec) in batch {
-                    let input = self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
-                    let target =
-                        self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
+                    let mut input_values = input_vec.to_vec();
+                    if input_values.len() < self.config.input_dim {
+                        input_values.resize(self.config.input_dim, 0.0);
+                    } else if input_values.len() > self.config.input_dim {
+                        input_values.truncate(self.config.input_dim);
+                    }
+                    batched_inputs.push(input_values);
 
-                    let output = self.adapter.forward(&input)?;
-                    let diff = output.sub(&target)?;
-                    let loss = diff.sqr()?.mean_all()?;
-                    let loss_val = loss.to_scalar::<f32>()?;
-
-                    total_loss += loss_val;
-                    sample_count += 1;
+                    let mut target_values = target_vec.to_vec();
+                    if target_values.len() < self.config.output_dim {
+                        target_values.resize(self.config.output_dim, 0.0);
+                    } else if target_values.len() > self.config.output_dim {
+                        target_values.truncate(self.config.output_dim);
+                    }
+                    batched_targets.push(target_values);
                 }
+
+                // Create batched tensors: (batch_size, dim)
+                let batch_size_actual = batched_inputs.len();
+                let batched_input = Tensor::from_vec(
+                    batched_inputs.into_iter().flatten().collect(),
+                    Shape::from((batch_size_actual, self.config.input_dim)),
+                    &device,
+                )?;
+                let batched_target = Tensor::from_vec(
+                    batched_targets.into_iter().flatten().collect(),
+                    Shape::from((batch_size_actual, self.config.output_dim)),
+                    &device,
+                )?;
+
+                // Single forward pass for entire batch
+                let batched_output = self.adapter.forward(&batched_input)?;
+                let diff = batched_output.sub(&batched_target)?;
+                let loss = diff.sqr()?.mean_all()?;
+                let loss_val = loss.to_scalar::<f32>()?;
+
+                total_loss += loss_val * batch_size_actual as f32;
+                sample_count += batch_size_actual;
             }
 
-            // Sequential gradient updates (if needed) - batched for performance
+            // Batched gradient updates for efficiency with parallel processing
             if epoch > 0 && total_loss > 0.001 {
-                // Perform gradient updates sequentially
-                for batch_start in (0..data.len()).step_by(batch_size) {
-                    let batch_end = (batch_start + batch_size).min(data.len());
+                let batch_ranges: Vec<(usize, usize)> = (0..data.len())
+                    .step_by(batch_size)
+                    .map(|start| (start, (start + batch_size).min(data.len())))
+                    .collect();
+
+                for (batch_start, batch_end) in batch_ranges {
                     let batch = &data[batch_start..batch_end];
 
+                    // Stack batch for efficient processing
+                    let mut batched_inputs = Vec::new();
+                    let mut batched_targets = Vec::new();
+
                     for (input_vec, target_vec) in batch {
-                        let input =
-                            self.prepare_tensor(input_vec, self.config.input_dim, &device)?;
-                        let target =
-                            self.prepare_tensor(target_vec, self.config.output_dim, &device)?;
-                        let output = self.adapter.forward(&input)?;
-                        let loss_val =
-                            output.sub(&target)?.sqr()?.mean_all()?.to_scalar::<f32>()?;
-
-                        if loss_val > 0.001 {
-                            let (grad_a, grad_b) =
-                                self.compute_gradients(&input, &target, &output, &device)?;
-
-                            // Apply gradient clipping to prevent explosion
-                            let grad_a_clipped = self.clip_gradients(grad_a, 1.0)?;
-                            let grad_b_clipped = self.clip_gradients(grad_b, 1.0)?;
-
-                            // Update momentum (SGD with momentum)
-                            let momentum_factor_tensor = Tensor::new(&[momentum_factor], &device)?;
-                            let lr_tensor = Tensor::new(&[current_lr], &device)?;
-
-                            momentum_a = momentum_a
-                                .broadcast_mul(&momentum_factor_tensor)?
-                                .broadcast_add(&grad_a_clipped.broadcast_mul(&lr_tensor)?)?;
-                            momentum_b = momentum_b
-                                .broadcast_mul(&momentum_factor_tensor)?
-                                .broadcast_add(&grad_b_clipped.broadcast_mul(&lr_tensor)?)?;
-
-                            // Apply gradient updates
-                            self.apply_gradient_updates(momentum_a.clone(), momentum_b.clone())?;
+                        let mut input_values = input_vec.to_vec();
+                        if input_values.len() < self.config.input_dim {
+                            input_values.resize(self.config.input_dim, 0.0);
+                        } else if input_values.len() > self.config.input_dim {
+                            input_values.truncate(self.config.input_dim);
                         }
+                        batched_inputs.push(input_values);
+
+                        let mut target_values = target_vec.to_vec();
+                        if target_values.len() < self.config.output_dim {
+                            target_values.resize(self.config.output_dim, 0.0);
+                        } else if target_values.len() > self.config.output_dim {
+                            target_values.truncate(self.config.output_dim);
+                        }
+                        batched_targets.push(target_values);
+                    }
+
+                    let batch_size_actual = batched_inputs.len();
+                    let batched_input = Tensor::from_vec(
+                        batched_inputs.into_iter().flatten().collect(),
+                        Shape::from((batch_size_actual, self.config.input_dim)),
+                        &device,
+                    )?;
+                    let batched_target = Tensor::from_vec(
+                        batched_targets.into_iter().flatten().collect(),
+                        Shape::from((batch_size_actual, self.config.output_dim)),
+                        &device,
+                    )?;
+
+                    let batched_output = self.adapter.forward(&batched_input)?;
+                    let loss_val = batched_output
+                        .sub(&batched_target)?
+                        .sqr()?
+                        .mean_all()?
+                        .to_scalar::<f32>()?;
+
+                    if loss_val > 0.001 {
+                        // Compute gradients for batched input (avg over batch)
+                        let scaling = self.config.alpha / self.config.rank as f32;
+                        let diff = batched_output.sub(&batched_target)?;
+                        let grad_output = diff.broadcast_mul(&Tensor::new(&[2.0], &device)?)?;
+                        let grad_output_scaled =
+                            grad_output.broadcast_mul(&Tensor::new(&[scaling], &device)?)?;
+
+                        let intermediate = batched_input.matmul(self.adapter.lora_a())?;
+                        let grad_b = intermediate.transpose(0, 1)?.matmul(&grad_output_scaled)?;
+                        let grad_a_intermediate =
+                            batched_input.transpose(0, 1)?.matmul(&grad_output_scaled)?;
+                        let grad_a =
+                            grad_a_intermediate.matmul(&self.adapter.lora_b().transpose(0, 1)?)?;
+
+                        // Apply gradient clipping
+                        let grad_a_clipped = self.clip_gradients(grad_a, 1.0)?;
+                        let grad_b_clipped = self.clip_gradients(grad_b, 1.0)?;
+
+                        // Update momentum
+                        let momentum_factor_tensor = Tensor::new(&[momentum_factor], &device)?;
+                        let lr_tensor = Tensor::new(&[current_lr], &device)?;
+
+                        momentum_a = momentum_a
+                            .broadcast_mul(&momentum_factor_tensor)?
+                            .broadcast_add(&grad_a_clipped.broadcast_mul(&lr_tensor)?)?;
+                        momentum_b = momentum_b
+                            .broadcast_mul(&momentum_factor_tensor)?
+                            .broadcast_add(&grad_b_clipped.broadcast_mul(&lr_tensor)?)?;
+
+                        // Apply gradient updates
+                        self.apply_gradient_updates(momentum_a.clone(), momentum_b.clone())?;
                     }
                 }
             }

@@ -122,6 +122,11 @@ impl ClaudeClient {
         &self.model
     }
 
+    /// Configured request timeout in seconds
+    pub fn timeout_secs(&self) -> u64 {
+        self.timeout_secs
+    }
+
     /// Send a request to Claude API
     pub async fn complete(&self, prompt: &str) -> Result<String> {
         self.generate_with_retry(prompt).await
@@ -252,6 +257,11 @@ impl GptClient {
     /// Get the model name
     pub fn model(&self) -> &str {
         &self.model
+    }
+
+    /// Configured request timeout in seconds
+    pub fn timeout_secs(&self) -> u64 {
+        self.timeout_secs
     }
 
     /// Send a request to GPT API

@@ -73,8 +73,8 @@ impl NodalDiagnostics {
         interquartile_gaps: &[f64],
     ) -> FederatedResult<FluxMetrics> {
         let proto_batch = proto::FluxTraceBatch::decode(proto_flux)?;
-        let shard_identifier = (!proto_batch.shard_id.is_empty())
-            .then(|| proto_batch.shard_id.clone());
+        let shard_identifier =
+            (!proto_batch.shard_id.is_empty()).then(|| proto_batch.shard_id.clone());
 
         let mut shard_samples = 0u32;
         for trace in proto_batch.traces {
@@ -189,10 +189,7 @@ impl FederatedResilienceOrchestrator for Pipeline {
         if shards.is_empty() {
             return 1.0;
         }
-        let sum_gaps = shards
-            .iter()
-            .map(|sig| sig.spectral_gap)
-            .sum::<f64>();
+        let sum_gaps = shards.iter().map(|sig| sig.spectral_gap).sum::<f64>();
         sum_gaps / shards.len() as f64
     }
 }
@@ -241,12 +238,9 @@ impl ShardClient {
             endpoints: endpoints.to_vec(),
         };
 
-        let response = time::timeout(
-            self.request_timeout,
-            client.pull_signatures(request),
-        )
-        .await
-        .map_err(|_| FederatedError::RpcTimeout(self.request_timeout))??;
+        let response = time::timeout(self.request_timeout, client.pull_signatures(request))
+            .await
+            .map_err(|_| FederatedError::RpcTimeout(self.request_timeout))??;
 
         let payload = response.into_inner();
 
@@ -257,6 +251,52 @@ impl ShardClient {
         }
 
         Ok(result)
+    }
+}
+
+#[instrument(skip(orchestrator, flux_batches, interquartile_gaps))]
+pub async fn orchestrate_federated_topology<O: FederatedResilienceOrchestrator + ?Sized>(
+    orchestrator: &O,
+    telemetry_endpoint: &str,
+    shard_ids: &[String],
+    flux_batches: &[Vec<u8>],
+    interquartile_gaps: &[f64],
+) -> FederatedResult<(FluxCoeff, FluxMetrics, Vec<NodeSig>)> {
+    if shard_ids.is_empty() {
+        return Ok((1.0, FluxMetrics::default(), Vec::new()));
+    }
+
+    let client = ShardClient::connect(telemetry_endpoint).await?;
+    let signatures = client.fetch_shard_signatures(shard_ids).await?;
+    let flux_coeff = orchestrator.aggregate_topology(&signatures);
+
+    let mut diagnostics = NodalDiagnostics::new();
+    let mut metrics = FluxMetrics::default();
+    for payload in flux_batches {
+        metrics = diagnostics.merge_shard_metrics(payload, interquartile_gaps)?;
+    }
+
+    Ok((flux_coeff, metrics, signatures))
+}
+
+impl Pipeline {
+    #[instrument(skip(self, flux_batches, interquartile_gaps))]
+    pub async fn synchronize_federated_topology(
+        &self,
+        telemetry_endpoint: &str,
+        shard_ids: &[String],
+        flux_batches: &[Vec<u8>],
+        interquartile_gaps: &[f64],
+    ) -> FederatedResult<(FluxCoeff, FluxMetrics)> {
+        let (coeff, metrics, _) = orchestrate_federated_topology(
+            self,
+            telemetry_endpoint,
+            shard_ids,
+            flux_batches,
+            interquartile_gaps,
+        )
+        .await?;
+        Ok((coeff, metrics))
     }
 }
 

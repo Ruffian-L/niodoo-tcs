@@ -11,6 +11,15 @@ use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 use tracing_subscriber::fmt;
 
+// Configuration constants
+const PAD_VECTOR_SIZE: usize = 7;
+const ENTROPY_THRESHOLD_MULTIPLIER: f64 = 0.5;
+const VARIANCE_SPIKE_MIN: f64 = 0.05;
+const VARIANCE_SPIKE_MULTIPLIER: f64 = 0.1;
+const MCTS_C_MULTIPLIER: f64 = 0.2;
+const MIRAGE_SIGMA_MULTIPLIER: f64 = 0.2;
+const MAX_SAMPLE_PAIRS: usize = 100;
+
 // Re-exports from other modules
 use crate::embedding::QwenEmbedder;
 use crate::emotional_mapping::EmotionalMapper;
@@ -80,32 +89,37 @@ impl DynamicThresholds {
 
         // Compute variance from PAD vectors
         let variances: Vec<f64> = samples.iter().map(|s| {
-            let mean = s.pad_vector.iter().sum::<f64>() / 7.0;
-            s.pad_vector.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / 7.0
+            let mean = s.pad_vector.iter().sum::<f64>() / PAD_VECTOR_SIZE as f64;
+            s.pad_vector.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / PAD_VECTOR_SIZE as f64
         }).collect();
         let variance_std = (variances.iter().map(|&v| (v - variances.iter().sum::<f64>() / variances.len() as f64).powi(2)).sum::<f64>() / variances.len() as f64).sqrt();
 
         // Similarity threshold from average pairwise similarity
         let mut similarities = Vec::new();
-        for i in 0..samples.len().min(100) {
-            for j in (i+1)..samples.len().min(100) {
+        let max_pairs = samples.len().min(MAX_SAMPLE_PAIRS);
+        for i in 0..max_pairs {
+            for j in (i+1)..max_pairs {
                 let sim = cosine_similarity(&samples[i].pad_vector, &samples[j].pad_vector);
                 similarities.push(sim);
             }
         }
-        let similarity_threshold = similarities.iter().sum::<f64>() / similarities.len() as f64;
+        let similarity_threshold = if similarities.is_empty() {
+            0.0
+        } else {
+            similarities.iter().sum::<f64>() / similarities.len() as f64
+        };
 
         Ok(Self {
-            entropy_high: entropy_mean + 0.5 * entropy_std, // Lowered threshold for triggers
-            variance_spike: 0.05_f64.max(0.1 * variance_std), // Much lower for flat detection
+            entropy_high: entropy_mean + ENTROPY_THRESHOLD_MULTIPLIER * entropy_std,
+            variance_spike: VARIANCE_SPIKE_MIN.max(VARIANCE_SPIKE_MULTIPLIER * variance_std),
             similarity_threshold,
-            mcts_c: entropy_std * 0.2, // Increased exploration 
-            mirage_sigma: 0.2 * entropy_mean, // More chaos noise
+            mcts_c: entropy_std * MCTS_C_MULTIPLIER,
+            mirage_sigma: MIRAGE_SIGMA_MULTIPLIER * entropy_mean,
         })
     }
 }
 
-fn cosine_similarity(a: &[f64; 7], b: &[f64; 7]) -> f64 {
+fn cosine_similarity(a: &[f64; PAD_VECTOR_SIZE], b: &[f64; PAD_VECTOR_SIZE]) -> f64 {
     let dot: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let norm_a = a.iter().map(|x| x * x).sum::<f64>().sqrt();
     let norm_b = b.iter().map(|x| x * x).sum::<f64>().sqrt();

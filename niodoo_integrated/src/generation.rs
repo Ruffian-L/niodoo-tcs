@@ -3,6 +3,15 @@ use reqwest::Client;
 use tokio::time::{sleep, Duration};
 use crate::tokenizer::TokenizedResult;
 
+// Configuration constants
+const DEFAULT_VLLM_URL: &str = "http://localhost:5001";
+const DEFAULT_MAX_TOKENS: usize = 128;
+const DEFAULT_TEMPERATURE: f64 = 0.3;
+const DEFAULT_TOP_P: f64 = 0.8;
+const DEFAULT_FREQUENCY_PENALTY: f64 = 0.5;
+const DEFAULT_PRESENCE_PENALTY: f64 = 0.3;
+const DEFAULT_LOGPROBS: usize = 10;
+
 #[derive(Debug)]
 pub struct GenerationResult {
     pub text: String,
@@ -26,7 +35,7 @@ impl GenerationEngine {
         }
         Ok(Self {
             client: Client::new(),
-            vllm_url: "http://localhost:5001".to_string(),
+            vllm_url: DEFAULT_VLLM_URL.to_string(),
             model_path,
             use_real_apis: std::env::var("USE_REAL_APIS").map(|v| v == "true").unwrap_or(false),
         })
@@ -51,12 +60,12 @@ impl GenerationEngine {
             .json(&serde_json::json!({
                 "model": &self.model_path,
                 "prompt": prompt,
-                "max_tokens": 128,  // Reduced from 256 for faster generation
-                "temperature": 0.3, // Lower temp for faster, more focused responses
-                "top_p": 0.8,       // Slightly lower for faster sampling
-                "frequency_penalty": 0.5,  // Reduce repetition
-                "presence_penalty": 0.3,   // Encourage conciseness
-                "stop": [".", "!", "?", "\n\n"]  // Stop at natural breakpoints for speed
+                "max_tokens": DEFAULT_MAX_TOKENS,
+                "temperature": DEFAULT_TEMPERATURE,
+                "top_p": DEFAULT_TOP_P,
+                "frequency_penalty": DEFAULT_FREQUENCY_PENALTY,
+                "presence_penalty": DEFAULT_PRESENCE_PENALTY,
+                "stop": [".", "!", "?", "\n\n"]
             }))
             .send()
             .await?;

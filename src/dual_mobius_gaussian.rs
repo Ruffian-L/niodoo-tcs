@@ -3055,24 +3055,14 @@ mod tests {
         let x = Array1::zeros(2);
         let kernel = compute_rbf_kernel(&x, &x, &Array1::from_elem(x.len(), 1.0), 0.0);
         let diag = kernel.diag();
-        let var = diag.var(0.0).to_scalar();
-        let var_f64 = match var {
-            Scalar::F64(v) => v,
-            Scalar::F32(v) => v as f64,
-            _ => panic!("Unexpected scalar type"),
-        };
-        assert!(var_f64 < 0.0001); // No jitter
+        let var = diag.var(0.0);
+        assert!(var < 0.0001); // No jitter
                                    // Mock warn log
 
         config.consent_jitter = true;
         let kernel_jitter = compute_rbf_kernel(&x, &x, &Array1::from_elem(x.len(), 1.0), 0.0);
-        let var_jitter = kernel_jitter.diag().var(0.0).to_scalar();
-        let var_jitter_f64 = match var_jitter {
-            Scalar::F64(v) => v,
-            Scalar::F32(v) => v as f64,
-            _ => panic!("Unexpected scalar type"),
-        };
-        assert!(var_jitter_f64 >= 0.0009 && var_jitter_f64 <= 0.0021); // Boost
+        let var_jitter = kernel_jitter.diag().var(0.0);
+        assert!(var_jitter >= 0.0009 && var_jitter <= 0.0021); // Boost
         Ok(())
     }
 

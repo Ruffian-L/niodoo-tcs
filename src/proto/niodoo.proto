@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package niodoo;
+
+message TopologyState {
+  float entropy = 1;
+  float iit_phi = 2;  // Integrated Information Theory approx
+  repeated float knots = 3;
+  repeated int32 betti_numbers = 4;
+  float spectral_gap = 5;
+  float persistent_entropy = 6;
+}
+
+message PadGhostState {
+  repeated float pad = 1;  // PadGhost values [7 floats]
+  repeated float mu = 2;   // Means
+  repeated float sigma = 3; // Standard deviations
+  repeated float raw_stds = 4;
+}
+
+message ConsciousnessState {
+  TopologyState topology = 1;
+  PadGhostState pad_ghost = 2;
+  string quadrant = 3;  // e.g., "Discover"
+  bool threat = 4;
+  bool healing = 5;
+  float rouge_score = 6;
+  int64 timestamp = 7;
+}
+
+message PipelineResponse {
+  string prompt = 1;
+  string baseline_response = 2;
+  string hybrid_response = 3;
+  ConsciousnessState state = 4;
+  float latency_ms = 5;
+}

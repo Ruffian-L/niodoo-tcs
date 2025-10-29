@@ -388,7 +388,8 @@ impl GenerationEngine {
             tokio::try_join!(baseline_future, claude_future)?;
 
         let echoes: Vec<LensEcho> = vec![claude];
-        let hybrid = synthesize_hybrid(&baseline, &echoes);
+        // Pass MCTS branches to synthesize_hybrid for weighted merge (MCTS-aware synthesis)
+        let hybrid = synthesize_hybrid(&baseline, &echoes, &compass.mcts_branches);
 
         // Adaptive resilience logic is experimental and disabled for now.
         // if adaptive_mode {
@@ -1253,7 +1254,7 @@ impl GenerationEngine {
     }
 }
 
-fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho]) -> String {
+fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho], mcts_branches: &[crate::compass::MctsBranch]) -> String {
     // Weighted merge: baseline gets 60%, best echo gets 40%
     if echoes.is_empty() {
         return baseline.to_string();
@@ -1266,12 +1267,25 @@ fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho]) -> String {
         .map(|e| e.response.as_str())
         .unwrap_or("");
 
-    // If echo is significantly better (30% longer), use weighted merge
-    if !best_echo.is_empty() && best_echo.len() as f64 > baseline.len() as f64 * 1.3 {
-        // Weighted merge: take first 60% from baseline, append echo for remaining
+    // Use MCTS branch weights to inform merge strategy
+    let mcts_weight = if !mcts_branches.is_empty() {
+        let best_branch = mcts_branches.first().unwrap();
+        // Normalize UCB score to [0, 1] range for weight (assuming max ~2.0)
+        (best_branch.ucb_score / 2.0).clamp(0.0, 1.0)
+    } else {
+        0.5 // Default middle weight
+    };
+    
+    // Adjust merge threshold based on MCTS confidence
+    let threshold_multiplier = 1.0 + mcts_weight;
+    
+    // If echo is significantly better (adjusted threshold), use weighted merge
+    if !best_echo.is_empty() && best_echo.len() as f64 > baseline.len() as f64 * (1.3 * threshold_multiplier) {
+        // Weighted merge: baseline portion depends on MCTS confidence
+        let baseline_weight = 0.6 + (1.0 - mcts_weight) * 0.2; // 0.6-0.8 range
         let baseline_part = baseline
             .chars()
-            .take((baseline.len() as f64 * 0.6) as usize)
+            .take((baseline.len() as f64 * baseline_weight) as usize)
             .collect::<String>();
         format!("{}{}", baseline_part, best_echo)
     } else {
@@ -1352,11 +1366,11 @@ struct LogProbs {
     content: Vec<LogProbToken>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct LogProbToken {
     #[serde(default)]
     logprob: f64,
-    #[allow(dead_code)]
     #[serde(default)]
     token: String,
 }

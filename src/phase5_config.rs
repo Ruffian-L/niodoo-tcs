@@ -61,6 +61,21 @@ pub struct SelfModificationConfig {
     /// Minimum improvement threshold to keep a modification
     pub min_improvement_threshold: f32,
 
+    /// Validation success probability (0.0 to 1.0)
+    pub validation_success_probability: f32,
+
+    /// Validation confidence threshold
+    pub validation_confidence_threshold: f32,
+
+    /// Default performance impact confidence
+    pub default_performance_confidence: f32,
+
+    /// Rollback deadline timeout (seconds)
+    pub rollback_deadline_seconds: u64,
+
+    /// History retention limit
+    pub history_retention_limit: usize,
+
     /// Neural network optimization parameters
     pub neural_network: NeuralNetworkOptimizationConfig,
 
@@ -192,6 +207,33 @@ pub struct ContinualLearningConfig {
     /// Proficiency factor for improvement calculation
     pub proficiency_factor: f32,
 
+    /// High confidence threshold for knowledge
+    pub high_confidence_threshold: f32,
+
+    /// Streak reset threshold (days)
+    pub streak_reset_threshold_days: u32,
+
+    /// Maximum improvement per session cap
+    pub max_improvement_per_session: f32,
+
+    /// Success outcome improvement multiplier
+    pub success_outcome_multiplier: f32,
+
+    /// Partial success outcome improvement multiplier
+    pub partial_success_outcome_multiplier: f32,
+
+    /// Breakthrough outcome improvement value
+    pub breakthrough_outcome_improvement: f32,
+
+    /// Failure outcome improvement value
+    pub failure_outcome_improvement: f32,
+
+    /// Default learning insights confidence
+    pub default_learning_insights_confidence: f32,
+
+    /// History retention limit
+    pub history_retention_limit: usize,
+
     /// Review scheduling configuration
     pub review_scheduling: ReviewSchedulingConfig,
 
@@ -273,6 +315,27 @@ pub struct MetacognitivePlasticityConfig {
 
     /// Skill transfer threshold
     pub skill_transfer_threshold: f32,
+
+    /// History retention limit
+    pub history_retention_limit: usize,
+
+    /// Default recognition confidence
+    pub default_recognition_confidence: f32,
+
+    /// Default learning confidence
+    pub default_learning_confidence: f32,
+
+    /// Default integration quality
+    pub default_integration_quality: f32,
+
+    /// Default consciousness impact
+    pub default_consciousness_impact: f32,
+
+    /// Default authenticity preservation
+    pub default_authenticity_preservation: f32,
+
+    /// Default learning integration
+    pub default_learning_integration: f32,
 
     /// Pattern recognition configuration
     pub pattern_recognition: PatternRecognitionConfig,
@@ -679,6 +742,11 @@ impl Phase5ConfigManager {
                 max_rollback_attempts: 3,
                 exploration_frequency_seconds: 300,
                 min_improvement_threshold: 0.05,
+                validation_success_probability: 0.8,
+                validation_confidence_threshold: 0.85,
+                default_performance_confidence: 0.8,
+                rollback_deadline_seconds: 300,
+                history_retention_limit: 1000,
                 neural_network: NeuralNetworkOptimizationConfig {
                     learning_rate_threshold: 0.01,
                     expected_latency_improvement_ms: -5.0,
@@ -722,6 +790,15 @@ impl Phase5ConfigManager {
                 base_improvement_per_session: 0.05,
                 complexity_factor: 1.0,
                 proficiency_factor: 1.0,
+                high_confidence_threshold: 0.8,
+                streak_reset_threshold_days: 1,
+                max_improvement_per_session: 0.1,
+                success_outcome_multiplier: 0.1,
+                partial_success_outcome_multiplier: 0.05,
+                breakthrough_outcome_improvement: 0.15,
+                failure_outcome_improvement: 0.01,
+                default_learning_insights_confidence: 0.8,
+                history_retention_limit: 1000,
                 review_scheduling: ReviewSchedulingConfig {
                     initial_intervals: vec![1.0, 6.0, 24.0, 72.0, 168.0],
                     max_reviews_per_day: 10,
@@ -749,6 +826,13 @@ impl Phase5ConfigManager {
                 pattern_retention_hours: 168.0,
                 knowledge_extraction_threshold: 0.7,
                 skill_transfer_threshold: 0.8,
+                history_retention_limit: 1000,
+                default_recognition_confidence: 0.85,
+                default_learning_confidence: 0.8,
+                default_integration_quality: 0.8,
+                default_consciousness_impact: 0.1,
+                default_authenticity_preservation: 0.9,
+                default_learning_integration: 0.8,
                 pattern_recognition: PatternRecognitionConfig {
                     recognition_accuracy: 0.8,
                     false_positive_rate: 0.05,

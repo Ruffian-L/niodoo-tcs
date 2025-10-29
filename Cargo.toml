@@ -41,6 +41,7 @@ exclude = [
     "Niodoo-Feeling-Alpha",
     "deployment",  # Has own workspace definition - excluded to prevent conflicts
 ]
+
 resolver = "2"
 
 # Workspace-wide package metadata
@@ -68,8 +69,6 @@ candle-transformers = { version = "0.8", default-features = false }
 # Async & concurrency
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
-actix-web = "4.9"
-actix-rt = "2.10"
 futures = "0.3"
 parking_lot = "0.12"
 sysinfo = "0.30"
@@ -113,7 +112,7 @@ dirs = "5.0"
 anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
 # Filesystem utilities
 walkdir = "2.5"
@@ -209,5 +208,3 @@ performance_targets = [
     "Longitudinal studies via Qt signals addressing Pham 2025d findings",
     "Policy reform simulations for ethical AGI transparency mandates",
 ]
-
-# Dependencies are in the src/Cargo.toml file

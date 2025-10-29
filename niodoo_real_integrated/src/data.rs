@@ -4,7 +4,9 @@ use std::io::BufReader;
 use crate::util::shannon_entropy;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{seq::SliceRandom, Rng};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -170,7 +172,7 @@ pub fn load_rut_gauntlet_prompts() -> Vec<RutPrompt> {
 }
 
 pub fn sample_prompts(prompts: &[RutPrompt], count: usize) -> Vec<RutPrompt> {
-    let mut rng = thread_rng();
+    let mut rng = StdRng::seed_from_u64(42);
     let mut cloned = prompts.to_vec();
     cloned.shuffle(&mut rng);
     cloned.into_iter().take(count).collect()

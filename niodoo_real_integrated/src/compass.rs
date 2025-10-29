@@ -342,29 +342,52 @@ impl CompassEngine {
 
     /// Perform MCTS search and convert results to MctsBranch objects
     fn perform_mcts_search(&mut self, state: &PadGhostState) -> Vec<MctsBranch> {
-        let mut arena = Vec::<SearchNode>::new();
-        let mut rng = StdRng::seed_from_u64(Self::derive_mcts_seed(state));
-        arena.push(SearchNode::new_root(state.clone()));
-
-        let start = Instant::now();
-        let mut iterations = 0usize;
-        while iterations < MCTS_MAX_ITERATIONS && start.elapsed() < MCTS_MAX_DURATION {
-            let mut path = self.mcts_select_path(&arena);
-            let selected_idx = *path.last().expect("path always contains root");
-            let expanded_idx = self.mcts_expand(&mut arena, selected_idx, &mut rng);
-            if expanded_idx != selected_idx {
-                path.push(expanded_idx);
+        // Try using the new adaptive MCTS implementation first
+        use crate::mcts::{MctsNode, AdaptiveSearchStats};
+        
+        let mut root = MctsNode::new(MctsAction::Retrieve, state.clone(), None);
+        
+        // Run adaptive search with reward function
+        let stats = root.search_adaptive(
+            MCTS_MAX_DURATION.as_millis() as u64,
+            self.exploration_c,
+            |node| {
+                // Reward function: higher entropy stability = better
+                let stability = (1.0 - node.state.entropy).clamp(0.0, 1.0);
+                let variance_mean = node.state.sigma.iter().copied().sum::<f64>() / node.state.sigma.len() as f64;
+                stability - variance_mean * 0.5
             }
-            let reward = self.mcts_rollout(&mut rng, &arena[expanded_idx].state);
-            self.mcts_backpropagate(&mut arena, &path, reward);
-            iterations += 1;
+        );
+        
+        // Convert adaptive search results to MctsBranch objects
+        let mut branches = Vec::new();
+        for (idx, child) in root.children.iter().enumerate() {
+            branches.push(MctsBranch {
+                label: child.action.to_string(),
+                ucb_score: child.ucb1(self.exploration_c),
+                entropy_projection: child.state.entropy,
+            });
         }
-
-        let mut branches = self.mcts_branches_from_root(&arena);
+        
+        // Sort by UCB score descending
+        branches.sort_by(|a, b| {
+            b.ucb_score
+                .partial_cmp(&a.ucb_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        // Fallback to heuristic if no branches found
         if branches.is_empty() {
             branches = self.fallback_mcts_heuristic(state);
         }
-
+        
+        tracing::info!(
+            simulations = stats.total_simulations,
+            depth = stats.max_depth,
+            best_action = branches.first().map(|b| b.label.as_str()).unwrap_or("none"),
+            "MCTS adaptive search completed"
+        );
+        
         branches
     }
 
@@ -444,7 +467,7 @@ impl CompassEngine {
         let action = arena[node_idx].untried_actions.swap_remove(action_idx);
         let next_state = self.transition_state(&arena[node_idx].state, action, rng);
         let child_idx = arena.len();
-        arena.push(SearchNode::new_child(action, next_state, node_idx));
+        arena.push(SearchNode::new_child(action, next_state));
         arena[node_idx].children.push(child_idx);
         child_idx
     }
@@ -508,7 +531,7 @@ impl CompassEngine {
         let mut noise_l1 = 0.0;
         for (idx, value) in next.pad.iter_mut().enumerate() {
             let component_weight = 1.0 / (idx as f64 + 1.0);
-            let noise: f64 = StandardNormal.sample(rng) * noise_scale * component_weight;
+            let noise = rng.sample::<f64, _>(StandardNormal) * noise_scale * component_weight;
             noise_l1 += noise.abs();
 
             *value = (*value + noise).clamp(-1.0, 1.0);
@@ -586,7 +609,6 @@ impl CompassEngine {
 struct SearchNode {
     action: MctsAction,
     state: PadGhostState,
-    parent: Option<usize>,
     children: Vec<usize>,
     untried_actions: Vec<MctsAction>,
     visits: usize,
@@ -598,7 +620,6 @@ impl SearchNode {
         Self {
             action: MctsAction::Retrieve,
             state,
-            parent: None,
             children: Vec::new(),
             untried_actions: MCTS_ACTIONS.to_vec(),
             visits: 0,
@@ -606,11 +627,10 @@ impl SearchNode {
         }
     }
 
-    fn new_child(action: MctsAction, state: PadGhostState, parent: usize) -> Self {
+    fn new_child(action: MctsAction, state: PadGhostState) -> Self {
         Self {
             action,
             state,
-            parent: Some(parent),
             children: Vec::new(),
             untried_actions: MCTS_ACTIONS.to_vec(),
             visits: 0,

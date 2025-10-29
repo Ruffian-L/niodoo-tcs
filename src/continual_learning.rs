@@ -859,8 +859,7 @@ impl ContinualLearningPipeline {
 
         // Update metrics
         self.performance_metrics.total_knowledge_nodes += 1;
-        // TODO: Make confidence threshold configurable
-        if confidence > 0.8 {
+        if confidence > self.config.high_confidence_threshold {
             self.performance_metrics.high_confidence_knowledge += 1;
         }
 
@@ -879,8 +878,7 @@ impl ContinualLearningPipeline {
                 .unwrap_or(Duration::from_secs(0))
                 .as_secs() / 86400; // Convert to days
 
-            // TODO: Make streak reset threshold configurable (currently 1 day)
-            if days_since_last_practice <= 1 {
+            if days_since_last_practice <= self.config.streak_reset_threshold_days as u64 {
                 skill.current_streak += 1;
                 skill.best_streak = skill.best_streak.max(skill.current_streak);
             } else {
@@ -972,8 +970,8 @@ impl ContinualLearningPipeline {
         // Record the experience
         self.learning_experiences.push_back(experience);
 
-        // Keep only recent experiences (last 1000)
-        if self.learning_experiences.len() > 1000 {
+        // Keep only recent experiences (configurable limit)
+        if self.learning_experiences.len() > self.config.history_retention_limit {
             self.learning_experiences.pop_front();
         }
 
@@ -1015,18 +1013,16 @@ impl ContinualLearningPipeline {
 
         let improvement = base_improvement * duration_factor * proficiency_factor * complexity_factor;
 
-        // TODO: Make improvement cap configurable (currently 10%)
-        Ok(improvement.min(0.1)) // Cap at 10% improvement per session
+        Ok(improvement.min(self.config.max_improvement_per_session))
     }
 
     /// Calculate improvement from learning experience
     fn calculate_experience_improvement(&self, skill: &Skill, experience: &LearningExperience) -> f32 {
-        // TODO: Make these improvement multipliers configurable
         match &experience.outcome {
-            LearningOutcome::Success { confidence_gain } => *confidence_gain * 0.1,
-            LearningOutcome::PartialSuccess { confidence_gain, .. } => *confidence_gain * 0.05,
-            LearningOutcome::Breakthrough { .. } => 0.15, // Breakthrough gives significant improvement
-            _ => 0.01, // Minimal improvement from failures
+            LearningOutcome::Success { confidence_gain } => *confidence_gain * self.config.success_outcome_multiplier,
+            LearningOutcome::PartialSuccess { confidence_gain, .. } => *confidence_gain * self.config.partial_success_outcome_multiplier,
+            LearningOutcome::Breakthrough { .. } => self.config.breakthrough_outcome_improvement,
+            _ => self.config.failure_outcome_improvement,
         }
     }
 
@@ -1065,7 +1061,7 @@ impl ContinualLearningPipeline {
             experience_id: format!("exp_{}", Uuid::new_v4()),
             insights,
             recommended_actions: self.generate_recommended_actions(experience),
-            confidence: 0.8, // Confidence in these insights
+            confidence: self.config.default_learning_insights_confidence,
         }
     }
 

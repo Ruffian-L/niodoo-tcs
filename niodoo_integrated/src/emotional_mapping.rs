@@ -4,6 +4,24 @@ use rand::prelude::*;
 use tokio::time::{sleep, Duration};
 use crate::types::EmotionalSample;
 
+// Configuration constants
+const EMBEDDING_DIMENSION: usize = 896;
+const HASH_PRIME: u64 = 73;
+const EMBEDDING_NORMALIZATION_DIVISOR: f64 = 1000.0;
+const EMBEDDING_NORMALIZATION_OFFSET: f64 = 0.5;
+const PAD_DIMENSION: usize = 7;
+const GHOST_INDICES_START: usize = 3;
+const GHOST_INDICES_END: usize = 7;
+const GHOST_NOISE_RANGE: f64 = 0.1;
+const CHAOS_NOISE_RANGE: f64 = 0.4;
+const PAD_RANGE_MIN: f64 = -1.0;
+const PAD_RANGE_MAX: f64 = 1.0;
+const TAIL_LENGTH_FOR_GHOSTS: usize = 32;
+const FRUSTRATION_PLEASURE: f64 = -0.5;
+const FRUSTRATION_AROUSAL: f64 = 0.5;
+const PROBABILITY_NORMALIZATION_OFFSET: f64 = 1.0;
+const PROBABILITY_NORMALIZATION_DIVISOR: f64 = 2.0;
+
 #[derive(Debug, Clone)]
 pub struct EmotionalState {
     pub pad_vector: [f64; 7], // PAD + 4 ghosts
@@ -22,11 +40,12 @@ impl EmotionalMapper {
     
     async fn embed_text(&mut self, text: &str) -> Result<Vec<f64>, Box<dyn std::error::Error + Send + Sync>> {
         // Mock embedding for nuclear fix - creates simple hash-based vectors
-        let mut embedding = vec![0.0; 896];
-        let hash = text.len() as u64 * 73 + text.chars().map(|c| c as u64).sum::<u64>();
+        let mut embedding = vec![0.0; EMBEDDING_DIMENSION];
+        let hash = text.len() as u64 * HASH_PRIME + text.chars().map(|c| c as u64).sum::<u64>();
         
         for (i, val) in embedding.iter_mut().enumerate() {
-            *val = ((hash.wrapping_add(i as u64) % 1000) as f64) / 1000.0 - 0.5;
+            *val = ((hash.wrapping_add(i as u64) % EMBEDDING_NORMALIZATION_DIVISOR as u64) as f64) 
+                / EMBEDDING_NORMALIZATION_DIVISOR - EMBEDDING_NORMALIZATION_OFFSET;
         }
         
         Ok(embedding)
@@ -39,11 +58,11 @@ impl EmotionalMapper {
             return Err(anyhow::anyhow!("Cannot map to emotion: empty embedding").into());
         }
         
-        // Torus projection: map 896D to 7D PAD space
-        let mut pad = [0.0; 7];
+        // Torus projection: map to PAD space
+        let mut pad = [0.0; PAD_DIMENSION];
 
         // Simple projection (in real impl: trained VAE)
-        for i in 0..7 {
+        for i in 0..PAD_DIMENSION {
             let mut sum = 0.0;
             for (j, &val) in embedding.iter().enumerate() {
                 // Use different frequency harmonics for torus
@@ -62,7 +81,7 @@ impl EmotionalMapper {
         }
 
         // Add ghosts (VAE μ/σ from embedding tail)
-        let tail_len = embedding.len().min(32);
+        let tail_len = embedding.len().min(TAIL_LENGTH_FOR_GHOSTS);
         let (tail_mean, tail_var) = if tail_len == 0 {
             (0.0, 0.0)
         } else {
@@ -76,26 +95,26 @@ impl EmotionalMapper {
 
         // Ghosts are perturbations of PAD + chaos injection
         let mut rng = thread_rng();
-        for i in 3..7 { // Ghosts in positions 3-6
-            pad[i] += rng.gen_range(-0.1..0.1) * tail_var.sqrt();
-            pad[i] = (pad[i] as f64).clamp(-1.0, 1.0);
+        for i in GHOST_INDICES_START..GHOST_INDICES_END {
+            pad[i] += rng.gen_range(-GHOST_NOISE_RANGE..GHOST_NOISE_RANGE) * tail_var.sqrt();
+            pad[i] = (pad[i] as f64).clamp(PAD_RANGE_MIN, PAD_RANGE_MAX);
         }
         
-        // CHAOS INJECTION: Add ±0.4 noise to main PAD dimensions for variance
+        // CHAOS INJECTION: Add noise to main PAD dimensions for variance
         for i in 0..3 { // Pleasure, Arousal, Dominance
-            let chaos_noise = rng.gen_range(-0.4..0.4);
-            pad[i] = ((pad[i] as f64) + chaos_noise).clamp(-1.0, 1.0);
+            let chaos_noise = rng.gen_range(-CHAOS_NOISE_RANGE..CHAOS_NOISE_RANGE);
+            pad[i] = ((pad[i] as f64) + chaos_noise).clamp(PAD_RANGE_MIN, PAD_RANGE_MAX);
         }
 
         // Semantic adjustment based on prompt keywords
         let lower_prompt = text.to_lowercase();
         if lower_prompt.contains("frustration") || lower_prompt.contains("grind") || lower_prompt.contains("despair") {
-            pad[0] = -0.5; // Negative pleasure
-            pad[1] = 0.5;  // High arousal
+            pad[0] = FRUSTRATION_PLEASURE; // Negative pleasure
+            pad[1] = FRUSTRATION_AROUSAL;  // High arousal
         }
 
         // Compute entropy from PAD distribution
-        let probs: Vec<f64> = pad.iter().map(|&p| (p + 1.0) / 2.0).collect();
+        let probs: Vec<f64> = pad.iter().map(|&p| (p + PROBABILITY_NORMALIZATION_OFFSET) / PROBABILITY_NORMALIZATION_DIVISOR).collect();
         let sum_probs = probs.iter().sum::<f64>();
         let entropy = if sum_probs > 0.0 {
             let normalized_probs: Vec<f64> = probs.iter().map(|&p| p / sum_probs).collect();

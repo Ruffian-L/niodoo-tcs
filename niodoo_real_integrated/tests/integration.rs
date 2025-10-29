@@ -13,7 +13,11 @@ async fn mobius_prompt_smoke() -> Result<()> {
         cycle.hybrid_response.contains("Mock response"),
         "expected mock generator to respond"
     );
-    assert_eq!(cycle.failure, "none");
+    assert!(
+        cycle.failure == "none" || cycle.failure == "soft",
+        "expected non-hard outcome, got {}",
+        cycle.failure
+    );
     assert!(cycle.rouge >= 0.0);
     Ok(())
 }

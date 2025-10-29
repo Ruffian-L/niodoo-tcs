@@ -1,8 +1,11 @@
 use anyhow::Result;
-use crate::mock_qdrant::{MockQdrantClient, MockSearchResult};
+use crate::mock_qdrant::MockQdrantClient;
 use tokio::time::{sleep, Duration};
 use tracing;
 use crate::compass::CompassResult;
+
+// Configuration constants
+const ERAG_SEARCH_DELAY_MS: u64 = 20;
 
 #[derive(Debug)]
 pub struct ERAGResult {
@@ -58,7 +61,7 @@ impl ERAGSystem {
     }
 
     async fn mock_search(&self) -> Result<Vec<String>> {
-        sleep(Duration::from_millis(20)).await;
+        sleep(Duration::from_millis(ERAG_SEARCH_DELAY_MS)).await;
         Ok(vec!["consciousness_memory_1".to_string(), "consciousness_memory_2".to_string()])
     }
 }

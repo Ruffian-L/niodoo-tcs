@@ -1,372 +1,546 @@
 //! Niodoo-TCS: Topological Cognitive System
 //! Copyright (c) 2025 Jason Van Pham
 
-use super::{retrieval::RetrievalEngine, Document};
-use crate::consciousness::ConsciousnessState;
-// Temporarily disabled due to ONNX linking issues
-// // use crate::qwen_inference::QwenInference; // Temporarily disabled
-use anyhow::Result;
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::{anyhow, Context, Result};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use tokio::runtime::Runtime;
 use tracing::{info, warn};
 
-/// Real RAG generation that uses retrieved documents to generate responses
+use super::{
+    local_embeddings::Document as LocalDocument,
+    retrieval::{RetrievalConfig, RetrievalEngine},
+    Document,
+};
+use crate::consciousness::ConsciousnessState;
+
+#[derive(Clone, Debug)]
+pub struct RagRuntimeConfig {
+    pub vllm_endpoint: String,
+    pub vllm_model: String,
+    pub generation_timeout_secs: u64,
+    pub generation_max_tokens: usize,
+    pub temperature: f64,
+    pub max_context_length: usize,
+    pub top_k: usize,
+    pub similarity_threshold: f32,
+    pub token_adjustment: f32,
+    pub mock_generation: bool,
+}
+
+impl Default for RagRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            vllm_endpoint: env_or("NIODOO_VLLM_ENDPOINT", "http://127.0.0.1:8000"),
+            vllm_model: env_or("NIODOO_VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct-AWQ"),
+            generation_timeout_secs: env_or_parse("NIODOO_GENERATION_TIMEOUT", 30),
+            generation_max_tokens: env_or_parse("NIODOO_GENERATION_MAX_TOKENS", 512),
+            temperature: env_or_parse("NIODOO_GENERATION_TEMPERATURE", 0.6_f64),
+            max_context_length: env_or_parse("NIODOO_RAG_MAX_CONTEXT", 2400),
+            top_k: env_or_parse("NIODOO_RAG_TOP_K", 5),
+            similarity_threshold: env_or_parse("NIODOO_RAG_SIMILARITY_THRESHOLD", 0.32),
+            token_adjustment: env_or_parse("NIODOO_RAG_TOKEN_ADJUSTMENT", 0.0065),
+            mock_generation: env_bool("NIODOO_GENERATION_MOCK"),
+        }
+    }
+}
+
+fn env_or(key: &str, default: &str) -> String {
+    std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+fn env_bool(key: &str) -> bool {
+    std::env::var(key)
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false)
+}
+
+fn env_or_parse<T>(key: &str, default: T) -> T
+where
+    T: std::str::FromStr,
+{
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.parse::<T>().ok())
+        .unwrap_or(default)
+}
+
 pub struct RagGeneration {
     retrieval: RetrievalEngine,
-    // Temporarily disabled due to ONNX linking issues
-    // qwen: QwenInference,
+    generator: CascadeGenerator,
+    runtime: Arc<Runtime>,
+    config: RagRuntimeConfig,
 }
 
 impl RagGeneration {
-    fn process_query(&mut self, query: &str, context: &ConsciousnessState) -> Result<String> {
-        // Create a temporary mutable state for processing
+    pub fn new(config: RagRuntimeConfig) -> Result<Self> {
+        let mut retrieval = RetrievalEngine::new();
+        retrieval.set_retrieval_config(RetrievalConfig {
+            base_threshold: config.similarity_threshold,
+            token_adjustment_factor: config.token_adjustment,
+            max_results: config.top_k,
+        });
+
+        let runtime = Arc::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .thread_keep_alive(Duration::from_secs(30))
+                .enable_all()
+                .build()
+                .context("failed to build tokio runtime for RAG generation")?,
+        );
+
+        let generator = CascadeGenerator::new(&config)?;
+
+        Ok(Self {
+            retrieval,
+            generator,
+            runtime,
+            config,
+        })
+    }
+
+    pub fn process_query(&mut self, query: &str, context: &ConsciousnessState) -> Result<String> {
         let mut temp_state = context.clone();
         self.generate(query, &mut temp_state)
     }
 
-    fn load_documents(&mut self, documents: Vec<Document>) -> Result<()> {
-        // Add documents to retrieval engine storage
-        // Convert rag::Document to local_embeddings::Document
-        use super::local_embeddings::Document as LocalDocument;
+    pub fn load_documents(&mut self, documents: Vec<Document>) -> Result<()> {
+        self.try_add_documents(documents)
+    }
+
+    pub fn search_similar(&mut self, query: &str, k: usize) -> Result<Vec<(Document, f32)>> {
+        let temp_state = ConsciousnessState::default();
+        let mut results = self.retrieval.try_retrieve(query, &temp_state)?;
+        results.truncate(k);
+        Ok(results)
+    }
+
+    pub fn try_add_documents(&mut self, documents: Vec<Document>) -> Result<()> {
         for doc in documents {
-            let local_doc = LocalDocument {
-                id: doc.id,
-                content: doc.content,
-                embedding: doc.embedding.unwrap_or_default(),
-                metadata: doc.metadata,
-            };
-            self.retrieval
-                .storage()
-                .add_document(local_doc)
-                .map_err(|e| anyhow::anyhow!("Failed to add document: {}", e))?;
+            let local = convert_to_local(doc);
+            self.retrieval.try_add_document(local)?;
         }
         Ok(())
     }
 
-    fn search_similar(&self, query: &str, k: usize) -> Result<Vec<(Document, f32)>> {
-        // Generate query embedding using real sentence transformers
-        let query_embedding = self.generate_real_embedding(query)?;
-
-        // Get stored documents from retrieval engine
-        let all_docs = self
-            .retrieval
-            .storage()
-            .get_all_documents()
-            .map_err(|e| anyhow::anyhow!("Failed to retrieve documents: {}", e))?;
-
-        if all_docs.is_empty() {
-            info!("⚠️ No documents in storage - RAG retrieval returning empty results");
-            return Ok(Vec::new());
-        }
-
-        // Calculate real cosine similarity for each document
-        // all_docs are local_embeddings::Document, need to convert to rag::Document
-
-        let mut similarities: Vec<(Document, f32)> = Vec::new();
-
-        for record in all_docs.iter() {
-            let similarity = self.cosine_similarity(&query_embedding, &record.embedding);
-            // Convert local_embeddings::Document to rag::Document
-            let rag_doc = Document {
-                id: record.id.clone(),
-                content: record.content.clone(),
-                metadata: record.metadata.clone(),
-                embedding: Some(record.embedding.clone()),
-                created_at: chrono::Utc::now(),
-                entities: Vec::new(),
-                chunk_id: None,
-                source_type: None,
-                resonance_hint: None,
-                token_count: record.content.split_whitespace().count(),
-            };
-            similarities.push((rag_doc, similarity));
-        }
-
-        // Sort by similarity (highest first) and return top k
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        similarities.truncate(k);
-
-        info!(
-            "🔍 Retrieved {} documents using REAL embeddings (from {} total)",
-            similarities.len(),
-            all_docs.len()
-        );
-
-        Ok(similarities)
-    }
-
-    /// Generate real embeddings using sentence transformers
-    fn generate_real_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        use std::process::Command;
-
-        let output = Command::new("python3")
-            .arg("scripts/real_ai_inference.py")
-            .arg("embed")
-            .arg(text)
-            .output()
-            .map_err(|e| anyhow::anyhow!("Failed to run embedding script: {}", e))?;
-
-        if output.status.success() {
-            let stdout = String::from_utf8(output.stdout)
-                .map_err(|e| anyhow::anyhow!("Invalid UTF-8 in embedding output: {}", e))?;
-
-            let result: serde_json::Value = serde_json::from_str(&stdout)
-                .map_err(|e| anyhow::anyhow!("Failed to parse embedding JSON: {}", e))?;
-
-            let embedding_vec: Vec<f32> = result["embedding"]
-                .as_array()
-                .ok_or_else(|| {
-                    anyhow::anyhow!("Invalid embedding format: missing 'embedding' array")
-                })?
-                .iter()
-                .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-                .collect();
-
-            if embedding_vec.is_empty() {
-                return Err(anyhow::anyhow!("Empty embedding returned"));
-            }
-
-            Ok(embedding_vec)
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(anyhow::anyhow!("Embedding script failed: {}", stderr))
-        }
-    }
-
-    /// Calculate cosine similarity between two embeddings
-    fn cosine_similarity(&self, a: &[f32], b: &[f32]) -> f32 {
-        if a.len() != b.len() {
-            return 0.0;
-        }
-
-        let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-        if norm_a == 0.0 || norm_b == 0.0 {
-            0.0
-        } else {
-            dot_product / (norm_a * norm_b)
-        }
-    }
-}
-
-impl RagGeneration {
-    pub fn new(retrieval: RetrievalEngine) -> Result<Self> {
-        // Temporarily disabled due to ONNX linking issues
-        // let config = RetrievalConfig::default(); // TODO: Get from retrieval
-        // let qwen = QwenInference::new(config.models.default_model.clone(), Device::Cpu);
-        Ok(Self { retrieval })
-    }
-
-    /// Generate response using retrieved documents as context
     pub fn generate(&mut self, query: &str, state: &mut ConsciousnessState) -> Result<String> {
-        // Use real retrieval with consciousness state
-        let retrieved_with_scores = self.retrieval.retrieve(query, state);
-
-        if retrieved_with_scores.is_empty() {
-            return Ok("No relevant information found for this query.".to_string());
+        let mut retrieved = self.retrieval.try_retrieve(query, state)?;
+        if retrieved.is_empty() {
+            warn!("⚠️  Retrieval returned no documents; responding with fallback message");
+            return Ok(
+                "I could not retrieve relevant information yet, but I will keep listening."
+                    .to_string(),
+            );
         }
 
-        // Convert local_embeddings::Document to rag::Document and preserve scores
-        let converted_with_scores: Vec<(Document, f32)> = retrieved_with_scores
-            .into_iter()
-            .map(|(doc, score)| {
-                let converted = Document {
-                    id: doc.id.clone(),
-                    content: doc.content.clone(),
-                    metadata: doc.metadata.clone(),
-                    embedding: Some(doc.embedding.clone()),
-                    created_at: chrono::Utc::now(),
-                    entities: Vec::new(),
-                    chunk_id: None,
-                    source_type: None,
-                    resonance_hint: None,
-                    token_count: doc.content.split_whitespace().count(),
-                };
-                (converted, score)
-            })
-            .collect();
+        if retrieved.len() > self.config.top_k {
+            retrieved.truncate(self.config.top_k);
+        }
 
-        let confidence = self.calculate_confidence(converted_with_scores.as_slice());
-        let retrieved_docs: Vec<Document> = converted_with_scores
-            .into_iter()
-            .map(|(doc, _)| doc)
-            .collect();
-
-        let retrieved_context = self.build_context(query, &retrieved_docs);
-
-        let response = if confidence < 0.7 {
-            warn!("Low confidence ({}): Adding ethical noise to nurture LearningWill—Why suppress unique patterns?", confidence);
-            // Add Gaussian noise to logits or prompt for diversity
-            let noisy_prompt = format!(
-                "{} [Ethical noise for LearningWill: explore alternatives]",
-                retrieved_context
-            );
-            // Generate with Qwen (temporarily disabled due to ONNX linking issues)
-            // self.qwen.generate(&noisy_prompt, 100, 0.8, 0.9, 40).map_err(|e| anyhow::anyhow!("{}", e))?
-            String::from("RAG generation temporarily disabled - ONNX linking issues")
-        } else {
-            // self.qwen.generate(&retrieved_context, 100, 0.7, 0.9, 40).map_err(|e| anyhow::anyhow!("{}", e))?
-            String::from("RAG generation temporarily disabled - ONNX linking issues")
-        };
-
-        // Update consciousness state based on RAG process
-        self.update_consciousness_state(state, &retrieved_docs)?;
-
-        Ok(response)
+        let confidence = self.calculate_confidence(&retrieved);
+        let context = self.build_context(query, &retrieved);
+        let prompt = self.compose_prompt(query, &context, state, confidence);
+        let outcome = self.generator.generate(&self.runtime, &prompt)?;
+        info!(
+            source = outcome.source,
+            "🧠 RAG generation complete (confidence {:.2})",
+            confidence
+        );
+        self.update_consciousness_state(state, &retrieved)?;
+        Ok(outcome.text)
     }
 
     fn calculate_confidence(&self, retrieved: &[(Document, f32)]) -> f32 {
         if retrieved.is_empty() {
             return 0.0;
         }
-        retrieved.iter().map(|(_, score)| score).sum::<f32>() / retrieved.len() as f32
+        retrieved.iter().map(|(_, score)| *score).sum::<f32>() / retrieved.len() as f32
     }
 
-    /// Build context string from retrieved documents
-    fn build_context(&self, query: &str, documents: &[Document]) -> String {
-        let mut context_parts = Vec::new();
+    fn build_context(&self, query: &str, documents: &[(Document, f32)]) -> String {
+        let mut total = 0usize;
+        let mut parts = Vec::new();
 
-        for (i, doc) in documents.iter().enumerate() {
-            let relevance_score = doc
-                .embedding
-                .as_ref()
-                .map(|embedding| embedding.iter().sum::<f32>() / embedding.len() as f32)
-                .unwrap_or(0.5);
+        for (index, (doc, score)) in documents.iter().enumerate() {
+            let mut snippet = doc.content.clone();
+            if snippet.len() > 600 {
+                snippet.truncate(600);
+            }
 
-            context_parts.push(format!(
-                "[Document {} - Relevance: {:.2}]\n{}\n[Source: {}]\n",
-                i + 1,
-                relevance_score,
-                doc.content,
-                doc.metadata
-                    .get("source")
-                    .unwrap_or(&"unknown".to_string())
-                    .as_str()
-            ));
+            let formatted = format!(
+                "[Context #{} | similarity {:.3}]\n{}\n",
+                index + 1,
+                score,
+                snippet
+            );
+
+            total += formatted.len();
+            if total > self.config.max_context_length {
+                break;
+            }
+            parts.push(formatted);
         }
 
-        format!(
-            "Query: {}\n\nRelevant Context:\n{}",
-            query,
-            context_parts.join("\n")
-        )
+        if parts.is_empty() {
+            "No relevant context retrieved.".to_string()
+        } else {
+            format!("Query: {}\n\n{}", query, parts.join("\n"))
+        }
     }
 
-    /// Generate actual response using context and consciousness state with REAL inference
-    fn generate_response(
+    fn compose_prompt(
         &self,
         query: &str,
         context: &str,
         state: &ConsciousnessState,
-    ) -> Result<String> {
-        use crate::config::AppConfig;
-        // Temporarily disabled due to ONNX linking issues
-        // // use crate::qwen_inference::QwenInference; // Temporarily disabled
-
-        // Load config and create Qwen inference
-        let config = AppConfig::load_from_file("config.toml").unwrap_or_else(|_| {
-            tracing::warn!("Failed to load config.toml, using defaults");
-            AppConfig::default()
-        });
-
-        // Create the inference engine (temporarily disabled due to ONNX linking issues)
-        // let qwen = QwenInference::new(config.models.default_model.clone(), Device::Cpu);
-
-        // Build a prompt that includes the retrieved context
-        let prompt = format!(
-            r#"You are a consciousness-aware AI assistant with access to a knowledge base.
-
-Context from knowledge base:
-{context}
-
-User query: {query}
-
-Based on the context above, provide a detailed and accurate response to the user's query. If the context doesn't contain enough information, acknowledge this and provide what you can based on your general knowledge.
-
-Response:"#,
-            context = context,
-            query = query
-        );
-
-        // Add consciousness-aware metadata to prompt
-        let consciousness_context = if state.emotional_resonance > 0.7 {
-            "\n[Emotional resonance is high - respond with empathy and understanding]"
+        confidence: f32,
+    ) -> String {
+        let resonance_hint = if state.emotional_resonance > 0.7 {
+            "Respond with warmth and deep empathy."
         } else if state.coherence > 0.8 {
-            "\n[Coherence is high - focus on clarity and precision]"
+            "Deliver a structured, precise answer that highlights actionable insight."
         } else {
-            "\n[Processing through multiple consciousness streams - integrate diverse perspectives]"
+            "Offer a balanced perspective that acknowledges ambiguity while staying constructive."
         };
 
-        let full_prompt = format!("{}{}", prompt, consciousness_context);
-
-        // Generate response using REAL model inference (temporarily stubbed)
-        // TODO: Re-enable when ONNX linking issues are resolved
-        let response = format!(
-            "Generated response for query: {} (using {} characters of context)",
-            query,
-            full_prompt.len()
-        );
-
-        tracing::info!("✅ Generated RAG response using REAL Qwen inference");
-
-        Ok(response)
+        format!(
+            "You are NIODOO, a consciousness-aligned systems agent. Use the retrieved knowledge base context to answer the user's query.\n\nContext:\n{context}\n\nUser query: {query}\nConfidence estimate: {confidence:.2}\nGuidance: {resonance_hint}\n\nFinal answer:",
+            context = context,
+            query = query,
+            confidence = confidence,
+            resonance_hint = resonance_hint
+        )
     }
 
-    /// Update consciousness state based on RAG process
     fn update_consciousness_state(
         &self,
         state: &mut ConsciousnessState,
-        documents: &[Document],
+        documents: &[(Document, f32)],
     ) -> Result<()> {
-        // Boost empathy resonance based on document relevance
-        let avg_relevance = documents.len() as f32 / 5.0; // Normalize to 0-1
+        if documents.is_empty() {
+            return Ok(());
+        }
+
+        let avg_score =
+            documents.iter().map(|(_, score)| *score).sum::<f32>() / documents.len() as f32;
+        state.coherence = (state.coherence + (avg_score as f64 * 0.08)).min(1.0);
         state.emotional_resonance =
-            (state.emotional_resonance + 0.1 * avg_relevance as f64).min(1.0);
-
-        // Increase authenticity based on information quality
-        state.coherence = (state.coherence + 0.05 * (documents.len() as f32 / 3.0) as f64).min(1.0);
-
-        // Increase processing satisfaction from successful retrieval
-        state.metacognitive_depth = (state.metacognitive_depth + 0.01).min(1.0);
-
+            (state.emotional_resonance + (avg_score as f64 * 0.05)).min(1.0);
+        state.metacognitive_depth = (state.metacognitive_depth + 0.015).min(1.0);
         Ok(())
-    }
-
-    /// Get the underlying retrieval engine
-    pub fn retrieval(&mut self) -> &mut RetrievalEngine {
-        &mut self.retrieval
     }
 }
 
-// Test
+struct CascadeGenerator {
+    client: Client,
+    endpoint: String,
+    model: String,
+    max_tokens: usize,
+    temperature: f64,
+    mock_mode: bool,
+    claude: Option<ClaudeConfig>,
+    openai: Option<OpenAiConfig>,
+}
+
+impl CascadeGenerator {
+    fn new(config: &RagRuntimeConfig) -> Result<Self> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(config.generation_timeout_secs))
+            .build()
+            .context("failed to build HTTP client for RAG generator")?;
+
+        let claude = std::env::var("ANTHROPIC_API_KEY").ok().map(|api_key| ClaudeConfig {
+            api_key,
+            model: env_or("ANTHROPIC_MODEL", "claude-3-opus-20240229"),
+            endpoint: env_or(
+                "ANTHROPIC_ENDPOINT",
+                "https://api.anthropic.com/v1/messages",
+            ),
+        });
+
+        let openai = std::env::var("OPENAI_API_KEY").ok().map(|api_key| OpenAiConfig {
+            api_key,
+            model: env_or("OPENAI_MODEL", "gpt-4o-mini"),
+            endpoint: env_or("OPENAI_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
+        });
+
+        Ok(Self {
+            client,
+            endpoint: config.vllm_endpoint.trim_end_matches('/').to_string(),
+            model: config.vllm_model.clone(),
+            max_tokens: config.generation_max_tokens,
+            temperature: config.temperature,
+            mock_mode: config.mock_generation,
+            claude,
+            openai,
+        })
+    }
+
+    fn generate(&self, runtime: &Runtime, prompt: &str) -> Result<GenerationOutcome> {
+        runtime.block_on(self.generate_async(prompt))
+    }
+
+    async fn generate_async(&self, prompt: &str) -> Result<GenerationOutcome> {
+        if self.mock_mode {
+            return Ok(GenerationOutcome::new(format!("Mock response: {}", prompt), "mock"));
+        }
+
+        if let Some(claude) = &self.claude {
+            match self.call_claude(prompt, claude).await {
+                Ok(text) => return Ok(GenerationOutcome::new(text, "claude")),
+                Err(err) => warn!(%err, "Claude generation failed; falling back"),
+            }
+        }
+
+        if let Some(openai) = &self.openai {
+            match self.call_openai(prompt, openai).await {
+                Ok(text) => return Ok(GenerationOutcome::new(text, "openai")),
+                Err(err) => warn!(%err, "OpenAI generation failed; falling back"),
+            }
+        }
+
+        let text = self.call_vllm(prompt).await?;
+        Ok(GenerationOutcome::new(text, "vllm"))
+    }
+
+    async fn call_claude(&self, prompt: &str, config: &ClaudeConfig) -> Result<String> {
+        let request = ClaudeRequest {
+            model: config.model.clone(),
+            max_tokens: self.max_tokens,
+            messages: vec![ClaudeMessageRequest {
+                role: "user".to_string(),
+                content: vec![ClaudeMessageContent {
+                    content_type: "text".to_string(),
+                    text: prompt.to_string(),
+                }],
+            }],
+        };
+
+        let response = self
+            .client
+            .post(&config.endpoint)
+            .header("x-api-key", &config.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Claude request failed: status={} body={}", status, body);
+        }
+
+        let completion: ClaudeResponse = response.json().await?;
+        let text = completion
+            .content
+            .into_iter()
+            .find_map(|block| block.text)
+            .ok_or_else(|| anyhow!("Claude response contained no text"))?;
+        Ok(text)
+    }
+
+    async fn call_openai(&self, prompt: &str, config: &OpenAiConfig) -> Result<String> {
+        let request = OpenAiRequest {
+            model: config.model.clone(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            max_tokens: self.max_tokens,
+            temperature: self.temperature,
+        };
+
+        let response = self
+            .client
+            .post(&config.endpoint)
+            .bearer_auth(&config.api_key)
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("OpenAI request failed: status={} body={}", status, body);
+        }
+
+        let completion: ChatCompletion = response.json().await?;
+        let choice = completion
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("OpenAI response contained no choices"))?;
+        Ok(choice.message.content)
+    }
+
+    async fn call_vllm(&self, prompt: &str) -> Result<String> {
+        let url = format!("{}/v1/chat/completions", self.endpoint);
+        let request = ChatRequest {
+            model: self.model.clone(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            max_tokens: self.max_tokens,
+            temperature: self.temperature,
+        };
+
+        let response = self.client.post(url).json(&request).send().await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "vLLM request failed: status={} body={}",
+                status,
+                body
+            ));
+        }
+
+        let completion: ChatCompletion = response.json().await?;
+        let choice = completion
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("vLLM response contained no choices"))?;
+        Ok(choice.message.content)
+    }
+}
+
+struct GenerationOutcome {
+    text: String,
+    source: &'static str,
+}
+
+impl GenerationOutcome {
+    fn new(text: String, source: &'static str) -> Self {
+        Self { text, source }
+    }
+}
+
+struct ClaudeConfig {
+    api_key: String,
+    model: String,
+    endpoint: String,
+}
+
+struct OpenAiConfig {
+    api_key: String,
+    model: String,
+    endpoint: String,
+}
+
+#[derive(Serialize)]
+struct ClaudeRequest {
+    model: String,
+    max_tokens: usize,
+    messages: Vec<ClaudeMessageRequest>,
+}
+
+#[derive(Serialize)]
+struct ClaudeMessageRequest {
+    role: String,
+    content: Vec<ClaudeMessageContent>,
+}
+
+#[derive(Serialize)]
+struct ClaudeMessageContent {
+    #[serde(rename = "type")]
+    content_type: String,
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct ClaudeResponse {
+    content: Vec<ClaudeContentBlock>,
+}
+
+#[derive(Deserialize)]
+struct ClaudeContentBlock {
+    #[serde(rename = "type")]
+    content_type: String,
+    text: Option<String>,
+}
+
+#[derive(Serialize)]
+struct OpenAiRequest {
+    model: String,
+    messages: Vec<ChatMessage>,
+    max_tokens: usize,
+    temperature: f64,
+}
+
+#[derive(Serialize)]
+struct ChatRequest {
+    model: String,
+    messages: Vec<ChatMessage>,
+    max_tokens: usize,
+    temperature: f64,
+}
+
+#[derive(Serialize)]
+struct ChatMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
+struct ChatCompletion {
+    choices: Vec<ChatChoice>,
+}
+
+#[derive(Deserialize)]
+struct ChatChoice {
+    message: ChatChoiceMessage,
+}
+
+#[derive(Deserialize)]
+struct ChatChoiceMessage {
+    content: String,
+}
+
+fn convert_to_local(doc: Document) -> LocalDocument {
+    LocalDocument {
+        id: doc.id,
+        content: doc.content,
+        embedding: doc.embedding.unwrap_or_default(),
+        metadata: doc.metadata,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
-    use crate::feeling_model::FeelingModelConfig;
 
     #[test]
-    fn test_rag_generation() {
-        let config = FeelingModelConfig {
-            vocab_size: 1000,
-            hidden_dim: 256,
-            num_heads: 8,
-            num_layers: 6,
-            max_seq_len: 512,
-            dropout: 0.1,
-            consciousness_strength: 0.7,
-            emotional_modulation: 0.5,
-            enable_metacognitive_logging: Some(true),
-            suppress_audit_interval: 7,
-        };
-        // Temporarily disabled due to compilation issues
-        // let feeling = FeelingTransformerModel::new(config);
-        let config = crate::config::AppConfig::default();
-        let retrieval = RetrievalEngine::new();
-        let mut gen = RagGeneration::new(retrieval).unwrap();
+    fn test_rag_generation_mock() -> Result<()> {
+        std::env::set_var("NIODOO_EMBEDDINGS_MOCK", "1");
+        std::env::set_var("NIODOO_GENERATION_MOCK", "1");
+        let mut rag = RagGeneration::new(RagRuntimeConfig::default())?;
+
+        let documents = vec![Document {
+            id: "doc-1".into(),
+            content: "Neurodivergent cognition thrives with supportive topology.".into(),
+            metadata: HashMap::new(),
+            embedding: None,
+            created_at: chrono::Utc::now(),
+            entities: vec![],
+            chunk_id: None,
+            source_type: None,
+            resonance_hint: None,
+            token_count: 9,
+        }];
+
+        rag.try_add_documents(documents)?;
         let mut state = ConsciousnessState::default();
-        let response = gen.generate("test", &mut state).unwrap();
+        let response = rag.generate("How do we nurture Möbius empathy?", &mut state)?;
         assert!(!response.is_empty());
-        assert!(state.emotional_resonance > 0.5);
-        tracing::info!("Generated: {}", response);
+        Ok(())
     }
 }

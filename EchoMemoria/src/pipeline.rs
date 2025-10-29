@@ -1,4 +1,5 @@
 use std::time::{Instant, Duration};
+use std::env;
 use tokio::try_join;
 use anyhow::Result;
 use serde_json::json;
@@ -124,8 +125,9 @@ pub async fn niodoo_process(prompt: &str) -> Result<NiodooOutput> {
         async {
             // Claude API (5s timeout)
             let client = HTTP_CLIENT.clone();
+            let api_key = env::var("ANTHROPIC_KEY").unwrap_or_default();
             let res = client.post("https://api.anthropic.com/v1/messages")
-                .header("x-api-key", "stub-key")  // From config/env
+                .header("x-api-key", api_key)
                 .json(&json!({
                     "model": "claude-3-opus-20240229",
                     "max_tokens": 512,

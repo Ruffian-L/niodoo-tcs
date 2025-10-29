@@ -12,7 +12,11 @@ use crate::embedding::QwenStatefulEmbedder;
 use crate::learning::{DqnAction, DqnState, ReplayTuple};
 use crate::metrics::PipelineMetrics;
 use crate::torus::PadGhostState;
+use blake3::Hasher as BlakeHasher;
+use lru::LruCache;
 use qdrant_client::Qdrant;
+use std::convert::TryInto;
+use std::num::NonZeroUsize;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -69,6 +73,7 @@ pub struct EragClient {
     pub similarity_threshold: f32,
     embedder: Arc<QwenStatefulEmbedder>,
     mock_mode: bool,
+    collapse_cache: Arc<tokio::sync::Mutex<LruCache<u64, CollapseResult>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +118,9 @@ impl EragClient {
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
 
+        let cache_capacity = NonZeroUsize::new(256).unwrap();
+        let collapse_cache = Arc::new(tokio::sync::Mutex::new(LruCache::new(cache_capacity)));
+
         if mock_mode {
             info!("Qdrant mock mode active; skipping collection provisioning");
             return Ok(Self {
@@ -123,6 +131,7 @@ impl EragClient {
                 similarity_threshold,
                 embedder,
                 mock_mode,
+                collapse_cache,
             });
         }
 
@@ -178,6 +187,7 @@ impl EragClient {
             similarity_threshold,
             embedder,
             mock_mode,
+            collapse_cache,
         })
     }
 
@@ -220,6 +230,14 @@ impl EragClient {
             self.vector_dim,
             vector.len()
         );
+
+        let cache_key = cache_key_for(vector);
+        {
+            let mut cache_guard = self.collapse_cache.lock().await;
+            if let Some(cached) = cache_guard.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
 
         // Build search request manually
         let request_json = json!({
@@ -323,73 +341,89 @@ impl EragClient {
             }
         }
 
-        if memories.is_empty() {
+        let result = if memories.is_empty() {
             sims.push(0.0);
-        }
 
-        // Sort memories by quality score if available (quality-weighted retrieval)
-        memories.sort_by(|a, b| {
-            let quality_a = a.quality_score.unwrap_or(0.5);
-            let quality_b = b.quality_score.unwrap_or(0.5);
-            quality_b
-                .partial_cmp(&quality_a)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        let average_similarity = if sims.is_empty() {
-            0.0
+            CollapseResult {
+                top_hits: Vec::new(),
+                aggregated_context: String::new(),
+                average_similarity: 0.0,
+                curator_quality: None,
+                failure_type: None,
+                failure_details: None,
+            }
         } else {
-            sims.iter().copied().sum::<f32>() / sims.len() as f32
+            // Sort memories by quality score if available (quality-weighted retrieval)
+            memories.sort_by(|a, b| {
+                let quality_a = a.quality_score.unwrap_or(0.5);
+                let quality_b = b.quality_score.unwrap_or(0.5);
+                quality_b
+                    .partial_cmp(&quality_a)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let average_similarity = if sims.is_empty() {
+                0.0
+            } else {
+                sims.iter().copied().sum::<f32>() / sims.len() as f32
+            };
+
+            // Collect context strings and join
+            let mut aggregated_context: String = memories
+                .iter()
+                .flat_map(|m| m.erag_context.iter())
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            // Check for higher quality previous solutions
+            let better_solution = memories
+                .iter()
+                .filter(|m| m.quality_score.unwrap_or(0.0) > 0.8)
+                .find(|m| m.solution_path.is_some());
+
+            if let Some(better) = better_solution {
+                aggregated_context.push_str(&format!(
+                    "\n[Previous optimal solution (quality {:.2}): {}]",
+                    better.quality_score.unwrap_or(0.0),
+                    better.solution_path.as_ref().unwrap_or(&"N/A".to_string())
+                ));
+
+                if better.iteration_count > 0 {
+                    aggregated_context.push_str(&format!(
+                        "\n[Note: This problem was solved optimally in {} iterations previously]",
+                        better.iteration_count
+                    ));
+                }
+            }
+
+            if aggregated_context.is_empty() {
+                aggregated_context = "No relevant ERAG context retrieved.".to_string();
+            } else if aggregated_context.len() > 1000 {
+                aggregated_context.truncate(1000);
+            }
+
+            let curator_quality = memories
+                .iter()
+                .filter_map(|m| m.quality_score)
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+            CollapseResult {
+                top_hits: memories,
+                aggregated_context,
+                average_similarity,
+                curator_quality,
+                failure_type: None,
+                failure_details: None,
+            }
         };
 
-        // Collect context strings and join
-        let mut aggregated_context: String = memories
-            .iter()
-            .flat_map(|m| m.erag_context.iter())
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        // Check for higher quality previous solutions
-        let better_solution = memories
-            .iter()
-            .filter(|m| m.quality_score.unwrap_or(0.0) > 0.8)
-            .find(|m| m.solution_path.is_some());
-
-        if let Some(better) = better_solution {
-            aggregated_context.push_str(&format!(
-                "\n[Previous optimal solution (quality {:.2}): {}]",
-                better.quality_score.unwrap_or(0.0),
-                better.solution_path.as_ref().unwrap_or(&"N/A".to_string())
-            ));
-
-            if better.iteration_count > 0 {
-                aggregated_context.push_str(&format!(
-                    "\n[Note: This problem was solved optimally in {} iterations previously]",
-                    better.iteration_count
-                ));
-            }
+        {
+            let mut cache_guard = self.collapse_cache.lock().await;
+            cache_guard.put(cache_key, result.clone());
         }
 
-        if aggregated_context.is_empty() {
-            aggregated_context = "No relevant ERAG context retrieved.".to_string();
-        } else if aggregated_context.len() > 1000 {
-            aggregated_context.truncate(1000);
-        }
-
-        let curator_quality = memories
-            .iter()
-            .filter_map(|m| m.quality_score)
-            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        Ok(CollapseResult {
-            top_hits: memories,
-            aggregated_context,
-            average_similarity,
-            curator_quality,
-            failure_type: None,
-            failure_details: None,
-        })
+        Ok(result)
     }
 
     pub async fn upsert_memory(
@@ -1102,4 +1136,16 @@ fn extract_number(payload: &JsonMap<String, JsonValue>, key: &str) -> f64 {
             }
         })
         .unwrap_or_default()
+}
+
+fn cache_key_for(vector: &[f32]) -> u64 {
+    let mut hasher = BlakeHasher::new();
+    for value in vector {
+        hasher.update(&value.to_le_bytes());
+    }
+    let bytes = hasher.finalize();
+    let digest: [u8; 8] = bytes.as_bytes()[..8]
+        .try_into()
+        .expect("blake3 digest slice");
+    u64::from_le_bytes(digest)
 }

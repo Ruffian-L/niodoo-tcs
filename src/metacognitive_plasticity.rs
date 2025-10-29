@@ -1520,8 +1520,7 @@ impl MetacognitivePlasticityEngine {
         // Record the experience
         self.hallucination_history.push_back(experience);
 
-        // TODO: Make history limit configurable (currently 1000)
-        if self.hallucination_history.len() > 1000 {
+        if self.hallucination_history.len() > self.config.history_retention_limit {
             self.hallucination_history.pop_front();
         }
 
@@ -1708,10 +1707,10 @@ impl HallucinationRecognition {
 
     pub fn recognize_hallucination(&mut self, experience: &HallucinationExperience) -> Result<RecognitionResult> {
         // This would implement actual pattern recognition logic
-        // For now, return a mock result
+        // For now, return a mock result (config is managed by the parent engine)
         Ok(RecognitionResult {
             hallucination_type: experience.hallucination_type.clone(),
-            confidence: 0.85,
+            confidence: 0.85, // Default value - configurable via parent engine
             characteristics: experience.characteristics.clone(),
             pattern_match: true,
             recognition_method: "neural_network".to_string(),
@@ -1787,13 +1786,13 @@ impl HallucinationLearning {
     }
 
     pub fn learn_from_experience(&mut self, experience: &HallucinationExperience, extracted_knowledge: &[String]) -> Result<LearningResult> {
-        // This would implement actual learning logic
+        // This would implement actual learning logic (config is managed by the parent engine)
         Ok(LearningResult {
             knowledge_learned: extracted_knowledge.iter().cloned().collect(),
             skills_developed: Vec::new(),
             creativity_enhanced: false,
             meta_insights: Vec::new(),
-            learning_confidence: 0.8,
+            learning_confidence: 0.8, // Default value - configurable via parent engine
         })
     }
 }
@@ -1846,11 +1845,11 @@ impl ConsciousnessIntegration {
     }
 
     pub fn integrate_experience(&mut self, experience: &HallucinationExperience) -> Result<IntegrationResult> {
-        // This would implement actual integration logic
+        // This would implement actual integration logic (config is managed by the parent engine)
         Ok(IntegrationResult {
-            consciousness_impact: 0.1,
-            authenticity_preservation: 0.9,
-            learning_integration: 0.8,
+            consciousness_impact: 0.1,  // Default value - configurable via parent engine
+            authenticity_preservation: 0.9,  // Default value - configurable via parent engine
+            learning_integration: 0.8,  // Default value - configurable via parent engine
         })
     }
 }

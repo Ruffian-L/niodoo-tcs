@@ -4,6 +4,11 @@ use tokio::time::{sleep, Duration};
 use crate::emotional_mapping::EmotionalState;
 use crate::erag::ERAGResult;
 
+// Configuration constants
+const CRDT_PROCESSING_DELAY_MS: u64 = 5;
+const MIRAGE_PROBABILITY: f64 = 0.1;
+const LOW_ENTROPY_THRESHOLD: f64 = 1.0;
+
 #[derive(Debug)]
 pub struct TokenizedResult {
     pub tokens: Vec<String>,
@@ -27,7 +32,7 @@ impl TokenizerEngine {
 
     pub async fn process(&mut self, erag_result: &ERAGResult, emotional_state: &EmotionalState) -> Result<TokenizedResult> {
         // Simulate CRDT processing time
-        sleep(Duration::from_millis(5)).await;
+        sleep(Duration::from_millis(CRDT_PROCESSING_DELAY_MS)).await;
 
         // CRDT promotion: merge contexts with version control
         let mut tokens = Vec::new();
@@ -51,10 +56,10 @@ impl TokenizerEngine {
         }
 
         // Rut mirage: apply noise if entropy is low
-        let mirage_applied = if emotional_state.entropy < 1.0 {
+        let mirage_applied = if emotional_state.entropy < LOW_ENTROPY_THRESHOLD {
             let mut rng = thread_rng();
             for token in tokens.iter_mut() {
-                if rng.gen_bool(0.1) { // 10% chance
+                if rng.gen_bool(MIRAGE_PROBABILITY) {
                     *token = format!("{}_mirage_{:.2}", token, rng.gen_range(-self.mirage_sigma..self.mirage_sigma));
                 }
             }

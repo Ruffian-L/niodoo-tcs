@@ -138,6 +138,7 @@ pub struct LearningLoop {
     curated_buffer: Vec<CuratedSample>,
     lora_epochs: usize,
     lora_rank: usize,
+    #[allow(dead_code)]
     ml_backend: Option<InferenceModelBackend>,
     rng: rand::rngs::StdRng,
 }
@@ -243,7 +244,7 @@ impl LearningLoop {
             initial_alpha: alpha,
             recent_metrics: VecDeque::with_capacity(50),
             recent_topologies: VecDeque::with_capacity(50), // INTEGRATION FIX: Initialize topology tracking
-            evolution: EvolutionLoop::new(20, 5, 0.05),
+            evolution: EvolutionLoop::new(20, 5, 0.05, rng_seed),
             predictor: TcsPredictor::new(), // FIXED: Removed underscore
             lora_trainer,
             reward_threshold: -0.5,
@@ -251,6 +252,7 @@ impl LearningLoop {
             curated_buffer: Vec::new(),
             lora_epochs,
             lora_rank,
+            #[allow(dead_code)]
             ml_backend,
             rng: rand::rngs::StdRng::seed_from_u64(rng_seed),
         }
@@ -308,26 +310,6 @@ impl LearningLoop {
         let history_dist =
             self.compute_history_distance(pad_state.entropy, collapse.top_hits.as_slice());
 
-        let mode = match compass.quadrant {
-            crate::compass::CompassQuadrant::Discover => "Discover",
-            crate::compass::CompassQuadrant::Master => "Master",
-            crate::compass::CompassQuadrant::Persist => "Persist",
-            crate::compass::CompassQuadrant::Panic => "Panic",
-        };
-
-        let shaped_reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist);
-
-        if (shaped_reward - base_reward).abs() > f64::EPSILON {
-            adjusted_params.insert(
-                "tcs_reward_adjustment".to_string(),
-                shaped_reward - base_reward,
-            );
-            events.push(format!(
-                "TCS reward reshaped in mode {mode}: base={:.3} → shaped={:.3}",
-                base_reward, shaped_reward
-            ));
-        }
-
         let predictor_delta = self
             .predictor
             .predict_reward_delta(topology)
@@ -352,8 +334,15 @@ impl LearningLoop {
         next_state.metrics[3] = fallback_ucb;
         next_state.metrics[4] = fallback_curator;
 
-        let reward = shaped_reward;
-        let blended_reward = reward + (predicted_reward_delta * 0.3);
+        let mode = match compass.quadrant {
+            crate::compass::CompassQuadrant::Discover => "Discover",
+            crate::compass::CompassQuadrant::Master => "Master",
+            crate::compass::CompassQuadrant::Persist => "Persist",
+            crate::compass::CompassQuadrant::Panic => "Panic",
+        };
+        let shaped_reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist);
+        let reward = shaped_reward + predictor_delta;
+        let blended_reward = reward;
 
         self.dqn_update(
             state.clone(),
@@ -1081,20 +1070,27 @@ impl LearningLoop {
     }
 }
 
-#[derive(Default)]
 pub struct GaussianProcess {
     x_train: Option<Vec<Vec<f64>>>,
     y_train: Option<Vec<f64>>,
+    rng: rand::rngs::StdRng,
 }
 
 impl GaussianProcess {
+    pub fn new(rng_seed: u64) -> Self {
+        Self {
+            x_train: None,
+            y_train: None,
+            rng: rand::rngs::StdRng::seed_from_u64(rng_seed),
+        }
+    }
+
     pub fn fit(&mut self, x: &Vec<Vec<f64>>, y: &Vec<f64>) {
         self.x_train = Some(x.clone());
         self.y_train = Some(y.clone());
     }
 
-    pub fn suggest_next(&self, n: usize) -> Vec<Vec<f64>> {
-        let mut rng = thread_rng();
+    pub fn suggest_next(&mut self, n: usize) -> Vec<Vec<f64>> {
         if let (Some(ref x_train), Some(ref y_train)) = (&self.x_train, &self.y_train) {
             if !x_train.is_empty() {
                 if let Some(max_entry) = y_train
@@ -1106,10 +1102,10 @@ impl GaussianProcess {
                     return (0..n)
                         .map(|_| {
                             vec![
-                                (best[0] + rng.gen_range(-0.05f64..0.05)).clamp(0.1, 1.0),
-                                (best[1] + rng.gen_range(-0.05f64..0.05)).clamp(0.1, 1.0),
-                                (best[2] + rng.gen_range(-0.05f64..0.05)).clamp(0.0, 1.0),
-                                (best[3] + rng.gen_range(-0.005f64..0.005)).clamp(0.001, 0.1),
+                                (best[0] + self.rng.gen_range(-0.05f64..0.05)).clamp(0.1, 1.0),
+                                (best[1] + self.rng.gen_range(-0.05f64..0.05)).clamp(0.1, 1.0),
+                                (best[2] + self.rng.gen_range(-0.05f64..0.05)).clamp(0.0, 1.0),
+                                (best[3] + self.rng.gen_range(-0.005f64..0.005)).clamp(0.001, 0.1),
                             ]
                         })
                         .collect();
@@ -1120,10 +1116,10 @@ impl GaussianProcess {
         (0..n)
             .map(|_| {
                 vec![
-                    rng.gen_range(0.1..1.0),
-                    rng.gen_range(0.1..1.0),
-                    rng.gen_range(0.0..1.0),
-                    rng.gen_range(0.001..0.1),
+                    self.rng.gen_range(0.1..1.0),
+                    self.rng.gen_range(0.1..1.0),
+                    self.rng.gen_range(0.0..1.0),
+                    self.rng.gen_range(0.001..0.1),
                 ]
             })
             .collect()
@@ -1135,15 +1131,17 @@ pub struct EvolutionLoop {
     generations: usize,
     mutation_std: f64,
     bo_gp: GaussianProcess,
+    rng: rand::rngs::StdRng,
 }
 
 impl EvolutionLoop {
-    pub fn new(pop_size: usize, gens: usize, mutation_std: f64) -> Self {
+    pub fn new(pop_size: usize, gens: usize, mutation_std: f64, rng_seed: u64) -> Self {
         Self {
             population_size: pop_size,
             generations: gens,
             mutation_std,
-            bo_gp: GaussianProcess::default(),
+            bo_gp: GaussianProcess::new(rng_seed),
+            rng: rand::rngs::StdRng::seed_from_u64(rng_seed),
         }
     }
 
@@ -1227,17 +1225,16 @@ impl EvolutionLoop {
         Ok(best_conf)
     }
 
-    fn mutate_config(&self, conf: &RuntimeConfig) -> RuntimeConfig {
-        let mut rng = thread_rng();
+    fn mutate_config(&mut self, conf: &RuntimeConfig) -> RuntimeConfig {
         let std = self.mutation_std;
         let mut new = conf.clone();
-        new.temperature += rng.gen_range(-std..std);
+        new.temperature += self.rng.gen_range(-std..std);
         new.temperature = new.temperature.clamp(0.1, 1.0);
-        new.top_p += rng.gen_range(-std..std);
+        new.top_p += self.rng.gen_range(-std..std);
         new.top_p = new.top_p.clamp(0.1, 1.0);
-        new.novelty_threshold += rng.gen_range(-std * 0.5..std * 0.5);
+        new.novelty_threshold += self.rng.gen_range(-std * 0.5..std * 0.5);
         new.novelty_threshold = new.novelty_threshold.clamp(0.0, 1.0);
-        new.dqn_alpha += rng.gen_range(-std * 0.001..std * 0.001);
+        new.dqn_alpha += self.rng.gen_range(-std * 0.001..std * 0.001);
         new.dqn_alpha = new.dqn_alpha.clamp(0.001, 0.1);
         new
     }
@@ -1261,25 +1258,28 @@ impl EvolutionLoop {
         }
     }
 
-    fn select_and_breed(&self, pop: &Vec<RuntimeConfig>, fitness: &Vec<f64>) -> Vec<RuntimeConfig> {
+    fn select_and_breed(
+        &mut self,
+        pop: &Vec<RuntimeConfig>,
+        fitness: &Vec<f64>,
+    ) -> Vec<RuntimeConfig> {
         let mut new_pop = vec![];
         let size = pop.len();
-        let mut rng = thread_rng();
         for _ in 0..size {
-            let p1 = self.tournament_select(fitness, &mut rng);
-            let p2 = self.tournament_select(fitness, &mut rng);
+            let p1 = self.tournament_select(fitness);
+            let p2 = self.tournament_select(fitness);
             let child = self.crossover(&pop[p1], &pop[p2]);
             new_pop.push(child);
         }
         new_pop
     }
 
-    fn tournament_select(&self, fitness: &Vec<f64>, rng: &mut ThreadRng) -> usize {
+    fn tournament_select(&mut self, fitness: &Vec<f64>) -> usize {
         let tournament_size = 4;
-        let mut best_idx = rng.gen_range(0..fitness.len());
+        let mut best_idx = self.rng.gen_range(0..fitness.len());
         let mut best = fitness[best_idx];
         for _ in 1..tournament_size {
-            let i = rng.gen_range(0..fitness.len());
+            let i = self.rng.gen_range(0..fitness.len());
             if fitness[i] > best {
                 best = fitness[i];
                 best_idx = i;

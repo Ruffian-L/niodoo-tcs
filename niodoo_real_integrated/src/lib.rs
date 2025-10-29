@@ -100,6 +100,9 @@ pub mod lora_trainer;
 /// Monte Carlo Tree Search utilities.
 pub mod mcts;
 
+/// MCTS configuration and tuning parameters.
+pub mod mcts_config;
+
 /// Metrics collection and reporting.
 pub mod metrics;
 
@@ -107,7 +110,7 @@ pub mod metrics;
 pub mod pipeline;
 
 // pub mod resilience;
-// pub mod federated;
+pub mod federated;
 
 /// Evaluation harnesses and scoring.
 pub mod eval;
@@ -129,6 +132,10 @@ pub mod torus;
 
 /// Miscellaneous helpers and shared utilities.
 pub mod util;
+
+/// Vector store implementation for binary protobuf storage
+#[cfg(feature = "qdrant")]
+pub mod vector_store;
 
 pub mod test_support;
 

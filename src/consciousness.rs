@@ -1185,8 +1185,8 @@ mod tests {
     fn test_emotional_state_complexity() {
         let config = ConsciousnessConfig::default();
         let mut emotional_state = AdaptiveState::new_with_config(&config);
-        emotional_state.add_secondary_emotion(EmotionType::Focused, 0.6, &config);
-        emotional_state.add_secondary_emotion(EmotionType::Learning, 0.4, &config);
+        emotional_state.add_secondary_emotion(StateMetric::Focused, 0.6, &config);
+        emotional_state.add_secondary_emotion(StateMetric::Learning, 0.4, &config);
 
         assert!(emotional_state.emotional_complexity > 0.3);
         assert_eq!(emotional_state.secondary_emotions.len(), 2);
