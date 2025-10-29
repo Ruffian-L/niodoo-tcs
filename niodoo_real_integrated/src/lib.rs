@@ -1,6 +1,6 @@
 //! Niodoo Real Integrated: Topological Cognitive System (TCS) integration crate.
-//! 
-//! This crate provides a comprehensive integrated runtime that bridges pipelines, embeddings, 
+//!
+//! This crate provides a comprehensive integrated runtime that bridges pipelines, embeddings,
 //! learning, and generation into a cohesive Topological Cognitive System.
 //!
 //! ## Overview
@@ -22,17 +22,16 @@
 //! ## Usage
 //!
 //! ```no_run
-//! use niodoo_real_integrated::{CliArgs, Pipeline};
+//! use anyhow::Result;
 //!
 //! #[tokio::main]
-//! async fn main() -> anyhow::Result<()> {
-//!     let args = CliArgs::parse();
-//!     let pipeline = Pipeline::initialise(args).await?;
-//!     
-//!     // Process prompts through the integrated pipeline
-//!     let cycle = pipeline.run_cycle("Your prompt here").await?;
+//! async fn main() -> Result<()> {
+//!     let mut harness = niodoo_real_integrated::test_support::mock_pipeline("embed").await?;
+//!     let cycle = harness
+//!         .pipeline_mut()
+//!         .process_prompt("Blueprint a Möbius-safe rollout")
+//!         .await?;
 //!     println!("Response: {}", cycle.hybrid_response);
-//!     
 //!     Ok(())
 //! }
 //! ```

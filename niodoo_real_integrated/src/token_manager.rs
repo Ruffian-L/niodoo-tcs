@@ -54,6 +54,7 @@ pub struct DynamicTokenizerManager {
     promotion_interval: u64,
     state_path: PathBuf,
     shutdown: Arc<AtomicBool>,
+    promotion_active: Arc<AtomicBool>,
 }
 
 struct TokenizationMetrics {
@@ -141,6 +142,7 @@ impl DynamicTokenizerManager {
             promotion_interval,
             state_path,
             shutdown: Arc::new(AtomicBool::new(false)),
+            promotion_active: Arc::new(AtomicBool::new(false)),
         };
 
         manager.load_persisted_vocabulary().await?;
@@ -279,37 +281,36 @@ impl DynamicTokenizerManager {
         {
             return Ok(());
         }
+
+        if self
+            .promotion_active
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
+            debug!("token promotion cycle already running; skipping");
+            return Ok(());
+        }
+
+        struct PromotionGuard<'a>(&'a AtomicBool);
+
+        impl<'a> Drop for PromotionGuard<'a> {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::Release);
+            }
+        }
+
+        let _guard = PromotionGuard(&self.promotion_active);
+
         let promotion_engine = self.promotion_engine.clone();
         let memories = self.memories.clone();
 
-        let (promotion_result, elapsed) = block_in_place(|| -> Result<_> {
-            let handle = Handle::current();
-            let engine_clone = promotion_engine.clone();
-            let memories_clone = memories.clone();
-
-            let thread = Builder::new()
-                .name("token_promotion_cycle".to_string())
-                .stack_size(16 * 1024 * 1024)
-                .spawn(move || {
-                    handle.block_on(async move {
-                        let start = Instant::now();
-                        let result = {
-                            let engine = engine_clone.read().await;
-                            let memories = memories_clone.read().await;
-                            engine.run_promotion_cycle(&memories).await
-                        }?;
-                        Ok::<_, anyhow::Error>((result, start.elapsed()))
-                    })
-                })
-                .context("failed to spawn token promotion thread")?;
-
-            let outcome = thread
-                .join()
-                .map_err(|_| anyhow::anyhow!("token promotion thread panicked"))?;
-
-            let (result, elapsed) = outcome?;
-            Ok((result, elapsed))
-        })?;
+        let start = Instant::now();
+        let promotion_result = {
+            let engine = promotion_engine.read().await;
+            let memories = memories.read().await;
+            engine.run_promotion_cycle(&memories).await
+        }?;
+        let elapsed = start.elapsed();
 
         self.persist_vocabulary().await?;
         self.metrics.record_promotion(&promotion_result);

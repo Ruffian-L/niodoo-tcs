@@ -13,13 +13,13 @@ pub mod metrics;
 pub mod topology;
 
 pub use counter_current::{CounterCurrentScheduler, Observation, ProbabilisticBelief};
+pub use metrics::{get_registry, init_metrics, record_topology_metrics};
 #[cfg(feature = "tda_gudhi")]
 pub use topology::GudhiEngine;
 #[cfg(feature = "tda_rust")]
 pub use topology::RustVREngine;
-pub use metrics::{get_registry, init_metrics, record_topology_metrics};
-pub use topology::{PersistenceFeature, PersistentFeature, Point, TopologyEngine, TopologyParams};
 pub use topology::TopologyEngine as TopologicalEngine;
+pub use topology::{PersistenceFeature, PersistentFeature, Point, TopologyEngine, TopologyParams};
 
 pub mod events {
     //! Event types emitted by the orchestrator when notable topological

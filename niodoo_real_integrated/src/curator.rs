@@ -118,7 +118,10 @@ impl Curator {
         let parsed: CuratorJson = match serde_json::from_str(raw) {
             Ok(value) => value,
             Err(error) => {
-                warn!(?error, "Curator JSON parse failed, returning unmodified response");
+                warn!(
+                    ?error,
+                    "Curator JSON parse failed, returning unmodified response"
+                );
                 return Ok(CuratedResponse {
                     refined_response: experience.output.clone(),
                     learned: false,
