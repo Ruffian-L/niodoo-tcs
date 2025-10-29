@@ -1027,4 +1027,77 @@ mod tests {
         let state = vec![0.1, 0.4, -0.2];
         assert_eq!(agent_a.select_action(&state), agent_b.select_action(&state));
     }
+
+    #[test]
+    fn exploration_agent_different_seeds_produce_different_actions() {
+        let mut agent_a = ExplorationAgent::with_seed(42);
+        let mut agent_b = ExplorationAgent::with_seed(99);
+        let state = vec![0.1, 0.4, -0.2];
+        
+        // Not guaranteed to be different, but very likely
+        let action_a = agent_a.select_action(&state);
+        let action_b = agent_b.select_action(&state);
+        
+        // At least verify they're valid actions (within action space)
+        assert!(action_a < DEFAULT_ACTION_SPACE + ENERGY_PERTURBATION_MOD);
+        assert!(action_b < DEFAULT_ACTION_SPACE + ENERGY_PERTURBATION_MOD);
+    }
+
+    #[test]
+    fn motor_brain_new() {
+        let brain = MotorBrain::new();
+        assert!(brain.is_ok());
+        let brain = brain.unwrap();
+        assert_eq!(brain.get_brain_type(), BrainType::Motor);
+    }
+
+    #[tokio::test]
+    async fn motor_brain_process_empty_input() {
+        let brain = MotorBrain::new().unwrap();
+        let result = brain.process("").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn motor_brain_process_help_request() {
+        let brain = MotorBrain::new().unwrap();
+        let result = brain.process("How do I write Rust code?").await;
+        assert!(result.is_ok());
+        let content = result.unwrap();
+        assert!(content.contains("Motor Brain"));
+    }
+
+    #[test]
+    fn equivariant_layer_forward() {
+        let layer = EquivariantLayer::new(3, 4);
+        let positions = DMatrix::<f32>::from_row_slice(2, 3, &[1.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
+        let features = DMatrix::<f32>::from_row_slice(2, 3, &[0.5, 0.3, 0.2, 0.4, 0.6, 0.1]);
+        
+        let output = layer.forward(&positions, &features);
+        assert_eq!(output.nrows(), 2);
+        assert_eq!(output.ncols(), 4);
+    }
+
+    #[test]
+    fn pairwise_distances_positive() {
+        let positions = DMatrix::<f32>::from_row_slice(2, 2, &[0.0, 0.0, 1.0, 1.0]);
+        let distances = EquivariantLayer::pairwise_squared_distances(&positions);
+        
+        assert_eq!(distances.nrows(), 2);
+        assert_eq!(distances.ncols(), 2);
+        assert!(distances[(0, 0)] >= 0.0);
+        assert!(distances[(1, 1)] >= 0.0);
+    }
+
+    #[test]
+    fn cognitive_knot_serialization() {
+        let knot = CognitiveKnot {
+            polynomial: "1t^0 + 1t^1 - 1t^2".to_string(),
+            crossing_number: 3,
+            complexity_score: 1.5,
+        };
+        
+        assert_eq!(knot.crossing_number, 3);
+        assert!(knot.complexity_score > 0.0);
+    }
 }

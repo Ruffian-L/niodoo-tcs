@@ -29,6 +29,12 @@ pub struct RagRuntimeConfig {
     pub similarity_threshold: f32,
     pub token_adjustment: f32,
     pub mock_generation: bool,
+    pub emotional_resonance_threshold: f32,
+    pub coherence_threshold: f32,
+    pub coherence_update_multiplier: f64,
+    pub emotional_resonance_update_multiplier: f64,
+    pub metacognitive_depth_increment: f64,
+    pub max_snippet_length: usize,
 }
 
 impl Default for RagRuntimeConfig {

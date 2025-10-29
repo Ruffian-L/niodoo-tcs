@@ -131,12 +131,12 @@ async fn main() -> Result<()> {
             use niodoo_real_integrated::embedding::QwenStatefulEmbedder;
             use std::sync::Arc;
             
-            let embedder = Arc::new(QwenStatefulEmbedder::new(
+            let embedder = QwenStatefulEmbedder::new(
                 "http://127.0.0.1:11434",
                 "qwen2.5-7b",
                 896,
                 10000,
-            )?);
+            )?;
             
             match embedder.embed(prompt).await {
                 Ok(embedding) => {

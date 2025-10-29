@@ -114,6 +114,7 @@ path = "src/bin/metrics_server.rs"
 [[bin]]
 name = "proto_test"
 path = "src/bin/proto_test.rs"
+required-features = ["qdrant"]
 
 [[bin]]
 name = "shard_telemetry_server"

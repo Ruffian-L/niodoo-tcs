@@ -430,6 +430,18 @@ pub struct RagConfig {
     pub top_k: usize,
     /// Consciousness-modulated retrieval toggle
     pub consciousness_modulated_retrieval: bool,
+    /// Emotional resonance threshold for empathetic responses (0.0-1.0)
+    pub emotional_resonance_threshold: f32,
+    /// Coherence threshold for structured responses (0.0-1.0)
+    pub coherence_threshold: f32,
+    /// Coherence update multiplier when processing retrieved docs
+    pub coherence_update_multiplier: f64,
+    /// Emotional resonance update multiplier when processing retrieved docs
+    pub emotional_resonance_update_multiplier: f64,
+    /// Metacognitive depth increment per query
+    pub metacognitive_depth_increment: f64,
+    /// Maximum snippet length for context building
+    pub max_snippet_length: usize,
 }
 
 /// Training and learning configuration
@@ -1239,6 +1251,12 @@ impl Default for RagConfig {
             embedding_dim: 896,
             top_k: 5,
             consciousness_modulated_retrieval: true,
+            emotional_resonance_threshold: 0.7,
+            coherence_threshold: 0.8,
+            coherence_update_multiplier: 0.08,
+            emotional_resonance_update_multiplier: 0.05,
+            metacognitive_depth_increment: 0.015,
+            max_snippet_length: 600,
         }
     }
 }

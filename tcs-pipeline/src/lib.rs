@@ -235,4 +235,68 @@ mod tests {
         assert!(orchestrator.consensus.propose(&pass));
         assert!(!orchestrator.consensus.propose(&fail));
     }
+
+    #[test]
+    fn orchestrator_default_construction() {
+        let orchestrator = TCSOrchestrator::new(16);
+        assert!(orchestrator.is_ok());
+    }
+
+    #[test]
+    fn orchestrator_config_construction() {
+        let config = TCSConfig::default();
+        let orchestrator = TCSOrchestrator::with_config(32, config);
+        assert!(orchestrator.is_ok());
+    }
+
+    #[test]
+    fn orchestrator_ready_state() {
+        let mut orchestrator = TCSOrchestrator::new(8).unwrap();
+        assert!(!orchestrator.ready());
+        
+        // Add enough samples to fill buffer
+        for _ in 0..8 {
+            orchestrator.ingest_sample(vec![0.1, 0.2, 0.3]);
+        }
+        assert!(orchestrator.ready());
+    }
+
+    #[test]
+    fn orchestrator_reset_brain_context() {
+        let mut orchestrator = TCSOrchestrator::new(8).unwrap();
+        
+        // Add some data
+        for _ in 0..8 {
+            orchestrator.ingest_sample(vec![0.1, 0.2, 0.3]);
+        }
+        assert!(orchestrator.ready());
+        
+        // Reset and verify
+        orchestrator.reset_brain_context();
+        assert!(!orchestrator.ready());
+    }
+
+    #[tokio::test]
+    async fn orchestrator_process_empty_input() {
+        let mut orchestrator = TCSOrchestrator::new(8).unwrap();
+        
+        // Fill buffer
+        for _ in 0..8 {
+            orchestrator.ingest_sample(vec![0.1, 0.2, 0.3]);
+        }
+        
+        let result = orchestrator.process("").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn orchestrator_process_not_ready() {
+        let mut orchestrator = TCSOrchestrator::new(8).unwrap();
+        
+        // Don't fill buffer
+        let result = orchestrator.process("test input").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
 }
