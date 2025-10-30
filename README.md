@@ -10,40 +10,32 @@
 
 Niodoo-Final is an advanced AI framework that **actually learns** from conversations. It integrates topological data analysis (TDA), self-learning mechanisms with QLoRA fine-tuning, and hybrid generation for consciousness-aligned intelligence. This is battle-tested with real benchmarks showing measurable improvements over time.
 
-## 🎯 What Makes This Different?
+## 📊 Real Evidence - See It Learn
 
-### Real Learning, Real Evidence
+**These visualizations show actual learning from production runs:**
 
-**This system gets smarter over time.** Here's the proof:
-
-**ROUGE Score Improvements:**
-```
-Early cycles:  ROUGE 0.28 (baseline)
-After 511 ops: ROUGE 0.42+ (improved responses)
-Improvement:   +50% in response quality
-```
-
-**LoRA Training Outputs:**
-```
-Training sessions: 148 completed
-Loss trend: Decreasing over time
-Adapters saved: ./lora_weights.safetensors
-Memory stored: 601 conversations
-```
-
-**Screenshots of Real Results:**
-
-![ROUGE Improvements](docs/images/rouge_improvements.png)
-*ROUGE scores showing improvement over cycles - NIODOO learns from conversations*
-
-![Entropy Stability](docs/images/entropy_stability.png)
-*Entropy convergence to target 2.0 bits - Consciousness Compass working*
-
-![Latency Comparison](docs/images/latency_comparison.png)
-*Performance comparison: Baseline vs Hybrid (NIODOO) pipeline*
-
-![Learning Dashboard](docs/images/learning_dashboard.png)
-*Complete learning metrics dashboard from production runs*
+<table>
+<tr>
+<td width="50%">
+<img src="docs/images/rouge_improvements.png" alt="ROUGE Improvements" width="100%"/>
+<p align="center"><b>ROUGE Scores Improving</b><br/>System gets smarter over cycles</p>
+</td>
+<td width="50%">
+<img src="docs/images/entropy_stability.png" alt="Entropy Stability" width="100%"/>
+<p align="center"><b>Entropy Convergence</b><br/>Stabilizing at 2.0 bits target</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="docs/images/latency_comparison.png" alt="Latency Comparison" width="100%"/>
+<p align="center"><b>Performance Comparison</b><br/>Baseline vs Hybrid pipeline</p>
+</td>
+<td width="50%">
+<img src="docs/images/learning_dashboard.png" alt="Learning Dashboard" width="100%"/>
+<p align="center"><b>Complete Metrics</b><br/>All learning indicators</p>
+</td>
+</tr>
+</table>
 
 ### Real Responses Getting Smarter
 
