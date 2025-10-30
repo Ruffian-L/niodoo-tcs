@@ -15,19 +15,19 @@ Niodoo-Final is an advanced AI framework that **actually learns** from conversat
 **These visualizations show actual learning from production runs:**
 
 ### ROUGE Scores Improving Over Time
-![ROUGE Improvements](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/rouge_improvements.png)
+![ROUGE Improvements](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/docs/images/rouge_improvements.png)
 *System gets smarter over cycles - ROUGE scores showing measurable improvement*
 
 ### Entropy Convergence
-![Entropy Stability](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/entropy_stability.png)
+![Entropy Stability](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/docs/images/entropy_stability.png)
 *Consciousness Compass stabilizing at 2.0 bits target - learning working*
 
 ### Performance Comparison
-![Latency Comparison](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/latency_comparison.png)
+![Latency Comparison](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/docs/images/latency_comparison.png)
 *Baseline vs Hybrid pipeline - showing performance metrics*
 
 ### Complete Learning Dashboard
-![Learning Dashboard](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/learning_dashboard.png)
+![Learning Dashboard](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/docs/images/learning_dashboard.png)
 *All learning indicators from production runs - real data*
 
 ### Real Responses Getting Smarter
