@@ -1,0 +1,104 @@
+[package]
+name = "niodoo_real_integrated"
+version = "0.1.0"
+edition = "2024"
+authors = ["Niodoo Torque Team <torque@niodoo.ai>"]
+description = "Full NIODOO pipeline integration with real Qwen embeddings, ERAG memory, tokenizer promotion, vLLM hybrid generation, and learning loop."
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["beelink", "svc"]
+beelink = []
+5080-q = []
+gauntlet = []
+examples = []
+qdrant = []
+embedded-qdrant = []
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
+svc = ["dep:axum", "dep:tower", "dep:tower-http", "dep:prometheus", "dep:tonic"]
+edge = []
+
+[dependencies]
+# Existing deps from workspace
+ndarray = { workspace = true }
+nalgebra = { workspace = true }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-opentelemetry = { version = "0.26", optional = true }
+qdrant-client = "1.7"
+# NOTE: qdrant-embedded crate needs to be configured when available
+# For now, embedded Qdrant functionality is feature-gated but requires
+# manual dependency setup. See: https://docs.rs/qdrant-client for embedded mode options
+reqwest = { version = "0.12", features = ["json"] }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true }
+blake3 = { workspace = true }
+once_cell = { workspace = true }
+parking_lot = { workspace = true }
+rayon = { workspace = true }
+rand_distr = { workspace = true }
+lru = { workspace = true }
+axum = { workspace = true, optional = true }
+prometheus = { workspace = true, optional = true }
+lazy_static = { workspace = true }
+regex = { workspace = true }
+serde_yaml = { workspace = true }
+safetensors = { workspace = true }
+num-complex = { workspace = true }
+csv = { workspace = true }
+plotters = { workspace = true }
+tonic = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+opentelemetry = { version = "0.24", optional = true, features = ["trace"] }
+opentelemetry-otlp = { version = "0.17", optional = true, features = ["tonic", "tls"] }
+bincode = { workspace = true }
+base64 = { workspace = true }
+niodoo-core = { path = "../niodoo-core" }
+tcs-core = { path = "../tcs-core" }
+tcs-ml = { path = "../tcs-ml" }
+tcs-knot = { path = "../tcs-knot" }
+tcs-tqft = { path = "../tcs-tqft" }
+tokio-stream = { workspace = true }
+
+# Protobuf additions
+prost = { workspace = true, features = ["derive"] }
+
+[build-dependencies]
+prost-build = "0.13"
+tonic-build = "0.12"
+protoc-bin-vendored = "3"
+
+[[bin]]
+name = "rut_gauntlet"
+path = "src/bin/rut_gauntlet.rs"
+required-features = ["gauntlet"]
+
+[[bin]]
+name = "rut_gauntlet_baseline"
+path = "src/bin/rut_gauntlet_baseline.rs"
+
+[[bin]]
+name = "qwen_comparison_test"
+path = "src/bin/qwen_comparison_test.rs"
+
+[[bin]]
+name = "soak_validator"
+path = "src/bin/soak_validator.rs"

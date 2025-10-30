@@ -1,0 +1,39 @@
+[package]
+name = "tcs-pipeline"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jason Van Pham <jasonvanpham@niodoo.com>"]
+description = "Topological Cognitive System orchestrator and monitoring pipeline. Developed in collaboration with ChatGPT, Grok, Gemini, Claude, Deepseek, and Qwen."
+license = "AGPL-3.0 OR Commercial"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+ndarray = { workspace = true }
+nalgebra = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+toml = { workspace = true }
+
+# Internal crates
+[dependencies.tcs-core]
+path = "../tcs-core"
+
+[dependencies.tcs-tda]
+path = "../tcs-tda"
+
+[dependencies.tcs-knot]
+path = "../tcs-knot"
+
+[dependencies.tcs-tqft]
+path = "../tcs-tqft"
+
+[dependencies.tcs-ml]
+path = "../tcs-ml"
+
+[dependencies.tcs-consensus]
+path = "../tcs-consensus"

@@ -1,0 +1,11 @@
+{
+  "total_prompts": 100,
+  "avg_latency_ms": 1033.94354091,
+  "p50_latency_ms": 1000.687708,
+  "p90_latency_ms": 1108.84664,
+  "avg_rouge_l": 0.2818509872752825,
+  "output_dir": "logs/rut_gauntlet_baseline_real",
+  "csv_path": "logs/rut_gauntlet_baseline_real/rut_gauntlet_baseline_results.csv",
+  "summary_json_path": "logs/rut_gauntlet_baseline_real/rut_gauntlet_baseline_summary.json",
+  "plot_path": "logs/rut_gauntlet_baseline_real/latency_over_cycles.png"
+}

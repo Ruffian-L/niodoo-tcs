@@ -1,0 +1,10 @@
+{
+  "baseline_avg_latency_ms": 1033.94354091,
+  "baseline_p50_latency_ms": 1000.687708,
+  "baseline_avg_rouge_l": 0.2818509872752824,
+  "niodoo_avg_latency_ms": 1657.63,
+  "niodoo_avg_entropy": 1.9454608599909866,
+  "niodoo_avg_improvement_pass1": 0.0,
+  "niodoo_avg_improvement_pass2": 0.0,
+  "niodoo_avg_rouge_l": 0.2793545724292149
+}

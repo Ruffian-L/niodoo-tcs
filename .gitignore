@@ -1,0 +1,53 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*.out
+
+# Environment (DO NOT COMMIT)
+.env
+.env.local
+*.env
+.env*
+
+# Secrets (DO NOT COMMIT)
+*.key
+*.pem
+*.p12
+*secret*
+*password*
+*token*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Test artifacts (keep validated ones)
+*.json.bak
+*.csv.bak
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.dll
+
+# Keep validated results
+!results/qwen_comparison_test.json

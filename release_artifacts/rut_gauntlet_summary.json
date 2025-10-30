@@ -1,0 +1,37 @@
+{
+  "total_prompts": 100,
+  "avg_entropy": 1.9454608599909873,
+  "entropy_std": 0.0005363631035656545,
+  "threat_count": 0,
+  "healing_count": 100,
+  "threat_rate_percent": 0.0,
+  "healing_rate_percent": 100.0,
+  "quadrant_threat_counts": {},
+  "quadrant_healing_counts": {
+    "Discover": 100
+  },
+  "quadrant_threat_rates": {},
+  "quadrant_healing_rates": {
+    "Discover": 100
+  },
+  "avg_latency_ms": 1657.63,
+  "p50_latency_ms": 1543.0,
+  "p75_latency_ms": 1705.0,
+  "p90_latency_ms": 2114.0,
+  "p95_latency_ms": 2275.0,
+  "avg_rouge_l": 0.27935457242921485,
+  "p50_rouge_l": 0.2683033420804505,
+  "p75_rouge_l": 0.28665175296874557,
+  "p90_rouge_l": 0.3347747848652142,
+  "p95_rouge_l": 0.37569442076000104,
+  "entropy_stability": true,
+  "emotional_activation": true,
+  "breakthroughs": 100,
+  "breakthrough_rate_percent": 100.0,
+  "verdict": "Validated: Full operational torque achieved",
+  "output_dir": "logs/rut_gauntlet_real_autonomy_tuned",
+  "csv_path": "logs/rut_gauntlet_real_autonomy_tuned/rut_gauntlet_results.csv",
+  "summary_json_path": "logs/rut_gauntlet_real_autonomy_tuned/rut_gauntlet_summary.json",
+  "plot_path": "logs/rut_gauntlet_real_autonomy_tuned/entropy_over_cycles.png",
+  "metrics_txt_path": "logs/rut_gauntlet_real_autonomy_tuned/metrics.prom"
+}

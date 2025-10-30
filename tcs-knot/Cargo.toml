@@ -1,0 +1,15 @@
+[package]
+name = "tcs-knot"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jason Van Pham <jasonvanpham@niodoo.com>"]
+description = "Knot theory utilities for Jones polynomial and knot classification. Developed in collaboration with ChatGPT, Grok, Gemini, Claude, Deepseek, and Qwen."
+license = "AGPL-3.0 OR Commercial"
+
+[dependencies]
+anyhow = { workspace = true }
+lru = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tcs-core = { path = "../tcs-core" }

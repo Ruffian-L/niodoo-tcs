@@ -1,0 +1,59 @@
+[package]
+name = "tcs-ml"
+version = "0.1.0"
+edition = "2024"
+authors = ["Jason Van Pham <jasonvanpham@niodoo.com>"]
+description = "Machine learning components for the Topological Cognitive System. Developed in collaboration with ChatGPT, Grok, Gemini, Claude, Deepseek, and Qwen."
+license = "AGPL-3.0 OR Commercial"
+
+[features]
+default = ["cpu"]
+cpu = []
+cuda = ["dep:cudarc", "ort/cuda"]
+rocm = []
+webgpu = ["dep:wgpu"]
+wasm = []
+onnx = ["dep:ort", "dep:half"]
+tokenizers = ["dep:tokenizers"]
+onnx-with-tokenizers = ["onnx", "tokenizers"]
+onnx-cuda = ["onnx", "cuda"]
+legacy-examples = []
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+ndarray = { workspace = true }
+ndarray-linalg = { workspace = true }
+ort = { workspace = true, optional = true }
+tokenizers = { version = "0.20", optional = true, default-features = false, features = ["unstable_wasm"] }
+half = { version = "2.3", optional = true }
+rand = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+tcs-core = { path = "../tcs-core" }
+nalgebra = { workspace = true, features = ["serde-serialize"] }
+wgpu = { version = "0.20", optional = true }
+cudarc = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+tcs-pipeline = { path = "../tcs-pipeline" }
+proptest = "1.4"
+
+# [[bin]]
+# name = "test_qwen_stateful"
+# path = "src/bin/test_qwen_stateful.rs"
+# required-features = ["onnx-with-tokenizers"]
+
+# [[example]]
+# name = "test_qwen"
+# path = "examples/test_qwen.rs"
+# required-features = ["legacy-examples"]
+
+# [[example]]
+# name = "test_simple"
+# path = "examples/test_simple.rs"
+# required-features = ["legacy-examples"]

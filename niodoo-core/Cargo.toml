@@ -1,0 +1,81 @@
+[package]
+name = "niodoo-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jason Van Pham <jasonvanpham@niodoo.com>"]
+description = "Niodoo consciousness engine - emotional topology and ERAG memory. Developed in collaboration with ChatGPT, Grok, Gemini, Claude, Deepseek, and Qwen."
+license = "AGPL-3.0 OR Commercial"
+
+[dependencies]
+# Core async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+parking_lot = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# Math operations
+ndarray = { workspace = true, features = ["serde-1"] }
+nalgebra = { workspace = true }
+rand = { workspace = true }
+rand_distr = { workspace = true }
+
+# Tokenization
+tokenizers = { version = "0.20", default-features = false, features = ["http", "onig"] }
+
+# ML framework
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+
+# Graph structures
+petgraph = { workspace = true }
+lru = { workspace = true }
+
+# RAG dependencies
+usearch = { workspace = true }
+
+# Parallel processing
+rayon = { workspace = true }
+
+# System and network utilities
+sysinfo = { workspace = true }
+reqwest = { version = "0.11", features = ["json"] }
+
+# Data formats
+csv = { workspace = true }
+safetensors = { workspace = true }
+toml = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Utility dependencies (optional)
+dirs = { workspace = true, optional = true }
+tempfile = "3.10"
+
+# Crypto dependencies
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
+
+# Internal dependencies
+constants_core = { path = "../constants_core" }
+
+
+
+[features]
+default = ["config-utils"]
+config-utils = ["dep:dirs"]
+full = ["config-utils"]
+hf-hub = []
+
+[lib]
+name = "niodoo_core"
+path = "src/lib.rs"
