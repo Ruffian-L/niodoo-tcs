@@ -1,23 +1,40 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+env:
+  NIODOO_ROOT: ${{ github.workspace }}
+  REAL_TEST: "0"
+  MOCK_MODE: "1"
+  NIODOO_EMBEDDINGS_MOCK: "1"
+  NIODOO_GENERATION_MOCK: "1"
+  VLLM_ENDPOINT: http://127.0.0.1:5001
+  QDRANT_URL: http://127.0.0.1:6333
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust: [stable]
+    runs-on: ubuntu-22.04
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust 1.87.0
+        uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: ${{ matrix.rust }}
-          override: true
-      - name: Fmt
-        run: cargo fmt -- --check
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test --all-features
+          toolchain: 1.87.0
+          components: rustfmt, clippy
+
+      - name: Cache cargo build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (warnings as errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test (mock mode)
+        run: cargo test --workspace -- --test-threads=1

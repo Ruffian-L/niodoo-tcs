@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_ROOT="/workspace/Niodoo-Final"
+PROJECT_ROOT="${NIODOO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 RESULTS_DIR="$PROJECT_ROOT/results/benchmarks"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 REPORT_FILE="$RESULTS_DIR/benchmark_report_${TIMESTAMP}.txt"

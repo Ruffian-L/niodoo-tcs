@@ -42,8 +42,11 @@ impl Drop for DynamicTokenizerManager {
     fn drop(&mut self) {
         // Cooperative shutdown for background maintenance loop
         self.shutdown.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.abort_handle.lock().unwrap().take() {
-            handle.abort();
+        // Use try_lock in Drop to avoid panicking if mutex is poisoned
+        if let Ok(mut guard) = self.abort_handle.lock() {
+            if let Some(handle) = guard.take() {
+                handle.abort();
+            }
         }
     }
 }
@@ -84,10 +87,14 @@ impl TokenizationMetrics {
             result.pruned,
             result.duration.as_secs_f64() * 1000.0,
         );
-        *self.last_promotion.lock().unwrap() = Some(Instant::now());
-        let mut promoted = self.promoted.lock().unwrap();
-        promoted.clear();
-        promoted.extend(result.promoted.clone());
+        // Handle mutex errors gracefully - log but don't crash
+        if let Ok(mut guard) = self.last_promotion.lock() {
+            *guard = Some(Instant::now());
+        }
+        if let Ok(mut promoted) = self.promoted.lock() {
+            promoted.clear();
+            promoted.extend(result.promoted.clone());
+        }
     }
 
     fn record_stats(&self, stats: &TokenizerStats) {

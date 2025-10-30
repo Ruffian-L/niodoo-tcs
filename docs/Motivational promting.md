@@ -7262,7 +7262,7 @@ export class R2RSystem {
 
   constructor() {
     this.config = {
-      endpoint: 'http://localhost:8000',
+      endpoint: process.env.VLLM_ENDPOINT || 'http://127.0.0.1:5001',
       timeout: 30000
     };
   }

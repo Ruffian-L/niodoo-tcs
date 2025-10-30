@@ -5,7 +5,7 @@ set -e
 # =====================================================
 # Validates and tests the Arc<RwLock>, spawn_blocking, and swarm concurrency improvements
 
-PROJECT_ROOT="/workspace/Niodoo-Final"
+PROJECT_ROOT="${NIODOO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 PACKAGE_DIR="$PROJECT_ROOT/niodoo_real_integrated"
 BOLD='\033[1m'
 GREEN='\033[0;32m'

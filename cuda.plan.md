@@ -142,3 +142,4 @@ let session = ort::session::SessionBuilder::new(&environment)?
 - [x] Add OpenTelemetry option, stage timings, and criterion benches (CPU vs CUDA)
 - [x] Implement code indexer/query tools using qdrant-client
 - [x] Integrate cargo-audit/deny and optional rCanary memory leak checks
+

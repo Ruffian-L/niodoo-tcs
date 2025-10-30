@@ -1,7 +1,8 @@
 use std::fs::{self, File};
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
+use blake3::hash as blake3_hash;
 use chrono::Utc;
 use clap::Parser;
 use csv::ReaderBuilder;
@@ -65,6 +66,10 @@ struct CycleRecord {
     spectral_gap_hybrid: f64,
     confidence_baseline: f64,
     confidence_hybrid: f64,
+    baseline_preview: String,
+    hybrid_preview: String,
+    baseline_hash: String,
+    hybrid_hash: String,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -194,6 +199,69 @@ async fn main() -> Result<()> {
             .await
             .with_context(|| format!("hybrid pipeline failed on cycle {}", cycle_idx))?;
 
+        let baseline_text = baseline_cycle.hybrid_response.trim();
+        let hybrid_text = hybrid_cycle.hybrid_response.trim();
+
+        ensure!(
+            !baseline_text.is_empty(),
+            "baseline response empty for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            !hybrid_text.is_empty(),
+            "hybrid response empty for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            baseline_text != hybrid_text,
+            "baseline and hybrid responses identical for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            baseline_cycle.generation.source != "mock",
+            "baseline generation used mock fallback for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            hybrid_cycle.generation.source != "mock",
+            "hybrid generation used mock fallback for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            !baseline_text.starts_with("Mock response:"),
+            "mock placeholder detected in baseline response for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            !hybrid_text.starts_with("Mock response:"),
+            "mock placeholder detected in hybrid response for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            baseline_text != "Generation failed",
+            "generation failure placeholder detected in baseline response for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+        ensure!(
+            hybrid_text != "Generation failed",
+            "generation failure placeholder detected in hybrid response for cycle {} (prompt: {})",
+            cycle_idx,
+            sample.text
+        );
+
+        let baseline_hash = response_hash(baseline_text);
+        let hybrid_hash = response_hash(hybrid_text);
+        let baseline_preview = response_preview(baseline_text);
+        let hybrid_preview = response_preview(hybrid_text);
+
         let ground_truth = emotion_to_pad(&sample.label);
         let pad_similarity_baseline =
             cosine_similarity_f64(&baseline_cycle.pad_state, &ground_truth);
@@ -228,6 +296,10 @@ async fn main() -> Result<()> {
             spectral_gap_hybrid: hybrid_cycle.topology.spectral_gap,
             confidence_baseline,
             confidence_hybrid,
+            baseline_preview,
+            hybrid_preview,
+            baseline_hash,
+            hybrid_hash,
         });
     }
 
@@ -307,6 +379,29 @@ fn cosine_similarity_f64(
 
 fn pipeline_confidence(entropy: f64) -> f64 {
     (1.0 - (entropy / 3.0)).clamp(0.0, 1.0)
+}
+
+fn response_hash(text: &str) -> String {
+    blake3_hash(text.as_bytes()).to_hex().to_string()
+}
+
+fn response_preview(text: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    const MAX_CHARS: usize = 160;
+    let mut preview = String::new();
+    let mut count = 0usize;
+    for ch in trimmed.chars() {
+        if count >= MAX_CHARS {
+            preview.push('…');
+            break;
+        }
+        preview.push(ch);
+        count += 1;
+    }
+    preview
 }
 
 fn persist_report(output_dir: &str, report: &BenchmarkReport) -> Result<()> {

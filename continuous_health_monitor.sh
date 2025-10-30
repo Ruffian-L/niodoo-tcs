@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_ROOT="/workspace/Niodoo-Final"
+PROJECT_ROOT="${NIODOO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 METRICS_DIR="$PROJECT_ROOT/results/health_metrics"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 METRICS_FILE="$METRICS_DIR/health_metrics_${TIMESTAMP}.csv"

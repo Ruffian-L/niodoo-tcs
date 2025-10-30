@@ -1,3 +1,9 @@
+# 🧠 NiodO.o Unified Rust Consciousness Engine - Neurodivergent AI Companion
+# 
+# ⚠️ DEPRECATED: This package is deprecated and will be removed in a future release.
+# Please use `niodoo_real_integrated` for production code instead.
+# See docs/PRODUCTION_PATHS.md for migration guide.
+#
 # Full CUDA support pending CUDA 12.6 toolkit install
 [package]
 name = "niodoo-consciousness"

@@ -26,3 +26,4 @@ cargo run -p tcs-code-tools --bin code_query -- "where are persistent homology f
 - Embeds up to ~16KB per file to keep vector sizes manageable.
 - Re-run indexer after large edits; upserts are idempotent.
 - Payload stores `path` for easy printing; integrate with your editor jump if desired.
+

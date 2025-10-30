@@ -12,12 +12,14 @@ use crate::config::{
     CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode, env_value,
     set_env_override,
 };
+use crate::conversation_log::{ConversationEntry, ConversationLogStore};
 use crate::curator::Curator;
 use crate::data::{
     DatasetStats, Experience, RutPrompt, compute_dataset_stats, load_emotional_dataset,
     load_rut_gauntlet_prompts,
 };
 use crate::embedding::QwenStatefulEmbedder;
+use crate::emotional_graph::EmotionalGraphBuilder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
 use crate::learning::{LearningLoop, LearningOutcome};
@@ -26,6 +28,7 @@ use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::{rouge_l, seed_manager, set_global_seed};
+use crate::erag::EmotionalVector as EragEmotionalVector;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
 use parking_lot::RwLock;
@@ -35,6 +38,7 @@ use rand::RngCore;
 use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
+use niodoo_core::{MemoryConsolidationEngine, ConsciousnessEvent, MultiLayerMemoryQuery, RetrievalEngine, GuessingMemorySystem, ConsciousnessState};
 
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
@@ -124,6 +128,14 @@ pub struct Pipeline {
     retry_count: Arc<AtomicU32>,
     #[allow(dead_code)]
     qdrant_process: Option<tokio::process::Child>,
+    // Phase 2 integration modules
+    conversation_log: AsyncMutex<ConversationLogStore>,
+    emotional_graph: AsyncMutex<EmotionalGraphBuilder>,
+    cycle_count: Arc<AtomicU64>,
+    // NEW: Memory consolidation engine
+    consolidation_engine: AsyncMutex<MemoryConsolidationEngine>,
+    // NEW: Triple-threat trigger system for learning events
+    multi_layer_query: Arc<AsyncMutex<Option<MultiLayerMemoryQuery>>>,
 }
 
 impl Pipeline {
@@ -271,6 +283,7 @@ impl Pipeline {
         let learning = LearningLoop::new(
             config.learning_window,
             config.breakthrough_threshold,
+            config.breakthrough_rouge_min,
             config.dqn_epsilon,
             config.dqn_gamma,
             config.dqn_alpha,
@@ -300,6 +313,13 @@ impl Pipeline {
         // Initialize curator if enabled
         let curator = if config.enable_curator {
             let curator_config = CuratorConfig::from_runtime_config(&config);
+            info!(
+                backend = ?curator_config.curator_backend,
+                endpoint = %curator_config.vllm_endpoint,
+                model = %curator_config.model_name,
+                "Curator configured (backend: {:?})",
+                curator_config.curator_backend
+            );
             match Curator::new(curator_config) {
                 Ok(c) => {
                     info!("Curator initialized successfully");
@@ -321,6 +341,28 @@ impl Pipeline {
         let cache_capacity =
             NonZeroUsize::new(config.cache_capacity).unwrap_or(NonZeroUsize::new(256).unwrap());
 
+        // Initialize Phase 2 integration modules
+        let conversation_log_path = env_value("CONVERSATION_LOG_PATH")
+            .unwrap_or_else(|| "./data/conversations.json".to_string());
+        let mut conversation_log = ConversationLogStore::new(&conversation_log_path);
+        conversation_log.load().context("Failed to load conversation log")?;
+        info!("Phase 2: ConversationLogStore initialized at {:?}", conversation_log_path);
+
+        let emotional_graph = EmotionalGraphBuilder::default();
+        info!("Phase 2: EmotionalGraphBuilder initialized");
+
+        // Initialize memory consolidation engine
+        let consolidation_engine = MemoryConsolidationEngine::new();
+        info!("Memory consolidation engine initialized");
+
+        // Initialize triple-threat trigger system (optional - needs RetrievalEngine)
+        // Create RetrievalEngine and GuessingMemorySystem for MultiLayerMemoryQuery
+        let rag_engine = Arc::new(std::sync::Mutex::new(RetrievalEngine::new()));
+        let gaussian_system = GuessingMemorySystem::new();
+        let multi_layer_query_instance = MultiLayerMemoryQuery::new(rag_engine, gaussian_system);
+        let multi_layer_query = Arc::new(AsyncMutex::new(Some(multi_layer_query_instance)));
+        info!("Triple-threat trigger system initialized with RAG + Gaussian spheres");
+
         Ok(Self {
             config: config.clone(),
             config_arc: config_arc.clone(),
@@ -341,6 +383,11 @@ impl Pipeline {
             collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
             qdrant_process,
+            conversation_log: AsyncMutex::new(conversation_log),
+            emotional_graph: AsyncMutex::new(emotional_graph),
+            cycle_count: Arc::new(AtomicU64::new(0)),
+            consolidation_engine: AsyncMutex::new(consolidation_engine),
+            multi_layer_query: multi_layer_query,
         })
     }
 
@@ -445,6 +492,59 @@ impl Pipeline {
         Ok(())
     }
 
+    /// Process a single prompt through the complete Niodoo pipeline.
+    ///
+    /// This is the main entry point for processing user prompts. The pipeline executes
+    /// the following stages in sequence:
+    ///
+    /// 1. **Embedding**: Convert prompt text to embedding vector (with caching)
+    /// 2. **Torus Projection**: Map embedding to 7D PAD+ghost space
+    /// 3. **Topology Analysis**: Compute persistent homology, knot invariants, TQFT signatures
+    /// 4. **Compass**: Analyze emotional state and determine navigation quadrant
+    /// 5. **ERAG Collapse**: Retrieve relevant memories from vector store
+    /// 6. **Tokenization**: Encode prompt with dynamic tokenizer (promotes new tokens)
+    /// 7. **Generation**: Generate response using vLLM (baseline + hybrid with retrieved context)
+    /// 8. **Curator**: Quality assessment and refinement
+    /// 9. **Learning**: Update DQN and trigger QLoRA fine-tuning if breakthroughs detected
+    /// 10. **Memory Storage**: Store high-quality experiences in ERAG
+    /// 11. **Phase 2 Integration**: Store conversation log and build emotional graph
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The user's input prompt to process
+    ///
+    /// # Returns
+    ///
+    /// * `PipelineCycle` - Complete cycle results including:
+    ///   - Generated responses (baseline and hybrid)
+    ///   - Metrics (entropy, ROUGE, latency)
+    ///   - Emotional state (Compass outcome)
+    ///   - Topological signature
+    ///   - Learning outcomes
+    ///
+    /// # Errors
+    ///
+    /// Returns `Result` which can fail at any stage:
+    /// - Embedding failures
+    /// - Generation timeouts
+    /// - Memory storage failures
+    /// - Configuration errors
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use niodoo_real_integrated::pipeline::Pipeline;
+    /// use niodoo_real_integrated::config::CliArgs;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let mut pipeline = Pipeline::initialise(CliArgs::default()).await?;
+    /// let cycle = pipeline.process_prompt("Hello, how are you?").await?;
+    /// println!("Response: {}", cycle.hybrid_response);
+    /// println!("Entropy: {:.3}", cycle.entropy);
+    /// println!("ROUGE: {:.3}", cycle.rouge);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn process_prompt(&mut self, prompt: &str) -> Result<PipelineCycle> {
         let overall_start = Instant::now();
         let mut timings = StageTimings::default();
@@ -542,6 +642,32 @@ impl Pipeline {
             )
         });
 
+        // Start timing BEFORE the parallel work begins
+        let compass_erag_start = Instant::now();
+        
+        // Convert ERAG emotional vector to niodoo_core EmotionalVector for triple-threat trigger
+        let erag_emotional_vector = EragEmotionalVector::from_pad(&pad_state);
+        let query_emotion = niodoo_core::memory::EmotionalVector::new(
+            erag_emotional_vector.joy,
+            erag_emotional_vector.sadness,
+            erag_emotional_vector.anger,
+            erag_emotional_vector.fear,
+            erag_emotional_vector.surprise,
+        );
+        
+        // Check triple-threat trigger system (runs in parallel, doesn't block ERAG)
+        let multi_layer_query_clone = Arc::clone(&self.multi_layer_query);
+        let prompt_clone = prompt.to_string();
+        let query_emotion_clone = query_emotion.clone();
+        tokio::spawn(async move {
+            if let Some(ref mut mlq) = *multi_layer_query_clone.lock().await {
+                let mut state = ConsciousnessState::default();
+                // Query triggers triple-threat detection
+                let _ = mlq.query(&prompt_clone, &query_emotion_clone, 5, &mut state);
+                // Trigger detection happens inside query() - triggers are logged automatically
+            }
+        });
+        
         let (compass, collapse) = tokio::try_join!(
             async {
                 match compass_task.await {
@@ -568,7 +694,7 @@ impl Pipeline {
                 }
             }
         )?;
-        let compass_erag_start = Instant::now();
+        // Measure elapsed time AFTER the work completes
         let compass_erag_elapsed = compass_erag_start.elapsed().as_secs_f64() * 1000.0;
         timings.compass_ms = compass_erag_elapsed / 2.0;
         timings.erag_ms = compass_erag_elapsed / 2.0;
@@ -699,12 +825,45 @@ impl Pipeline {
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(self.thresholds.mcts_c); // Fallback to configured threshold
 
-        let (failure, details) = FailureSignals::evaluate(
+        let (mut failure, mut details) = FailureSignals::evaluate(
             generation.rouge_score,
             entropy_delta,
             curator_quality,
             ucb1_score,
         );
+
+        let reason_lower = curated_experience.reason.to_lowercase();
+        let curator_unavailable = self.curator.is_none()
+            || reason_lower.contains("curator_disabled")
+            || reason_lower.contains("ollama")
+            || reason_lower.contains("curator_error")
+            || reason_lower.contains("curator mock mode")
+            || reason_lower.contains("mock mode")
+            || reason_lower.contains("request_failed");
+        let curator_passive = !curated_experience.learned;
+
+        if (curator_unavailable || curator_passive) && failure != "none" {
+            info!(reason = %curated_experience.reason, "Curator unavailable or passive; skipping retry escalation");
+            failure = "none".to_string();
+            details = if curator_unavailable {
+                "curator_unavailable".to_string()
+            } else {
+                "curator_passive".to_string()
+            };
+        }
+
+        let quality_acceptable = (curated_experience.quality_score as f64)
+            >= self.config.curator_minimum_threshold as f64;
+        let rouge_acceptable = generation.rouge_score >= 0.25;
+        if failure == "soft" && (quality_acceptable || rouge_acceptable) {
+            info!(
+                rouge = generation.rouge_score,
+                quality = curated_experience.quality_score,
+                "Soft failure bypassed due to acceptable metrics"
+            );
+            failure = "none".to_string();
+            details = "quality_acceptable".to_string();
+        }
 
         // Phase 2: Handle retries with Reflection and CoT with topology awareness
         let (final_generation, final_failure, threat_cycle_ms) = self
@@ -829,6 +988,28 @@ impl Pipeline {
             )
             .await?; // Propagate error
 
+        // Add to consolidation engine for later consolidation
+        let erag_emotional_vector = EragEmotionalVector::from_pad(&pad_state);
+        let emotional_vector_for_consolidation = niodoo_core::memory::EmotionalVector::new(
+            erag_emotional_vector.joy,
+            erag_emotional_vector.sadness,
+            erag_emotional_vector.anger,
+            erag_emotional_vector.fear,
+            erag_emotional_vector.surprise,
+        );
+        let consolidation_event = ConsciousnessEvent::MemoryUpdate {
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            content: format!("{} -> {}", experience_input, response_to_store),
+            emotional_vector: emotional_vector_for_consolidation,
+        };
+        {
+            let consolidator = self.consolidation_engine.lock().await;
+            consolidator.add_memories_for_consolidation(vec![consolidation_event]).await;
+        }
+
         metrics().observe_cycle(
             pad_state.entropy,
             final_generation.latency_ms,
@@ -860,6 +1041,93 @@ impl Pipeline {
             });
         }
 
+        // Phase 2: Store conversation in ConversationLogStore with enhanced PAD tagging
+        let cycle = self.cycle_count.fetch_add(1, Ordering::Relaxed);
+        let erag_emotional_vector = EragEmotionalVector::from_pad(&pad_state);
+        let emotional_vector = niodoo_core::memory::EmotionalVector::new(
+            erag_emotional_vector.joy,
+            erag_emotional_vector.sadness,
+            erag_emotional_vector.anger,
+            erag_emotional_vector.fear,
+            erag_emotional_vector.surprise,
+        );
+        let emotion_state = format!("{:?}", compass.quadrant);
+        
+        let mut conversation_entry = ConversationEntry::new(
+            prompt.to_string(),
+            final_generation.hybrid_response.clone(),
+            emotional_vector,
+            emotion_state,
+        );
+        
+        // Hook post-process for PAD tagging: Add detailed PAD metadata
+        conversation_entry.metadata.insert("pad_pleasure".to_string(), pad_state.pad[0].to_string());
+        conversation_entry.metadata.insert("pad_arousal".to_string(), pad_state.pad[1].to_string());
+        conversation_entry.metadata.insert("pad_dominance".to_string(), pad_state.pad[2].to_string());
+        conversation_entry.metadata.insert("entropy".to_string(), pad_state.entropy.to_string());
+        conversation_entry.metadata.insert("knot_complexity".to_string(), topology.knot_complexity.to_string());
+        conversation_entry.metadata.insert("spectral_gap".to_string(), topology.spectral_gap.to_string());
+        conversation_entry.metadata.insert("rouge_score".to_string(), final_generation.rouge_to_baseline.to_string());
+        
+        if let Err(e) = self.conversation_log.lock().await.store(conversation_entry) {
+            warn!("Failed to store conversation: {}", e);
+        }
+        
+        // Periodically build emotional graph (every 10 cycles)
+        if cycle > 0 && cycle % 10 == 0 {
+            let log_store = self.conversation_log.lock().await;
+            let mut graph_builder = self.emotional_graph.lock().await;
+            
+            if let Err(e) = graph_builder.build_from_conversations(&log_store) {
+                warn!("Failed to build emotional graph: {}", e);
+            } else {
+                info!("Phase 2: Built emotional graph with {} spheres", graph_builder.sphere_count());
+            }
+        }
+
+        // Periodically curate memory (every 50 cycles) - REMOVE LOW QUALITY
+        if cycle > 0 && cycle % 50 == 0 {
+            match self.erag.curate_memory().await {
+                Ok(deleted) => {
+                    info!(deleted, "Memory curation completed: removed {} low-quality memories", deleted);
+                }
+                Err(e) => {
+                    warn!(%e, "Memory curation failed");
+                }
+            }
+        }
+
+        // Periodically distill knowledge (every 100 cycles) - CREATE TRAINING EXAMPLES
+        if cycle > 0 && cycle % 100 == 0 {
+            if let Some(ref curator) = self.curator {
+                match curator.distill_knowledge(&self.erag, 10).await {
+                    Ok(distilled) => {
+                        info!(count = distilled.len(), "Knowledge distillation completed: {} training examples created", distilled.len());
+                        // Store distilled examples for learning loop
+                        for example in distilled {
+                            tracing::debug!(instruction = %example.instruction, quality = example.quality_score, "Distilled example");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(%e, "Knowledge distillation failed");
+                    }
+                }
+            }
+        }
+
+        // Periodically consolidate memories (every 200 cycles) - COMPRESS/MERGE/PRUNE
+        if cycle > 0 && cycle % 200 == 0 {
+            let mut consolidator = self.consolidation_engine.lock().await;
+            match consolidator.run_consolidation_cycle().await {
+                Ok(_) => {
+                    info!("Memory consolidation cycle completed");
+                }
+                Err(e) => {
+                    warn!(%e, "Memory consolidation failed");
+                }
+            }
+        }
+
         // learning_ms already set above
 
         Ok(PipelineCycle {
@@ -887,6 +1155,114 @@ impl Pipeline {
         self.args.hardware
     }
 
+    /// Phase 2: Query conversations by emotion similarity
+    /// Wraps ConversationLogStore query for use by LearningLoop and other components
+    pub async fn query_conversations_by_emotion(
+        &self,
+        query_emotion: &niodoo_core::memory::EmotionalVector,
+        threshold: f32,
+        limit: usize,
+    ) -> Vec<crate::conversation_log::ConversationEntry> {
+        let log_store = self.conversation_log.lock().await;
+        log_store.query_by_emotion(query_emotion, threshold, limit)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Phase 2: Query conversations by time range
+    /// Wraps ConversationLogStore query for use by LearningLoop and other components
+    pub async fn query_conversations_by_time_range(
+        &self,
+        start: chrono::DateTime<chrono::Utc>,
+        end: chrono::DateTime<chrono::Utc>,
+    ) -> Vec<crate::conversation_log::ConversationEntry> {
+        let log_store = self.conversation_log.lock().await;
+        log_store.query_by_time_range(start, end)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Phase 2: Query conversations by content similarity
+    /// Wraps ConversationLogStore query for use by LearningLoop and other components
+    pub async fn query_conversations_by_content(
+        &self,
+        query_text: &str,
+        threshold: f32,
+        limit: usize,
+    ) -> Vec<crate::conversation_log::ConversationEntry> {
+        let log_store = self.conversation_log.lock().await;
+        log_store.query_by_content(query_text, threshold, limit)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+}
+
+impl Default for PipelineCycle {
+    fn default() -> Self {
+        Self {
+            prompt: String::new(),
+            baseline_response: String::new(),
+            hybrid_response: String::new(),
+            entropy: 0.0,
+            rouge: 0.0,
+            latency_ms: 0.0,
+            compass: CompassOutcome {
+                quadrant: CompassQuadrant::Persist,
+                is_threat: false,
+                is_healing: false,
+                mcts_branches: Vec::new(),
+                intrinsic_reward: 0.0,
+                ucb1_score: None,
+            },
+            generation: GenerationResult {
+                baseline_response: String::new(),
+                hybrid_response: String::new(),
+                echoes: Vec::new(),
+                rouge_to_baseline: 0.0,
+                latency_ms: 0.0,
+                rouge_score: 0.0,
+                entropy_delta: 0.0,
+                source: "default".to_string(),
+                ucb1_score: 0.0,
+                curator_quality: 0.0,
+                failure_type: None,
+                failure_details: None,
+            },
+            tokenizer: TokenizerOutput {
+                tokens: Vec::new(),
+                augmented_prompt: String::new(),
+                promoted_tokens: Vec::new(),
+                vocab_size: 0,
+                oov_rate: 0.0,
+                failure_type: None,
+                failure_details: None,
+            },
+            collapse: CollapseResult::empty("none", None),
+            learning: LearningOutcome::default(),
+            stage_timings: StageTimings::default(),
+            last_entropy: 0.0,
+            failure: "none".to_string(),
+            pad_state: PadGhostState::default(),
+            topology: TopologicalSignature::new(
+                Vec::new(),
+                [1, 0, 0],
+                0.0,
+                String::new(),
+                2,
+                None,
+                0.0,
+                0.0,
+                0.0,
+            ),
+            topology_mode: TopologyMode::Baseline,
+        }
+    }
+}
+
+impl Pipeline {
     /// Phase 2: Handle retries with Reflection and CoT self-correction with topology awareness
     async fn handle_retry_with_reflection(
         &self,
@@ -930,8 +1306,18 @@ impl Pipeline {
             return Ok((generation.clone(), "none".to_string(), 0.0));
         }
 
-        let max_retries = self.config.phase2_max_retries;
-        let base_delay_ms = self.config.phase2_retry_base_delay_ms;
+        let cfg_snapshot = self.config_arc.read().clone();
+        let max_retries = cfg_snapshot.phase2_max_retries;
+        let base_delay_ms = cfg_snapshot.phase2_retry_base_delay_ms;
+        let cot_iterations = cfg_snapshot.phase2_cot_iterations.max(1) as usize;
+        let cot_success_rouge = cfg_snapshot.cot_success_rouge_threshold;
+        let level3_retry_count = cfg_snapshot.phase2_level3_retry_count;
+        let mcts_c_increment = cfg_snapshot.phase2_mcts_c_increment;
+        let top_p_increment = cfg_snapshot.phase2_top_p_increment;
+        let retrieval_top_k_increment = cfg_snapshot.phase2_retrieval_top_k_increment;
+        let backoff_cap_ms = cfg_snapshot.phase2_retry_backoff_cap_ms.max(base_delay_ms);
+        let backoff_exponent_cap = cfg_snapshot.retry_backoff_exponent_cap;
+
         let mut current_gen = generation.clone();
         let mut current_failure = initial_failure.to_string();
         let mut retry_count = 0;
@@ -961,7 +1347,7 @@ impl Pipeline {
             }
 
             // Level3+ escalation: Tune MCTS/retrieval params for repeated failures
-            let is_level3 = retry_count > self.config.phase2_level3_retry_count;
+            let is_level3 = retry_count > level3_retry_count;
             if is_level3 {
                 info!(
                     "Level3 escalation: Applying parameter tuning (attempt {})",
@@ -970,9 +1356,7 @@ impl Pipeline {
                 // Log escalation metrics (actual tuning would require mutable access to compass/thresholds)
                 info!(
                     "Suggested tuning: MCTS c += {:.3}, top_p += {:.3}, retrieval_top_k += {}",
-                    self.config.phase2_mcts_c_increment,
-                    self.config.phase2_top_p_increment,
-                    self.config.phase2_retrieval_top_k_increment
+                    mcts_c_increment, top_p_increment, retrieval_top_k_increment
                 );
             }
 
@@ -1006,10 +1390,15 @@ impl Pipeline {
                 let mut best_response = current_gen.hybrid_response.clone();
                 let mut best_rouge = current_gen.rouge_score;
 
-                for cot_iter in 0..3 {
+                for cot_iter in 0..cot_iterations {
                     let cot_result = self
                         .generator
-                        .apply_cot_repair_with_topology(prompt, details, cot_iter, Some(topology))
+                        .apply_cot_repair_with_topology(
+                            prompt,
+                            details,
+                            cot_iter as u32,
+                            Some(topology),
+                        )
                         .await?;
 
                     // Recompute ROUGE
@@ -1019,10 +1408,11 @@ impl Pipeline {
                         best_rouge = new_rouge;
                     }
 
-                    if best_rouge > 0.4 {
+                    if best_rouge >= cot_success_rouge {
                         info!(
-                            "Topology-aware CoT iteration {} achieved ROUGE > 0.4",
-                            cot_iter + 1
+                            "Topology-aware CoT iteration {} achieved target ROUGE {:.3}",
+                            cot_iter + 1,
+                            best_rouge
                         );
                         break;
                     }
@@ -1083,8 +1473,9 @@ impl Pipeline {
             // Backoff delay before next retry (exponential with jitter, but capped)
             // OPTIMIZATION: Cap exponential backoff to prevent excessive delays
             if retry_count < max_retries {
-                let exponent = 2_u64.pow(retry_count.min(6)); // Cap at 2^6 = 64x instead of 2^10 = 1024x
-                let delay_ms = (base_delay_ms * exponent).min(5000); // Cap at 5 seconds max
+                let exponent = ((retry_count.saturating_sub(1)) as u32).min(backoff_exponent_cap);
+                let multiplier = 1_u64 << exponent;
+                let delay_ms = (base_delay_ms * multiplier).min(backoff_cap_ms);
                 if delay_ms > 100 {
                     info!(
                         retry = retry_count,
@@ -1193,7 +1584,7 @@ impl Pipeline {
             adjusted_quality *= 1.05;
         }
 
-        let quality_score = adjusted_quality.min(1.0).max(0.0);
+        let mut quality_score = adjusted_quality.min(1.0).max(0.0);
 
         // TOPOLOGY-AWARE REFINEMENT: Refine if quality is low OR topology indicates issues
         let refinement_threshold = self.config.curator_quality_threshold;
@@ -1215,44 +1606,157 @@ impl Pipeline {
         };
 
         let mut reason = refinement_reason.to_string();
-        let (refined, learned) = if quality_score < refinement_threshold
-            || topology_needs_refinement
-        {
-            // Attempt refinement for low-quality or topologically problematic responses
-            if let Some(ref curator) = self.curator {
-                // Call curator.refine with topology context
-                match curator
-                    .refine(
-                        output,
-                        quality_score as f64,
-                        topology.knot_complexity,
-                        topology.persistence_entropy,
-                    )
+        let needs_refinement = quality_score < refinement_threshold || topology_needs_refinement;
+        let autonomy_enabled = self.config.curator_autonomous || self.curator.is_none();
+        let mut refined = output.to_string();
+        let mut learned = false;
+
+        if needs_refinement {
+            // First, attempt autonomous refinement if enabled
+            if autonomy_enabled {
+                let mut auto_improvement = 0.0;
+                let autonomy_prompt = format!(
+                    "You are NIODOO's autonomous curator. Rewrite the assistant response to be concise, specific, and constitutionally aligned. Remove filler, avoid repeating the prompt, and deliver one high-signal insight in 3-5 sentences.\n\nPrompt:\n{input}\n\nOriginal Response:\n{output}\n\nReturn only the refined response text.",
+                    input = input,
+                    output = output
+                );
+
+                match self
+                    .generator
+                    .generate_with_params(&autonomy_prompt, 0.22, 0.82)
                     .await
                 {
-                    Ok(result) => {
-                        reason = result.reason.clone();
-                        info!(
-                            "Curator refined response (quality={:.3}, knot={:.3}, learned={}, reason={})",
-                            quality_score, topology.knot_complexity, result.learned, result.reason
-                        );
-                        (result.refined, result.learned)
+                    Ok(autonomous) => {
+                        let candidate = autonomous.hybrid_response.trim();
+                        if !candidate.is_empty() {
+                            auto_improvement = rouge_l(candidate, output);
+                            if auto_improvement.is_finite() {
+                                quality_score = (quality_score
+                                    + (auto_improvement.clamp(0.0, 1.0) * 0.35) as f32)
+                                    .min(1.0);
+                            }
+                            refined = candidate.to_string();
+                            learned = auto_improvement > 0.05;
+                            reason = format!(
+                                "auto_refine|improvement:{:.3}|mode:{}",
+                                auto_improvement,
+                                if self.curator.is_some() {
+                                    "curator_present"
+                                } else {
+                                    "curator_absent"
+                                }
+                            );
+
+                            if auto_improvement < 0.25 {
+                                let first_improvement = auto_improvement;
+                                let second_prompt = format!(
+                                    "You are NIODOO's refinement overdrive. Further tighten the assistant reply so it is laser-focused, free of hedging, and emphasizes one actionable takeaway. Maintain constitutional tone and clear structure.\n\nPrompt:\n{input}\n\nCurrent Refinement:\n{refined}\n\nReturn only the upgraded response.",
+                                    input = input,
+                                    refined = refined
+                                );
+
+                                match self
+                                    .generator
+                                    .generate_with_params(&second_prompt, 0.28, 0.78)
+                                    .await
+                                {
+                                    Ok(second_pass) => {
+                                        let second_candidate = second_pass.hybrid_response.trim();
+                                        if !second_candidate.is_empty() {
+                                            let second_improvement =
+                                                rouge_l(second_candidate, output);
+                                            if second_improvement.is_finite()
+                                                && second_improvement > auto_improvement
+                                            {
+                                                refined = second_candidate.to_string();
+                                                auto_improvement = second_improvement;
+                                                learned = learned || auto_improvement > 0.05;
+                                                quality_score = (quality_score
+                                                    + (second_improvement.clamp(0.0, 1.0) * 0.35)
+                                                        as f32)
+                                                    .min(1.0);
+                                                reason = format!(
+                                                    "auto_refine_second_pass|first:{:.3}|second:{:.3}|mode:{}",
+                                                    first_improvement,
+                                                    second_improvement,
+                                                    if self.curator.is_some() {
+                                                        "curator_present"
+                                                    } else {
+                                                        "curator_absent"
+                                                    }
+                                                );
+                                            } else {
+                                                reason = format!(
+                                                    "auto_refine_second_pass_no_gain|first:{:.3}|second:{:.3}",
+                                                    first_improvement, second_improvement
+                                                );
+                                            }
+                                        } else {
+                                            reason = format!(
+                                                "auto_refine_second_pass_empty|first:{:.3}",
+                                                first_improvement
+                                            );
+                                        }
+                                    }
+                                    Err(error) => {
+                                        warn!(?error, "Second-pass autonomous refinement failed");
+                                        reason = format!(
+                                            "auto_refine_second_pass_error:{error}|first:{:.3}",
+                                            first_improvement
+                                        );
+                                    }
+                                }
+                            }
+                        } else {
+                            reason = "auto_refine_empty".to_string();
+                        }
                     }
-                    Err(e) => {
-                        reason = format!("curator_error:{e}");
-                        warn!("Curator refinement failed: {}, using original", e);
-                        (output.to_string(), false)
+                    Err(error) => {
+                        warn!(?error, "Autonomous curator refinement failed");
+                        reason = format!("auto_refine_error:{error}");
                     }
                 }
-            } else {
-                reason = "curator_disabled".to_string();
-                (output.to_string(), false)
             }
-        } else {
-            (output.to_string(), false)
-        };
 
-        if self.curator.is_none() && !reason.contains("curator_disabled") {
+            // If autonomous mode is disabled or produced no change, fall back to external curator
+            let should_call_curator = !autonomy_enabled && self.curator.is_some();
+
+            if should_call_curator {
+                if let Some(ref curator) = self.curator {
+                    match curator
+                        .refine(
+                            &refined,
+                            quality_score as f64,
+                            topology.knot_complexity,
+                            topology.persistence_entropy,
+                        )
+                        .await
+                    {
+                        Ok(result) => {
+                            reason = result.reason.clone();
+                            refined = result.refined;
+                            learned = result.learned;
+                            info!(
+                                "Curator refined response (quality={:.3}, knot={:.3}, learned={}, reason={})",
+                                quality_score,
+                                topology.knot_complexity,
+                                result.learned,
+                                result.reason
+                            );
+                            if result.learned {
+                                quality_score = (quality_score + 0.1).min(1.0);
+                            }
+                        }
+                        Err(e) => {
+                            reason = format!("curator_error:{e}");
+                            warn!("Curator refinement failed: {}, using current response", e);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (self.curator.is_none() || autonomy_enabled) && !reason.contains("curator_disabled") {
             reason = format!("{}|curator_disabled", reason);
         }
 

@@ -3,7 +3,7 @@
 # NIODOO-TCS INTEGRATED PIPELINE RUNNER
 # Sets all env vars and runs the full pipeline
 
-cd /home/beelink/Niodoo-Final
+cd /workspace/Niodoo-Final
 
 # Load environment from central runtime file if present
 if [ -f "tcs_runtime.env" ]; then
@@ -12,9 +12,9 @@ if [ -f "tcs_runtime.env" ]; then
     set +a
 fi
 
-# Base model/library paths
-export QWEN_MODEL_PATH=/home/beelink/models/Qwen2.5-7B-Instruct-AWQ
-export LD_LIBRARY_PATH=/home/beelink/Niodoo-Final/onnxruntime-linux-x64-1.16.3/lib:$LD_LIBRARY_PATH
+# Base model/library paths (override via env to customize)
+export QWEN_MODEL_PATH="${QWEN_MODEL_PATH:-/workspace/models/Qwen2.5-7B-Instruct-AWQ}"
+export LD_LIBRARY_PATH="/workspace/Niodoo-Final/onnxruntime-linux-x64-1.16.3/lib:$LD_LIBRARY_PATH"
 
 # Standardize endpoints to supervisor configuration (vLLM:5001, Qdrant:6333)
 export VLLM_ENDPOINT="${VLLM_ENDPOINT:-http://127.0.0.1:5001}"

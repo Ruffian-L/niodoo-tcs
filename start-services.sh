@@ -2,7 +2,8 @@
 # Start all services in background with auto-restart
 # Saves to /workspace network drive
 
-cd /workspace/Niodoo-Final
+ROOT=${NIODOO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
+cd "$ROOT"
 
 # Start supervisor monitor in background
 nohup ./supervisor.sh monitor > /tmp/supervisor.log 2>&1 &

@@ -1,5 +1,25 @@
 # RunPod Endpoints Configuration
 
+## 🚀 Bootstrap Everything
+
+```bash
+bash /workspace/Niodoo-Final/scripts/runpod_bootstrap.sh
+```
+
+- Installs apt packages, Rust toolchain, Python venv (Torch CU121, vLLM, requirements)
+- Downloads the vLLM model (requires `HF_TOKEN`) and provisions Qdrant/Ollama binaries
+- Builds the full Rust workspace and launches vLLM, Qdrant, Ollama, and metrics with health checks
+- Flags: `--force`, `--skip-services`, `--skip-build`, `--skip-model-download`, `--skip-qdrant`, `--skip-ollama`
+- Customize via env vars (examples):
+  - `VLLM_MODEL=/workspace/models/Qwen2.5-7B-Instruct-AWQ`
+  - `QDRANT_VERSION=1.11.3`, `QDRANT_ROOT=/workspace/qdrant`
+  - `OLLAMA_ROOT=/workspace/ollama`, `ENABLE_METRICS=0`
+
+```bash
+# RunPod startup command example
+bash /workspace/Niodoo-Final/scripts/runpod_bootstrap.sh --force
+```
+
 ## 🔌 All Endpoints
 
 ### **vLLM Endpoint**
@@ -79,103 +99,3 @@ model = "Qwen/Qwen2.5-32B-Instruct-AWQ"
 max_tokens = 512
 temperature = 0.7
 ```
-
----
-
-## 🔧 Configuration Loading Logic
-
-### **vLLM Endpoint Loading** (`niodoo_real_integrated/src/config.rs:421-437`)
-```rust
-let mut vllm_keys: Vec<&str> = vec!["VLLM_ENDPOINT"];
-if matches!(args.hardware, HardwareProfile::Laptop5080Q) {
-    vllm_keys.insert(0, "VLLM_ENDPOINT_TAILSCALE");
-} else {
-    vllm_keys.push("VLLM_ENDPOINT_TAILSCALE");
-}
-vllm_keys.push("TEST_ENDPOINT_VLLM");
-let vllm_endpoint = env_with_fallback(&vllm_keys)
-    .unwrap_or_else(|| "http://127.0.0.1:8000".to_string())
-    .trim()
-    .trim_end_matches('/')
-    .replace("/v1/chat/completions", "")
-    .replace("/v1/completions", "")
-    .replace("/v1/embeddings", "")
-    .trim_end_matches('/')
-    .to_string();
-```
-
-### **Qdrant Endpoint Loading** (`niodoo_real_integrated/src/config.rs:442-453`)
-```rust
-let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
-if matches!(args.hardware, HardwareProfile::Laptop5080Q) {
-    qdrant_keys.insert(0, "QDRANT_URL_TAILSCALE");
-} else {
-    qdrant_keys.push("QDRANT_URL_TAILSCALE");
-}
-qdrant_keys.push("TEST_ENDPOINT_QDRANT");
-let qdrant_url = env_with_fallback(&qdrant_keys)
-    .unwrap_or_else(|| "http://127.0.0.1:6333".to_string())
-    .trim()
-    .trim_end_matches('/')
-    .to_string();
-```
-
-### **Ollama Endpoint Loading** (`niodoo_real_integrated/src/config.rs:462-463`)
-```rust
-let ollama_endpoint = env_with_fallback(&["OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
-    .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
-```
-
----
-
-## 🚀 Usage Examples
-
-### **Loading the Environment**
-```bash
-source tcs_runtime.env
-```
-
-### **Testing Endpoints**
-```bash
-# Test vLLM
-curl $VLLM_ENDPOINT/health
-
-# Test Qdrant
-curl $QDRANT_URL/health
-
-# Test Ollama
-curl $OLLAMA_ENDPOINT/api/tags
-```
-
-### **RunPod Setup**
-```bash
-# From runpod_setup.sh
-bash runpod_setup.sh
-```
-
----
-
-## 📍 Key File Locations
-
-| Component | File | Line(s) |
-|-----------|------|---------|
-| **Environment Variables** | `tcs_runtime.env` | 1-17 |
-| **Config Loading** | `niodoo_real_integrated/src/config.rs` | 421-463 |
-| **Curator Config** | `curator_executor/config.toml` | 1-32 |
-| **Gauntlet Config** | `niodoo_integrated/rut_gauntlet_config.toml` | 13-29 |
-| **Setup Script** | `runpod_setup.sh` | All |
-
----
-
-## 🔗 Quick Reference
-
-```bash
-# All endpoints in one place
-VLLM_ENDPOINT=http://127.0.0.1:8000
-OLLAMA_ENDPOINT=http://127.0.0.1:11434
-QDRANT_URL=http://127.0.0.1:6333
-QDRANT_COLLECTION=experiences
-QDRANT_VECTOR_SIZE=896
-VLLM_MODEL=/workspace/models/hf_cache/hub/models--Qwen--Qwen2.5-7B-Instruct-AWQ
-```
-

@@ -21,7 +21,7 @@ impl Point {
 }
 
 /// Distance functions available to the topology engine.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum DistanceMetric {
     #[default]
     Euclidean,

@@ -87,3 +87,4 @@ cargo test --workspace --all-features
 - Qt build errors: the transitional `src/` crate is excluded from the workspace to avoid `qmake`; keep using `niodoo_real_integrated` and libraries.
 - ORT provider errors: ensure system ORT libs present or keep CPU path; verify `QWEN_MODEL_PATH` and `TOKENIZER_JSON`.
 - Qdrant connection: verify `QDRANT_URL`, collection name, and that the container is running.
+

@@ -17,11 +17,13 @@ pub struct TcsPredictor {
 impl TcsPredictor {
     pub fn new() -> Self {
         let mut weights = HashMap::new();
-        weights.insert("knot_complexity".to_string(), -0.5);
-        weights.insert("betti1".to_string(), -0.2);
-        weights.insert("persistence_entropy".to_string(), -0.1);
-        weights.insert("spectral_gap".to_string(), 0.4); // Low gap is good
-        weights.insert("betti0".to_string(), 0.3);
+        // Stronger penalty for tangling; stronger bonus for stability
+        weights.insert("knot_complexity".to_string(), -0.8);
+        weights.insert("betti1".to_string(), -0.3);
+        weights.insert("persistence_entropy".to_string(), -0.2);
+        weights.insert("spectral_gap".to_string(), 0.8); // Lower gap preferred; boost when low
+        // Slightly lower betti0 influence
+        weights.insert("betti0".to_string(), 0.1);
 
         Self {
             feature_weights: weights,

@@ -8,15 +8,17 @@
 //! - Latency measurements
 //! - PAD mapping similarity for emotion accuracy
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use chrono::Utc;
 use csv::Writer;
+use blake3::hash as blake3_hash;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
+use std::path::Path;
 use std::time::{Duration, Instant};
-use tracing::{debug, info};
+use reqwest::Client;
+use tracing::{debug, info, warn};
 
 use niodoo_real_integrated::{
     compass::CompassEngine,
@@ -62,6 +64,10 @@ struct BenchmarkMetrics {
     // Tokenizer stats
     vocab_size: usize,
     promoted_tokens: usize,
+    system_response_preview: String,
+    baseline_response_preview: String,
+    system_hash: String,
+    baseline_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,29 +88,75 @@ struct SummaryStats {
     total_cycles: usize,
 }
 
+fn require_env_var(name: &str) -> Result<String> {
+    std::env::var(name).with_context(|| format!("{name} must be set before running emotion_bench"))
+}
+
+fn join_url(base: &str, path: &str) -> String {
+    format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )
+}
+
+async fn verify_endpoint(client: &Client, name: &str, base: &str, path: &str) -> Result<()> {
+    let url = join_url(base, path);
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .with_context(|| format!("failed to reach {name} endpoint at {url}"))?;
+    ensure!(
+        response.status().is_success(),
+        "{name} endpoint {url} returned status {}",
+        response.status()
+    );
+    Ok(())
+}
+
+fn response_hash(text: &str) -> String {
+    blake3_hash(text.as_bytes()).to_hex().to_string()
+}
+
+fn response_preview(text: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    const MAX_CHARS: usize = 160;
+    let mut preview = String::new();
+    let mut count = 0usize;
+    for ch in trimmed.chars() {
+        if count >= MAX_CHARS {
+            preview.push('…');
+            break;
+        }
+        preview.push(ch);
+        count += 1;
+    }
+    preview
+}
+
 // Load GoEmotions dataset (or use synthetic samples)
 fn load_emotion_dataset() -> Result<Vec<EmotionSample>> {
     info!("Loading emotion dataset...");
     
     // Try to load GoEmotions from file
     let dataset_path = "data/goemotions_test.tsv";
-    let mut samples = Vec::new();
-    
     if let Ok(file) = File::open(dataset_path) {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')
             .has_headers(true)
             .from_reader(file);
-        
+
+        let mut samples = Vec::new();
         for result in rdr.records() {
             let record = result?;
-            if record.len() >= 3 {
+            if record.len() >= 2 {
                 let text = record.get(0).unwrap_or("").to_string();
                 let emotion = record.get(1).unwrap_or("neutral").to_string();
-                
-                // Generate synthetic PAD ground truth based on emotion
                 let pad = emotion_to_pad(&emotion);
-                
                 samples.push(EmotionSample {
                     text,
                     emotion_label: emotion,
@@ -113,13 +165,17 @@ fn load_emotion_dataset() -> Result<Vec<EmotionSample>> {
             }
         }
         info!("Loaded {} samples from GoEmotions", samples.len());
-    } else {
-        // Generate synthetic dataset
-        info!("GoEmotions not found, generating synthetic dataset");
-        samples = generate_synthetic_dataset(1000);
+        if samples.is_empty() {
+            warn!("GoEmotions dataset empty; using synthetic fallback");
+            let synthetic = generate_synthetic_dataset(1000);
+            info!("Synthetic fallback dataset size {}", synthetic.len());
+            return Ok(synthetic);
+        }
+        return Ok(samples);
     }
-    
-    Ok(samples)
+
+    info!("GoEmotions not found, generating synthetic dataset");
+    Ok(generate_synthetic_dataset(1000))
 }
 
 fn emotion_to_pad(emotion: &str) -> [f64; 7] {
@@ -181,7 +237,7 @@ async fn run_system_prediction(
     engine: &GenerationEngine,
     _compass: &CompassEngine,
     text: &str,
-) -> Result<(String, Vec<f64>, f64, usize)> {
+) -> Result<(String, Vec<f64>, f64, usize, f64)> {
     let start = Instant::now();
     
     // Generate response with system
@@ -198,10 +254,10 @@ async fn run_system_prediction(
     // Simulated vocab size
     let vocab_size = 50000;
     
-    Ok((response, pad, entropy, vocab_size))
+    Ok((response, pad, entropy, vocab_size, latency_ms))
 }
 
-async fn run_baseline_prediction(text: &str) -> Result<(String, Vec<f64>, f64)> {
+async fn run_baseline_prediction(text: &str) -> Result<(String, Vec<f64>, f64, f64)> {
     let start = Instant::now();
     
     // Simulate baseline (vanilla Qwen) - simple response
@@ -215,7 +271,7 @@ async fn run_baseline_prediction(text: &str) -> Result<(String, Vec<f64>, f64)> 
     
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
     
-    Ok((response, pad, entropy))
+    Ok((response, pad, entropy, latency_ms))
 }
 
 fn extract_pad_from_response(response: &str) -> Vec<f64> {
@@ -275,11 +331,33 @@ async fn main() -> Result<()> {
     
     info!("🧠 Emotion Benchmark: System vs Baseline Comparison");
     
+    let tokenizer_path = require_env_var("TOKENIZER_JSON")?;
+    ensure!(
+        Path::new(&tokenizer_path).is_file(),
+        "Tokenizer JSON not found at {}",
+        tokenizer_path
+    );
+    let vllm_endpoint = require_env_var("VLLM_ENDPOINT")?;
+    let ollama_endpoint = require_env_var("OLLAMA_ENDPOINT")?;
+    let qdrant_url = require_env_var("QDRANT_URL")?;
+
+    let health_client = Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .context("failed to build HTTP client for endpoint verification")?;
+    verify_endpoint(&health_client, "vLLM", &vllm_endpoint, "/v1/models").await?;
+    verify_endpoint(&health_client, "Ollama", &ollama_endpoint, "/api/tags").await?;
+    verify_endpoint(&health_client, "Qdrant", &qdrant_url, "/healthz").await?;
+
     // Load configuration
     let config = RuntimeConfig::from_env()?;
     
     // Load emotion dataset
     let samples = load_emotion_dataset()?;
+    ensure!(
+        !samples.is_empty(),
+        "emotion dataset is empty; provide data/goemotions_test.tsv or synthetic fallback"
+    );
     info!("Loaded {} emotion samples", samples.len());
     
     // Initialize engines
@@ -310,16 +388,74 @@ async fn main() -> Result<()> {
         let sample = &samples[cycle % samples.len()];
         
         // Run system prediction
-        let (system_response, system_pad, system_entropy, vocab_size) = run_system_prediction(
+        let (
+            system_response,
+            system_pad,
+            system_entropy,
+            vocab_size,
+            system_latency_ms,
+        ) = run_system_prediction(
             &generation_engine,
             &compass,
             &sample.text,
         ).await?;
         
         // Run baseline prediction
-        let (baseline_response, baseline_pad, baseline_entropy) = 
+        let (baseline_response, _baseline_pad, baseline_entropy, baseline_latency_ms) = 
             run_baseline_prediction(&sample.text).await?;
         
+        let system_trimmed = system_response.trim();
+        let baseline_trimmed = baseline_response.trim();
+
+        ensure!(
+            !system_trimmed.is_empty(),
+            "system response empty for cycle {} (prompt: {})",
+            cycle,
+            sample.text
+        );
+        ensure!(
+            !baseline_trimmed.is_empty(),
+            "baseline response empty for cycle {} (prompt: {})",
+            cycle,
+            sample.text
+        );
+        ensure!(
+            !system_trimmed.starts_with("Mock response:"),
+            "system response is mock placeholder for cycle {} (prompt: {})",
+            cycle,
+            sample.text
+        );
+        ensure!(
+            system_trimmed != "Generation failed",
+            "system response indicates failed generation for cycle {} (prompt: {})",
+            cycle,
+            sample.text
+        );
+        ensure!(
+            baseline_trimmed != "Generation failed",
+            "baseline response indicates failed generation for cycle {} (prompt: {})",
+            cycle,
+            sample.text
+        );
+        ensure!(
+            system_trimmed != baseline_trimmed,
+            "system and baseline responses identical for cycle {} (prompt: {})",
+            cycle,
+            sample.text
+        );
+
+        let system_hash = response_hash(system_trimmed);
+        let baseline_hash = response_hash(baseline_trimmed);
+        ensure!(
+            system_hash != baseline_hash,
+            "system and baseline responses hash to same value for cycle {} (prompt: {})",
+            cycle,
+            sample.text
+        );
+
+        let system_preview = response_preview(system_trimmed);
+        let baseline_preview = response_preview(baseline_trimmed);
+
         // Calculate metrics
         let oov_rate_system = 0.05; // Simulated
         let oov_rate_baseline = 0.15; // Simulated
@@ -329,9 +465,6 @@ async fn main() -> Result<()> {
         
         let rouge_l_score = rouge_l(&system_response, &baseline_response);
         let rouge_1_score = compute_rouge_1(&system_response, &baseline_response);
-        
-        let latency_system_ms = 50.0; // Simulated
-        let latency_baseline_ms = 40.0; // Simulated
         
         let pad_similarity = calculate_pad_similarity(&system_pad, &sample.pad_ground_truth);
         let emotion_match = pad_similarity > 0.7;
@@ -350,11 +483,15 @@ async fn main() -> Result<()> {
             rouge_l_score,
             rouge_1_score,
             latency_system_ms,
-            latency_baseline_ms,
+            baseline_latency_ms,
             pad_similarity,
             emotion_match,
             vocab_size,
             promoted_tokens,
+            system_response_preview: system_preview,
+            baseline_response_preview: baseline_preview,
+            system_hash,
+            baseline_hash,
         };
         
         metrics.push(metric);
@@ -400,7 +537,8 @@ async fn main() -> Result<()> {
         "entropy_system", "entropy_baseline", "entropy_convergence",
         "rouge_l_score", "rouge_1_score",
         "latency_system_ms", "latency_baseline_ms",
-        "pad_similarity", "emotion_match", "vocab_size", "promoted_tokens"
+        "pad_similarity", "emotion_match", "vocab_size", "promoted_tokens",
+        "system_response_preview", "baseline_response_preview", "system_hash", "baseline_hash"
     ])?;
     
     for metric in &results.metrics {
@@ -421,6 +559,10 @@ async fn main() -> Result<()> {
             metric.emotion_match.to_string(),
             metric.vocab_size.to_string(),
             metric.promoted_tokens.to_string(),
+            metric.system_response_preview.clone(),
+            metric.baseline_response_preview.clone(),
+            metric.system_hash.clone(),
+            metric.baseline_hash.clone(),
         ])?;
     }
     

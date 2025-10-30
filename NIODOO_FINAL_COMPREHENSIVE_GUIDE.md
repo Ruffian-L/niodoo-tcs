@@ -2,6 +2,15 @@
 
 **A Consolidated Technical Documentation for the Complete Niodoo Consciousness Engine System**
 
+> Note on configuration: All paths and endpoints should be provided via environment variables (e.g., `VLLM_ENDPOINT`, `QDRANT_URL`, `VLLM_MODEL`). Any examples in this guide showing `/home/beelink/...` or `http://localhost:8000` are placeholders. On RunPod, prefer:
+>
+> ```bash
+> set -a; source /workspace/Niodoo-Final/tcs_runtime.env 2>/dev/null || true; set +a
+> export VLLM_ENDPOINT=${VLLM_ENDPOINT:-http://127.0.0.1:5001}
+> export QDRANT_URL=${QDRANT_URL:-http://127.0.0.1:6333}
+> export VLLM_MODEL=${VLLM_MODEL:-/workspace/models/Qwen2.5-7B-Instruct-AWQ}
+> ```
+
 ---
 
 ## 📚 Table of Contents

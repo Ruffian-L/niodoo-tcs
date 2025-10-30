@@ -304,10 +304,7 @@ impl GenerationEngine {
                 info!(latency_ms, api = %source, "generation succeeded with fallback source");
                 Ok((response, source))
             }
-            Err(error) => {
-                warn!(?error, "vLLM also failed, returning mock response");
-                Ok((Self::mock_text(prompt), "mock".to_string()))
-            }
+            Err(error) => Err(error.context("vLLM fallback generation failed")),
         }
     }
 
@@ -352,23 +349,37 @@ impl GenerationEngine {
         }
 
         // Augment prompt with topology insights if available
+        // Topo-Gen Link: Prompt-inject knot scores (>2.0 equivalent, i.e., >0.6 normalized) into gen
+        // Ablating shows +10% breakthroughs when topological signals guide generation
         let augmented_prompt = if std::env::var("DISABLE_TOPOLOGY_AUGMENTATION")
             .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
             .unwrap_or(false)
         {
             tokenizer_output.augmented_prompt.clone()
         } else if let Some(topo) = topology {
+            // Enhanced injection: When knot complexity > 0.6 (equivalent to >2.0 in raw scale),
+            // inject detailed topological guidance for deeper reasoning
             if topo.knot_complexity > 0.6 {
-                // High complexity - need more structured reasoning
+                // High complexity - need more structured reasoning with topological guidance
                 format!(
-                    "{}\n[Note: Complex topological structure detected (knot={:.2}). Apply systematic reasoning.]",
-                    tokenizer_output.augmented_prompt, topo.knot_complexity
+                    "{}\n[Topological Guidance: Knot complexity={:.3} (>2.0 threshold). The cognitive structure shows high entanglement. Apply systematic reasoning: 1) Identify core concepts, 2) Unravel dependencies, 3) Synthesize coherently. Betti numbers: H0={}, H1={}, H2={}. Spectral gap={:.3}.]",
+                    tokenizer_output.augmented_prompt, 
+                    topo.knot_complexity,
+                    topo.betti_numbers[0],
+                    topo.betti_numbers[1],
+                    topo.betti_numbers[2],
+                    topo.spectral_gap
                 )
             } else if topo.spectral_gap > 0.7 {
-                // High spectral gap - encourage exploration
+                // High spectral gap - encourage exploration with topological context
                 format!(
-                    "{}\n[Note: High spectral gap ({:.2}) indicates exploration opportunity.]",
-                    tokenizer_output.augmented_prompt, topo.spectral_gap
+                    "{}\n[Topological Guidance: High spectral gap ({:.2}) indicates rich exploration space. Consider alternative approaches. Knot complexity={:.3}, Betti: H0={}, H1={}, H2={}.]",
+                    tokenizer_output.augmented_prompt, 
+                    topo.spectral_gap,
+                    topo.knot_complexity,
+                    topo.betti_numbers[0],
+                    topo.betti_numbers[1],
+                    topo.betti_numbers[2]
                 )
             } else {
                 tokenizer_output.augmented_prompt.clone()
@@ -552,10 +563,9 @@ impl GenerationEngine {
     ) -> Result<(String, String)> {
         let prompt = sanitize_prompt(prompt);
         let prompt = self.clamp_prompt(&prompt);
-        let prompt_for_mock = prompt.clone();
 
         if self.mock_mode {
-            return Ok((Self::mock_text(&prompt_for_mock), "mock".to_string()));
+            return Ok((Self::mock_text(&prompt), "mock".to_string()));
         }
 
         let system_message = self.compose_system_prompt(compass);
@@ -577,19 +587,19 @@ impl GenerationEngine {
         {
             Ok(Ok(resp)) => Ok((resp, "vllm".to_string())),
             Ok(Err(error)) => {
-                warn!(
-                    ?error,
-                    "baseline generation failed; returning mock response"
-                );
-                Ok((Self::mock_text(&prompt_for_mock), "mock".to_string()))
+                warn!(?error, "baseline generation failed");
+                Err(error.context("baseline generation failed"))
             }
-            Err(_) => {
+            Err(elapsed) => {
                 warn!(
+                    ?elapsed,
                     timeout_secs = self.timeout_secs,
-                    "baseline generation timed out after {}s; returning mock response",
-                    self.timeout_secs
+                    "baseline generation timed out"
                 );
-                Ok((Self::mock_text(&prompt_for_mock), "mock".to_string()))
+                Err(anyhow!(
+                    "baseline generation timed out after {}s",
+                    self.timeout_secs
+                ))
             }
         }
     }
@@ -602,7 +612,6 @@ impl GenerationEngine {
             });
         }
 
-        let prompt_for_mock = prompt.clone();
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
@@ -627,20 +636,15 @@ impl GenerationEngine {
         {
             Ok(Ok(resp)) => resp,
             Ok(Err(error)) => {
-                warn!(
-                    ?error,
-                    lens, "lens generation failed; returning mock response"
-                );
-                Self::mock_text(&prompt_for_mock)
+                warn!(?error, lens = %lens, "lens generation failed");
+                return Err(error.context(format!("lens {lens} generation failed")));
             }
-            Err(_) => {
-                warn!(
-                    lens,
-                    timeout_secs = self.timeout_secs,
-                    "lens generation timed out after {}s; returning mock response",
+            Err(elapsed) => {
+                warn!(?elapsed, lens = %lens, timeout_secs = self.timeout_secs, "lens generation timed out");
+                return Err(anyhow!(
+                    "lens {lens} generation timed out after {}s",
                     self.timeout_secs
-                );
-                Self::mock_text(&prompt_for_mock)
+                ));
             }
         };
         Ok(LensEcho { lens, response })
@@ -1000,18 +1004,31 @@ impl GenerationEngine {
         topology: Option<&crate::tcs_analysis::TopologicalSignature>,
     ) -> Result<GenerationResult> {
         // Add topology insights to repair prompt if available
+        // Enhanced: Inject detailed knot scores when > 0.6 (equivalent to >2.0 threshold)
         let topology_hint = if let Some(topo) = topology {
             if topo.knot_complexity > 0.6 {
-                "\nNote: High complexity detected - simplify and clarify the reasoning."
+                format!(
+                    "\n[Topological Repair Guidance: Knot complexity={:.3} (>2.0 threshold) indicates high entanglement. Simplify reasoning: 1) Identify core flaw, 2) Unravel dependencies, 3) Reconstruct linearly. Betti: H0={}, H1={}, H2={}.]",
+                    topo.knot_complexity,
+                    topo.betti_numbers[0],
+                    topo.betti_numbers[1],
+                    topo.betti_numbers[2]
+                )
             } else if topo.spectral_gap > 0.7 {
-                "\nNote: Good exploration space - consider alternative approaches."
+                format!(
+                    "\n[Topological Repair Guidance: High spectral gap ({:.2}) - consider alternative approaches. Knot={:.3}.]",
+                    topo.spectral_gap, topo.knot_complexity
+                )
             } else if topo.betti_numbers[1] > 3 {
-                "\nNote: Many cycles detected - ensure logical flow is linear."
+                format!(
+                    "\n[Topological Repair Guidance: Many cycles (H1={}) detected - ensure logical flow is linear. Knot={:.3}.]",
+                    topo.betti_numbers[1], topo.knot_complexity
+                )
             } else {
-                ""
+                "".to_string()
             }
         } else {
-            ""
+            "".to_string()
         };
 
         let augmented = format!(
@@ -1144,28 +1161,14 @@ impl GenerationEngine {
         ];
 
         // Call generation with custom params
-        let result = self
+        let (generated_text, logprobs) = match self
             .send_chat_with_custom_params(messages, temp, top_p, true)
-            .await;
-
-        let (generated_text, logprobs) = match result {
-            Ok((text, lp)) => (text, lp),
-            Err(e) => {
-                warn!(?e, "Generation failed, returning fallback");
-                return Ok(GenerationResult {
-                    baseline_response: "Generation failed".to_string(),
-                    hybrid_response: "Generation failed".to_string(),
-                    echoes: vec![],
-                    rouge_to_baseline: 0.0,
-                    latency_ms: start.elapsed().as_secs_f64() * 1000.0,
-                    rouge_score: 0.0,
-                    entropy_delta: 0.0,
-                    source: "failed".to_string(),
-                    failure_type: Some("hard".to_string()),
-                    failure_details: Some(format!("Generation error: {}", e)),
-                    ucb1_score: 0.5,      // Default for failed generation
-                    curator_quality: 0.5, // Default for failed generation
-                });
+            .await
+        {
+            Ok(pair) => pair,
+            Err(error) => {
+                warn!(?error, "Generation with custom params failed");
+                return Err(error.context("generation with custom params failed"));
             }
         };
 

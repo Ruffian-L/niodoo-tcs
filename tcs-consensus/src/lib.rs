@@ -264,7 +264,6 @@ pub mod hotstuff {
 mod hotstuff_tests {
     use super::hotstuff::{FakeNode, commit, propose, supermajority_threshold, vote};
     use std::future::Future;
-    use std::pin::Pin;
     use std::ptr;
     use std::sync::Arc;
     use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};

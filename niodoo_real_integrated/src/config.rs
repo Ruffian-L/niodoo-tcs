@@ -250,6 +250,37 @@ impl Default for BackendType {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CuratorBackend {
+    #[serde(rename = "ollama")]
+    Ollama,
+    #[serde(rename = "vllm")]
+    Vllm,
+}
+
+impl Default for CuratorBackend {
+    fn default() -> Self {
+        // Default to vLLM for better reliability
+        CuratorBackend::Vllm
+    }
+}
+
+impl CuratorBackend {
+    pub fn from_env() -> Self {
+        match env_with_fallback(&["CURATOR_BACKEND", "CURATOR_TYPE"]) {
+            Some(value) => match value.to_ascii_lowercase().as_str() {
+                "vllm" | "vllm_gpu" => CuratorBackend::Vllm,
+                "ollama" | "ollama_cpu" => CuratorBackend::Ollama,
+                _ => {
+                    warn!(%value, "Invalid curator backend; defaulting to vLLM");
+                    CuratorBackend::Vllm
+                }
+            },
+            None => CuratorBackend::Vllm, // Default to vLLM
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TopologyMode {
     #[serde(rename = "hybrid")]
     Hybrid,
@@ -291,11 +322,19 @@ impl FromStr for TopologyMode {
 }
 
 fn default_max_retries() -> u32 {
-    10 // Further increased to allow learning through degraded responses
+    3 // Keep retry budget tight to avoid runaway latency
 }
 
 fn default_retry_base_delay_ms() -> u64 {
     100 // Reduced from 200 for faster retries
+}
+
+fn default_phase2_cot_iterations() -> u32 {
+    1
+}
+
+fn default_phase2_retry_backoff_cap_ms() -> u64 {
+    1_500
 }
 
 fn default_similarity_threshold() -> f32 {
@@ -412,6 +451,10 @@ fn default_breakthrough_threshold() -> f64 {
     0.2
 }
 
+fn default_breakthrough_rouge_min() -> f64 {
+    0.65
+}
+
 fn default_novelty_threshold() -> f64 {
     0.5
 }
@@ -422,6 +465,10 @@ fn default_self_awareness_level() -> f64 {
 
 fn default_curator_quality_threshold() -> f32 {
     0.6
+}
+
+fn default_curator_autonomous() -> bool {
+    true
 }
 
 impl BackendType {
@@ -474,6 +521,10 @@ pub struct RuntimeConfig {
     pub phase2_max_retries: u32,
     #[serde(default = "default_retry_base_delay_ms")]
     pub phase2_retry_base_delay_ms: u64,
+    #[serde(default = "default_phase2_cot_iterations")]
+    pub phase2_cot_iterations: u32,
+    #[serde(default = "default_phase2_retry_backoff_cap_ms")]
+    pub phase2_retry_backoff_cap_ms: u64,
     #[serde(default = "default_similarity_threshold")]
     pub similarity_threshold: f32,
 
@@ -501,6 +552,8 @@ pub struct RuntimeConfig {
     pub curator_timeout_secs: u64,
     pub curator_temperature: f64,
     pub curator_max_tokens: usize,
+    #[serde(default = "default_curator_autonomous")]
+    pub curator_autonomous: bool,
     pub assessment_prompt_template: String,
 
     // Generation timeout and token configuration
@@ -521,6 +574,8 @@ pub struct RuntimeConfig {
     pub learning_window: usize,
     #[serde(default = "default_breakthrough_threshold")]
     pub breakthrough_threshold: f64,
+    #[serde(default = "default_breakthrough_rouge_min")]
+    pub breakthrough_rouge_min: f64,
     #[serde(default = "default_dqn_actions")]
     pub dqn_actions: Vec<DqnActionConfig>,
 
@@ -732,7 +787,7 @@ impl RuntimeConfig {
 
         let enable_curator = env_with_fallback(&["ENABLE_CURATOR"])
             .and_then(|value| value.parse().ok())
-            .unwrap_or(true); // Enabled by default
+            .unwrap_or(false); // Default to autonomous mode unless explicitly enabled
 
         let curator_model_name = env_with_fallback(&["CURATOR_MODEL", "CURATOR_MODEL_NAME"])
             .unwrap_or_else(|| "qwen2:0.5b".to_string());
@@ -756,6 +811,15 @@ impl RuntimeConfig {
         let curator_max_tokens = env_with_fallback(&["CURATOR_MAX_TOKENS"])
             .and_then(|value| value.parse().ok())
             .unwrap_or(256);
+
+        let curator_autonomous = env_with_fallback(&["CURATOR_AUTONOMOUS"])
+            .map(|value| {
+                matches!(
+                    value.to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on" | "auto"
+                )
+            })
+            .unwrap_or(default_curator_autonomous());
 
         // Generation timeout and token configuration from env
         let generation_timeout_secs =
@@ -819,8 +883,11 @@ impl RuntimeConfig {
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_reflexion_top_p_step);
         let cot_success_rouge_threshold = env_with_fallback(&["COT_SUCCESS_ROUGE_THRESHOLD"])
-            .and_then(|v| v.parse().ok())
+            .and_then(|v| v.parse::<f64>().ok())
             .unwrap_or_else(default_cot_success_rouge_threshold);
+        let breakthrough_rouge_min = env_with_fallback(&["BREAKTHROUGH_ROUGE_MIN"])
+            .and_then(|value| value.parse::<f64>().ok())
+            .unwrap_or_else(default_breakthrough_rouge_min);
 
         let variance_stagnation_default = env_with_fallback(&["VARIANCE_STAGNATION_DEFAULT"])
             .and_then(|v| v.parse().ok())
@@ -846,19 +913,24 @@ impl RuntimeConfig {
             .unwrap_or_else(default_retry_backoff_exponent_cap);
 
         let phase2_max_retries = env_with_fallback(&["PHASE2_MAX_RETRIES"])
-            .and_then(|value| value.parse().ok())
+            .and_then(|value| value.parse::<u32>().ok())
             .unwrap_or(default_max_retries());
-
         let phase2_retry_base_delay_ms = env_with_fallback(&["PHASE2_RETRY_BASE_DELAY_MS"])
-            .and_then(|value| value.parse().ok())
+            .and_then(|value| value.parse::<u64>().ok())
             .unwrap_or(default_retry_base_delay_ms());
+        let phase2_cot_iterations = env_with_fallback(&["PHASE2_COT_ITERATIONS"])
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(default_phase2_cot_iterations());
+        let phase2_retry_backoff_cap_ms = env_with_fallback(&["PHASE2_RETRY_BACKOFF_CAP_MS"])
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(default_phase2_retry_backoff_cap_ms());
 
         let similarity_threshold = env_with_fallback(&["SIMILARITY_THRESHOLD"])
             .and_then(|value| value.parse().ok())
             .unwrap_or(default_similarity_threshold());
 
         let phase2_level3_retry_count = env_with_fallback(&["PHASE2_LEVEL3_RETRY_COUNT"])
-            .and_then(|value| value.parse().ok())
+            .and_then(|value| value.parse::<u32>().ok())
             .unwrap_or(default_level3_retry_count());
 
         let phase2_mcts_c_increment = env_with_fallback(&["PHASE2_MCTS_C_INCREMENT"])
@@ -871,7 +943,7 @@ impl RuntimeConfig {
 
         let phase2_retrieval_top_k_increment =
             env_with_fallback(&["PHASE2_RETRIEVAL_TOP_K_INCREMENT"])
-                .and_then(|value| value.parse().ok())
+                .and_then(|value| value.parse::<i32>().ok())
                 .unwrap_or(default_retrieval_top_k_increment());
 
         let dqn_actions = env_with_fallback(&["DQN_ACTIONS"])
@@ -900,6 +972,8 @@ impl RuntimeConfig {
             topology_mode,
             phase2_max_retries,
             phase2_retry_base_delay_ms,
+            phase2_cot_iterations,
+            phase2_retry_backoff_cap_ms,
             similarity_threshold,
             phase2_level3_retry_count,
             phase2_mcts_c_increment,
@@ -913,6 +987,7 @@ impl RuntimeConfig {
             curator_timeout_secs,
             curator_temperature,
             curator_max_tokens,
+            curator_autonomous,
             // Enhanced prompt with strict output format
             assessment_prompt_template: "Score this response (0.0-1.0) for emotional breakthrough potential.\nConsider: breakthrough→high score, stagnation→low score, LearningWill advance→boost score.\n\nPrompt: {}\nResponse: {}\nEntropy: {:.3}, Quadrant: {}\n\nOUTPUT FORMAT: Respond with ONLY a single number (e.g., '0.85'). No text, no explanation, no JSON, just the number.:".to_string(),
             generation_timeout_secs,
@@ -925,6 +1000,7 @@ impl RuntimeConfig {
             dqn_alpha: default_dqn_alpha(),
             learning_window: default_learning_window(),
             breakthrough_threshold: default_breakthrough_threshold(),
+            breakthrough_rouge_min,
             dqn_actions,
             temperature: 0.7,
             top_p: 0.9,
@@ -964,6 +1040,7 @@ pub struct CuratorConfig {
     pub vllm_endpoint: String,
     pub ollama_endpoint: String,
     pub model_name: String,
+    pub curator_backend: CuratorBackend, // NEW: Backend selection
     pub embedding_dim: usize,
     pub max_context_length: usize,
     pub distillation_batch_size: usize,
@@ -987,10 +1064,18 @@ pub struct CuratorConfig {
 
 impl CuratorConfig {
     pub fn from_runtime_config(config: &RuntimeConfig) -> Self {
+        // Determine curator backend from env or default to vLLM
+        let curator_backend = CuratorBackend::from_env();
+        
+        // If vLLM backend, use separate endpoint if configured, otherwise use main vLLM endpoint
+        let curator_vllm_endpoint = env_with_fallback(&["CURATOR_VLLM_ENDPOINT", "CURATOR_ENDPOINT"])
+            .unwrap_or_else(|| config.vllm_endpoint.clone());
+        
         Self {
-            vllm_endpoint: config.vllm_endpoint.clone(),
+            vllm_endpoint: curator_vllm_endpoint,
             ollama_endpoint: config.ollama_endpoint.clone(),
             model_name: config.curator_model_name.clone(),
+            curator_backend,
             embedding_dim: config.qdrant_vector_dim,
             max_context_length: 2048,
             distillation_batch_size: 32,

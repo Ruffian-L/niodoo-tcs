@@ -142,7 +142,8 @@ impl TCSAnalyzer {
         let start = Instant::now();
 
         let tcs_state = Arc::new(Mutex::new(TCSState::default()));
-        let mut guard = tcs_state.lock().unwrap();
+        let mut guard = tcs_state.lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock TCS state: {}", e))?;
         // Use guard for computations, e.g., populate from pad_state
         guard.pad = pad_state.pad.iter().map(|&v| v as f64).collect();
         guard.mu = pad_state.mu.iter().map(|&v| v as f64).collect();
@@ -399,7 +400,13 @@ impl TCSAnalyzer {
         use std::sync::RwLock;
         static PREV_BETTI: RwLock<Option<[usize; 3]>> = RwLock::new(None);
 
-        let prev_opt = { PREV_BETTI.read().unwrap().clone() };
+        let prev_opt = { 
+            PREV_BETTI.read()
+                .map_err(|_| ())
+                .ok()
+                .map(|lock| lock.clone())
+                .flatten()
+        };
         let cobordism = if let Some(prev) = prev_opt {
             TQFTEngine::infer_cobordism_from_betti(&prev, betti)
         } else {
@@ -413,8 +420,9 @@ impl TCSAnalyzer {
             }
         };
         {
-            let mut w = PREV_BETTI.write().unwrap();
-            *w = Some(*betti);
+            if let Ok(mut w) = PREV_BETTI.write() {
+                *w = Some(*betti);
+            }
         }
 
         cobordism
@@ -518,7 +526,17 @@ pub struct TransitionAnalysis {
 
 impl Default for TCSAnalyzer {
     fn default() -> Self {
-        Self::new().expect("Failed to initialize TCS analyzer")
+        Self::new().unwrap_or_else(|_| {
+            // Fallback: create minimal analyzer
+            Self {
+                topology_engine: RustVREngine::new(),
+                knot_analyzer: JonesPolynomial::new(64),
+                tqft_engine: TQFTEngine::new(2).unwrap_or_else(|_| {
+                    // If TQFT fails, create a minimal one - this shouldn't happen but handle gracefully
+                    TQFTEngine::new(2).unwrap_or_else(|_| panic!("Failed to create fallback TQFT engine"))
+                }),
+            }
+        })
     }
 }
 

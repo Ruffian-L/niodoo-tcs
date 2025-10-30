@@ -78,6 +78,9 @@ tcs-knot = { path = "../tcs-knot" }
 tcs-tqft = { path = "../tcs-tqft" }
 tokio-stream = { workspace = true }
 
+# Test dependencies
+tempfile = "3.10"
+
 # Protobuf additions
 prost = { workspace = true, features = ["derive"] }
 
@@ -95,6 +98,10 @@ harness = false
 [[test]]
 name = "integration"
 path = "tests/integration.rs"
+
+[[test]]
+name = "phase2_e2e"
+path = "tests/phase2_e2e.rs"
 
 [[bin]]
 name = "niodoo_real_integrated"
@@ -145,6 +152,10 @@ path = "src/bin/topology_bench.rs"
 name = "learning_demo"
 path = "src/bin/learning_demo.rs"
 
+[[bin]]
+name = "qwen_comparison_test"
+path = "src/bin/qwen_comparison_test.rs"
+
 [[example]]
 name = "topology_baseline"
 path = "examples/topology_baseline.rs"
@@ -168,3 +179,4 @@ required-features = ["examples"]
 [dev-dependencies]
 criterion = "0.5"
 mockall = "0.13"
+tempfile = { workspace = true }

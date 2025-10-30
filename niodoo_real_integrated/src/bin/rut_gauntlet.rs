@@ -1,6 +1,7 @@
 use std::fs::{File, create_dir_all};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::time::{Instant, SystemTime};
 
 use anyhow::{Context, Result};
@@ -10,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tracing_subscriber::prelude::*;
 
 use niodoo_real_integrated::{
-    config::{CliArgs, OutputFormat},
+    config::{CliArgs, OutputFormat, env_value},
     metrics::metrics,
     pipeline::Pipeline,
 };
@@ -34,6 +35,18 @@ struct RutGauntletConfig {
     latency_max_ms: f64,
     emotional_activation_min_percent: f64,
     breakthroughs_min_percent: f64,
+}
+
+impl RutGauntletConfig {
+    fn load() -> Self {
+        Self {
+            default_entropy_high: read_env_or("GAUNTLET_ENTROPY_HIGH", 2.0),
+            entropy_stability_threshold: read_env_or("GAUNTLET_ENTROPY_STD_MAX", 0.3),
+            latency_max_ms: read_env_or("GAUNTLET_LATENCY_MAX_MS", 500.0),
+            emotional_activation_min_percent: read_env_or("GAUNTLET_EMOTIONAL_MIN_PERCENT", 20.0),
+            breakthroughs_min_percent: read_env_or("GAUNTLET_BREAKTHROUGH_MIN_PERCENT", 60.0),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +108,15 @@ struct TestSummary {
     summary_json_path: String,
     plot_path: String,
     metrics_txt_path: String,
+}
+
+fn read_env_or<T>(key: &str, default: T) -> T
+where
+    T: FromStr,
+{
+    env_value(key)
+        .and_then(|value| value.parse::<T>().ok())
+        .unwrap_or(default)
 }
 
 fn generate_raw_rut_prompts() -> Vec<String> {
@@ -211,13 +233,7 @@ async fn run_100_prompt_test() -> Result<()> {
     println!("📂 Output directory: {}", output_dir.display());
 
     // Load configuration
-    let config = RutGauntletConfig {
-        default_entropy_high: 2.0,
-        entropy_stability_threshold: 0.3,
-        latency_max_ms: 500.0,
-        emotional_activation_min_percent: 20.0,
-        breakthroughs_min_percent: 60.0,
-    };
+    let config = RutGauntletConfig::load();
 
     let args = CliArgs {
         hardware: niodoo_real_integrated::config::HardwareProfile::Beelink,

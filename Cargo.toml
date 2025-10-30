@@ -15,7 +15,8 @@
 # - tcs-pipeline: Data processing pipelines for consciousness streams
 # - niodoo-core: Main consciousness engine with ERAG memory and emotional topology
 # - constants_core: Shared constants and configuration
-# - src: Legacy monolithic implementation (transitional)
+# - src: Legacy monolithic implementation (DEPRECATED - migration in progress)
+#   See docs/PRODUCTION_PATHS.md for migration guide
 
 [workspace]
 members = [
@@ -26,7 +27,6 @@ members = [
     "tcs-ml",
     "tcs-consensus",
     "tcs-pipeline",
-    "niodoo-core",
     "constants_core",
     "niodoo_real_integrated",
     "tcs-core-wasm",

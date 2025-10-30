@@ -140,6 +140,18 @@ pub mod util;
 /// Vector store implementation for binary protobuf storage
 pub mod vector_store;
 
+/// Conversation log storage for Phase 2 pipeline integration
+pub mod conversation_log;
+
+/// Emotional graph builder for Phase 2 integration
+pub mod emotional_graph;
+
+/// Memory architect for layer placement decisions
+pub mod memory_architect;
+
+/// Graph exporter for visualization
+pub mod graph_exporter;
+
 pub mod test_support;
 
 #[cfg(test)]

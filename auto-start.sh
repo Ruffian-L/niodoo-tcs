@@ -8,12 +8,13 @@ echo "🚀 Auto-starting services on pod boot..."
 sleep 3
 
 # Start all services using supervisor
-cd /workspace/Niodoo-Final
+ROOT=${NIODOO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
+cd "$ROOT"
 ./supervisor.sh start
 
 # Start supervisor monitor in background
 nohup ./supervisor.sh monitor > /tmp/supervisor.log 2>&1 &
 
 echo "✅ Auto-start complete. Services running in background."
-echo "📊 Check status: cd /workspace/Niodoo-Final && ./supervisor.sh status"
+echo "📊 Check status: cd \"$ROOT\" && ./supervisor.sh status"
 

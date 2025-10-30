@@ -7,12 +7,82 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+ENV_FILE="$SCRIPT_DIR/tcs_runtime.env"
+if [[ -f "$ENV_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+    echo "ERROR: curl is required for endpoint health checks" >&2
+    exit 1
+fi
+
+CURL_TIMEOUT="${CURL_TIMEOUT:-5}"
+
+require_env() {
+    local name="$1"
+    local value="$2"
+    if [[ -z "$value" ]]; then
+        echo "ERROR: Environment variable $name must be set before running the topology benchmark" >&2
+        exit 1
+    fi
+}
+
+check_http_endpoint() {
+    local name="$1"
+    local url="$2"
+    local path="$3"
+    local request_url
+    request_url="${url%/}${path}"
+    local status
+    status=$(curl -sS -m "$CURL_TIMEOUT" -o /dev/null -w "%{http_code}" "$request_url" || true)
+    if [[ "$status" != "200" ]]; then
+        echo "ERROR: $name endpoint $request_url is not healthy (HTTP ${status:-unreachable})" >&2
+        exit 1
+    fi
+    echo "$name endpoint healthy ($request_url)"
+}
+
+require_env "VLLM_ENDPOINT" "${VLLM_ENDPOINT:-}"
+require_env "OLLAMA_ENDPOINT" "${OLLAMA_ENDPOINT:-}"
+require_env "QDRANT_URL" "${QDRANT_URL:-}"
+
+check_http_endpoint "vLLM" "${VLLM_ENDPOINT}" "/v1/models"
+check_http_endpoint "Ollama" "${OLLAMA_ENDPOINT}" "/api/tags"
+check_http_endpoint "Qdrant" "${QDRANT_URL}" "/healthz"
+
 # Default values
 CYCLES=8
 DATASET="data/goemotions_test.tsv"
 OUTPUT_DIR="results/benchmarks/topology"
 HARDWARE="${HARDWARE:-beelink}"
 CONFIG="${CONFIG:-}"
+
+DEFAULT_MODELS_DIR="${SCRIPT_DIR}/models"
+if [[ -z "${MODELS_DIR:-}" && -d "${DEFAULT_MODELS_DIR}" ]]; then
+    export MODELS_DIR="${DEFAULT_MODELS_DIR}"
+fi
+
+if [[ -z "${TOKENIZER_JSON:-}" ]]; then
+    declare -a TOKENIZER_CANDIDATES=()
+    if [[ -n "${MODELS_DIR:-}" ]]; then
+        TOKENIZER_CANDIDATES+=("${MODELS_DIR}/tokenizer.json")
+    fi
+    TOKENIZER_CANDIDATES+=("${SCRIPT_DIR}/tokenizer.json")
+
+    for candidate in "${TOKENIZER_CANDIDATES[@]}"; do
+        if [[ -f "${candidate}" ]]; then
+            export TOKENIZER_JSON="${candidate}"
+            break
+        fi
+    done
+fi
+
+if [[ -z "${TOKENIZER_JSON:-}" || ! -f "${TOKENIZER_JSON}" ]]; then
+    echo "ERROR: Tokenizer JSON not configured. Set TOKENIZER_JSON or place tokenizer.json under \\${MODELS_DIR:-${DEFAULT_MODELS_DIR}}." >&2
+    exit 1
+fi
 
 # Environment variable overrides for TCS parameters
 TCS_BETTI1_MAX="${TCS_BETTI1_MAX:-6}"
@@ -116,6 +186,8 @@ echo "Cycles: $CYCLES"
 echo "Dataset: $DATASET"
 echo "Output Directory: $OUTPUT_DIR"
 echo "Hardware Profile: $HARDWARE"
+echo "MODELS_DIR: ${MODELS_DIR:-<unset>}"
+echo "TOKENIZER_JSON: ${TOKENIZER_JSON}"
 echo "TCS_BETTI1_MAX: $TCS_BETTI1_MAX"
 echo "TCS_KNOT_COMPLEXITY_MAX: $TCS_KNOT_COMPLEXITY_MAX"
 if [[ -n "$CONFIG" ]]; then

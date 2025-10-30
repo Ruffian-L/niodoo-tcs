@@ -50,10 +50,11 @@ pkill -9 -f vllm
 cd /workspace/Niodoo-Final
 source venv/bin/activate
 export HF_HUB_ENABLE_HF_TRANSFER=0
-vllm serve Qwen/Qwen2.5-0.5B-Instruct --host 127.0.0.1 --port 8000 --gpu-memory-utilization 0.9 --trust-remote-code &
+export VLLM_ENDPOINT="${VLLM_ENDPOINT:-http://127.0.0.1:5001}"
+vllm serve Qwen/Qwen2.5-0.5B-Instruct --host 127.0.0.1 --port 5001 --gpu-memory-utilization 0.9 --trust-remote-code &
 
 # Wait ~60 seconds, then verify
-curl http://localhost:8000/v1/models
+curl ${VLLM_ENDPOINT}/v1/models
 ```
 
 ---
@@ -139,8 +140,8 @@ source tcs_runtime.env
 
 # Override specific settings
 export RNG_SEED=42                    # Deterministic randomness
-export QDRANT_URL=http://localhost:6333
-export VLLM_ENDPOINT=http://localhost:8000
+export QDRANT_URL=http://127.0.0.1:6333
+export VLLM_ENDPOINT=http://127.0.0.1:5001
 export RUST_LOG=info
 ```
 
