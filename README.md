@@ -14,28 +14,21 @@ Niodoo-Final is an advanced AI framework that **actually learns** from conversat
 
 **These visualizations show actual learning from production runs:**
 
-<table>
-<tr>
-<td width="50%">
-<img src="docs/images/rouge_improvements.png" alt="ROUGE Improvements" width="100%"/>
-<p align="center"><b>ROUGE Scores Improving</b><br/>System gets smarter over cycles</p>
-</td>
-<td width="50%">
-<img src="docs/images/entropy_stability.png" alt="Entropy Stability" width="100%"/>
-<p align="center"><b>Entropy Convergence</b><br/>Stabilizing at 2.0 bits target</p>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<img src="docs/images/latency_comparison.png" alt="Latency Comparison" width="100%"/>
-<p align="center"><b>Performance Comparison</b><br/>Baseline vs Hybrid pipeline</p>
-</td>
-<td width="50%">
-<img src="docs/images/learning_dashboard.png" alt="Learning Dashboard" width="100%"/>
-<p align="center"><b>Complete Metrics</b><br/>All learning indicators</p>
-</td>
-</tr>
-</table>
+### ROUGE Scores Improving Over Time
+![ROUGE Improvements](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/rouge_improvements.png)
+*System gets smarter over cycles - ROUGE scores showing measurable improvement*
+
+### Entropy Convergence
+![Entropy Stability](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/entropy_stability.png)
+*Consciousness Compass stabilizing at 2.0 bits target - learning working*
+
+### Performance Comparison
+![Latency Comparison](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/latency_comparison.png)
+*Baseline vs Hybrid pipeline - showing performance metrics*
+
+### Complete Learning Dashboard
+![Learning Dashboard](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/master/docs/images/learning_dashboard.png)
+*All learning indicators from production runs - real data*
 
 ### Real Responses Getting Smarter
 
