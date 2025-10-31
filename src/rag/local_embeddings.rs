@@ -27,11 +27,21 @@ impl Tokenizer {
         Ok(Tokenizer)
     }
 
+    pub fn new() -> Self {
+        Tokenizer
+    }
+
     pub fn encode(&self, _text: &str, _add_special_tokens: bool) -> Result<Encoding> {
         Ok(Encoding {
             ids: vec![],
             attention_mask: vec![],
         })
+    }
+}
+
+impl Default for Tokenizer {
+    fn default() -> Self {
+        Tokenizer
     }
 }
 
@@ -682,7 +692,7 @@ mod tests {
         let mock_tokenize =
             |text: &str, _tokenizer: &Tokenizer, _max_len: usize| (vec![1, 2, 3], vec![1, 1, 1]);
 
-        let tokenizer = Tokenizer::new(tokenizers::models::bpe::BPE::default());
+        let tokenizer = Tokenizer::default();
 
         // First call should compute
         let result1 = cache.get_or_compute("test", &tokenizer, 10, mock_tokenize);

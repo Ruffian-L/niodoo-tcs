@@ -8,7 +8,7 @@
 //! - Latency measurements
 //! - PAD mapping similarity for emotion accuracy
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{ensure, Context, Result};
 use blake3::hash as blake3_hash;
 use chrono::Utc;
 use clap::Parser;

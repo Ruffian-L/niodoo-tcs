@@ -90,7 +90,7 @@ pub mod gpu_acceleration;
 pub mod learning_analytics;
 pub mod metacognition;
 pub mod oscillatory;
-// pub mod persistent_learning; // TODO: Create this module
+pub mod persistent_learning; // Persistent learning harness shared by tests and runtime
 pub mod personal_memory;
 pub mod phase5_config;
 pub mod phase6_config;

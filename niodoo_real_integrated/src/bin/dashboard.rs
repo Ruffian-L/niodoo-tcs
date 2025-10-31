@@ -1,9 +1,3 @@
-use std::time::{Duration, Instant};
-use std::io;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use ratatui::{
     backend::CrosstermBackend,
     crossterm::{
@@ -16,6 +10,12 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Row, Table, Wrap},
     Frame, Terminal,
 };
+use std::io;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 struct DashboardState {
@@ -130,7 +130,7 @@ async fn monitor_logs(state: Arc<RwLock<DashboardState>>, log_file: String) {
             Ok(file) => {
                 let reader = BufReader::new(file);
                 let mut lines = reader.lines();
-                
+
                 // Skip to end if file exists
                 let mut line_count = 0;
                 while let Ok(Some(_)) = lines.next_line().await {
@@ -139,7 +139,7 @@ async fn monitor_logs(state: Arc<RwLock<DashboardState>>, log_file: String) {
                         break; // Skip old logs
                     }
                 }
-                
+
                 // Now read new lines
                 while let Ok(Some(line)) = lines.next_line().await {
                     parse_log_line(&state, &line).await;
@@ -151,7 +151,7 @@ async fn monitor_logs(state: Arc<RwLock<DashboardState>>, log_file: String) {
                 continue;
             }
         }
-        
+
         // File closed or EOF, wait and retry
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
@@ -160,7 +160,7 @@ async fn monitor_logs(state: Arc<RwLock<DashboardState>>, log_file: String) {
 async fn parse_log_line(state: &Arc<RwLock<DashboardState>>, line: &str) {
     let mut state_guard = state.write().await;
     state_guard.last_update = Instant::now();
-    
+
     // Parse iteration
     if line.contains("Iteration") || line.contains("iteration") {
         if let Some(iter_str) = extract_number_after(line, "iteration") {
@@ -169,7 +169,7 @@ async fn parse_log_line(state: &Arc<RwLock<DashboardState>>, line: &str) {
             }
         }
     }
-    
+
     // Parse prompt
     if line.contains("Processing prompt") || line.contains("prompt") {
         if let Some(prompt) = extract_prompt(line) {
@@ -180,7 +180,7 @@ async fn parse_log_line(state: &Arc<RwLock<DashboardState>>, line: &str) {
             }
         }
     }
-    
+
     // Parse latency
     if line.contains("latency_ms=") {
         if let Some(latency) = extract_number_after(line, "latency_ms=") {
@@ -190,7 +190,7 @@ async fn parse_log_line(state: &Arc<RwLock<DashboardState>>, line: &str) {
             }
         }
     }
-    
+
     // Parse ROUGE
     if line.contains("rouge=") || line.contains("ROUGE=") {
         if let Some(rouge_str) = extract_number_after(line, "rouge=") {
@@ -199,7 +199,7 @@ async fn parse_log_line(state: &Arc<RwLock<DashboardState>>, line: &str) {
             }
         }
     }
-    
+
     // Parse errors
     if line.contains("ERROR") || line.contains("WARN") || line.contains("failed") {
         let time = chrono::Local::now().format("%H:%M:%S").to_string();
@@ -214,22 +214,22 @@ async fn parse_log_line(state: &Arc<RwLock<DashboardState>>, line: &str) {
         }
         state_guard.failure_count += 1;
     }
-    
+
     // Parse QLoRA training
     if line.contains("QLoRA") || line.contains("LoRA training") {
         state_guard.qlora_trainings += 1;
     }
-    
+
     // Parse memory upserts
     if line.contains("stored ERAG memory") || line.contains("upsert") {
         state_guard.memory_upserts += 1;
     }
-    
+
     // Parse gRPC failures
     if line.contains("gRPC") && (line.contains("failed") || line.contains("fallback")) {
         state_guard.grpc_failures += 1;
     }
-    
+
     // Parse progress
     if line.contains("Progress:") {
         if let Some(percent_str) = extract_number_after(line, "(") {
@@ -238,13 +238,13 @@ async fn parse_log_line(state: &Arc<RwLock<DashboardState>>, line: &str) {
             }
         }
     }
-    
+
     // Calculate throughput
     if state_guard.last_update.elapsed().as_secs() > 0 {
         let elapsed = state_guard.last_update.elapsed().as_secs_f64();
         state_guard.throughput_ops_per_sec = state_guard.success_count as f64 / elapsed.max(1.0);
     }
-    
+
     drop(state_guard);
 }
 
@@ -267,12 +267,12 @@ fn extract_prompt(text: &str) -> Option<String> {
         let after = &text[pos..];
         // Try to extract quoted string or text after colon
         if let Some(start) = after.find('"') {
-            if let Some(end) = after[start+1..].find('"') {
-                return Some(after[start+1..start+1+end].to_string());
+            if let Some(end) = after[start + 1..].find('"') {
+                return Some(after[start + 1..start + 1 + end].to_string());
             }
         }
         if let Some(start) = after.find(':') {
-            let prompt = after[start+1..].trim();
+            let prompt = after[start + 1..].trim();
             if prompt.len() > 0 && prompt.len() < 100 {
                 return Some(prompt.to_string());
             }
@@ -283,25 +283,32 @@ fn extract_prompt(text: &str) -> Option<String> {
 
 fn ui(f: &mut Frame, state: &Arc<RwLock<DashboardState>>) {
     let state_guard = tokio::runtime::Handle::current().block_on(state.read());
-    
+
     let size = f.size();
-    
+
     // Create main layout
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Length(6),  // Metrics row
-            Constraint::Length(6),  // Current operation
-            Constraint::Min(8),     // Recent activity
-            Constraint::Length(3),  // Footer
+            Constraint::Length(3), // Header
+            Constraint::Length(6), // Metrics row
+            Constraint::Length(6), // Current operation
+            Constraint::Min(8),    // Recent activity
+            Constraint::Length(3), // Footer
         ])
         .split(size);
 
     // Header
-    let header_text = format!("🚀 NIODOO-TCS LIVE DASHBOARD | Status: {}", state_guard.status);
+    let header_text = format!(
+        "🚀 NIODOO-TCS LIVE DASHBOARD | Status: {}",
+        state_guard.status
+    );
     let header = Paragraph::new(header_text)
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(header, chunks[0]);
@@ -351,14 +358,22 @@ fn ui(f: &mut Frame, state: &Arc<RwLock<DashboardState>>) {
         Color::Red
     };
     let rouge_widget = Paragraph::new(rouge_text)
-        .block(Block::default().title("✨ Quality (ROUGE)").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("✨ Quality (ROUGE)")
+                .borders(Borders::ALL),
+        )
         .style(Style::default().fg(rouge_color));
     f.render_widget(rouge_widget, metrics_chunks[2]);
 
     // Throughput
     let throughput_text = format!("{:.2} ops/s", state_guard.throughput_ops_per_sec);
     let throughput_widget = Paragraph::new(throughput_text)
-        .block(Block::default().title("🏃 Throughput").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("🏃 Throughput")
+                .borders(Borders::ALL),
+        )
         .style(Style::default().fg(Color::Blue));
     f.render_widget(throughput_widget, metrics_chunks[3]);
 
@@ -369,7 +384,11 @@ fn ui(f: &mut Frame, state: &Arc<RwLock<DashboardState>>) {
         format!("📝 {}", state_guard.current_prompt)
     };
     let prompt_para = Paragraph::new(prompt_text)
-        .block(Block::default().title("Current Prompt").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("Current Prompt")
+                .borders(Borders::ALL),
+        )
         .style(Style::default().fg(Color::White))
         .wrap(Wrap { trim: true });
     f.render_widget(prompt_para, chunks[2]);
@@ -389,13 +408,21 @@ fn ui(f: &mut Frame, state: &Arc<RwLock<DashboardState>>) {
         .map(|(time, msg)| {
             Row::new(vec![
                 time.clone(),
-                if msg.len() > 40 { format!("{}...", &msg[..40]) } else { msg.clone() },
+                if msg.len() > 40 {
+                    format!("{}...", &msg[..40])
+                } else {
+                    msg.clone()
+                },
             ])
         })
         .collect();
 
     let error_table = Table::new(error_rows, &[Constraint::Length(12), Constraint::Min(30)])
-        .block(Block::default().title("🚨 Recent Errors").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("🚨 Recent Errors")
+                .borders(Borders::ALL),
+        )
         .style(Style::default().fg(Color::Red));
     f.render_widget(error_table, activity_chunks[0]);
 
@@ -416,7 +443,11 @@ fn ui(f: &mut Frame, state: &Arc<RwLock<DashboardState>>) {
         .collect();
 
     let prompt_list = List::new(prompt_items)
-        .block(Block::default().title("📋 Recent Prompts").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("📋 Recent Prompts")
+                .borders(Borders::ALL),
+        )
         .style(Style::default().fg(Color::Cyan));
     f.render_widget(prompt_list, activity_chunks[1]);
 

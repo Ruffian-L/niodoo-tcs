@@ -81,18 +81,18 @@ struct ComparisonResult {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    
+
     println!("🧪 QUICK TEST: Normal Qwen vs. NIODOO Pipeline");
     println!("{}", "=".repeat(60));
     println!("Testing {} prompts...", PROMPTS.len());
-    
+
     let client = Client::new();
     let mut results = Vec::new();
-    
+
     // Check services
-    let ollama_url = std::env::var("OLLAMA_ENDPOINT")
-        .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
-    
+    let ollama_url =
+        std::env::var("OLLAMA_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+
     println!("\n📡 Checking services...");
     let health = client.get(&format!("{}/api/tags", ollama_url)).send().await;
     if health.is_err() {
@@ -101,10 +101,10 @@ async fn main() -> Result<()> {
     } else {
         println!("✅ Ollama ready");
     }
-    
+
     // Test ALL 50 prompts (full test for GitHub release)
     let test_prompts: Vec<&str> = PROMPTS.iter().copied().collect();
-    
+
     // Initialize pipeline once (reuse for all prompts)
     println!("\n🔧 Initializing NIODOO pipeline...");
     use niodoo_real_integrated::config::CliArgs;
@@ -115,24 +115,29 @@ async fn main() -> Result<()> {
     };
     let mut pipeline = Pipeline::initialise(args).await?;
     println!("✅ Pipeline initialized");
-    
+
     for (idx, prompt) in test_prompts.iter().enumerate() {
-        println!("\n[{}/{}] Testing: {}", idx + 1, test_prompts.len(), &prompt[..prompt.len().min(60)]);
-        
+        println!(
+            "\n[{}/{}] Testing: {}",
+            idx + 1,
+            test_prompts.len(),
+            &prompt[..prompt.len().min(60)]
+        );
+
         // 1. Baseline Qwen (direct call)
         let baseline_start = Instant::now();
         let baseline_response = call_baseline_qwen(&client, &ollama_url, prompt).await?;
         let baseline_latency = baseline_start.elapsed().as_secs_f64() * 1000.0;
-        
+
         // 2. NIODOO Pipeline (reuse initialized pipeline)
         let niodoo_start = Instant::now();
         let cycle = pipeline.process_prompt(prompt).await?;
         let niodoo_response = cycle.hybrid_response;
         let niodoo_latency = niodoo_start.elapsed().as_secs_f64() * 1000.0;
-        
+
         // Analyze difference
         let diff_analysis = analyze_difference(&baseline_response, &niodoo_response);
-        
+
         results.push(ComparisonResult {
             prompt_id: idx,
             prompt: prompt.to_string(),
@@ -142,31 +147,35 @@ async fn main() -> Result<()> {
             niodoo_latency_ms: niodoo_latency,
             difference_analysis: diff_analysis,
         });
-        
+
         // Small delay to avoid overwhelming
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
-    
+
     // Write results
     let output_file = "results/qwen_comparison_test.json";
     std::fs::create_dir_all("results")?;
     let mut file = File::create(output_file)?;
     serde_json::to_writer_pretty(&mut file, &results)?;
-    
+
     println!("\n✅ Test complete!");
     println!("Results saved to: {}", output_file);
-    
+
     // Print summary
     println!("\n📊 SUMMARY:");
-    let avg_baseline_latency: f64 = results.iter().map(|r| r.baseline_latency_ms).sum::<f64>() / results.len() as f64;
-    let avg_niodoo_latency: f64 = results.iter().map(|r| r.niodoo_latency_ms).sum::<f64>() / results.len() as f64;
-    
+    let avg_baseline_latency: f64 =
+        results.iter().map(|r| r.baseline_latency_ms).sum::<f64>() / results.len() as f64;
+    let avg_niodoo_latency: f64 =
+        results.iter().map(|r| r.niodoo_latency_ms).sum::<f64>() / results.len() as f64;
+
     println!("  Baseline Qwen Avg Latency: {:.0}ms", avg_baseline_latency);
     println!("  NIODOO Pipeline Avg Latency: {:.0}ms", avg_niodoo_latency);
-    println!("  Overhead: {:.0}ms ({:.1}%)", 
+    println!(
+        "  Overhead: {:.0}ms ({:.1}%)",
         avg_niodoo_latency - avg_baseline_latency,
-        ((avg_niodoo_latency / avg_baseline_latency - 1.0) * 100.0));
-    
+        ((avg_niodoo_latency / avg_baseline_latency - 1.0) * 100.0)
+    );
+
     Ok(())
 }
 
@@ -177,60 +186,59 @@ async fn call_baseline_qwen(client: &Client, ollama_url: &str, prompt: &str) -> 
         prompt: String,
         stream: bool,
     }
-    
+
     #[derive(Deserialize)]
     struct OllamaResponse {
         response: String,
     }
-    
+
     let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "qwen2:0.5b".to_string());
-    
+
     let req = OllamaRequest {
         model,
         prompt: prompt.to_string(),
         stream: false,
     };
-    
+
     let response = client
         .post(&format!("{}/api/generate", ollama_url))
         .json(&req)
         .send()
         .await
         .context("Failed to call Ollama")?;
-    
+
     let ollama_resp: OllamaResponse = response.json().await?;
     Ok(ollama_resp.response)
 }
 
-
 fn analyze_difference(baseline: &str, niodoo: &str) -> String {
     let baseline_len = baseline.len();
     let niodoo_len = niodoo.len();
-    
+
     let len_diff = niodoo_len as i32 - baseline_len as i32;
     let len_diff_pct = if baseline_len > 0 {
         (len_diff as f64 / baseline_len as f64) * 100.0
     } else {
         0.0
     };
-    
+
     // Simple similarity check
     let words_baseline: Vec<&str> = baseline.split_whitespace().collect();
     let words_niodoo: Vec<&str> = niodoo.split_whitespace().collect();
-    
-    let common_words = words_baseline.iter()
+
+    let common_words = words_baseline
+        .iter()
         .filter(|w| words_niodoo.contains(w))
         .count();
-    
+
     let similarity = if !words_baseline.is_empty() {
         (common_words as f64 / words_baseline.len() as f64) * 100.0
     } else {
         0.0
     };
-    
+
     format!(
         "Length: baseline={} chars, niodoo={} chars (Δ{} chars, {:.1}%). Word similarity: {:.1}%",
         baseline_len, niodoo_len, len_diff, len_diff_pct, similarity
     )
 }
-

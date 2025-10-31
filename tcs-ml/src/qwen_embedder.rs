@@ -2,6 +2,7 @@
 //! Copyright (c) 2025 Jason Van Pham
 
 use ndarray::{concatenate, s, Array2, Array4, Axis, CowArray};
+use ort::execution_providers::ExecutionProvider;
 use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,9 +12,9 @@ use tokenizers::Tokenizer;
 
 use tracing::{debug, info, warn};
 
-use crate::f16;
 use crate::qwen_config::QwenConfig;
 use crate::qwen_error::{QwenError, QwenResult};
+use half::f16;
 
 /// Stateful Qwen embedder with KV cache management
 #[derive(Debug)]
@@ -39,10 +40,41 @@ impl QwenEmbedder {
 
         let env = Arc::new(Environment::builder().with_name("qwen_embedder").build()?);
 
-        let session = SessionBuilder::new(&env)?
+        // Build session with CUDA execution provider explicitly enabled
+        let session_builder = SessionBuilder::new(&env)?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
-            .with_intra_threads(4)?
-            .with_model_from_file(model_path)?;
+            .with_intra_threads(4)?;
+
+        // Explicitly enable CUDA execution provider if available
+        let session_builder = match session_builder
+            .with_execution_providers([ExecutionProvider::CUDA(Default::default())])
+        {
+            Ok(builder) => {
+                info!(
+                    target: "tcs-ml::qwen_embedder",
+                    "CUDA execution provider enabled successfully"
+                );
+                builder
+            }
+            Err(e) => {
+                warn!(
+                    target: "tcs-ml::qwen_embedder",
+                    error = %e,
+                    "Failed to enable CUDA execution provider, falling back to CPU"
+                );
+                // Retry without CUDA
+                SessionBuilder::new(&env)?
+                    .with_optimization_level(GraphOptimizationLevel::Level1)?
+                    .with_intra_threads(4)?
+            }
+        };
+
+        let session = session_builder.with_model_from_file(model_path)?;
+
+        info!(
+            target: "tcs-ml::qwen_embedder",
+            "ONNX Runtime session created (will use CUDA if available)"
+        );
 
         // Try to load tokenizer
         #[cfg(feature = "tokenizers")]
@@ -233,7 +265,7 @@ impl QwenEmbedder {
         let attention_mask_cow = CowArray::from(attention_mask_array.into_dyn());
         let position_ids_cow = CowArray::from(position_ids_array.into_dyn());
 
-        // Store all KV cache CowArrays first
+        // Store all KV cache CowArrays first, converting f32 to f16 for FP16 model
         let mut kv_cows = Vec::with_capacity(self.config.num_layers * 2);
         for layer in 0..self.config.num_layers {
             let key_name = format!("past_key_values.{}.key", layer);
@@ -242,8 +274,12 @@ impl QwenEmbedder {
             let key_cache = self.kv_cache.get(&key_name).unwrap();
             let value_cache = self.kv_cache.get(&value_name).unwrap();
 
-            let key_cow = CowArray::from(key_cache.view().into_dyn());
-            let value_cow = CowArray::from(value_cache.view().into_dyn());
+            // Convert f32 arrays to f16 for FP16 model
+            let key_f16: Array4<f16> = key_cache.mapv(|x| f16::from_f32(x));
+            let value_f16: Array4<f16> = value_cache.mapv(|x| f16::from_f32(x));
+
+            let key_cow = CowArray::from(key_f16.into_dyn());
+            let value_cow = CowArray::from(value_f16.into_dyn());
 
             kv_cows.push(key_cow);
             kv_cows.push(value_cow);
@@ -280,7 +316,18 @@ impl QwenEmbedder {
         }
 
         // Run inference (all CowArrays are still alive here)
+        let inference_start = std::time::Instant::now();
         let outputs = self.session.run(input_values)?;
+        let inference_duration = inference_start.elapsed();
+
+        if seq_len > 1 || context_before == 0 {
+            info!(
+                target: "tcs-ml::qwen_embedder",
+                duration_ms = inference_duration.as_secs_f64() * 1000.0,
+                seq_len,
+                "ONNX inference completed"
+            );
+        }
 
         if outputs.is_empty() {
             return Err(QwenError::NoOutputs);

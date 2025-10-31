@@ -1,11 +1,11 @@
-use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
 use csv::WriterBuilder;
 use serde::Serialize;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::{
     filter::FilterFn,
     fmt,
@@ -38,6 +38,32 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let mut pipeline = Pipeline::initialise(args.clone()).await?;
+
+    // Setup signal handlers for graceful shutdown
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_flag_clone = shutdown_flag.clone();
+
+    tokio::spawn(async move {
+        let mut ctrl_c = tokio::signal::ctrl_c();
+        #[cfg(unix)]
+        let mut sigterm = {
+            use tokio::signal::unix::{signal, SignalKind};
+            signal(SignalKind::terminate()).ok()
+        };
+
+        tokio::select! {
+            _ = ctrl_c.recv() => {
+                info!("Received SIGINT (Ctrl-C), shutting down gracefully...");
+            }
+            #[cfg(unix)]
+            _ = sigterm.as_mut().map(|s| s.recv()) => {
+                info!("Received SIGTERM, shutting down gracefully...");
+            }
+        }
+
+        shutdown_flag_clone.store(true, Ordering::Relaxed);
+    });
+
     let prompts = collect_prompts(&args, &pipeline)?;
 
     info!(
@@ -47,8 +73,20 @@ async fn main() -> Result<()> {
 
     let mut cycles = Vec::new();
     for prompt in prompts {
+        // Check if shutdown was requested
+        if shutdown_flag.load(Ordering::Relaxed) {
+            info!("Shutdown requested, stopping prompt processing");
+            break;
+        }
         let cycle = pipeline.process_prompt(&prompt.text).await?;
         cycles.push(cycle);
+    }
+
+    // Cleanup if shutdown was requested
+    if shutdown_flag.load(Ordering::Relaxed) {
+        if let Err(e) = pipeline.shutdown().await {
+            warn!(error = %e, "Error during pipeline shutdown");
+        }
     }
 
     match args.output {

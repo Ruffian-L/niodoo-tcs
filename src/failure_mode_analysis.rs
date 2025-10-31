@@ -295,7 +295,58 @@ impl FailureModeAnalyzer {
         }
     }
 
+    /// Detect failure using temporal TDA analysis results
+    /// This method should be called before analyze_and_recover when TDA analysis is available
+    /// Returns Some(FailureEvent) if TDA detects a failure pattern, None otherwise
+    pub fn detect_failure_with_tda(
+        &self,
+        failure_chain_severity: Option<f32>,
+        danger_signature_detected: bool,
+        pattern_type: Option<&str>,
+    ) -> Option<FailureEvent> {
+        // If failure chain detected with high severity, create failure event
+        if let Some(severity_score) = failure_chain_severity {
+            if severity_score > 5.0 {
+                return Some(FailureEvent {
+                    failure_mode: format!("temporal_tda_{}", pattern_type.unwrap_or("failure_chain")),
+                    severity: if severity_score > 8.0 {
+                        FailureSeverity::Critical
+                    } else if severity_score > 6.0 {
+                        FailureSeverity::Severe
+                    } else {
+                        FailureSeverity::Moderate
+                    },
+                    description: format!(
+                        "Temporal TDA detected failure chain with severity {:.2}: {}",
+                        severity_score,
+                        pattern_type.unwrap_or("unknown pattern")
+                    ),
+                    affected_components: vec!["topology".to_string(), "memory".to_string()],
+                    system_state: "tda_detected_failure".to_string(),
+                    active_processes: vec![],
+                    timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64(),
+                });
+            }
+        }
+
+        // If danger signature detected, create warning-level failure event
+        if danger_signature_detected {
+            return Some(FailureEvent {
+                failure_mode: "temporal_tda_danger_signature".to_string(),
+                severity: FailureSeverity::Moderate,
+                description: "Temporal TDA detected dangerous precursor pattern indicating potential failure".to_string(),
+                affected_components: vec!["topology".to_string()],
+                system_state: "tda_danger_signature".to_string(),
+                active_processes: vec![],
+                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64(),
+            });
+        }
+
+        None
+    }
+
     /// Analyze a potential failure and trigger recovery if needed
+    /// TDA analysis should be run first via detect_failure_with_tda if available
     pub async fn analyze_and_recover(
         &mut self,
         failure_event: &FailureEvent,

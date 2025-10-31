@@ -13,6 +13,7 @@ pub struct EmbeddingGenerator {
     dim: usize,
     server: Option<Mutex<PersistentPython>>,
     cache: crate::kv_cache::EmbeddingCache, // Add embedding cache for 5x speedup
+    device_telemetry: Mutex<Option<String>>,
 }
 
 impl EmbeddingGenerator {
@@ -21,6 +22,7 @@ impl EmbeddingGenerator {
             dim: dimensions,
             server: PersistentPython::spawn().map(Mutex::new).ok(),
             cache: crate::kv_cache::EmbeddingCache::new(1000), // Cache up to 1000 embeddings
+            device_telemetry: Mutex::new(None),
         }
     }
 
@@ -30,6 +32,7 @@ impl EmbeddingGenerator {
             dim: dimensions,
             server: PersistentPython::spawn().map(Mutex::new).ok(),
             cache: crate::kv_cache::EmbeddingCache::new(cache_size),
+            device_telemetry: Mutex::new(None),
         }
     }
 
@@ -40,8 +43,9 @@ impl EmbeddingGenerator {
         // Check cache first
         if let Some(cached_embedding) = self.cache.get(&chunk.text) {
             tracing::debug!(
-                "📦 Embedding cache hit for: {}",
-                chunk.text.chars().take(50).collect::<String>()
+                "📦 Embedding cache hit for: {} (device: {:?})",
+                chunk.text.chars().take(50).collect::<String>(),
+                self.current_device()
             );
             return Ok(Array1::from_vec(cached_embedding));
         }
@@ -68,6 +72,26 @@ impl EmbeddingGenerator {
         Ok(Array1::from_vec(embedding))
     }
 
+    fn current_device(&self) -> Option<String> {
+        self.device_telemetry
+            .lock()
+            .ok()
+            .and_then(|device| device.clone())
+    }
+
+    fn update_device(&self, reported: Option<String>) {
+        if let Some(device_name) = reported {
+            if let Ok(mut guard) = self.device_telemetry.lock() {
+                if guard.as_deref() != Some(device_name.as_str()) {
+                    tracing::info!("⚡ Embedding generator using device: {}", device_name);
+                    *guard = Some(device_name);
+                }
+            }
+        } else {
+            tracing::warn!("Embedding response missing device telemetry; retaining previous state");
+        }
+    }
+
     /// Get cache statistics for monitoring
     pub fn get_cache_stats(&self) -> (u64, u64, f64, usize) {
         self.cache.get_stats()
@@ -84,7 +108,11 @@ impl EmbeddingGenerator {
             return server
                 .lock()
                 .map_err(|e| anyhow!("Failed to lock Python server mutex: {}", e))?
-                .embed(text);
+                .embed(text)
+                .map(|response| {
+                    self.update_device(response.device.clone());
+                    response.embedding
+                });
         }
 
         let output = Command::new("python3")
@@ -94,10 +122,12 @@ impl EmbeddingGenerator {
             .output()
             .map_err(|e| anyhow!("Failed to run embedding script: {}", e))?;
 
-        Self::parse_embedding_output(output.stdout, output.stderr)
+        let response = Self::parse_embedding_output(output.stdout, output.stderr)?;
+        self.update_device(response.device.clone());
+        Ok(response.embedding)
     }
 
-    fn parse_embedding_output(stdout: Vec<u8>, stderr: Vec<u8>) -> Result<Vec<f32>> {
+    fn parse_embedding_output(stdout: Vec<u8>, stderr: Vec<u8>) -> Result<EmbeddingResponse> {
         let stdout = String::from_utf8(stdout)
             .map_err(|e| anyhow!("Invalid UTF-8 in embedding output: {}", e))?;
 
@@ -116,6 +146,8 @@ impl EmbeddingGenerator {
             .map(|v| v.as_f64().unwrap_or(0.0) as f32)
             .collect();
 
+        let device = result["device"].as_str().map(|d| d.to_string());
+
         if embedding_vec.is_empty() {
             let stderr = String::from_utf8_lossy(&stderr);
             tracing::warn!("Embedding script stderr: {}", stderr);
@@ -128,7 +160,10 @@ impl EmbeddingGenerator {
             "Generated real embedding with dimension: {}",
             embedding_vec.len()
         );
-        Ok(embedding_vec)
+        Ok(EmbeddingResponse {
+            embedding: embedding_vec,
+            device,
+        })
     }
 
     fn resolve_script() -> Result<String> {
@@ -204,7 +239,7 @@ impl PersistentPython {
         })
     }
 
-    fn embed(&mut self, text: &str) -> Result<Vec<f32>> {
+    fn embed(&mut self, text: &str) -> Result<EmbeddingResponse> {
         let request = serde_json::json!({ "text": text });
 
         serde_json::to_writer(&mut self.writer, &request)?;
@@ -231,8 +266,18 @@ impl PersistentPython {
             .map(|v| v.as_f64().unwrap_or(0.0) as f32)
             .collect();
 
-        Ok(embedding_vec)
+        let device = response["device"].as_str().map(|d| d.to_string());
+
+        Ok(EmbeddingResponse {
+            embedding: embedding_vec,
+            device,
+        })
     }
+}
+
+struct EmbeddingResponse {
+    embedding: Vec<f32>,
+    device: Option<String>,
 }
 
 impl Drop for PersistentPython {

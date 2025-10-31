@@ -66,7 +66,12 @@ fn calculate_emotional_conflict(state: &ConsciousnessState) -> EmotionalVector {
     ] {
         if primary == a || primary == b {
             let opposing = if primary == a { *b } else { *a };
-            if let Some((_, intensity)) = state.emotional_state.secondary_emotions.iter().find(|(e, _)| e == &opposing) {
+            if let Some((_, intensity)) = state
+                .emotional_state
+                .secondary_emotions
+                .iter()
+                .find(|(e, _)| e == &opposing)
+            {
                 conflict = conflict + EmotionalVector::new(*intensity, 0.0, 0.0, 0.0, 0.0);
             }
         }
@@ -74,7 +79,8 @@ fn calculate_emotional_conflict(state: &ConsciousnessState) -> EmotionalVector {
     for (emotion_a, intensity_a) in &state.emotional_state.secondary_emotions {
         for (emotion_b, intensity_b) in &state.emotional_state.secondary_emotions {
             if emotion_a != emotion_b && are_opposing(emotion_a, emotion_b) {
-                conflict = conflict + EmotionalVector::new((intensity_a + intensity_b) / 2.0, 0.0, 0.0, 0.0, 0.0);
+                conflict = conflict
+                    + EmotionalVector::new((intensity_a + intensity_b) / 2.0, 0.0, 0.0, 0.0, 0.0);
             }
         }
     }
@@ -597,12 +603,16 @@ impl RealConsciousnessTester {
     fn save_learning_events(&self) -> Result<(), Box<dyn std::error::Error>> {
         use std::fs::File;
         use std::io::Write;
-        
+
         let file_path = "learning_events.json";
         let json = serde_json::to_string_pretty(&self.learning_events)?;
         let mut file = File::create(file_path)?;
         file.write_all(json.as_bytes())?;
-        println!("✅ Saved {} learning events to {}", self.learning_events.len(), file_path);
+        println!(
+            "✅ Saved {} learning events to {}",
+            self.learning_events.len(),
+            file_path
+        );
         Ok(())
     }
 
@@ -785,7 +795,11 @@ mod tests {
             .push((EmotionType::Frustrated, 0.5));
 
         let conflict = calculate_emotional_conflict(&state);
-        assert!(conflict.magnitude() > 0.0, "Conflict should be non-zero: {:?}", conflict);
+        assert!(
+            conflict.magnitude() > 0.0,
+            "Conflict should be non-zero: {:?}",
+            conflict
+        );
     }
 
     #[tokio::test]
