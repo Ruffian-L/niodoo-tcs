@@ -1,15 +1,21 @@
 use anyhow::{Error, Result};
 use once_cell::sync::Lazy;
 use prometheus::{
-    register_counter, register_gauge, register_histogram, Counter, Encoder, Gauge, Histogram,
-    HistogramOpts, TextEncoder,
+    register_counter, register_gauge, register_histogram, register_histogram_vec, Counter, Encoder,
+    Gauge, Histogram, HistogramOpts, HistogramVec, TextEncoder,
 };
 
-static METRICS: Lazy<PipelineMetrics> =
-    Lazy::new(|| PipelineMetrics::new().expect("failed to initialise Prometheus metrics"));
+static METRICS: Lazy<PipelineMetrics> = Lazy::new(|| {
+    PipelineMetrics::new().unwrap_or_else(|e| {
+        panic!("Failed to initialize Prometheus metrics: {}. This is a critical infrastructure failure.", e);
+    })
+});
 
-static WEIGHTED_MEMORY_METRICS: Lazy<WeightedMemoryMetrics> =
-    Lazy::new(|| WeightedMemoryMetrics::new().expect("failed to initialise weighted memory metrics"));
+static WEIGHTED_MEMORY_METRICS: Lazy<WeightedMemoryMetrics> = Lazy::new(|| {
+    WeightedMemoryMetrics::new().unwrap_or_else(|e| {
+        panic!("Failed to initialize weighted memory metrics: {}. This is a critical infrastructure failure.", e);
+    })
+});
 
 #[derive(Clone)]
 pub struct PipelineMetrics {
@@ -18,6 +24,7 @@ pub struct PipelineMetrics {
     rouge_gauge: Gauge,
     threats_counter: Counter,
     healings_counter: Counter,
+    stage_latency: HistogramVec,
 }
 
 impl PipelineMetrics {
@@ -39,6 +46,13 @@ impl PipelineMetrics {
             register_counter!("niodoo_threat_cycles", "Threat detections").map_err(Error::from)?;
         let healings_counter = register_counter!("niodoo_healing_cycles", "Healing detections")
             .map_err(Error::from)?;
+        let stage_latency = register_histogram_vec!(
+            "niodoo_stage_latency_ms",
+            "Latency per pipeline stage in milliseconds",
+            &["stage"],
+            vec![5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
+        )
+        .map_err(Error::from)?;
 
         Ok(Self {
             entropy_gauge,
@@ -46,6 +60,7 @@ impl PipelineMetrics {
             rouge_gauge,
             threats_counter,
             healings_counter,
+            stage_latency,
         })
     }
 
@@ -68,6 +83,12 @@ impl PipelineMetrics {
         }
     }
 
+    pub fn record_stage_latency(&self, stage: &str, latency_ms: f64) {
+        self.stage_latency
+            .with_label_values(&[stage])
+            .observe(latency_ms);
+    }
+
     pub fn gather(&self) -> Result<String> {
         let metric_families = prometheus::gather();
         let mut buffer = Vec::new();
@@ -80,20 +101,190 @@ pub fn metrics() -> &'static PipelineMetrics {
     &METRICS
 }
 
-/// Tokenizer metrics stub
-pub struct TokenizerMetrics;
+#[derive(Clone)]
+pub struct CacheMetrics {
+    embedding_hits: Counter,
+    embedding_misses: Counter,
+    embedding_compression_ratio: Histogram,
+    collapse_hits: Counter,
+    collapse_misses: Counter,
+    collapse_compression_ratio: Histogram,
+    prefetch_jobs: Counter,
+    prefetch_failures: Counter,
+}
 
-impl TokenizerMetrics {
-    pub fn record_promotion(&self, _count: usize) {
-        // Stub implementation
+impl CacheMetrics {
+    fn new() -> Result<Self> {
+        let embedding_hits =
+            register_counter!("niodoo_embedding_cache_hits_total", "Embedding cache hits")
+                .map_err(Error::from)?;
+        let embedding_misses = register_counter!(
+            "niodoo_embedding_cache_misses_total",
+            "Embedding cache misses"
+        )
+        .map_err(Error::from)?;
+        let embedding_compression_ratio = register_histogram!(HistogramOpts::new(
+            "niodoo_embedding_cache_compression_ratio",
+            "Compression ratio for embedding cache entries"
+        )
+        .buckets(vec![0.2, 0.4, 0.6, 0.8, 0.9, 1.0, 1.1]))
+        .map_err(Error::from)?;
+
+        let collapse_hits =
+            register_counter!("niodoo_collapse_cache_hits_total", "Collapse cache hits")
+                .map_err(Error::from)?;
+        let collapse_misses = register_counter!(
+            "niodoo_collapse_cache_misses_total",
+            "Collapse cache misses"
+        )
+        .map_err(Error::from)?;
+        let collapse_compression_ratio = register_histogram!(HistogramOpts::new(
+            "niodoo_collapse_cache_compression_ratio",
+            "Compression ratio for collapse cache entries"
+        )
+        .buckets(vec![0.2, 0.4, 0.6, 0.8, 0.9, 1.0, 1.1]))
+        .map_err(Error::from)?;
+
+        let prefetch_jobs = register_counter!(
+            "niodoo_cache_prefetch_jobs_total",
+            "Number of cache prefetch jobs scheduled"
+        )
+        .map_err(Error::from)?;
+        let prefetch_failures = register_counter!(
+            "niodoo_cache_prefetch_failures_total",
+            "Failed cache prefetch attempts"
+        )
+        .map_err(Error::from)?;
+
+        Ok(Self {
+            embedding_hits,
+            embedding_misses,
+            embedding_compression_ratio,
+            collapse_hits,
+            collapse_misses,
+            collapse_compression_ratio,
+            prefetch_jobs,
+            prefetch_failures,
+        })
     }
 
-    pub fn record(&self, _vocab_size: f64, _oov_rate: f64) {
-        // Stub implementation
+    pub fn record_embedding_hit(&self, compression_ratio: Option<f64>) {
+        self.embedding_hits.inc();
+        if let Some(ratio) = compression_ratio {
+            self.observe_embedding_entry(ratio);
+        }
+    }
+
+    pub fn record_embedding_miss(&self) {
+        self.embedding_misses.inc();
+    }
+
+    pub fn observe_embedding_entry(&self, ratio: f64) {
+        self.embedding_compression_ratio.observe(ratio);
+    }
+
+    pub fn record_collapse_hit(&self, compression_ratio: Option<f64>) {
+        self.collapse_hits.inc();
+        if let Some(ratio) = compression_ratio {
+            self.observe_collapse_entry(ratio);
+        }
+    }
+
+    pub fn record_collapse_miss(&self) {
+        self.collapse_misses.inc();
+    }
+
+    pub fn observe_collapse_entry(&self, ratio: f64) {
+        self.collapse_compression_ratio.observe(ratio);
+    }
+
+    pub fn record_prefetch_job(&self) {
+        self.prefetch_jobs.inc();
+    }
+
+    pub fn record_prefetch_failure(&self) {
+        self.prefetch_failures.inc();
     }
 }
 
-static TOKENIZER_METRICS: Lazy<TokenizerMetrics> = Lazy::new(|| TokenizerMetrics);
+static CACHE_METRICS: Lazy<CacheMetrics> = Lazy::new(|| {
+    CacheMetrics::new().unwrap_or_else(|e| {
+        panic!(
+            "Failed to initialize cache metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
+    })
+});
+
+pub fn cache_metrics() -> &'static CacheMetrics {
+    &CACHE_METRICS
+}
+
+/// Tokenizer metrics instrumentation
+pub struct TokenizerMetrics {
+    promoted_per_cycle: Histogram,
+    pruned_per_cycle: Histogram,
+    promotion_duration_ms: Histogram,
+    vocab_size_gauge: Gauge,
+    oov_rate_gauge: Gauge,
+}
+
+impl TokenizerMetrics {
+    fn new() -> Result<Self> {
+        let promoted_per_cycle = register_histogram!(HistogramOpts::new(
+            "tokenizer_promoted_tokens",
+            "Tokens promoted during a promotion cycle",
+        )
+        .buckets(vec![0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0]))
+        .map_err(Error::from)?;
+
+        let pruned_per_cycle = register_histogram!(HistogramOpts::new(
+            "tokenizer_pruned_tokens",
+            "Tokens pruned during a promotion cycle",
+        )
+        .buckets(vec![0.0, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0]))
+        .map_err(Error::from)?;
+
+        let promotion_duration_ms = register_histogram!(HistogramOpts::new(
+            "tokenizer_promotion_duration_ms",
+            "Promotion cycle duration in milliseconds",
+        )
+        .buckets(vec![5.0, 10.0, 20.0, 50.0, 100.0, 250.0, 500.0, 1000.0]))
+        .map_err(Error::from)?;
+
+        let vocab_size_gauge = register_gauge!(
+            "tokenizer_vocab_size",
+            "Total vocabulary size (base + extended)"
+        )
+        .map_err(Error::from)?;
+
+        let oov_rate_gauge =
+            register_gauge!("tokenizer_oov_rate", "Estimated out-of-vocabulary rate")
+                .map_err(Error::from)?;
+
+        Ok(Self {
+            promoted_per_cycle,
+            pruned_per_cycle,
+            promotion_duration_ms,
+            vocab_size_gauge,
+            oov_rate_gauge,
+        })
+    }
+
+    pub fn record_promotion(&self, promoted: usize, pruned: usize, duration_ms: f64) {
+        self.promoted_per_cycle.observe(promoted as f64);
+        self.pruned_per_cycle.observe(pruned as f64);
+        self.promotion_duration_ms.observe(duration_ms.max(0.0));
+    }
+
+    pub fn record(&self, vocab_size: f64, oov_rate: f64) {
+        self.vocab_size_gauge.set(vocab_size.max(0.0));
+        self.oov_rate_gauge.set(oov_rate.clamp(0.0, 1.0));
+    }
+}
+
+static TOKENIZER_METRICS: Lazy<TokenizerMetrics> =
+    Lazy::new(|| TokenizerMetrics::new().expect("failed to initialise tokenizer metrics"));
 
 pub fn tokenizer_metrics() -> &'static TokenizerMetrics {
     &TOKENIZER_METRICS
