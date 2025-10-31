@@ -1,11 +1,15 @@
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
+use chrono::Utc;
 use clap::{Parser, ValueEnum};
+use hex;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -22,7 +26,41 @@ where
     K: Into<String>,
     V: Into<String>,
 {
-    env_store().write().insert(key.into(), value.into());
+    let key = key.into();
+    let value = value.into();
+    env_store().write().insert(key.clone(), value.clone());
+
+    if let Err(error) = append_config_audit_log(&key, &value) {
+        warn!(%key, ?error, "failed to record configuration override");
+    }
+}
+
+fn append_config_audit_log(key: &str, value: &str) -> Result<()> {
+    let path = PathBuf::from("./logs/config_audit.log");
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "unable to create config audit directory at {}",
+                parent.display()
+            )
+        })?;
+    }
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("unable to open config audit log at {}", path.display()))?;
+
+    let timestamp = Utc::now().to_rfc3339();
+    let digest = blake3::hash(value.as_bytes());
+    writeln!(
+        file,
+        "{timestamp} key={key} value_hash={} char_count={}",
+        hex::encode(digest.as_bytes()),
+        value.chars().count()
+    )?;
+    Ok(())
 }
 
 pub fn env_value(key: &str) -> Option<String> {
@@ -321,6 +359,92 @@ impl FromStr for TopologyMode {
     }
 }
 
+fn default_security_rate_limit_window_secs() -> u64 {
+    60
+}
+
+fn default_security_rate_limit_max_requests() -> u32 {
+    45
+}
+
+fn default_security_allow_control_chars() -> bool {
+    false
+}
+
+fn default_security_banned_patterns() -> Vec<String> {
+    vec![
+        r"(?i)\b(?:drop|delete)\s+(?:table|database)\b".to_string(),
+        r"(?i)\bunion\s+select\b".to_string(),
+        r"(?i)<script".to_string(),
+        r"(?i)\brm\s+-rf\s+/".to_string(),
+    ]
+}
+
+fn default_security_audit_log_path() -> String {
+    "./logs/security_audit.log".to_string()
+}
+
+fn default_security_prompt_max_chars() -> usize {
+    0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityConfig {
+    #[serde(default = "default_security_rate_limit_window_secs")]
+    pub rate_limit_window_secs: u64,
+    #[serde(default = "default_security_rate_limit_max_requests")]
+    pub rate_limit_max_requests: u32,
+    #[serde(default = "default_security_allow_control_chars")]
+    pub allow_control_chars: bool,
+    #[serde(default = "default_security_banned_patterns")]
+    pub banned_patterns: Vec<String>,
+    #[serde(default = "default_security_audit_log_path")]
+    pub audit_log_path: String,
+    #[serde(default = "default_security_prompt_max_chars")]
+    pub prompt_max_chars: usize,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            rate_limit_window_secs: default_security_rate_limit_window_secs(),
+            rate_limit_max_requests: default_security_rate_limit_max_requests(),
+            allow_control_chars: default_security_allow_control_chars(),
+            banned_patterns: default_security_banned_patterns(),
+            audit_log_path: default_security_audit_log_path(),
+            prompt_max_chars: default_security_prompt_max_chars(),
+        }
+    }
+}
+
+impl SecurityConfig {
+    pub fn finalize(&mut self, prompt_max_chars: usize) {
+        if self.prompt_max_chars == 0 {
+            self.prompt_max_chars = prompt_max_chars;
+        }
+        if self.banned_patterns.is_empty() {
+            self.banned_patterns = default_security_banned_patterns();
+        }
+        if self.audit_log_path.trim().is_empty() {
+            self.audit_log_path = default_security_audit_log_path();
+        }
+        if self.rate_limit_window_secs == 0 {
+            self.rate_limit_window_secs = default_security_rate_limit_window_secs();
+        }
+        if self.rate_limit_max_requests == 0 {
+            self.rate_limit_max_requests = default_security_rate_limit_max_requests();
+        }
+    }
+
+    pub fn parse_patterns(raw: &str) -> Vec<String> {
+        raw.split(|c| c == ',' || c == ';')
+            .map(|pattern| pattern.trim())
+            .filter(|pattern| !pattern.is_empty())
+            .map(|pattern| pattern.to_string())
+            .collect()
+    }
+}
+
 fn default_max_retries() -> u32 {
     3 // Keep retry budget tight to avoid runaway latency
 }
@@ -390,6 +514,21 @@ fn default_mcts_c_scale() -> f64 {
 }
 fn default_cache_capacity() -> usize {
     256
+}
+fn default_cache_compression_min_bytes() -> usize {
+    2048
+}
+fn default_cache_prefetch_prompts() -> usize {
+    8
+}
+fn default_cache_prefetch_top_hits() -> usize {
+    3
+}
+fn default_cache_prefetch_parallelism() -> usize {
+    2
+}
+fn default_cache_prefetch_enabled() -> bool {
+    true
 }
 fn default_retry_backoff_exponent_cap() -> u32 {
     10
@@ -630,6 +769,16 @@ pub struct RuntimeConfig {
     // Caches and retry
     #[serde(default = "default_cache_capacity")]
     pub cache_capacity: usize,
+    #[serde(default = "default_cache_compression_min_bytes")]
+    pub cache_compression_min_bytes: usize,
+    #[serde(default = "default_cache_prefetch_enabled")]
+    pub cache_prefetch_enabled: bool,
+    #[serde(default = "default_cache_prefetch_prompts")]
+    pub cache_prefetch_prompts: usize,
+    #[serde(default = "default_cache_prefetch_top_hits")]
+    pub cache_prefetch_top_hits: usize,
+    #[serde(default = "default_cache_prefetch_parallelism")]
+    pub cache_prefetch_parallelism: usize,
     #[serde(default = "default_retry_backoff_exponent_cap")]
     pub retry_backoff_exponent_cap: u32,
 
@@ -639,14 +788,24 @@ pub struct RuntimeConfig {
     /// Disable memory storage to ERAG/Qdrant (best-effort store becomes a no-op)
     #[serde(default)]
     pub disable_memory_store: bool,
+
+    // Resource budget and degradation configuration
+    #[serde(default)]
+    pub resource_budget_config: ResourceBudgetConfig,
+    #[serde(default)]
+    pub degradation_config: DegradationConfig,
+    #[serde(default)]
+    pub temporal_tda_config: TemporalTDAConfig,
+    #[serde(default)]
+    pub security: SecurityConfig,
 }
 
 /// Weighted Episodic Memory configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WeightedMemoryConfig {
-    /// Fitness weights [temporal, pad, beta1, retrieval, consonance]
+    /// Fitness weights [temporal, pad, beta1, retrieval, consonance, resource_penalty]
     #[serde(default = "default_fitness_weights")]
-    pub fitness_weights: [f32; 5],
+    pub fitness_weights: [f32; 6],
     /// Enable weight evolution
     #[serde(default = "default_weight_evolution_enabled")]
     pub weight_evolution_enabled: bool,
@@ -670,8 +829,8 @@ pub struct WeightedMemoryConfig {
     pub gpu_device: String,
 }
 
-fn default_fitness_weights() -> [f32; 5] {
-    [0.25, 0.20, 0.20, 0.15, 0.20] // temporal, pad, beta1, retrieval, consonance
+fn default_fitness_weights() -> [f32; 6] {
+    [0.20, 0.18, 0.18, 0.13, 0.18, 0.13] // temporal, pad, beta1, retrieval, consonance, resource_penalty
 }
 
 fn default_weight_evolution_enabled() -> bool {
@@ -702,6 +861,178 @@ fn default_gpu_device() -> String {
     "cpu".to_string()
 }
 
+/// Resource budget configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceBudgetConfig {
+    /// Maximum token budget
+    #[serde(default = "default_tokens_max")]
+    pub tokens_max: u64,
+    /// Maximum API rate limit per window
+    #[serde(default = "default_api_rate_limit_max")]
+    pub api_rate_limit_max: u64,
+    /// Maximum compute cycles (for normalization)
+    #[serde(default = "default_compute_cycles_max")]
+    pub compute_cycles_max: u64,
+    /// Maximum memory bandwidth (for normalization)
+    #[serde(default = "default_memory_bandwidth_max")]
+    pub memory_bandwidth_max: u64,
+}
+
+fn default_tokens_max() -> u64 {
+    100_000
+}
+
+fn default_api_rate_limit_max() -> u64 {
+    100
+}
+
+fn default_compute_cycles_max() -> u64 {
+    1_000_000
+}
+
+fn default_memory_bandwidth_max() -> u64 {
+    100_000
+}
+
+impl Default for ResourceBudgetConfig {
+    fn default() -> Self {
+        Self {
+            tokens_max: default_tokens_max(),
+            api_rate_limit_max: default_api_rate_limit_max(),
+            compute_cycles_max: default_compute_cycles_max(),
+            memory_bandwidth_max: default_memory_bandwidth_max(),
+        }
+    }
+}
+
+/// Graceful degradation configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DegradationConfig {
+    /// Tier 1 threshold (70-100% resources)
+    #[serde(default = "default_tier1_threshold")]
+    pub tier1_threshold: f32,
+    /// Tier 2 threshold (50-70% resources)
+    #[serde(default = "default_tier2_threshold")]
+    pub tier2_threshold: f32,
+    /// Tier 3 threshold (30-50% resources)
+    #[serde(default = "default_tier3_threshold")]
+    pub tier3_threshold: f32,
+    /// Tier 4 threshold (0-30% resources)
+    #[serde(default = "default_tier4_threshold")]
+    pub tier4_threshold: f32,
+    /// Resource penalty multiplier for tier 1
+    #[serde(default = "default_tier1_multiplier")]
+    pub tier1_multiplier: f32,
+    /// Resource penalty multiplier for tier 2
+    #[serde(default = "default_tier2_multiplier")]
+    pub tier2_multiplier: f32,
+    /// Resource penalty multiplier for tier 3
+    #[serde(default = "default_tier3_multiplier")]
+    pub tier3_multiplier: f32,
+    /// Resource penalty multiplier for tier 4
+    #[serde(default = "default_tier4_multiplier")]
+    pub tier4_multiplier: f32,
+}
+
+fn default_tier1_threshold() -> f32 {
+    0.70
+}
+
+fn default_tier2_threshold() -> f32 {
+    0.50
+}
+
+fn default_tier3_threshold() -> f32 {
+    0.30
+}
+
+fn default_tier4_threshold() -> f32 {
+    0.0
+}
+
+fn default_tier1_multiplier() -> f32 {
+    1.2
+}
+
+fn default_tier2_multiplier() -> f32 {
+    2.0
+}
+
+fn default_tier3_multiplier() -> f32 {
+    5.0
+}
+
+fn default_tier4_multiplier() -> f32 {
+    10.0
+}
+
+impl Default for DegradationConfig {
+    fn default() -> Self {
+        Self {
+            tier1_threshold: default_tier1_threshold(),
+            tier2_threshold: default_tier2_threshold(),
+            tier3_threshold: default_tier3_threshold(),
+            tier4_threshold: default_tier4_threshold(),
+            tier1_multiplier: default_tier1_multiplier(),
+            tier2_multiplier: default_tier2_multiplier(),
+            tier3_multiplier: default_tier3_multiplier(),
+            tier4_multiplier: default_tier4_multiplier(),
+        }
+    }
+}
+
+/// Temporal TDA configuration for failure chain detection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemporalTDAConfig {
+    /// Maximum history window size for topological snapshots
+    #[serde(default = "default_temporal_tda_window_size")]
+    pub window_size: usize,
+    /// Wasserstein distance threshold for detecting transitions
+    #[serde(default = "default_temporal_tda_wasserstein_threshold")]
+    pub wasserstein_threshold: f32,
+    /// Minimum severity score to trigger failure detection
+    #[serde(default = "default_temporal_tda_severity_threshold")]
+    pub severity_threshold: f32,
+    /// Maximum number of failure chains to track
+    #[serde(default = "default_temporal_tda_max_chains")]
+    pub max_chains: usize,
+    /// Enable temporal TDA detection
+    #[serde(default = "default_temporal_tda_enabled")]
+    pub enabled: bool,
+}
+
+fn default_temporal_tda_window_size() -> usize {
+    20
+}
+
+fn default_temporal_tda_wasserstein_threshold() -> f32 {
+    0.5
+}
+
+fn default_temporal_tda_severity_threshold() -> f32 {
+    5.0
+}
+
+fn default_temporal_tda_max_chains() -> usize {
+    10
+}
+
+fn default_temporal_tda_enabled() -> bool {
+    true
+}
+
+impl Default for TemporalTDAConfig {
+    fn default() -> Self {
+        Self {
+            window_size: default_temporal_tda_window_size(),
+            wasserstein_threshold: default_temporal_tda_wasserstein_threshold(),
+            severity_threshold: default_temporal_tda_severity_threshold(),
+            max_chains: default_temporal_tda_max_chains(),
+            enabled: default_temporal_tda_enabled(),
+        }
+    }
+}
+
 impl Default for WeightedMemoryConfig {
     fn default() -> Self {
         Self {
@@ -724,8 +1055,9 @@ impl RuntimeConfig {
         if let Some(ref config_path) = args.config {
             let file = std::fs::read_to_string(config_path)
                 .with_context(|| format!("unable to read config file {config_path}"))?;
-            let cfg: RuntimeConfig = serde_yaml::from_str(&file)
+            let mut cfg: RuntimeConfig = serde_yaml::from_str(&file)
                 .with_context(|| format!("invalid YAML in {config_path}"))?;
+            cfg.security.finalize(cfg.prompt_max_chars);
             return Ok(cfg);
         }
 
@@ -930,6 +1262,39 @@ impl RuntimeConfig {
         let prompt_max_chars = env_with_fallback(&["PROMPT_MAX_CHARS"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_prompt_max_chars);
+        let security_rate_limit_window_secs = env_with_fallback(&[
+            "SECURITY_PROMPT_RATE_WINDOW_SECS",
+            "PIPELINE_RATE_LIMIT_WINDOW_SECS",
+        ])
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or_else(default_security_rate_limit_window_secs);
+        let security_rate_limit_max_requests = env_with_fallback(&[
+            "SECURITY_PROMPT_RATE_LIMIT",
+            "SECURITY_RATE_LIMIT_MAX_REQUESTS",
+            "PIPELINE_RATE_LIMIT_MAX_REQUESTS",
+        ])
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or_else(default_security_rate_limit_max_requests);
+        let security_allow_control_chars = env_with_fallback(&["SECURITY_ALLOW_CONTROL_CHARS"])
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or_else(default_security_allow_control_chars);
+        let mut security_banned_patterns = env_with_fallback(&["SECURITY_BANNED_PATTERNS"])
+            .map(|raw| SecurityConfig::parse_patterns(&raw))
+            .unwrap_or_else(default_security_banned_patterns);
+        if security_banned_patterns.is_empty() {
+            security_banned_patterns = default_security_banned_patterns();
+        }
+        let security_audit_log_path = env_with_fallback(&["SECURITY_AUDIT_LOG_PATH"])
+            .unwrap_or_else(default_security_audit_log_path);
+        let mut security = SecurityConfig {
+            rate_limit_window_secs: security_rate_limit_window_secs,
+            rate_limit_max_requests: security_rate_limit_max_requests,
+            allow_control_chars: security_allow_control_chars,
+            banned_patterns: security_banned_patterns,
+            audit_log_path: security_audit_log_path,
+            prompt_max_chars,
+        };
+        security.finalize(prompt_max_chars);
         let embedding_cache_ttl_secs = env_with_fallback(&["EMBEDDING_CACHE_TTL_SECS"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_embedding_cache_ttl_secs);
@@ -991,6 +1356,22 @@ impl RuntimeConfig {
         let cache_capacity = env_with_fallback(&["CACHE_CAPACITY"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_cache_capacity);
+        let cache_compression_min_bytes = env_with_fallback(&["CACHE_COMPRESSION_MIN_BYTES"])
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(default_cache_compression_min_bytes);
+        let cache_prefetch_enabled = env_with_fallback(&["CACHE_PREFETCH_ENABLED"])
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or_else(default_cache_prefetch_enabled);
+        let cache_prefetch_prompts = env_with_fallback(&["CACHE_PREFETCH_PROMPTS"])
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or_else(default_cache_prefetch_prompts);
+        let cache_prefetch_top_hits = env_with_fallback(&["CACHE_PREFETCH_TOP_HITS"])
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or_else(default_cache_prefetch_top_hits);
+        let cache_prefetch_parallelism = env_with_fallback(&["CACHE_PREFETCH_PARALLELISM"])
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|v| v.clamp(1, 16))
+            .unwrap_or_else(default_cache_prefetch_parallelism);
         let retry_backoff_exponent_cap = env_with_fallback(&["RETRY_BACKOFF_EXPONENT_CAP"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_retry_backoff_exponent_cap);
@@ -1107,17 +1488,196 @@ impl RuntimeConfig {
             mcts_c_min_std,
             mcts_c_scale,
             cache_capacity,
+            cache_compression_min_bytes,
+            cache_prefetch_enabled,
+            cache_prefetch_prompts,
+            cache_prefetch_top_hits,
+            cache_prefetch_parallelism,
             retry_backoff_exponent_cap,
+            security,
             weighted_memory_config: WeightedMemoryConfig::default(),
-            disable_memory_store: env_with_fallback(&["DISABLE_MEMORY_STORE"])\
-                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))\
+            disable_memory_store: env_with_fallback(&["DISABLE_MEMORY_STORE"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
+            resource_budget_config: ResourceBudgetConfig::default(),
+            degradation_config: DegradationConfig::default(),
+            temporal_tda_config: TemporalTDAConfig::default(),
         };
 
         info!(model = %runtime.curator_model_name, "Config loaded: CURATOR_MODEL={}", runtime.curator_model_name);
         info!(mode = ?runtime.topology_mode, "Topology mode configured");
 
+        runtime.validate()?;
         Ok(runtime)
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        // Validate numeric ranges
+        if self.prompt_max_chars > 1_000_000 {
+            return Err(anyhow::anyhow!(
+                "prompt_max_chars ({}) exceeds maximum allowed value (1,000,000)",
+                self.prompt_max_chars
+            ));
+        }
+
+        if self.generation_max_tokens > 100_000 {
+            return Err(anyhow::anyhow!(
+                "generation_max_tokens ({}) exceeds maximum allowed value (100,000)",
+                self.generation_max_tokens
+            ));
+        }
+
+        if self.generation_timeout_secs > 3600 {
+            return Err(anyhow::anyhow!(
+                "generation_timeout_secs ({}) exceeds maximum allowed value (3600)",
+                self.generation_timeout_secs
+            ));
+        }
+
+        if self.temperature < 0.0 || self.temperature > 2.0 {
+            return Err(anyhow::anyhow!(
+                "temperature ({}) must be between 0.0 and 2.0",
+                self.temperature
+            ));
+        }
+
+        if self.top_p < 0.0 || self.top_p > 1.0 {
+            return Err(anyhow::anyhow!(
+                "top_p ({}) must be between 0.0 and 1.0",
+                self.top_p
+            ));
+        }
+
+        // Validate paths exist (if not mock mode)
+        if !self.mock_mode {
+            if !Path::new(&self.training_data_path).exists() {
+                warn!(path = %self.training_data_path, "training_data_path does not exist");
+            }
+            if !Path::new(&self.emotional_seed_path).exists() {
+                warn!(path = %self.emotional_seed_path, "emotional_seed_path does not exist");
+            }
+        }
+
+        // Validate URLs
+        if !self.vllm_endpoint.starts_with("http://") && !self.vllm_endpoint.starts_with("https://")
+        {
+            return Err(anyhow::anyhow!(
+                "vllm_endpoint ({}) must be a valid HTTP(S) URL",
+                self.vllm_endpoint
+            ));
+        }
+
+        if !self.qdrant_url.starts_with("http://") && !self.qdrant_url.starts_with("https://") {
+            return Err(anyhow::anyhow!(
+                "qdrant_url ({}) must be a valid HTTP(S) URL",
+                self.qdrant_url
+            ));
+        }
+
+        if !self.ollama_endpoint.starts_with("http://")
+            && !self.ollama_endpoint.starts_with("https://")
+        {
+            return Err(anyhow::anyhow!(
+                "ollama_endpoint ({}) must be a valid HTTP(S) URL",
+                self.ollama_endpoint
+            ));
+        }
+
+        // Validate security config
+        if self.security.prompt_max_chars > 0
+            && self.prompt_max_chars > self.security.prompt_max_chars
+        {
+            return Err(anyhow::anyhow!(
+                "prompt_max_chars ({}) exceeds security.prompt_max_chars ({})",
+                self.prompt_max_chars,
+                self.security.prompt_max_chars
+            ));
+        }
+
+        if self.security.rate_limit_window_secs == 0 {
+            return Err(anyhow::anyhow!(
+                "security.rate_limit_window_secs must be greater than 0"
+            ));
+        }
+
+        // Validate Qdrant vector dimension
+        if self.qdrant_vector_dim == 0 || self.qdrant_vector_dim > 65536 {
+            return Err(anyhow::anyhow!(
+                "qdrant_vector_dim ({}) must be between 1 and 65536",
+                self.qdrant_vector_dim
+            ));
+        }
+
+        // Validate cache capacity
+        if self.cache_capacity == 0 {
+            return Err(anyhow::anyhow!(
+                "cache_capacity ({}) must be greater than 0",
+                self.cache_capacity
+            ));
+        }
+
+        // Validate retry configurations
+        if self.phase2_max_retries > 100 {
+            return Err(anyhow::anyhow!(
+                "phase2_max_retries ({}) exceeds maximum allowed value (100)",
+                self.phase2_max_retries
+            ));
+        }
+
+        if self.phase2_retry_base_delay_ms == 0 {
+            return Err(anyhow::anyhow!(
+                "phase2_retry_base_delay_ms ({}) must be greater than 0",
+                self.phase2_retry_base_delay_ms
+            ));
+        }
+
+        // Validate similarity threshold
+        if self.similarity_threshold < 0.0 || self.similarity_threshold > 1.0 {
+            return Err(anyhow::anyhow!(
+                "similarity_threshold ({}) must be between 0.0 and 1.0",
+                self.similarity_threshold
+            ));
+        }
+
+        // Validate curator thresholds
+        if self.curator_quality_threshold < 0.0 || self.curator_quality_threshold > 1.0 {
+            return Err(anyhow::anyhow!(
+                "curator_quality_threshold ({}) must be between 0.0 and 1.0",
+                self.curator_quality_threshold
+            ));
+        }
+
+        if self.curator_minimum_threshold < 0.0 || self.curator_minimum_threshold > 1.0 {
+            return Err(anyhow::anyhow!(
+                "curator_minimum_threshold ({}) must be between 0.0 and 1.0",
+                self.curator_minimum_threshold
+            ));
+        }
+
+        // Validate timeout values
+        if self.curator_timeout_secs == 0 {
+            return Err(anyhow::anyhow!(
+                "curator_timeout_secs ({}) must be greater than 0",
+                self.curator_timeout_secs
+            ));
+        }
+
+        // Validate cache TTL values
+        if self.embedding_cache_ttl_secs == 0 {
+            return Err(anyhow::anyhow!(
+                "embedding_cache_ttl_secs ({}) must be greater than 0",
+                self.embedding_cache_ttl_secs
+            ));
+        }
+
+        if self.collapse_cache_ttl_secs == 0 {
+            return Err(anyhow::anyhow!(
+                "collapse_cache_ttl_secs ({}) must be greater than 0",
+                self.collapse_cache_ttl_secs
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -1153,11 +1713,12 @@ impl CuratorConfig {
     pub fn from_runtime_config(config: &RuntimeConfig) -> Self {
         // Determine curator backend from env or default to vLLM
         let curator_backend = CuratorBackend::from_env();
-        
+
         // If vLLM backend, use separate endpoint if configured, otherwise use main vLLM endpoint
-        let curator_vllm_endpoint = env_with_fallback(&["CURATOR_VLLM_ENDPOINT", "CURATOR_ENDPOINT"])
-            .unwrap_or_else(|| config.vllm_endpoint.clone());
-        
+        let curator_vllm_endpoint =
+            env_with_fallback(&["CURATOR_VLLM_ENDPOINT", "CURATOR_ENDPOINT"])
+                .unwrap_or_else(|| config.vllm_endpoint.clone());
+
         Self {
             vllm_endpoint: curator_vllm_endpoint,
             ollama_endpoint: config.ollama_endpoint.clone(),
