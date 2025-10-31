@@ -36,6 +36,8 @@ use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
 
+const DEFAULT_CACHE_CAPACITY: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(256) };
+
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
 pub mod proto {
@@ -320,7 +322,7 @@ impl Pipeline {
         };
 
         let cache_capacity =
-            NonZeroUsize::new(config.cache_capacity).unwrap_or(NonZeroUsize::new(256).unwrap());
+            NonZeroUsize::new(config.cache_capacity).unwrap_or(DEFAULT_CACHE_CAPACITY);
 
         Ok(Self {
             config: config.clone(),
@@ -851,7 +853,7 @@ impl Pipeline {
         let solution_path = experience.solution_path.clone();
         self.erag
             .upsert_memory(
-                &experience.embedding.as_ref().unwrap(),
+                &experience_embedding,
                 &pad_state,
                 &compass,
                 &experience_input,
