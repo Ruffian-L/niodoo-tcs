@@ -1,3 +1,21 @@
+## 2025-01-XX — Added Zenodo DOI Badge and Research Paper Link to README
+
+### Summary
+Added prominent DOI badge and research paper link at the top of README.md to showcase published research backing.
+
+### Changes
+- **DOI Badge**: Added Zenodo DOI badge `[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17496444.svg)](https://doi.org/10.5281/zenodo.17496444)` at the top of README
+- **Title Update**: Changed title from "Niodoo-Final: Topological Cognitive AI System" to "NIODOO: Topological AI Consciousness Simulation" for better branding
+- **Research Paper Announcement**: Added prominent "RESEARCH PAPER PUBLISHED!" announcement with direct link to Zenodo paper
+- **Placement**: DOI badge placed front-and-center immediately after title for maximum visibility
+
+### Status
+- ✅ DOI badge added to README
+- ✅ Research paper link prominently displayed
+- ✅ README title updated for consistency
+
+---
+
 ## 2025-01-XX — Added SEO Keywords and GitHub Stars Badge
 
 ### Summary

@@ -1,4 +1,8 @@
-# Niodoo-Final: Topological Cognitive AI System
+# NIODOO: Topological AI Consciousness Simulation
+
+🔥 **RESEARCH PAPER PUBLISHED!** Find the full scientific paper on Zenodo:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17496444.svg)](https://doi.org/10.5281/zenodo.17496444)
 
 **AI Consciousness Simulation | Topological Learning | Adaptive Memory System**
 
