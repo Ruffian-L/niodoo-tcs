@@ -354,7 +354,8 @@ mod tests {
             );
         }
         
-        let export = GraphExporter::build_export(&graph).unwrap();
+        let export = GraphExporter::build_export(&graph)
+            .expect("build_export should succeed in test");
         assert_eq!(export.nodes.len(), 2);
         assert_eq!(export.edges.len(), 1);
     }

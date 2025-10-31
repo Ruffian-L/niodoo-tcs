@@ -213,7 +213,7 @@ mod tests {
         let event = detector.detect(&signals);
         assert!(event.is_some());
         
-        let event = event.unwrap();
+        let event = event.expect("hyperfocus detection should succeed in test");
         assert!(event.overall_consonance >= 0.85);
         assert_eq!(event.aligned_signals.len(), 3);
     }
@@ -242,7 +242,7 @@ mod tests {
         let event = detector.detect(&signals);
         assert!(event.is_some());
         
-        let event = event.unwrap();
+        let event = event.expect("hyperfocus detection should succeed in test");
         // Should choose StoreBreakthrough because curator is high
         assert_eq!(event.coherent_action, CoherentAction::StoreBreakthrough);
     }

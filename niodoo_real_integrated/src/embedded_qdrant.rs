@@ -1,6 +1,4 @@
-use anyhow::{Context, Result};
-use tokio::process::Command;
-use tracing::{info, warn};
+use anyhow::Result;
 
 /// Spawn embedded Qdrant as a managed child process
 #[cfg(feature = "embedded-qdrant")]

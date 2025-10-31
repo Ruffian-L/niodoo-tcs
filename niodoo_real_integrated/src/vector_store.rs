@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::time::Duration;
 use std::time::SystemTime;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Document returned from vector store retrieval
 #[derive(Debug, Clone)]
@@ -150,7 +150,11 @@ impl VectorStore for RealQdrantClient {
         // Add timestamp
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_else(|_| {
+                // System clock is set backwards; use zero as fallback
+                warn!("System clock appears set backwards; using epoch timestamp");
+                std::time::Duration::from_secs(0)
+            })
             .as_secs();
         payload_map.insert("timestamp".to_string(), JsonValue::Number(timestamp.into()));
 

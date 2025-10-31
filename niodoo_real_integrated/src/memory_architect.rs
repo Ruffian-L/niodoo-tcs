@@ -301,7 +301,8 @@ mod tests {
         );
         
         let emotion = EmotionalVector::new(0.5, 0.5, 0.0, 0.0, 0.0);
-        let layer = architect.decide_layer("New memory", &emotion, None).unwrap();
+        let layer = architect.decide_layer("New memory", &emotion, None)
+            .expect("decide_layer should succeed in test");
         
         // With no similar memories, should start at Working layer
         assert_eq!(layer, MemoryLayer::Working);

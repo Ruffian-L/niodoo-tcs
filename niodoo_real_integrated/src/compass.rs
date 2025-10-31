@@ -6,7 +6,7 @@ use tracing::instrument;
 
 use crate::torus::PadGhostState;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CompassQuadrant {
     Panic,
     Persist,

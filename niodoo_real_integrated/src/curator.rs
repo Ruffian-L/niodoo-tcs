@@ -13,6 +13,7 @@ use tracing::{error, info, warn};
 use crate::config::{CuratorBackend, CuratorConfig};
 use crate::consonance::ConsonanceMetrics;
 use crate::data::Experience;
+use crate::degradation_tiers::CuratorMode;
 
 #[derive(Deserialize)]
 struct CuratorJson {
@@ -43,6 +44,8 @@ pub struct Curator {
     client: Client,
     config: CuratorConfig,
     mock_mode: bool,
+    /// Current curator mode (efficient/brief/emergency) for degradation-aware processing
+    mode: CuratorMode,
 }
 
 impl Curator {
@@ -79,6 +82,7 @@ impl Curator {
             client,
             config,
             mock_mode,
+            mode: CuratorMode::Efficient, // Default to efficient mode
         })
     }
 
@@ -89,6 +93,16 @@ impl Curator {
         entropy: f64,
     ) -> Result<CuratedResponse> {
         self.curate_with_consonance(experience, knot, entropy, None).await
+    }
+
+    /// Set curator mode for degradation-aware processing
+    pub fn set_mode(&mut self, mode: CuratorMode) {
+        self.mode = mode;
+    }
+
+    /// Get current curator mode
+    pub fn mode(&self) -> CuratorMode {
+        self.mode
     }
 
     /// Curate with consonance metrics for truth attractor scoring
@@ -115,10 +129,12 @@ impl Curator {
             String::new()
         };
 
-        let prompt = format!(
-            "As code reviewer, validate/refine for quality>0.8, untangle knot {knot}, balance entropy {entropy}: Response '{response}'.{consonance_context} Output JSON: {{\"learned\": true/false, \"refined\": \"text\", \"reason\": \"brief\"}}",
-            response = experience.output,
-            consonance_context = consonance_context
+        // Format prompt based on curator mode
+        let prompt = self.format_prompt_for_mode(
+            &experience.output,
+            knot,
+            entropy,
+            &consonance_context,
         );
 
         // Use backend-specific refinement
@@ -197,13 +213,55 @@ impl Curator {
         .clamp(0.0, 1.0)
     }
 
+    /// Format prompt based on curator mode
+    fn format_prompt_for_mode(
+        &self,
+        response: &str,
+        knot: f64,
+        entropy: f64,
+        consonance_context: &str,
+    ) -> String {
+        match self.mode {
+            CuratorMode::Efficient => {
+                // Standard detailed prompt
+                format!(
+                    "As code reviewer, validate/refine for quality>0.8, untangle knot {knot}, balance entropy {entropy}: Response '{response}'.{consonance_context} Output JSON: {{\"learned\": true/false, \"refined\": \"text\", \"reason\": \"brief\"}}",
+                    response = response,
+                    consonance_context = consonance_context
+                )
+            }
+            CuratorMode::Brief => {
+                // Compressed prompt for resource constraints
+                format!(
+                    "Briefly refine: '{response}'.{consonance_context} JSON: {{\"learned\": true/false, \"refined\": \"text\", \"reason\": \"\"}}",
+                    response = response,
+                    consonance_context = consonance_context
+                )
+            }
+            CuratorMode::Emergency => {
+                // Minimal prompt for emergency mode
+                format!(
+                    "Refine: '{response}'. JSON: {{\"learned\": false, \"refined\": \"text\", \"reason\": \"\"}}",
+                    response = response
+                )
+            }
+        }
+    }
+
     async fn refine_with_vllm(&self, prompt: &str) -> Result<CuratorRefineResult> {
+        // Adjust max_tokens based on mode
+        let max_tokens = match self.mode {
+            CuratorMode::Efficient => self.config.max_tokens,
+            CuratorMode::Brief => (self.config.max_tokens as f32 * 0.7) as usize,
+            CuratorMode::Emergency => (self.config.max_tokens as f32 * 0.5) as usize,
+        };
+
         let url = format!("{}/v1/completions", self.config.vllm_endpoint);
         let payload = json!({
             "model": self.config.model_name,
             "prompt": prompt,
             "temperature": 0.3,
-            "max_tokens": 512,
+            "max_tokens": max_tokens,
             "stop": ["\n\n"],
         });
 
@@ -228,6 +286,13 @@ impl Curator {
     }
 
     async fn refine_with_ollama(&self, prompt: &str) -> Result<CuratorRefineResult> {
+        // Adjust max_tokens based on mode
+        let max_tokens = match self.mode {
+            CuratorMode::Efficient => self.config.max_tokens,
+            CuratorMode::Brief => (self.config.max_tokens as f32 * 0.7) as usize,
+            CuratorMode::Emergency => (self.config.max_tokens as f32 * 0.5) as usize,
+        };
+
         let url = format!("{}/api/generate", self.config.ollama_endpoint);
         let payload = json!({
             "model": self.config.model_name,
@@ -235,6 +300,7 @@ impl Curator {
             "stream": false,
             "options": {
                 "temperature": 0.3,
+                "num_predict": max_tokens,
             }
         });
 

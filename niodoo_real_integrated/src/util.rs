@@ -111,12 +111,16 @@ static SEED_MANAGER: once_cell::sync::Lazy<std::sync::Mutex<SeedManager>> =
 
 /// Get the global seed manager
 pub fn seed_manager() -> std::sync::MutexGuard<'static, SeedManager> {
-    SEED_MANAGER.lock().unwrap()
+    SEED_MANAGER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Set global seed for deterministic RNG
 pub fn set_global_seed(seed: u64) {
-    let mut manager = SEED_MANAGER.lock().unwrap();
+    let mut manager = SEED_MANAGER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     manager.global_seed = seed;
 }
 

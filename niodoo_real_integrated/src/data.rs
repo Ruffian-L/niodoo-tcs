@@ -62,6 +62,7 @@ pub struct Experience {
     pub next_state: Vec<f32>,
     pub done: bool,
     pub output: String, // Response text for curator refinement
+    pub replay: Option<DqnReplayMetadata>,
 }
 
 impl Experience {
@@ -92,8 +93,25 @@ impl Experience {
             next_state,
             done,
             output,
+            replay: None,
         }
     }
+
+    /// Attach DQN replay metadata to the experience for downstream learning integration
+    pub fn with_replay(mut self, replay: Option<DqnReplayMetadata>) -> Self {
+        self.replay = replay;
+        self
+    }
+}
+
+/// Metadata required to convert stored experiences back into DQN replay tuples
+#[derive(Debug, Clone)]
+pub struct DqnReplayMetadata {
+    pub state_metrics: Vec<f64>,
+    pub action_param: String,
+    pub action_delta: f64,
+    pub reward: f64,
+    pub next_state_metrics: Vec<f64>,
 }
 
 pub fn load_emotional_dataset(path: &str, limit: Option<usize>) -> Result<Vec<EmotionalSample>> {

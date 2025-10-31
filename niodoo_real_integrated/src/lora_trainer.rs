@@ -364,7 +364,9 @@ impl Default for LoRATrainer {
     fn default() -> Self {
         Self::new().unwrap_or_else(|_| Self {
             adapter: LoRAAdapter::new(LoRAConfig::default())
-                .expect("Failed to create default LoRAAdapter"),
+                .unwrap_or_else(|e| {
+                    panic!("Failed to create default LoRAAdapter: {}. This is a critical initialization failure.", e);
+                }),
             training_count: 0,
             config: LoRAConfig::default(),
         })

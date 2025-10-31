@@ -6,7 +6,7 @@
 use crate::torus::PadGhostState;
 use crate::weighted_episodic_mem::{calculate_fitness_score, TemporalDecayConfig};
 use ndarray::Array1;
-use tracing::info;
+use tracing::{info, warn};
 
 /// GPU fitness calculator with CPU fallback
 pub struct GPUMemoryFitnessCalculator {
@@ -48,7 +48,7 @@ impl GPUMemoryFitnessCalculator {
     pub fn batch_fitness(
         &self,
         memories: &[(PadGhostState, f64, u32, f32, f32, f32)], // (pad_state, age_days, retrieval_count, beta1, consonance, consolidation_level)
-        weights: &[f32; 5],
+        weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
         if self.gpu_available && self.device == "cuda" {
@@ -62,11 +62,11 @@ impl GPUMemoryFitnessCalculator {
     fn _batch_fitness_cpu(
         &self,
         memories: &[(PadGhostState, f64, u32, f32, f32, f32)],
-        weights: &[f32; 5],
+        weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
         use rayon::prelude::*;
-        
+
         memories
             .par_iter()
             .map(|(pad_state, age_days, retrieval_count, beta1, consonance, consolidation_level)| {
@@ -79,6 +79,7 @@ impl GPUMemoryFitnessCalculator {
                     *consolidation_level,
                     weights,
                     temporal_config,
+                    None, // resource_availability
                 )
             })
             .collect()
@@ -89,7 +90,7 @@ impl GPUMemoryFitnessCalculator {
     fn _batch_fitness_gpu(
         &self,
         memories: &[(PadGhostState, f64, u32, f32, f32, f32)],
-        weights: &[f32; 5],
+        weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
         warn!("GPU acceleration not yet implemented, falling back to CPU");
@@ -100,7 +101,7 @@ impl GPUMemoryFitnessCalculator {
     fn _batch_fitness_gpu(
         &self,
         memories: &[(PadGhostState, f64, u32, f32, f32, f32)],
-        weights: &[f32; 5],
+        weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
         self._batch_fitness_cpu(memories, weights, temporal_config)
@@ -117,7 +118,7 @@ impl GPUMemoryFitnessCalculator {
         beta1_scores: &[f32],
         consonance_scores: &[f32],
         consolidation_levels: &[f32],
-        weights: &[f32; 5],
+        weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
         if pad_states.len() != ages.len()
@@ -153,7 +154,7 @@ impl GPUMemoryFitnessCalculator {
         beta1_scores: &Array1<f32>,
         consonance_scores: &Array1<f32>,
         consolidation_levels: &Array1<f32>,
-        weights: &[f32; 5],
+        weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Array1<f32> {
         if pad_states.len() != ages.len()

@@ -4,8 +4,11 @@ use rand::{thread_rng, Rng};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
+
+use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 
 use crate::compass::{CascadeStage, CompassOutcome};
 use crate::torus::PadGhostState;
@@ -63,13 +66,17 @@ pub struct EragClient {
     collection: String,
     vector_dim: usize,
     pub similarity_threshold: f32,
-    /// Fitness weights for weighted episodic memory [temporal, pad, beta1, retrieval, consonance]
-    pub fitness_weights: [f32; 5],
+    /// Fitness weights for weighted episodic memory [temporal, pad, beta1, retrieval, consonance, resource_penalty]
+    pub fitness_weights: [f32; 6],
     /// Temporal decay configuration
     pub temporal_config: TemporalDecayConfig,
+    /// Optional resource budget for resource-aware fitness calculation
+    pub resource_budget: Option<std::sync::Arc<crate::resource_budget::GlobalResourceBudget>>,
+    /// Circuit breaker for Qdrant requests
+    circuit_breaker: Arc<CircuitBreaker>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollapseResult {
     pub top_hits: Vec<EragMemory>,
     pub aggregated_context: String,
@@ -89,6 +96,12 @@ impl EragClient {
             .timeout(Duration::from_secs(10))
             .build()
             .map_err(|err| anyhow!("failed to build qdrant http client: {err}"))?;
+        
+        let circuit_breaker = Arc::new(CircuitBreaker::new(
+            "qdrant",
+            CircuitBreakerConfig::default(),
+        ));
+        
         Ok(Self {
             client,
             base_url,
@@ -97,6 +110,8 @@ impl EragClient {
             similarity_threshold,
             fitness_weights: DEFAULT_FITNESS_WEIGHTS,
             temporal_config: TemporalDecayConfig::default(),
+            resource_budget: None,
+            circuit_breaker,
         })
     }
 
@@ -146,25 +161,34 @@ impl EragClient {
             "{}/collections/{}/points/search",
             self.base_url, self.collection
         );
-        let response = self.client.post(url).json(&request).send().await;
+        
+        // Use circuit breaker for Qdrant request
+        let client = self.client.clone();
+        let url_clone = url.clone();
+        let response_result = self.circuit_breaker.call(|| {
+            let request_clone = request.clone();
+            async move {
+                let resp = client.post(&url_clone).json(&request_clone).send().await
+                    .map_err(|e| anyhow!("Qdrant request failed: {}", e))?;
+                
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(anyhow!("Qdrant returned error status {}: {}", status, body));
+                }
+                
+                resp.json::<SearchResponse>().await
+                    .map_err(|e| anyhow!("Failed to parse Qdrant response: {}", e))
+            }
+        }).await;
+        
         let mut memories = Vec::new();
         let mut sims = Vec::new();
-        match response {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    match resp.json::<SearchResponse>().await {
-                        Ok(parsed) => {
-                            for hit in parsed.result {
-                                memories.push(deserialize_memory(&hit.payload));
-                                sims.push(hit.score);
-                            }
-                        }
-                        Err(err) => {
-                            warn!(%err, "failed to decode qdrant search response");
-                        }
-                    }
-                } else {
-                    warn!(status = %resp.status(), "qdrant search returned error status");
+        match response_result {
+            Ok(parsed) => {
+                for hit in parsed.result {
+                    memories.push(deserialize_memory(&hit.payload));
+                    sims.push(hit.score);
                 }
             }
             Err(err) => {
@@ -365,7 +389,7 @@ impl EragClient {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct SearchRequest {
     vector: Vec<f32>,
     limit: u64,
@@ -646,6 +670,10 @@ impl EragClient {
             .unwrap_or_else(|_| Utc::now());
         let age_days = age_in_days(&timestamp);
 
+        // Get resource availability if resource budget is available
+        let resource_availability = self.resource_budget.as_ref()
+            .map(|budget| budget.get_resource_availability());
+
         calculate_fitness_score(
             age_days,
             pad_state,
@@ -655,6 +683,7 @@ impl EragClient {
             metadata.consolidation_level,
             &self.fitness_weights,
             &self.temporal_config,
+            resource_availability.as_ref(),
         )
     }
 
@@ -694,6 +723,8 @@ impl Clone for EragClient {
             similarity_threshold: self.similarity_threshold,
             fitness_weights: self.fitness_weights,
             temporal_config: self.temporal_config,
+            resource_budget: self.resource_budget.clone(),
+            circuit_breaker: self.circuit_breaker.clone(),
         }
     }
 }

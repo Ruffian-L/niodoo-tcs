@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use niodoo_core::memory::EmotionalVector;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter};
@@ -158,7 +159,7 @@ impl ConversationLogStore {
             .filter(|(_, similarity)| *similarity >= threshold)
             .collect();
             
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
         results.into_iter().take(limit).map(|(entry, _)| entry).collect()
     }
 
@@ -194,7 +195,7 @@ impl ConversationLogStore {
             .filter(|(_, similarity)| *similarity >= threshold)
             .collect();
             
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
         results.into_iter().take(limit).map(|(entry, _)| entry).collect()
     }
 

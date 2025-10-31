@@ -12,8 +12,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::torus::PadGhostState;
 
-/// Default fitness weights: [temporal, pad_salience, beta1_connectivity, retrieval_count, consonance]
-pub const DEFAULT_FITNESS_WEIGHTS: [f32; 5] = [0.25, 0.20, 0.20, 0.15, 0.20];
+/// Default fitness weights: [temporal, pad_salience, beta1_connectivity, retrieval_count, consonance, resource_penalty]
+/// Resource penalty weight (w₆) is subtracted, so it reduces fitness when resources are constrained
+pub const DEFAULT_FITNESS_WEIGHTS: [f32; 6] = [0.20, 0.18, 0.18, 0.13, 0.18, 0.13];
+/// Legacy 5-weight default (for backward compatibility)
+pub const DEFAULT_FITNESS_WEIGHTS_LEGACY: [f32; 5] = [0.25, 0.20, 0.20, 0.15, 0.20];
 
 /// Temporal decay phase constants (tau values in days)
 #[derive(Debug, Clone, Copy)]
@@ -137,11 +140,37 @@ pub fn normalized_retrieval_weight(retrieval_count: u32) -> f32 {
     calculate_retrieval_weight(retrieval_count) / 5.0
 }
 
+/// Calculate resource penalty Res(m) from resource availability
+///
+/// Returns a penalty value (0.0 = no penalty, 1.0 = maximum penalty) based on resource constraints.
+/// Lower resource availability = higher penalty.
+pub fn calculate_resource_penalty(
+    resource_availability: Option<&crate::resource_budget::ResourceAvailability>,
+) -> f32 {
+    match resource_availability {
+        Some(avail) => {
+            // Use minimum availability as the bottleneck
+            let min_avail = avail.minimum();
+            // Convert availability to penalty: 1.0 = no penalty, 0.0 = max penalty
+            1.0 - min_avail
+        }
+        None => 0.0, // No resource tracking = no penalty
+    }
+}
+
 /// Calculate multi-factor fitness score
 ///
-/// Formula: F(m) = w₁·e^(-age/τ) + w₂·PAD_salience + w₃·β₁_connectivity + w₄·log(1+retrieval_count) + w₅·consonance
+/// Formula: F(m) = w₁·T(m) + w₂·PAD(m) + w₃·β₁(m) + w₄·R(m) + w₅·C(m) - w₆·Res(m)
 ///
-/// Weights should sum to 1.0 for proper normalization
+/// Where:
+/// - T(m): Temporal decay
+/// - PAD(m): Emotional salience
+/// - β₁(m): Topological connectivity
+/// - R(m): Retrieval frequency
+/// - C(m): Consonance
+/// - Res(m): Resource penalty (0.0 = no penalty, 1.0 = max penalty)
+///
+/// Weights should sum to 1.0 for proper normalization (w₆ is subtracted, so it reduces fitness)
 pub fn calculate_fitness_score(
     age_days: f64,
     pad_state: &PadGhostState,
@@ -149,8 +178,9 @@ pub fn calculate_fitness_score(
     beta_1_connectivity: f32,
     consonance_score: f32,
     consolidation_level: f32,
-    weights: &[f32; 5],
+    weights: &[f32; 6],
     temporal_config: &TemporalDecayConfig,
+    resource_availability: Option<&crate::resource_budget::ResourceAvailability>,
 ) -> f32 {
     let temporal = calculate_temporal_decay(age_days, consolidation_level, temporal_config);
     let pad_salience = calculate_pad_salience(pad_state);
@@ -160,14 +190,44 @@ pub fn calculate_fitness_score(
     let beta1_normalized = beta_1_connectivity.clamp(0.0, 1.0);
     let consonance_normalized = consonance_score.clamp(0.0, 1.0);
     
-    // Weighted combination
+    // Calculate resource penalty
+    let resource_penalty = calculate_resource_penalty(resource_availability);
+    
+    // Weighted combination: positive terms - resource penalty
     let fitness = weights[0] * temporal
         + weights[1] * pad_salience
         + weights[2] * beta1_normalized
         + weights[3] * retrieval_weight
-        + weights[4] * consonance_normalized;
+        + weights[4] * consonance_normalized
+        - weights[5] * resource_penalty;
     
     fitness.clamp(0.0, 1.0)
+}
+
+/// Legacy fitness function with 5 weights (for backward compatibility)
+pub fn calculate_fitness_score_legacy(
+    age_days: f64,
+    pad_state: &PadGhostState,
+    retrieval_count: u32,
+    beta_1_connectivity: f32,
+    consonance_score: f32,
+    consolidation_level: f32,
+    weights: &[f32; 5],
+    temporal_config: &TemporalDecayConfig,
+) -> f32 {
+    // Convert 5 weights to 6 weights (w₆ = 0.0)
+    let weights_6 = [weights[0], weights[1], weights[2], weights[3], weights[4], 0.0];
+    calculate_fitness_score(
+        age_days,
+        pad_state,
+        retrieval_count,
+        beta_1_connectivity,
+        consonance_score,
+        consolidation_level,
+        &weights_6,
+        temporal_config,
+        None,
+    )
 }
 
 /// Calculate age in days from timestamp
@@ -261,6 +321,7 @@ mod tests {
             0.2, // consolidation level
             &weights,
             &config,
+            None, // resource_availability
         );
         
         assert!(fitness >= 0.0 && fitness <= 1.0);

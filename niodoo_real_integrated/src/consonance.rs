@@ -274,7 +274,6 @@ mod tests {
     use crate::erag::{CollapseResult, EragMemory};
     use crate::tcs_analysis::TopologicalSignature;
     use crate::torus::PadGhostState;
-    use std::time::SystemTime;
 
     fn create_test_pad_state(entropy: f64) -> PadGhostState {
         PadGhostState {
@@ -309,6 +308,11 @@ mod tests {
             cobordism_type: None,
             persistence_entropy: 1.0,
             spectral_gap: 0.5,
+            euler_characteristic: 1.0,
+            total_persistence: 1.0,
+            max_persistence: 1.0,
+            mean_persistence: 1.0,
+            laplacian_spectral_radius: 0.5,
             computation_time_ms: 10.0,
         }
     }

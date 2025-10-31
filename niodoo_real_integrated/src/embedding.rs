@@ -20,7 +20,9 @@ pub struct QwenStatefulEmbedder {
 impl QwenStatefulEmbedder {
     pub fn new(model_path: impl AsRef<Path>, expected_dim: usize) -> Result<Self> {
         let model_path = model_path.as_ref();
-        let model_path_str = model_path.to_str().unwrap();
+        let model_path_str = model_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Embedding model path contains invalid UTF-8: {}", model_path.display()))?;
         
         // Check if mock mode is enabled
         let mock_mode = std::env::var("MOCK_MODE")
@@ -187,6 +189,8 @@ impl QwenStatefulEmbedder {
             normalize(&mut embedding);
             return Ok(embedding);
         }
+
+        drop(guard);
         
         // Clone the Arc before moving into the blocking task
         let embedder_arc = self.inner.clone();

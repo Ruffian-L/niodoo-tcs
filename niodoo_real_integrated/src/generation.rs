@@ -1,3 +1,5 @@
+use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -6,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::{info, instrument, warn};
 
+use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use crate::compass::CompassOutcome;
-use crate::token_manager::TokenizerOutput;
 use crate::util::rouge_l;
 
 #[derive(Debug, Clone)]
@@ -40,11 +42,16 @@ pub struct GenerationEngine {
     top_p: f64,
     max_tokens: usize,
     mock_mode: bool,
+    circuit_breaker: Arc<CircuitBreaker>,
 }
 
 impl GenerationEngine {
     pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self> {
         let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
+        let circuit_breaker = Arc::new(CircuitBreaker::new(
+            "vllm",
+            CircuitBreakerConfig::default(),
+        ));
         Ok(Self {
             client,
             endpoint: endpoint.into(),
@@ -53,6 +60,7 @@ impl GenerationEngine {
             top_p: 0.7,
             max_tokens: 16,
             mock_mode: false,
+            circuit_breaker,
         })
     }
 
@@ -202,33 +210,40 @@ impl GenerationEngine {
             format!("{}/v1/chat/completions", self.endpoint.trim_end_matches('/'))
         };
 
-        let response = self
-            .client
-            .post(&endpoint_url)
-            .json(&payload)
-            .send()
-            .await
-            .with_context(|| format!("failed to call vLLM endpoint {}", endpoint_url))?;
+        // Use circuit breaker for vLLM request
+        let client = self.client.clone();
+        let endpoint_url_clone = endpoint_url.clone();
+        let payload_clone = payload.clone();
+        let response = self.circuit_breaker.call(|| async {
+            let resp = client
+                .post(&endpoint_url_clone)
+                .json(&payload_clone)
+                .send()
+                .await
+                .with_context(|| format!("failed to call vLLM endpoint {}", endpoint_url_clone))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            warn!(%status, %body, endpoint = %endpoint_url, "vLLM returned error status");
-            anyhow::bail!("vLLM request failed: {status}");
-        }
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                warn!(%status, %body, endpoint = %endpoint_url_clone, "vLLM returned error status");
+                anyhow::bail!("vLLM request failed: {status}");
+            }
 
-        let completion: ChatCompletionResponse = response
-            .json()
-            .await
-            .context("failed to parse vLLM chat completion response")?;
+            let completion: ChatCompletionResponse = resp
+                .json()
+                .await
+                .context("failed to parse vLLM chat completion response")?;
 
-        let content = completion
-            .choices
-            .first()
-            .and_then(|choice| choice.message.content.clone())
-            .unwrap_or_default();
+            let content = completion
+                .choices
+                .first()
+                .and_then(|choice| choice.message.content.clone())
+                .unwrap_or_default();
 
-        Ok(content)
+            Ok(content)
+        }).await?;
+
+        Ok(response)
     }
 
     pub async fn warmup(&self) -> Result<()> {
@@ -368,13 +383,24 @@ impl GenerationEngine {
             .timeout(Duration::from_secs(60))
             .build()?;
         
-        // Use model ID from vLLM if model path is provided, otherwise use as-is
-        let model_id = if model.starts_with("/workspace/models/") {
-            // Try to get the actual model ID from vLLM
-            model.to_string() // Use the path as model ID since vLLM accepts it
+        // Normalise model identifier: vLLM registers the served model by name, not path.
+        let model_id = if model.starts_with("/home/beelink/models/") {
+            model.replacen("/home/beelink/models/", "/workspace/models/", 1)
+        } else if model.starts_with("/workspace/") {
+            // Canonicalise workspace-relative paths to avoid stray symlink prefixes
+            Path::new(model)
+                .canonicalize()
+                .ok()
+                .and_then(|p| p.to_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| model.to_string())
         } else {
             model.to_string()
         };
+        
+        let circuit_breaker = Arc::new(CircuitBreaker::new(
+            "vllm",
+            CircuitBreakerConfig::default(),
+        ));
         
         Ok(Self {
             client,
@@ -386,6 +412,7 @@ impl GenerationEngine {
             mock_mode: std::env::var("MOCK_MODE")
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
+            circuit_breaker,
         })
     }
 
@@ -424,6 +451,7 @@ impl GenerationEngine {
             top_p,
             max_tokens: self.max_tokens,
             mock_mode: false,
+            circuit_breaker: self.circuit_breaker.clone(),
         };
         temp_engine.request_text(prompt).await
     }
@@ -479,7 +507,7 @@ pub struct ConsistencyVotingResult {
     pub winner_index: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct ChatCompletionRequest {
     model: String,
     messages: Vec<ChatMessage>,

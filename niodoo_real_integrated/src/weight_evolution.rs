@@ -7,7 +7,7 @@
 //! - Thread-safe weight updates
 //! - Comprehensive metrics tracking
 
-use crate::weighted_episodic_mem::DEFAULT_FITNESS_WEIGHTS;
+use crate::weighted_episodic_mem::{DEFAULT_FITNESS_WEIGHTS, DEFAULT_FITNESS_WEIGHTS_LEGACY};
 use parking_lot::RwLock;
 use rand::Rng;
 use std::collections::VecDeque;
@@ -89,9 +89,9 @@ impl SmoothWeightEvolution {
             updates_since_ga: Arc::new(RwLock::new(0)),
             ga_frequency: 5, // Run GA every 5 hill-climbing updates
             
-            current_weights: Arc::new(RwLock::new(DEFAULT_FITNESS_WEIGHTS)),
+            current_weights: Arc::new(RwLock::new(DEFAULT_FITNESS_WEIGHTS_LEGACY)),
             weight_performance_history: Arc::new(RwLock::new(VecDeque::with_capacity(50))),
-            best_weights: Arc::new(RwLock::new(DEFAULT_FITNESS_WEIGHTS)),
+            best_weights: Arc::new(RwLock::new(DEFAULT_FITNESS_WEIGHTS_LEGACY)),
             best_score: Arc::new(RwLock::new(0.0)),
             
             step_size: 0.02,
@@ -374,9 +374,13 @@ impl SmoothWeightEvolution {
         self._project_to_simplex(mutated)
     }
 
-    /// Get current weights (thread-safe)
-    pub fn get_current_weights(&self) -> [f32; 5] {
-        *self.current_weights.read()
+    /// Get current weights (thread-safe) including resource penalty weight
+    pub fn get_current_weights(&self) -> [f32; 6] {
+        let base = *self.current_weights.read();
+        let mut weights = [0.0; 6];
+        weights[..5].copy_from_slice(&base);
+        weights[5] = DEFAULT_FITNESS_WEIGHTS[5];
+        weights
     }
 
     /// Get evolution statistics
@@ -432,11 +436,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_weight_evolution_creation() {
+        use crate::weighted_episodic_mem::DEFAULT_FITNESS_WEIGHTS;
+
         let evolution = SmoothWeightEvolution::new();
         let weights = evolution.get_current_weights();
-        assert_eq!(weights.len(), 5);
-        let sum: f32 = weights.iter().sum();
-        assert!((sum - 1.0).abs() < 0.001); // Should sum to ~1.0
+        let sum: f32 = weights[..5].iter().sum();
+        assert!((sum - 1.0).abs() < 0.001); // Active weights should sum to ~1.0
+        assert!((weights[5] - DEFAULT_FITNESS_WEIGHTS[5]).abs() < f32::EPSILON);
     }
 
     #[tokio::test]

@@ -4,12 +4,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use futures::future::{AbortHandle, abortable};
+use futures::future::{abortable, AbortHandle};
 use niodoo_core::config::ConsciousnessConfig;
 use niodoo_core::memory::guessing_spheres::{
     EmotionalVector as CoreEmotion, GuessingMemorySystem, SphereId,
 };
-use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::token_promotion::consensus::{ConsensusEngine, NodeId};
 use niodoo_core::token_promotion::dynamic_tokenizer::{
     DynamicTokenizer, MergeStats, RemoteVocabulary, TokenizerStats,
@@ -19,11 +18,13 @@ use niodoo_core::token_promotion::engine::{
 };
 use niodoo_core::token_promotion::pattern_discovery::PatternDiscoveryEngine;
 use niodoo_core::token_promotion::spatial::SpatialHash;
+use niodoo_core::token_promotion::PromotedToken;
 use niodoo_core::topology::persistent_homology::PersistentHomologyCalculator;
 use tokio::{fs, sync::RwLock, time::interval};
 use tracing::{debug, info, instrument, warn};
 
 use crate::erag::{CollapseResult, EragMemory};
+use crate::metrics::tokenizer_metrics;
 use crate::torus::PadGhostState;
 
 #[derive(Debug, Clone)]
@@ -81,12 +82,11 @@ impl TokenizationMetrics {
     }
 
     fn record_promotion(&self, result: &PromotionCycleResult) {
-        // TODO: Add tokenizer metrics recording
-        // tokenizer_metrics().record_promotion(
-        //     result.promoted.len(),
-        //     result.pruned,
-        //     result.duration.as_secs_f64() * 1000.0,
-        // );
+        tokenizer_metrics().record_promotion(
+            result.promoted.len(),
+            result.pruned,
+            result.duration.as_secs_f64() * 1000.0,
+        );
         // Handle mutex errors gracefully - log but don't crash
         if let Ok(mut guard) = self.last_promotion.lock() {
             *guard = Some(Instant::now());
@@ -98,11 +98,7 @@ impl TokenizationMetrics {
     }
 
     fn record_stats(&self, stats: &TokenizerStats) {
-        // TODO: Add tokenizer metrics recording
-        // tokenizer_metrics().record(
-        //     stats.base_vocab_size as f64 + stats.extended_vocab_size as f64,
-        //     stats.oov_rate(),
-        // );
+        tokenizer_metrics().record(stats.vocab_size() as f64, stats.oov_rate());
     }
 }
 
@@ -209,7 +205,10 @@ impl DynamicTokenizerManager {
         };
         let (abortable_task, abort_handle) = abortable(task);
         {
-            let mut slot = manager_for_abort.abort_handle.lock().unwrap();
+            let mut slot = manager_for_abort
+                .abort_handle
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             *slot = Some(abort_handle);
         }
         let _ = tokio::spawn(abortable_task);
@@ -246,19 +245,26 @@ impl DynamicTokenizerManager {
         let vocab_size = stats.vocab_size();
         let oov_rate = stats.oov_rate();
         {
-            let mut slot = self.metrics.vocab_stats.lock().unwrap();
+            let mut slot = self
+                .metrics
+                .vocab_stats
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             *slot = Some(stats.clone());
         }
         self.metrics.record_stats(&stats);
-        // TODO: Add tokenizer metrics recording
-        // tokenizer_metrics().record(vocab_size as f64, oov_rate);
 
         info!(
             tokens = tokens.len(),
             vocab_size, oov_rate, "tokenized prompt"
         );
 
-        let promoted_snapshot = self.metrics.promoted.lock().unwrap().clone();
+        let promoted_snapshot = self
+            .metrics
+            .promoted
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
 
         Ok(TokenizerOutput {
             tokens,
@@ -360,7 +366,11 @@ impl DynamicTokenizerManager {
         let mut tokenizer = self.tokenizer.write().await;
         let stats = tokenizer.merge_remote_vocabulary(&remote)?;
         drop(tokenizer);
-        *self.metrics.merge_stats.lock().unwrap() = Some(stats);
+        *self
+            .metrics
+            .merge_stats
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(stats);
         self.persist_vocabulary().await?;
         Ok(())
     }
@@ -371,12 +381,20 @@ impl DynamicTokenizerManager {
     }
 
     pub async fn vocab_stats(&self) -> Option<TokenizerStats> {
-        let guard = self.metrics.vocab_stats.lock().unwrap();
+        let guard = self
+            .metrics
+            .vocab_stats
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.clone()
     }
 
     pub async fn promoted_tokens(&self) -> Vec<PromotedToken> {
-        self.metrics.promoted.lock().unwrap().clone()
+        self.metrics
+            .promoted
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     async fn load_persisted_vocabulary(&self) -> Result<()> {
@@ -390,7 +408,11 @@ impl DynamicTokenizerManager {
 
     async fn persist_vocabulary(&self) -> Result<()> {
         let tokens = {
-            let promoted = self.metrics.promoted.lock().unwrap();
+            let promoted = self
+                .metrics
+                .promoted
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             promoted.clone()
         };
 
