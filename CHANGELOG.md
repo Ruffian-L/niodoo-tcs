@@ -1,3 +1,27 @@
+## 2025-01-XX — Changed License from MIT to AGPL-3.0
+
+### Summary
+Changed license from MIT to GNU Affero General Public License v3.0 (AGPL-3.0) to protect against commercial exploitation while allowing free open source use.
+
+### Changes
+- **License File**: Updated LICENSE file from MIT to AGPL-3.0
+- **README Badge**: Updated license badge from MIT to AGPL-3.0
+- **README Section**: Updated license section to explain AGPL-3.0 terms
+- **Purpose**: Prevents commercial use without source code sharing - big companies must contribute back if they profit from this software
+
+### Why AGPL-3.0?
+- ✅ **Free for open source**: Free use for open source projects
+- ✅ **Protects against commercial exploitation**: Commercial users must share their source code
+- ✅ **Prevents SaaS abuse**: Even if used as a service, source code must be shared
+- ✅ **Forces contribution back**: Big companies profiting from this must contribute improvements
+
+### Status
+- ✅ LICENSE file updated to AGPL-3.0
+- ✅ README badge updated
+- ✅ README license section updated with explanation
+
+---
+
 ## 2025-01-XX — Added Zenodo DOI Badge and Research Paper Link to README
 
 ### Summary

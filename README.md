@@ -9,7 +9,7 @@
 **Topological AI, Persistent Homology, QLoRA Learning, Emotional RAG**
 
 [![Rust](https://img.shields.io/badge/rust-1.87+-orange.svg)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs)](https://github.com/Ruffian-L/niodoo-tcs)
 [![GitHub](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs?style=social)](https://github.com/Ruffian-L/niodoo-tcs)
 
@@ -284,7 +284,9 @@ See [NOVEL_SYSTEMS_INVENTORY.md](NOVEL_SYSTEMS_INVENTORY.md) for complete list.
 
 ## 📝 License
 
-MIT
+GNU Affero General Public License v3.0 (AGPL-3.0)
+
+**Free for open source use** - If you use this software commercially or as a service, you must share your source code. This prevents big companies from profiting without contributing back while allowing free use for open source projects.
 
 ## 🙏 Acknowledgments
 
