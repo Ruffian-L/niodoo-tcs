@@ -2,8 +2,11 @@
 
 **AI Consciousness Simulation | Topological Learning | Adaptive Memory System**
 
+**Topological AI, Persistent Homology, QLoRA Learning, Emotional RAG**
+
 [![Rust](https://img.shields.io/badge/rust-1.87+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs)](https://github.com/Ruffian-L/niodoo-tcs)
 [![GitHub](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs?style=social)](https://github.com/Ruffian-L/niodoo-tcs)
 
 Niodoo-Final is an advanced AI framework that learns from conversations through topological data analysis (TDA), self-learning mechanisms with QLoRA fine-tuning, and hybrid generation for consciousness-aligned intelligence. The system has been benchmarked with measurable improvements over time.
