@@ -61,6 +61,32 @@ impl EmotionalVector {
     pub fn sum(&self) -> f32 {
         self.joy + self.sadness + self.anger + self.fear + self.surprise
     }
+
+    /// Calculate the norm (magnitude) of the vector
+    pub fn norm(&self) -> f32 {
+        self.magnitude()
+    }
+
+    /// Add a scalar value to all components
+    pub fn add(&mut self, value: f32) {
+        self.joy += value;
+        self.sadness += value;
+        self.anger += value;
+        self.fear += value;
+        self.surprise += value;
+    }
+}
+
+impl Default for EmotionalVector {
+    fn default() -> Self {
+        Self {
+            joy: 0.0,
+            sadness: 0.0,
+            anger: 0.0,
+            fear: 0.0,
+            surprise: 0.0,
+        }
+    }
 }
 
 impl std::ops::Add for EmotionalVector {

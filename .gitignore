@@ -129,3 +129,60 @@ learning_events.csv
 # VS Code remote
 .vscode-server/
 
+# Logs and runtime data
+logs/
+*.out
+*.csv
+*.png
+*.json
+*.prom
+*.pid
+learning_log.txt
+continual_learning*.out
+
+# Build and test artifacts
+target-ci/
+target-cursor/
+target_old_*/
+target_local/
+.cargo-target/
+qdrant_data/
+storage/
+results/
+backups/
+niodoo_real_integrated/logs/
+niodoo_real_integrated/results/
+niodoo_real_integrated/target_local/
+
+# Temporary documentation and scripts
+*.md
+!README.md
+!CHANGELOG.md
+!niodoo_real_integrated/README.md
+COMMANDS_FOR_YOU.txt
+*.txt
+!LICENSE.txt
+*.sh
+!run_*.sh
+!start_*.sh
+!check_*.sh
+!verify_*.sh
+!dashboard.sh
+
+# Docker and monitoring configs (local)
+docker-compose.monitoring.yml
+prometheus.yml
+grafana-*.json
+grafana-provisioning/
+
+# Python virtual environments
+venv_new/
+
+# Working directories
+Niodoo-TCS-Release/
+docs/validation/
+
+# Temporary files
+{ok+=}
+1{ok+=}
+

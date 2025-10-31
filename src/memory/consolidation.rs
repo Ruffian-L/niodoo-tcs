@@ -1058,17 +1058,7 @@ impl ImportanceScorer {
     }
 }
 
-impl Default for EmotionalVector {
-    fn default() -> Self {
-        Self {
-            joy: 0.5,
-            sadness: 0.5,
-            anger: 0.0,
-            fear: 0.0,
-            surprise: 0.0,
-        }
-    }
-}
+// Default implementation is provided by guessing_spheres::EmotionalVector
 
 impl MemoryConsolidationEngine {
     /// Real-time consolidation for immediate processing

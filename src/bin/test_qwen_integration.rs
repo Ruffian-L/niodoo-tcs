@@ -1,8 +1,6 @@
 //! Niodoo-TCS: Topological Cognitive System
 //! Copyright (c) 2025 Jason Van Pham
 
-#!/usr/bin/env rust
-
 // Simple test for Qwen integration without complex dependencies
 // This tests the actual model loading and inference
 

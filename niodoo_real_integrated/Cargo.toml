@@ -6,10 +6,19 @@ authors = ["Niodoo Torque Team <torque@niodoo.ai>"]
 description = "Full NIODOO pipeline integration with real Qwen embeddings, ERAG memory, tokenizer promotion, vLLM hybrid generation, and learning loop."
 license = "MIT"
 
+[lib]
+path = "src/lib.rs"
+
 [features]
 default = ["beelink"]
 beelink = []
 5080-q = []
+gauntlet = []
+examples = []
+embedded-qdrant = []
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
+svc = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tonic"]
+edge = []
 
 [dependencies]
 anyhow = "1"
@@ -29,13 +38,43 @@ nalgebra = { version = "0.33", features = ["serde-serialize"] }
 csv = "1.3"
 thiserror = "1.0"
 tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
+tcs-core = { path = "../tcs-core" }
+tcs-knot = { path = "../tcs-knot" }
+tcs-tqft = { path = "../tcs-tqft" }
+niodoo-core = { path = "../niodoo-core" }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
 once_cell = "1.19"
 futures = "0.3"
 uuid = { workspace = true }
 plotters = "0.3"
 
-qdrant-client = { version = "1.7", features = ["grpc"] }
+qdrant-client = { version = "1.15", features = [] }
 urlencoding = "2.1"
+parking_lot.workspace = true
+ndarray.workspace = true
+dashmap.workspace = true
+blake3 = "1.5"
+base64 = "0.22"
+regex = "1.11"
+bincode = "1.3"
+lazy_static = "1.5"
+async-trait = "0.1"
+safetensors = "0.4"
+rayon = "1.10"
+lru = "0.16"
+num-complex = "0.4"
+petgraph = "0.6"
+
+# Optional dependencies for features
+opentelemetry = { version = "0.24", optional = true, features = ["trace"] }
+opentelemetry-otlp = { version = "0.17", optional = true, features = ["tonic", "tls"] }
+tracing-opentelemetry = { version = "0.26", optional = true }
+axum = { workspace = true, optional = true }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.6", optional = true }
+tonic = { version = "0.12", optional = true }
+
 [dev-dependencies]
 serde_json = "1.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -53,3 +92,7 @@ path = "src/main.rs"
 [[bin]]
 name = "rut_gauntlet"
 path = "src/bin/rut_gauntlet.rs"
+
+[[bin]]
+name = "soak_test"
+path = "src/bin/soak_test.rs"

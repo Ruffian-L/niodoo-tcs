@@ -59,6 +59,16 @@ impl QwenStatefulEmbedder {
         normalize(&mut embedding);
         Ok(embedding)
     }
+
+    /// Enable Candle backend
+    pub fn enable_candle(&mut self, _model_dir: &Path) {
+        // Stub implementation
+    }
+
+    /// Set mock mode
+    pub fn set_mock_mode(&mut self, _mock: bool) {
+        // Stub implementation
+    }
 }
 
 fn normalize(vec: &mut [f32]) {

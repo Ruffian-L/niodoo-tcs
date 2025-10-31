@@ -52,7 +52,7 @@
 
 use crate::config::ConsciousnessConfig;
 use niodoo_core::config::system_config::AppConfig;
-use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
+use niodoo_core::qwen_integration::{QwenIntegrator, QwenModelInterface};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};

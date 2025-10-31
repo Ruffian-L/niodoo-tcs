@@ -53,6 +53,49 @@ pub struct RutPrompt {
     pub text: String,
 }
 
+/// Experience tuple for learning/replay buffers and curator
+#[derive(Debug, Clone)]
+pub struct Experience {
+    pub state: Vec<f32>,
+    pub action: usize,
+    pub reward: f64,
+    pub next_state: Vec<f32>,
+    pub done: bool,
+    pub output: String, // Response text for curator refinement
+}
+
+impl Experience {
+    /// Create experience from pipeline
+    pub fn from_pipeline(
+        input: String,
+        output: String,
+        embedding: Vec<f32>,
+        pad_state: &crate::torus::PadGhostState,
+        compass: &crate::compass::CompassOutcome,
+        context: Vec<String>,
+    ) -> Self {
+        let state = embedding.clone();
+        let next_state = embedding;
+        let action = match compass.quadrant {
+            crate::compass::CompassQuadrant::Panic => 0,
+            crate::compass::CompassQuadrant::Persist => 1,
+            crate::compass::CompassQuadrant::Discover => 2,
+            crate::compass::CompassQuadrant::Master => 3,
+        };
+        let reward = compass.intrinsic_reward;
+        let done = false;
+
+        Self {
+            state,
+            action,
+            reward,
+            next_state,
+            done,
+            output,
+        }
+    }
+}
+
 pub fn load_emotional_dataset(path: &str, limit: Option<usize>) -> Result<Vec<EmotionalSample>> {
     let file =
         File::open(path).with_context(|| format!("unable to open training data at {path}"))?;

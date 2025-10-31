@@ -78,3 +78,51 @@ pub fn unique_tokens(text: &str) -> Vec<String> {
     }
     result
 }
+
+/// Seed manager for deterministic RNG
+pub struct SeedManager {
+    global_seed: u64,
+}
+
+impl SeedManager {
+    pub fn new() -> Self {
+        Self {
+            global_seed: std::env::var("RNG_SEED")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(42),
+        }
+    }
+
+    pub fn get_rng(&self, scope: &str) -> rand::rngs::StdRng {
+        use rand::SeedableRng;
+        let seed = self.global_seed.wrapping_add(scope.len() as u64);
+        rand::rngs::StdRng::seed_from_u64(seed)
+    }
+
+    /// Get master seed
+    pub fn master_seed(&self) -> u64 {
+        self.global_seed
+    }
+}
+
+static SEED_MANAGER: once_cell::sync::Lazy<std::sync::Mutex<SeedManager>> =
+    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(SeedManager::new()));
+
+/// Get the global seed manager
+pub fn seed_manager() -> std::sync::MutexGuard<'static, SeedManager> {
+    SEED_MANAGER.lock().unwrap()
+}
+
+/// Set global seed for deterministic RNG
+pub fn set_global_seed(seed: u64) {
+    let mut manager = SEED_MANAGER.lock().unwrap();
+    manager.global_seed = seed;
+}
+
+/// Compute entropy from log probabilities
+pub fn entropy_from_logprobs(logprobs: &[f64]) -> f64 {
+    // Convert logprobs to probabilities
+    let probs: Vec<f64> = logprobs.iter().map(|&lp| lp.exp()).collect();
+    shannon_entropy(&probs)
+}

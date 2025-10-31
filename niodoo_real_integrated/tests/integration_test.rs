@@ -57,9 +57,11 @@ fn tokenizer_promotes_tokens_and_emits_ids() {
             entropy_after: 0.6,
             timestamp: Utc::now().to_rfc3339(),
             compass_state: Some("Discover".to_string()),
+            cascade_stage: None,
         }],
         aggregated_context: "memory context".to_string(),
         average_similarity: 0.5,
+        curator_quality: None,
     };
 
     let output = engine
@@ -108,6 +110,7 @@ fn learning_loop_tracks_entropy_delta() {
         top_hits: vec![],
         aggregated_context: String::new(),
         average_similarity: 0.0,
+        curator_quality: None,
     };
 
     let generation = GenerationResult {

@@ -62,9 +62,9 @@ onig = { version = "6.5", default-features = false, features = ["std", "generate
 hf-hub = "0.3"
 
 # Candle framework for ML operations
-candle-core = { git = "https://github.com/huggingface/candle", version = "0.9.1" }
-candle-nn = { git = "https://github.com/huggingface/candle", version = "0.9.1" }
-candle-transformers = { git = "https://github.com/huggingface/candle", version = "0.9.1" }
+candle-core = { git = "https://github.com/huggingface/candle", branch = "main" }
+candle-nn = { git = "https://github.com/huggingface/candle", branch = "main" }
+candle-transformers = { git = "https://github.com/huggingface/candle", branch = "main" }
 
 # Async & concurrency
 tokio = { version = "1", features = ["full"] }

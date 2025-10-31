@@ -1,8 +1,6 @@
 //! Niodoo-TCS: Topological Cognitive System
 //! Copyright (c) 2025 Jason Van Pham
 
-#!/usr/bin/env rust
-
 // Simple test for Qwen integration - just test the basic functionality
 
 use niodoo_core::config::system_config::AppConfig;

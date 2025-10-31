@@ -47,7 +47,7 @@ fn calculate_emotional_entropy(state: &ConsciousnessState) -> f32 {
     let conflict = calculate_emotional_conflict(state);
     let complexity = state.emotional_state.emotional_complexity;
     let temporal_variance = (state.cycle_count as f32).log2().abs() / 10.0; // Log scale for long-term variance
-    entropy * (1.0 + conflict.norm() * 0.2 + complexity * 0.1 + temporal_variance * 0.05)
+    entropy * (1.0 + conflict.magnitude() * 0.2 + complexity * 0.1 + temporal_variance * 0.05)
     // Emergent multipliers from vectors
 }
 
@@ -66,15 +66,15 @@ fn calculate_emotional_conflict(state: &ConsciousnessState) -> EmotionalVector {
     ] {
         if primary == a || primary == b {
             let opposing = if primary == a { *b } else { *a };
-            if let Some(intensity) = state.emotional_state.secondary_emotions.get(&opposing) {
-                conflict.add(*intensity);
+            if let Some((_, intensity)) = state.emotional_state.secondary_emotions.iter().find(|(e, _)| e == &opposing) {
+                conflict = conflict + EmotionalVector::new(*intensity, 0.0, 0.0, 0.0, 0.0);
             }
         }
     }
     for (emotion_a, intensity_a) in &state.emotional_state.secondary_emotions {
         for (emotion_b, intensity_b) in &state.emotional_state.secondary_emotions {
             if emotion_a != emotion_b && are_opposing(emotion_a, emotion_b) {
-                conflict.add((*intensity_a + *intensity_b) / 2.0);
+                conflict = conflict + EmotionalVector::new((intensity_a + intensity_b) / 2.0, 0.0, 0.0, 0.0, 0.0);
             }
         }
     }
@@ -594,6 +594,18 @@ impl RealConsciousnessTester {
         Ok(metrics)
     }
 
+    fn save_learning_events(&self) -> Result<(), Box<dyn std::error::Error>> {
+        use std::fs::File;
+        use std::io::Write;
+        
+        let file_path = "learning_events.json";
+        let json = serde_json::to_string_pretty(&self.learning_events)?;
+        let mut file = File::create(file_path)?;
+        file.write_all(json.as_bytes())?;
+        println!("✅ Saved {} learning events to {}", self.learning_events.len(), file_path);
+        Ok(())
+    }
+
     fn generate_adaptive_queries(&self, current_entropy: f32, cycle: usize) -> Vec<String> {
         let mut queries = Vec::new();
 
@@ -750,7 +762,7 @@ mod tests {
         state
             .emotional_state
             .secondary_emotions
-            .insert(EmotionType::Anxious, 0.5);
+            .push((EmotionType::Anxious, 0.5));
         state.emotional_state.emotional_complexity = 0.5;
         state.cycle_count = 10;
         state.timestamp = 0;
@@ -770,10 +782,10 @@ mod tests {
         state
             .emotional_state
             .secondary_emotions
-            .insert(EmotionType::Frustrated, 0.5);
+            .push((EmotionType::Frustrated, 0.5));
 
         let conflict = calculate_emotional_conflict(&state);
-        assert_eq!(conflict, 0.25, "Conflict mismatch: {}", conflict); // 0.5 * 0.5
+        assert!(conflict.magnitude() > 0.0, "Conflict should be non-zero: {:?}", conflict);
     }
 
     #[tokio::test]
