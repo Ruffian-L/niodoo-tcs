@@ -18,9 +18,10 @@ export QDRANT_USE_GRPC=true
 export CURATOR_BACKEND=vllm
 export CURATOR_VLLM_ENDPOINT=${VLLM_ENDPOINT:-http://127.0.0.1:5001}
 export ENABLE_CURATOR=true
+export EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-auto}
 
-echo "🧪 Small Soak Test: 4 jobs x 20 cycles"
-echo "======================================"
+echo "🧪 Small Soak Test (quick mode)"
+echo "==============================="
 echo "Config: gRPC Qdrant + vLLM Curator"
 echo "QDRANT_USE_GRPC=$QDRANT_USE_GRPC"
 echo "CURATOR_BACKEND=$CURATOR_BACKEND"
@@ -37,68 +38,119 @@ curl -sS http://127.0.0.1:6333/healthz > /dev/null || { echo "❌ Qdrant not run
 curl -sS http://127.0.0.1:5001/v1/models > /dev/null || { echo "❌ vLLM not running"; exit 1; }
 echo "✅ Services ready"
 
-# Run 4 parallel jobs, 20 cycles each - Pass env vars explicitly
-for i in 1 2 3 4; do
-  echo "Starting job $i..."
-  env QDRANT_USE_GRPC=true \
-      CURATOR_BACKEND=vllm \
-      CURATOR_VLLM_ENDPOINT="${VLLM_ENDPOINT:-http://127.0.0.1:5001}" \
-      VLLM_ENDPOINT="${VLLM_ENDPOINT:-http://127.0.0.1:5001}" \
-      QDRANT_URL="${QDRANT_URL:-http://127.0.0.1:6333}" \
-      OLLAMA_ENDPOINT="${OLLAMA_ENDPOINT:-http://127.0.0.1:11434}" \
-      TOKENIZER_JSON="${TOKENIZER_JSON:-}" \
-      ENABLE_CURATOR=true \
-      RUST_LOG=info \
-  ./target/release/topology_bench \
-    --cycles 20 \
-    --dataset results/benchmarks/topology/curated_eval.tsv \
-    > logs/soak/small/soak_small_job${i}.log 2>&1 &
-  echo $! > logs/soak/small/soak_small_job${i}.pid
-  sleep 1
-done
+export SOAK_EMBEDDING_MAX_LATENCY_MS=${SOAK_EMBEDDING_MAX_LATENCY_MS:-1000}
+echo "🎯 Embedding latency target: ${SOAK_EMBEDDING_MAX_LATENCY_MS} ms"
+echo "Verifying GPU-backed embeddings..."
+
+# Ensure ONNX runtime libraries are discoverable before spawning soak_test
+export LD_LIBRARY_PATH="/tmp/cudnn8_extract/cudnn-linux-x86_64-8.9.7.29_cuda11-archive/lib:/workspace/Niodoo-Final/third_party/onnxruntime-linux-x64-gpu-1.18.1/lib:/workspace/Niodoo-Final/third_party/onnxruntime-linux-x64-gpu-1.18.1/lib/cuda_compat:/usr/local/cuda-11.8/lib64:/usr/local/cuda-12.8/lib64:${LD_LIBRARY_PATH:-}"
+
+python3 <<'PY'
+import json
+import os
+import subprocess
+import sys
+import time
+
+script_path = "/workspace/Niodoo-Final/src/scripts/real_ai_inference.py"
+target_ms = int(os.environ["SOAK_EMBEDDING_MAX_LATENCY_MS"])
+
+start = time.perf_counter()
+proc = subprocess.run(
+    ["python3", script_path, "embed", "GPU verification probe"],
+    capture_output=True,
+    text=True,
+    check=True,
+)
+elapsed_ms = (time.perf_counter() - start) * 1000
+
+try:
+    payload = json.loads(proc.stdout)
+except json.JSONDecodeError as exc:
+    sys.stderr.write(f"❌ Failed to parse embedding response: {exc}\n{proc.stdout}\n")
+    sys.exit(1)
+
+if payload.get("status") != "success":
+    sys.stderr.write(f"❌ Embedding probe failed: {payload!r}\n")
+    sys.exit(1)
+
+device = payload.get("device")
+if device is None:
+    sys.stderr.write("❌ Embedding response missing device telemetry; cannot confirm GPU usage\n")
+    sys.exit(1)
+
+if not device.startswith("cuda"):
+    sys.stderr.write(f"❌ Embedding probe ran on {device}, expected CUDA device\n")
+    sys.exit(1)
+
+latency_ms = float(payload.get("warmup_ms", elapsed_ms))
+total_ms = elapsed_ms
+
+if latency_ms > target_ms:
+    sys.stderr.write(
+        f"❌ Embedding warm-up {latency_ms:.2f} ms exceeded target {target_ms} ms\n"
+    )
+    sys.exit(1)
+
+if total_ms > target_ms:
+    sys.stderr.write(
+        f"⚠️ Cold start cost {total_ms:.2f} ms exceeds target {target_ms} ms; warm-up {latency_ms:.2f} ms. Continuing.\n"
+    )
+
+print(
+    f"✅ GPU embeddings ready on {device} (warm-up {latency_ms:.2f} ms, cold start {total_ms:.2f} ms, target {target_ms} ms)"
+)
+PY
+
+echo "GPU verification passed. Ensuring soak_test binary is available..."
+
+if [ ! -x "./target/release/soak_test" ]; then
+  echo "Building soak_test (release)..."
+  mkdir -p /workspace/Niodoo-Final/.tmp
+  export TMPDIR=/workspace/Niodoo-Final/.tmp
+  cargo build --release --bin soak_test >/tmp/small_soak_build.log 2>&1 || {
+    echo "❌ Failed to build soak_test. See /tmp/small_soak_build.log";
+    exit 1;
+  }
+fi
+
+export RUST_LOG=${RUST_LOG:-info}
+
+LOG_FILE="logs/soak/small/soak_small.log"
+echo "Running soak_test --quick (logs -> $LOG_FILE)"
+./target/release/soak_test --quick > "$LOG_FILE" 2>&1
+status=$?
 
 echo ""
-echo "⏳ Waiting for jobs to complete..."
-echo "Monitor with: tail -f logs/soak/small/soak_small_job*.log"
+if [ $status -eq 0 ]; then
+  echo "✅ Small soak test complete!"
+else
+  echo "⚠️ Soak test exited with status $status"
+fi
 
-# Wait for all jobs
-for pidfile in logs/soak/small/soak_small_job*.pid; do
-  pid=$(cat "$pidfile")
-  echo "Waiting for $(basename $pidfile) (pid=$pid)..."
-  while kill -0 "$pid" 2>/dev/null; do
-    sleep 2
-  done
-  echo "$(basename $pidfile) complete."
-done
-
-echo ""
-echo "✅ Small soak test complete!"
 echo ""
 echo "📊 Summary:"
-python3 << 'PY'
-import csv,glob,statistics as s
-files=sorted(glob.glob('results/benchmarks/topology/topology_benchmark_*.csv'))[-4:]
-if not files:
-    print("No CSV files found")
-    exit(0)
-bl_r=[];hy_r=[];bl_l=[];hy_l=[]
-for f in files:
-  try:
-    for r in csv.DictReader(open(f)):
-      try:
-        bl_r.append(float(r.get('rouge_baseline', 0))); hy_r.append(float(r.get('rouge_hybrid', 0)))
-        bl_l.append(float(r.get('latency_baseline_ms', 0))); hy_l.append(float(r.get('latency_hybrid_ms', 0)))
-      except: pass
-  except: pass
-if not bl_r:
-    print("No data found in CSV files")
-    exit(0)
-def p(v,q):
-  v=sorted(v); i=(len(v)-1)*q; lo=int(i); hi=min(lo+1,len(v)-1); a=v[lo]; b=v[hi]; return a+(b-a)*(i-lo)
-print('N cycles:',len(bl_r))
-print('ROUGE mean baseline',round(s.mean(bl_r),3),'hybrid',round(s.mean(hy_r),3),'delta',round(s.mean(hy_r)-s.mean(bl_r),3))
-print('LATENCY mean baseline',int(s.mean(bl_l)),'hybrid',int(s.mean(hy_l)),'delta',int(s.mean(hy_l)-s.mean(bl_l)))
-print('LATENCY p50/p95/p99 baseline',int(p(bl_l,0.5)),int(p(bl_l,0.95)),int(p(bl_l,0.99)))
-print('LATENCY p50/p95/p99 hybrid ',int(p(hy_l,0.5)),int(p(hy_l,0.95)),int(p(hy_l,0.99)))
+python3 <<'PY'
+import json, pathlib
+results_path = pathlib.Path('soak_test_results.json')
+if not results_path.exists():
+    print('No soak_test_results.json produced. Check logs/soak/small/soak_small.log')
+    raise SystemExit(0)
+data = json.loads(results_path.read_text())
+def flag(ok):
+    return '✅' if ok else '❌'
+success_rate = data.get('success_rate', 0)
+avg_latency = data.get('avg_latency_ms', 0)
+ops_sec = data.get('ops_per_sec', 0)
+failed = data.get('failed_operations', 0)
+duration = data.get('duration_secs', 0)
+print(f"Duration: {duration:.1f}s | Ops: {data.get('total_operations', 0)} | Ops/sec: {ops_sec:.1f}")
+print(f"Success rate: {flag(success_rate >= 0.99)} {success_rate*100:.2f}% (failures={failed})")
+print(f"Avg latency: {flag(avg_latency < 1000)} {avg_latency:.1f} ms")
+print(f"Peak memory: {data.get('peak_memory_mb', 0):.1f} MB | Growth: {data.get('memory_growth_mb', 0):.1f} MB")
+print(f"Threats: {data.get('threat_count', 0)} | Healings: {data.get('healing_count', 0)} | Breakthroughs: {data.get('breakthroughs', 0)}")
 PY
+
+echo ""
+echo "🗒️ Detailed logs: $LOG_FILE"
 

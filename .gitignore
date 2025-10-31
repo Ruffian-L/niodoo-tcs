@@ -186,3 +186,4 @@ docs/validation/
 {ok+=}
 1{ok+=}
 
+.cargo-tmp/

@@ -26,7 +26,7 @@ extract_host_port() {
         host="127.0.0.1"
         port="$default_port"
     fi
-    printf "%s %s" "$host" "$port"
+    printf "%s %s\n" "$host" "$port"
 }
 
 VLLM_ENDPOINT=${VLLM_ENDPOINT:-http://127.0.0.1:5001}
