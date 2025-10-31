@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::Arc;
@@ -11,6 +12,7 @@ use tracing::{info, warn};
 
 use crate::compass::CompassOutcome;
 use crate::config::RuntimeConfig;
+use crate::data::{DqnReplayMetadata, Experience};
 use crate::erag::{CollapseResult, EragClient, EragMemory};
 use crate::generation::GenerationResult;
 use crate::lora_trainer::{LoRAConfig, LoRATrainer};
@@ -27,6 +29,7 @@ pub struct LearningOutcome {
     pub qlora_updates: Vec<String>,
     pub entropy_delta: f64,
     pub adjusted_params: HashMap<String, f64>, // e.g., "temperature" => 0.8
+    pub last_replay: Option<DqnReplayMetadata>,
 }
 
 impl Default for LearningOutcome {
@@ -37,6 +40,7 @@ impl Default for LearningOutcome {
             qlora_updates: Vec::new(),
             entropy_delta: 0.0,
             adjusted_params: HashMap::new(),
+            last_replay: None,
         }
     }
 }
@@ -259,7 +263,9 @@ impl LearningLoop {
         }
 
         let config_snapshot = self.config.read().clone();
-        let fallback_ucb = compass.ucb1_score.unwrap_or(config_snapshot.mcts_c_scale as f64) as f64;
+        let fallback_ucb = compass
+            .ucb1_score
+            .unwrap_or(config_snapshot.mcts_c_scale as f64) as f64;
         let fallback_curator = collapse
             .curator_quality
             .map(|q| q as f64)
@@ -314,6 +320,14 @@ impl LearningLoop {
         let reward = shaped_reward + predictor_delta;
         let blended_reward = reward;
 
+        let replay_snapshot = DqnReplayMetadata {
+            state_metrics: state.metrics.clone(),
+            action_param: action.param.clone(),
+            action_delta: action.delta,
+            reward: blended_reward,
+            next_state_metrics: next_state.metrics.clone(),
+        };
+
         self.dqn_update(
             state.clone(),
             action.clone(),
@@ -332,13 +346,13 @@ impl LearningLoop {
         let skip_qlora = std::env::var("SKIP_QLORA_TRAINING")
             .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
             .unwrap_or(false);
-        
+
         // Run QLoRA training asynchronously (non-blocking) using spawn_blocking
         // This moves CPU-bound training off the async runtime without blocking pipeline
         let run_qlora_async = std::env::var("QLORA_ASYNC")
             .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
             .unwrap_or(false);
-        
+
         if self.episode_count % 5 == 0 {
             self.reptile_step(32).await?;
             if !skip_qlora && self.average_reward() < 0.0 {
@@ -346,8 +360,9 @@ impl LearningLoop {
                     // Background training: collect data, then spawn blocking task
                     let erag_clone = self.erag.clone();
                     let config_clone = self.config.clone();
-                    let replay_buffer_snapshot: Vec<_> = self.replay_buffer.iter().rev().take(32).cloned().collect();
-                    
+                    let replay_buffer_snapshot: Vec<_> =
+                        self.replay_buffer.iter().rev().take(32).cloned().collect();
+
                     tokio::spawn(async move {
                         // Collect low-reward tuples (async)
                         let _low_tuples = match erag_clone.query_low_reward_tuples(-0.5, 16).await {
@@ -357,30 +372,32 @@ impl LearningLoop {
                                 return;
                             }
                         };
-                        
+
                         let embedding_dim = config_clone.read().qdrant_vector_dim;
                         let training_samples: Vec<(Vec<f32>, Vec<f32>)> = replay_buffer_snapshot
                             .iter()
                             .map(|tuple| {
-                                let mut input: Vec<f32> = tuple.state.metrics.iter().map(|v| *v as f32).collect();
+                                let mut input: Vec<f32> =
+                                    tuple.state.metrics.iter().map(|v| *v as f32).collect();
                                 input.resize(embedding_dim, 0.0);
                                 input.truncate(embedding_dim);
-                                
-                                let mut target: Vec<f32> = tuple.next_state.metrics.iter().map(|v| *v as f32).collect();
+
+                                let mut target: Vec<f32> =
+                                    tuple.next_state.metrics.iter().map(|v| *v as f32).collect();
                                 target.resize(embedding_dim, 0.0);
                                 target.truncate(embedding_dim);
-                                
+
                                 (input, target)
                             })
                             .collect();
-                        
+
                         if training_samples.is_empty() {
                             return;
                         }
-                        
+
                         // Clone training samples for spawn_blocking closure
                         let training_samples_clone = training_samples.clone();
-                        
+
                         // Create new trainer for background training (won't update main one, but training still happens)
                         let mut bg_trainer = match LoRATrainer::new() {
                             Ok(trainer) => trainer,
@@ -389,13 +406,18 @@ impl LearningLoop {
                                 return;
                             }
                         };
-                        
+
                         // Run training on blocking thread pool (non-blocking for async runtime)
                         match tokio::task::spawn_blocking(move || {
                             bg_trainer.train(&training_samples_clone, 10, 1e-3_f32)
-                        }).await {
+                        })
+                        .await
+                        {
                             Ok(Ok(_loss)) => {
-                                info!("QLoRA fine-tuning completed in background on {} samples", training_samples.len());
+                                info!(
+                                    "QLoRA fine-tuning completed in background on {} samples",
+                                    training_samples.len()
+                                );
                                 // Note: bg_trainer updates are lost, but training still improves model understanding
                             }
                             Ok(Err(e)) => {
@@ -480,6 +502,7 @@ impl LearningLoop {
             qlora_updates,
             entropy_delta,
             adjusted_params,
+            last_replay: Some(replay_snapshot),
         })
     }
 
@@ -648,26 +671,46 @@ impl LearningLoop {
         base - (penalty * weight) + conv_bonus + novelty_bonus
     }
 
-    fn choose_action(&mut self, state: &DqnState) -> DqnAction {
-        if self.rng.gen_range(0.0..1.0) < self.epsilon {
-            self.action_space.choose(&mut self.rng).cloned().unwrap()
+    fn fallback_action(&self) -> DqnAction {
+        if let Some(action) = self.action_space.first() {
+            action.clone()
         } else {
-            let s_key = state.to_key();
-            // DashMap: lock-free read access (no locks needed!)
-            if let Some(qs) = self.q_table.get(&s_key) {
-                let max_key = qs
-                    .iter()
-                    .max_by(|a, b| a.value().partial_cmp(b.value()).unwrap())
-                    .map(|entry| entry.key().clone())
-                    .unwrap_or_else(|| self.action_space[0].to_key());
-                self.action_space
-                    .iter()
-                    .find(|a| a.to_key() == max_key)
-                    .cloned()
-                    .unwrap_or_else(|| self.action_space[0].clone())
-            } else {
-                self.action_space[0].clone()
+            warn!("Action space empty; returning no-op action");
+            DqnAction {
+                param: "noop".to_string(),
+                delta: 0.0,
             }
+        }
+    }
+
+    fn choose_action(&mut self, state: &DqnState) -> DqnAction {
+        if self.action_space.is_empty() {
+            return self.fallback_action();
+        }
+
+        if self.rng.gen_range(0.0..1.0) < self.epsilon {
+            return self
+                .action_space
+                .choose(&mut self.rng)
+                .cloned()
+                .unwrap_or_else(|| self.fallback_action());
+        }
+
+        let s_key = state.to_key();
+        if let Some(qs) = self.q_table.get(&s_key) {
+            let fallback_key = self.fallback_action().to_key();
+            let max_key = qs
+                .iter()
+                .max_by(|a, b| a.value().partial_cmp(b.value()).unwrap_or(Ordering::Equal))
+                .map(|entry| entry.key().clone())
+                .unwrap_or(fallback_key);
+            self.action_space
+                .iter()
+                .find(|a| a.to_key() == max_key)
+                .cloned()
+                .unwrap_or_else(|| self.fallback_action())
+        } else {
+            self.fallback_action()
         }
     }
 
@@ -693,9 +736,15 @@ impl LearningLoop {
         let batch_size = 32.min(self.replay_buffer.len());
         // Convert VecDeque to Vec for sampling
         let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
-        let batch: Vec<_> = (0..batch_size)
-            .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
-            .collect();
+        let mut batch = Vec::with_capacity(batch_size);
+        for _ in 0..batch_size {
+            if let Some(sample) = buffer_vec.choose(&mut self.rng) {
+                batch.push(sample.clone());
+            } else {
+                warn!("Replay buffer empty while sampling batch; stopping early");
+                break;
+            }
+        }
 
         let q_table = Arc::clone(&self.q_table);
         let alpha = self.alpha;
@@ -706,19 +755,23 @@ impl LearningLoop {
             for tuple in batch {
                 let s_key = tuple.state.to_key();
                 let a_key = tuple.action.to_key();
-                
+
                 // Get or create nested DashMap for this state (lock-free)
                 let state_map = q_table.entry(s_key).or_insert_with(DashMap::new);
-                
+
                 // Calculate max Q-value for next state
                 let max_next_q = q_table
                     .get(&tuple.next_state.to_key())
-                    .map(|qs| qs.iter().map(|e| *e.value()).fold(f64::NEG_INFINITY, f64::max))
+                    .map(|qs| {
+                        qs.iter()
+                            .map(|e| *e.value())
+                            .fold(f64::NEG_INFINITY, f64::max)
+                    })
                     .unwrap_or(0.0);
-                
+
                 // Get current Q-value (or 0.0 if not exists)
                 let current_q = state_map.get(&a_key).map(|e| *e.value()).unwrap_or(0.0);
-                
+
                 // Update Q-value using Bellman equation
                 let updated = current_q + alpha * (tuple.reward + gamma * max_next_q - current_q);
                 state_map.insert(a_key, updated);
@@ -747,6 +800,33 @@ impl LearningLoop {
         }
     }
 
+    fn adjust_runtime_param(config: &mut RuntimeConfig, param: &str, delta: f64) {
+        match param {
+            "temperature" => {
+                config.temperature = (config.temperature + delta).clamp(0.1, 1.0);
+            }
+            "top_p" => {
+                config.top_p = (config.top_p + delta).clamp(0.1, 1.0);
+            }
+            "mcts_c" => {
+                config.phase2_mcts_c_increment =
+                    (config.phase2_mcts_c_increment + delta).clamp(0.0, 2.0);
+            }
+            "retrieval_top_k" => {
+                let updated =
+                    (config.phase2_retrieval_top_k_increment as f64 + delta).clamp(0.0, 10.0);
+                config.phase2_retrieval_top_k_increment = updated.round() as i32;
+            }
+            "novelty_threshold" => {
+                config.novelty_threshold = (config.novelty_threshold + delta).clamp(0.0, 1.0);
+            }
+            "self_awareness_level" => {
+                config.self_awareness_level = (config.self_awareness_level + delta).clamp(0.0, 1.0);
+            }
+            _ => {}
+        }
+    }
+
     async fn reptile_step(&mut self, batch_size: usize) -> Result<()> {
         // Sample batch from replay
         let batch: Vec<_> = if self.replay_buffer.len() < batch_size / 2 {
@@ -754,7 +834,11 @@ impl LearningLoop {
             {
                 let query_metrics = if let Some(last) = self.replay_buffer.back() {
                     // Convert f64 metrics to f32 for query_replay_batch
-                    last.state.metrics.iter().map(|x| *x as f32).collect::<Vec<f32>>()
+                    last.state
+                        .metrics
+                        .iter()
+                        .map(|x| *x as f32)
+                        .collect::<Vec<f32>>()
                 } else {
                     vec![0.0f32; 5]
                 };
@@ -762,25 +846,42 @@ impl LearningLoop {
                     .erag
                     .query_replay_batch("", &query_metrics[..], batch_size)
                     .await?;
-                // Note: ERAG returns Experience, but replay_buffer expects ReplayTuple
-                // For now, skip ERAG batch until conversion is implemented
-                let mut full = self.replay_buffer.iter().cloned().collect::<Vec<_>>();
-                // full.extend(erag_batch); // Type mismatch: Experience vs ReplayTuple
-                full.truncate(batch_size);
-                full
+                let mut combined = self.replay_buffer.iter().cloned().collect::<Vec<_>>();
+                combined.extend(
+                    erag_batch
+                        .iter()
+                        .filter_map(|exp| self.experience_to_replay(exp)),
+                );
+                if combined.len() > batch_size {
+                    combined.truncate(batch_size);
+                }
+                combined
             }
             #[cfg(test)]
             {
                 let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
-                (0..batch_size.min(buffer_vec.len()))
-                    .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
-                    .collect()
+                let mut sampled = Vec::with_capacity(batch_size.min(buffer_vec.len()));
+                for _ in 0..batch_size.min(buffer_vec.len()) {
+                    if let Some(sample) = buffer_vec.choose(&mut self.rng) {
+                        sampled.push(sample.clone());
+                    } else {
+                        break;
+                    }
+                }
+                sampled
             }
         } else {
             let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
-            (0..batch_size.min(buffer_vec.len()))
-                .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
-                .collect()
+            let mut sampled = Vec::with_capacity(batch_size.min(buffer_vec.len()));
+            for _ in 0..batch_size.min(buffer_vec.len()) {
+                if let Some(sample) = buffer_vec.choose(&mut self.rng) {
+                    sampled.push(sample.clone());
+                } else {
+                    warn!("Replay buffer empty during reptile sampling; stopping early");
+                    break;
+                }
+            }
+            sampled
         };
 
         let mut param_deltas = HashMap::new();
@@ -797,34 +898,7 @@ impl LearningLoop {
         let mut config = self.config.write();
         for (param, total_delta) in &param_deltas {
             let avg_delta = total_delta / batch_len as f64;
-            match param.as_str() {
-                "temperature" => {
-                    config.temperature += avg_delta;
-                    config.temperature = config.temperature.clamp(0.1, 1.0);
-                }
-                "top_p" => {
-                    config.top_p += avg_delta;
-                    config.top_p = config.top_p.clamp(0.1, 1.0);
-                }
-                "mcts_c" => {
-                    config.phase2_mcts_c_increment += avg_delta;
-                    config.phase2_mcts_c_increment = config.phase2_mcts_c_increment.clamp(0.0, 2.0);
-                }
-                "retrieval_top_k" => {
-                    let new_val = (config.phase2_retrieval_top_k_increment as f64 + avg_delta)
-                        .clamp(0.0, 10.0);
-                    config.phase2_retrieval_top_k_increment = new_val as i32;
-                }
-                "novelty_threshold" => {
-                    config.novelty_threshold += avg_delta;
-                    config.novelty_threshold = config.novelty_threshold.clamp(0.0, 1.0);
-                }
-                "self_awareness_level" => {
-                    config.self_awareness_level += avg_delta;
-                    config.self_awareness_level = config.self_awareness_level.clamp(0.0, 1.0);
-                }
-                _ => {}
-            }
+            Self::adjust_runtime_param(&mut config, param, avg_delta);
         }
         info!("Reptile meta-update applied");
         Ok(())
@@ -833,45 +907,26 @@ impl LearningLoop {
     async fn trigger_qlora(&mut self) -> Result<()> {
         #[cfg(not(test))]
         {
-            // Step 1: Collect low-reward tuples from ERAG
+            // Step 1: Collect low-reward tuples from ERAG for targeted fine-tuning
             let low_tuples = self.erag.query_low_reward_tuples(-0.5, 16).await?;
             let embedding_dim = self.config.read().qdrant_vector_dim;
-
-            // Step 2: Prepare training data from replay buffer + topological features
-            let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
-                .replay_buffer
+            let external_replay: Vec<ReplayTuple> = low_tuples
                 .iter()
-                .rev()
-                .take(32)
-                .map(|tuple| {
-                    // Input: state metrics (5 dims) + topological features (4 dims) = 9 dims
-                    let mut input = tuple
-                        .state
-                        .metrics
-                        .iter()
-                        .map(|value| *value as f32)
-                        .collect::<Vec<f32>>();
+                .filter_map(|exp| self.experience_to_replay(exp))
+                .collect();
 
-                    // Pad to fixed size if needed
-                    while input.len() < embedding_dim {
-                        input.push(0.0);
-                    }
-                    input.truncate(embedding_dim);
+            // Step 2: Build training corpus from recent replay buffer entries plus external tuples
+            const MAX_QLORA_SAMPLES: usize = 64;
+            let mut combined_replay: Vec<ReplayTuple> =
+                self.replay_buffer.iter().rev().take(32).cloned().collect();
+            combined_replay.extend(external_replay.iter().cloned());
+            if combined_replay.len() > MAX_QLORA_SAMPLES {
+                combined_replay.truncate(MAX_QLORA_SAMPLES);
+            }
 
-                    // Target: next state metrics (5 dims) -> pad to 896
-                    let mut target = tuple
-                        .next_state
-                        .metrics
-                        .iter()
-                        .map(|value| *value as f32)
-                        .collect::<Vec<f32>>();
-                    while target.len() < embedding_dim {
-                        target.push(0.0);
-                    }
-                    target.truncate(embedding_dim);
-
-                    (input, target)
-                })
+            let training_samples: Vec<(Vec<f32>, Vec<f32>)> = combined_replay
+                .iter()
+                .map(|tuple| self.replay_tuple_to_training(tuple, embedding_dim))
                 .collect();
 
             if training_samples.is_empty() {
@@ -879,7 +934,7 @@ impl LearningLoop {
                 return Ok(());
             }
 
-            // Step 3: Train LoRA adapter on topological data
+            // Step 3: Train LoRA adapter on the assembled replay tuples
             if std::env::var("DISABLE_LORA")
                 .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
                 .unwrap_or(false)
@@ -894,19 +949,29 @@ impl LearningLoop {
                         training_samples.len()
                     );
 
-                    // Step 4: After training, optionally adjust config based on low-reward tuples
-                    // NOTE: low_tuples is Vec<Experience> where action is usize, not ReplayTuple
-                    // Skip config adjustment since we can't extract action parameters from Experience
-                    // TODO: Convert Experience to ReplayTuple or use replay_buffer instead
-                    /*
-                    if !low_tuples.is_empty() {
+                    // Step 4: Apply configuration nudges based on low-reward tuples
+                    if !external_replay.is_empty() {
                         let mut param_deltas: HashMap<String, f64> = HashMap::new();
-                        for tuple in &low_tuples {
-                            // Experience.action is usize, not DqnAction
-                            // Need to convert or skip this adjustment
+                        for tuple in &external_replay {
+                            if tuple.reward >= 0.0 {
+                                continue;
+                            }
+                            let entry = param_deltas
+                                .entry(tuple.action.param.clone())
+                                .or_insert(0.0);
+                            let penalty = tuple.reward.abs();
+                            *entry -= penalty * tuple.action.delta;
+                        }
+
+                        if !param_deltas.is_empty() {
+                            let mut config = self.config.write();
+                            let normaliser = external_replay.len() as f64;
+                            for (param, total_delta) in param_deltas {
+                                let adjustment = (total_delta / normaliser) * self.alpha;
+                                Self::adjust_runtime_param(&mut config, &param, adjustment);
+                            }
                         }
                     }
-                    */
                 }
                 Err(error) => {
                     warn!(%error, "QLoRA fine-tuning failed");
@@ -925,6 +990,150 @@ impl LearningLoop {
             return 0.0;
         }
         self.replay_buffer.iter().map(|t| t.reward).sum::<f64>() / self.replay_buffer.len() as f64
+    }
+
+    fn replay_tuple_to_training(
+        &self,
+        tuple: &ReplayTuple,
+        embedding_dim: usize,
+    ) -> (Vec<f32>, Vec<f32>) {
+        let mut input: Vec<f32> = tuple
+            .state
+            .metrics
+            .iter()
+            .map(|value| *value as f32)
+            .collect();
+        if input.len() < embedding_dim {
+            input.resize(embedding_dim, 0.0);
+        } else {
+            input.truncate(embedding_dim);
+        }
+
+        let mut target: Vec<f32> = tuple
+            .next_state
+            .metrics
+            .iter()
+            .map(|value| *value as f32)
+            .collect();
+        if target.len() < embedding_dim {
+            target.resize(embedding_dim, 0.0);
+        } else {
+            target.truncate(embedding_dim);
+        }
+
+        (input, target)
+    }
+
+    fn experience_to_replay(&self, experience: &Experience) -> Option<ReplayTuple> {
+        if let Some(meta) = &experience.replay {
+            return Some(ReplayTuple {
+                state: DqnState {
+                    metrics: meta.state_metrics.clone(),
+                },
+                action: DqnAction {
+                    param: meta.action_param.clone(),
+                    delta: meta.action_delta,
+                },
+                reward: meta.reward,
+                next_state: DqnState {
+                    metrics: meta.next_state_metrics.clone(),
+                },
+            });
+        }
+
+        if self.action_space.is_empty() {
+            return None;
+        }
+
+        let state_metrics = Self::derive_state_metrics(&experience.state)?;
+        let next_metrics = if experience.next_state.is_empty() {
+            state_metrics.clone()
+        } else {
+            Self::derive_state_metrics(&experience.next_state)?
+        };
+        let action = self.select_action_for_index(experience.action)?;
+
+        Some(ReplayTuple {
+            state: DqnState {
+                metrics: state_metrics,
+            },
+            action,
+            reward: experience.reward,
+            next_state: DqnState {
+                metrics: next_metrics,
+            },
+        })
+    }
+
+    fn select_action_for_index(&self, index: usize) -> Option<DqnAction> {
+        if self.action_space.is_empty() {
+            return None;
+        }
+
+        let mapped = match index {
+            0 => self
+                .find_action_variant("temperature", false)
+                .or_else(|| self.find_action_variant("novelty_threshold", false)),
+            1 => self
+                .find_action_variant("temperature", true)
+                .or_else(|| self.find_action_variant("top_p", true)),
+            2 => self
+                .find_action_variant("novelty_threshold", true)
+                .or_else(|| self.find_action_variant("top_p", true)),
+            3 => self
+                .find_action_variant("self_awareness_level", true)
+                .or_else(|| self.find_action_variant("mcts_c", true)),
+            _ => None,
+        };
+
+        mapped.or_else(|| Some(self.action_space[index % self.action_space.len()].clone()))
+    }
+
+    fn find_action_variant(&self, param: &str, prefer_positive: bool) -> Option<DqnAction> {
+        self.action_space
+            .iter()
+            .find(|action| {
+                action.param == param
+                    && (prefer_positive && action.delta.is_sign_positive()
+                        || !prefer_positive && action.delta.is_sign_negative())
+            })
+            .cloned()
+    }
+
+    fn derive_state_metrics(vector: &[f32]) -> Option<Vec<f64>> {
+        let filtered: Vec<f64> = vector
+            .iter()
+            .map(|&value| value as f64)
+            .filter(|value| value.is_finite())
+            .collect();
+        if filtered.is_empty() {
+            return None;
+        }
+
+        let len = filtered.len() as f64;
+        let mean = filtered.iter().sum::<f64>() / len;
+        let variance = filtered
+            .iter()
+            .map(|value| {
+                let diff = value - mean;
+                diff * diff
+            })
+            .sum::<f64>()
+            / len.max(1.0);
+        let std_dev = variance.sqrt();
+        let max = filtered
+            .iter()
+            .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
+        let min = filtered
+            .iter()
+            .fold(f64::INFINITY, |acc, value| acc.min(*value));
+        let l2_norm = filtered
+            .iter()
+            .map(|value| value * value)
+            .sum::<f64>()
+            .sqrt();
+
+        Some(vec![mean, std_dev, max, min, l2_norm])
     }
 
     // INTEGRATION FIX: Compute Wasserstein distance between current and historical entropy distributions
@@ -1019,9 +1228,9 @@ impl LearningLoop {
         // Experience.state is Vec<f32>, not DqnState with metrics
         // Convert Experience to (delta, rouge) tuples if state has enough elements
         for tuple in old_tuples {
-            if tuple.state.len() >= 2 {
-                let delta = tuple.state[0] as f64;
-                let rouge = tuple.state[1] as f64;
+            if let Some(replay) = self.experience_to_replay(&tuple) {
+                let delta = replay.state.metrics.get(0).copied().unwrap_or(0.0);
+                let rouge = replay.state.metrics.get(1).copied().unwrap_or(0.0);
                 mixed_episodes.push((delta, rouge));
             }
         }
@@ -1164,7 +1373,7 @@ impl GaussianProcess {
                 if let Some(max_entry) = y_train
                     .iter()
                     .enumerate()
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(Ordering::Equal))
                 {
                     let best = &x_train[max_entry.0];
                     return (0..n)

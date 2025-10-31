@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::Arc;
@@ -569,27 +570,50 @@ impl LearningLoop {
         base - (penalty * weight) + conv_bonus + novelty_bonus
     }
 
-    fn choose_action(&mut self, state: &DqnState) -> DqnAction {
-        if self.rng.gen_range(0.0..1.0) < self.epsilon {
-            self.action_space.choose(&mut self.rng).cloned().unwrap()
+    fn fallback_action(&self) -> DqnAction {
+        if let Some(action) = self.action_space.first() {
+            action.clone()
         } else {
-            let s_key = state.to_key();
-            let table = self.q_table.read();
-            let q_values = table.get(&s_key);
-            if let Some(qs) = q_values {
-                let max_key = qs
-                    .iter()
-                    .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-                    .map(|(k, _)| k.clone())
-                    .unwrap_or_else(|| self.action_space[0].to_key());
-                self.action_space
-                    .iter()
-                    .find(|a| a.to_key() == max_key)
-                    .cloned()
-                    .unwrap_or_else(|| self.action_space[0].clone())
-            } else {
-                self.action_space[0].clone()
+            warn!("Action space empty; returning no-op action");
+            DqnAction {
+                param: "noop".to_string(),
+                delta: 0.0,
             }
+        }
+    }
+
+    fn choose_action(&mut self, state: &DqnState) -> DqnAction {
+        if self.action_space.is_empty() {
+            return self.fallback_action();
+        }
+
+        if self.rng.gen_range(0.0..1.0) < self.epsilon {
+            return self
+                .action_space
+                .choose(&mut self.rng)
+                .cloned()
+                .unwrap_or_else(|| self.fallback_action());
+        }
+
+        let s_key = state.to_key();
+        let table = self.q_table.read();
+        if let Some(qs) = table.get(&s_key) {
+            let fallback_key = self.fallback_action().to_key();
+            let max_key = qs
+                .iter()
+                .max_by(|a, b| a
+                    .1
+                    .partial_cmp(&b.1)
+                    .unwrap_or(Ordering::Equal))
+                .map(|(k, _)| k.clone())
+                .unwrap_or(fallback_key);
+            self.action_space
+                .iter()
+                .find(|a| a.to_key() == max_key)
+                .cloned()
+                .unwrap_or_else(|| self.fallback_action())
+        } else {
+            self.fallback_action()
         }
     }
 
@@ -615,9 +639,15 @@ impl LearningLoop {
         let batch_size = 32.min(self.replay_buffer.len());
         // Convert VecDeque to Vec for sampling
         let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
-        let batch: Vec<_> = (0..batch_size)
-            .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
-            .collect();
+        let mut batch = Vec::with_capacity(batch_size);
+        for _ in 0..batch_size {
+            if let Some(sample) = buffer_vec.choose(&mut self.rng) {
+                batch.push(sample.clone());
+            } else {
+                warn!("Replay buffer empty while sampling batch; stopping early");
+                break;
+            }
+        }
 
         let q_table = Arc::clone(&self.q_table);
         let alpha = self.alpha;
@@ -684,15 +714,28 @@ impl LearningLoop {
             #[cfg(test)]
             {
                 let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
-                (0..batch_size.min(buffer_vec.len()))
-                    .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
-                    .collect()
+                let mut sampled = Vec::with_capacity(batch_size.min(buffer_vec.len()));
+                for _ in 0..batch_size.min(buffer_vec.len()) {
+                    if let Some(sample) = buffer_vec.choose(&mut self.rng) {
+                        sampled.push(sample.clone());
+                    } else {
+                        break;
+                    }
+                }
+                sampled
             }
         } else {
             let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
-            (0..batch_size.min(buffer_vec.len()))
-                .map(|_| buffer_vec.choose(&mut self.rng).cloned().unwrap())
-                .collect()
+            let mut sampled = Vec::with_capacity(batch_size.min(buffer_vec.len()));
+            for _ in 0..batch_size.min(buffer_vec.len()) {
+                if let Some(sample) = buffer_vec.choose(&mut self.rng) {
+                    sampled.push(sample.clone());
+                } else {
+                    warn!("Replay buffer empty during reptile sampling; stopping early");
+                    break;
+                }
+            }
+            sampled
         };
 
         let mut param_deltas = HashMap::new();
@@ -1109,7 +1152,10 @@ impl GaussianProcess {
                 if let Some(max_entry) = y_train
                     .iter()
                     .enumerate()
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                    .max_by(|a, b| a
+                        .1
+                        .partial_cmp(b.1)
+                        .unwrap_or(Ordering::Equal))
                 {
                     let best = &x_train[max_entry.0];
                     return (0..n)
