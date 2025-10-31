@@ -604,7 +604,6 @@ impl EragClient {
         &self,
         input: &str,
         output: &str,
-        metrics: &dyn std::any::Any,
         details: Option<String>,
         failure_type: &str,
         retry_count: u32,

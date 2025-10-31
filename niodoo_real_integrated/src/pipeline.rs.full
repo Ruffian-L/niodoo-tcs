@@ -7,12 +7,11 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use anyhow::Result;
 
-use crate::compass::{CascadeTracker, CompassEngine, CompassOutcome, CompassQuadrant};
+use crate::compass::{CompassEngine, CompassOutcome, CompassQuadrant};
 use crate::config::{
-    CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode,
-    env_value, set_env_override,
+    CliArgs, CuratorConfig, HardwareProfile, RuntimeConfig, TopologyMode, env_value,
+    set_env_override,
 };
-use crate::consonance::{compute_consonance, ConsonanceMetrics};
 use crate::curator::Curator;
 use crate::data::{
     DatasetStats, Experience, RutPrompt, compute_dataset_stats, load_emotional_dataset,
@@ -21,42 +20,26 @@ use crate::data::{
 use crate::embedding::QwenStatefulEmbedder;
 use crate::erag::{CollapseResult, EragClient};
 use crate::generation::{GenerationEngine, GenerationResult};
-use crate::hyperfocus::{HyperfocusDetector, HyperfocusEvent};
 use crate::learning::{LearningLoop, LearningOutcome};
-use crate::mcts::MctsDaydreamer;
-use crate::signals::FailureSignals;
-use crate::metrics::{metrics, weighted_memory_metrics};
+use crate::metrics::{FailureSignals, metrics};
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
 use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::{rouge_l, seed_manager, set_global_seed};
-use crate::weight_evolution::{Discovery, SmoothWeightEvolution};
-use crate::gpu_fitness::GPUMemoryFitnessCalculator;
-use crate::topology_memory::TopologyMemoryAnalyzer;
-use crate::memory_consolidation::MemoryConsolidationManager;
 use blake3::hash as blake3_hash;
 use lru::LruCache;
-use dashmap::DashMap;
 use parking_lot::RwLock;
 #[allow(unused_imports)]
 use qdrant_client::qdrant::{CreateCollection, Distance, VectorsConfig};
 use rand::RngCore;
-use tcs_core::PersistentFeature;
+use tcs_core::topology::PersistenceFeature;
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
 
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
 pub mod proto {
-    // Stub proto module - requires build.rs to generate niodoo.rs
-    // For now, define minimal types needed for compilation
-    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct ConsciousnessState {
-        pub entropy: f64,
-        pub quadrant: String,
-        pub threat: bool,
-        pub healing: bool,
-    }
+    include!(concat!(env!("OUT_DIR"), "/niodoo.rs"));
 }
 
 // Define CuratedExperience struct
@@ -99,9 +82,6 @@ pub struct PipelineCycle {
     pub pad_state: PadGhostState,
     pub topology: TopologicalSignature,
     pub topology_mode: TopologyMode,
-    pub consonance: Option<ConsonanceMetrics>, // Consonance metrics
-    pub hyperfocus: Option<HyperfocusEvent>,   // Hyperfocus event if detected
-    pub cascade_transition: Option<crate::compass::CascadeTransition>, // Cascade transition if detected
 }
 
 #[derive(Debug, Clone, Default)]
@@ -139,21 +119,11 @@ pub struct Pipeline {
     learning: AsyncMutex<LearningLoop>,
     curator: Option<Curator>,
     tcs_analyzer: Option<TCSAnalyzer>,
-    embedding_cache: Arc<DashMap<u64, CacheEntry<Vec<f32>>>>,
-    collapse_cache: Arc<DashMap<u64, CacheEntry<CollapseResult>>>,
+    embedding_cache: LruCache<u64, CacheEntry<Vec<f32>>>,
+    collapse_cache: LruCache<u64, CacheEntry<CollapseResult>>,
     retry_count: Arc<AtomicU32>,
-    cascade_tracker: Arc<AsyncMutex<CascadeTracker>>, // Cascade tracking
-    hyperfocus_detector: Arc<HyperfocusDetector>,       // Hyperfocus detection
-    last_compass_outcome: Arc<AsyncMutex<Option<CompassOutcome>>>, // Track last compass for cascade
     #[allow(dead_code)]
-    qdrant_process: Option<Arc<tokio::sync::Mutex<tokio::process::Child>>>,
-    // Weighted Episodic Memory components
-    weight_evolver: Arc<SmoothWeightEvolution>,
-    gpu_fitness_calculator: Arc<GPUMemoryFitnessCalculator>,
-    topology_analyzer: Arc<TopologyMemoryAnalyzer>,
-    consolidation_manager: Arc<AsyncMutex<MemoryConsolidationManager>>,
-    mcts_daydreamer: Arc<MctsDaydreamer>,
-    discovery_queue: Arc<AsyncMutex<tokio::sync::mpsc::UnboundedSender<Discovery>>>,
+    qdrant_process: Option<tokio::process::Child>,
 }
 
 impl Pipeline {
@@ -197,20 +167,20 @@ impl Pipeline {
         };
 
         let mut embedder = QwenStatefulEmbedder::new(
+            &config.ollama_endpoint,
             &config.embedding_model_name,
             config.qdrant_vector_dim,
+            config.embedding_max_chars,
         )?;
-        // Set mock mode after initialization (embedder handles this gracefully)
-        embedder.set_mock_mode(config.mock_mode);
         if config.embed_with_candle {
-        if let Some(dir) = &config.embed_model_dir {
-            embedder.enable_candle(std::path::Path::new(dir));
+            if let Some(dir) = &config.embed_model_dir {
+                embedder.enable_candle(dir);
+            }
         }
-        }
+        embedder.set_mock_mode(config.mock_mode);
         info!(
             endpoint = %config.ollama_endpoint,
             model = %config.embedding_model_name,
-            mock_mode = config.mock_mode,
             "Initialized embedding client"
         );
         let embedder_arc = Arc::new(embedder.clone());
@@ -243,10 +213,10 @@ impl Pipeline {
 
         // Optional embedded Qdrant startup (spawns Qdrant as child process)
         #[cfg(feature = "embedded-qdrant")]
-        let qdrant_process: Option<Arc<tokio::sync::Mutex<tokio::process::Child>>> = if config.qdrant_embedded {
+        let qdrant_process: Option<tokio::process::Child> = if config.qdrant_embedded {
             info!("QDRANT_EMBEDDED enabled: spawning embedded Qdrant process");
             match crate::embedded_qdrant::spawn_embedded_qdrant().await {
-                Ok(child) => Some(Arc::new(tokio::sync::Mutex::new(child))),
+                Ok(child) => Some(child),
                 Err(e) => {
                     warn!(error = %e, "Failed to spawn embedded Qdrant; falling back to external Qdrant");
                     None
@@ -257,13 +227,15 @@ impl Pipeline {
         };
 
         #[cfg(not(feature = "embedded-qdrant"))]
-        let qdrant_process: Option<Arc<tokio::sync::Mutex<tokio::process::Child>>> = None;
+        let qdrant_process: Option<tokio::process::Child> = None;
 
         let erag = EragClient::new(
             &config.qdrant_url,
             &config.qdrant_collection,
             config.qdrant_vector_dim,
             config.similarity_threshold,
+            embedder_arc.clone(),
+            config.mock_mode,
         )
         .await?;
 
@@ -285,7 +257,11 @@ impl Pipeline {
         let mut generator = GenerationEngine::new_with_config(
             &config.vllm_endpoint,
             &config.vllm_model,
+            config.generation_timeout_secs,
             config.generation_max_tokens,
+            config.dynamic_token_min,
+            config.dynamic_token_max,
+            config.prompt_max_chars,
             config.consistency_variance_threshold,
         )?;
         generator.set_mock_mode(config.mock_mode);
@@ -346,63 +322,6 @@ impl Pipeline {
         let cache_capacity =
             NonZeroUsize::new(config.cache_capacity).unwrap_or(NonZeroUsize::new(256).unwrap());
 
-        // Initialize Weighted Episodic Memory components
-        let weighted_config = &config.weighted_memory_config;
-        let weight_evolver = Arc::new(SmoothWeightEvolution::new());
-        let gpu_fitness_calculator = Arc::new(GPUMemoryFitnessCalculator::new(&weighted_config.gpu_device));
-        let topology_analyzer = Arc::new(TopologyMemoryAnalyzer::new(0.3));
-        let consolidation_manager = Arc::new(AsyncMutex::new(MemoryConsolidationManager::new()));
-        let mcts_daydreamer = Arc::new(MctsDaydreamer::new(1.414, 5)); // sqrt(2) exploration, depth 5
-        
-        // Create discovery queue for async processing
-        let (discovery_tx, mut discovery_rx) = tokio::sync::mpsc::unbounded_channel::<Discovery>();
-        let discovery_queue = Arc::new(AsyncMutex::new(discovery_tx));
-        
-        // Clone components for background tasks
-        let weight_evolver_clone = Arc::clone(&weight_evolver);
-        let discovery_queue_clone = Arc::clone(&discovery_queue);
-        
-        // Spawn background discovery processor
-        tokio::spawn(async move {
-            let mut discovery_buffer = Vec::new();
-            loop {
-                tokio::select! {
-                    discovery = discovery_rx.recv() => {
-                        if let Some(disc) = discovery {
-                            discovery_buffer.push(disc);
-                            if discovery_buffer.len() >= 10 {
-                                // Process batch
-                                for disc in discovery_buffer.drain(..) {
-                                    weight_evolver_clone.register_discovery(disc).await;
-                                }
-                            }
-                        }
-                    }
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                        // Process remaining discoveries every second
-                        if !discovery_buffer.is_empty() {
-                            for disc in discovery_buffer.drain(..) {
-                                weight_evolver_clone.register_discovery(disc).await;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        
-        // Spawn weight update monitor (updates EragClient weights every 5 seconds)
-        let erag_arc_clone = Arc::clone(&erag_arc);
-        let weight_evolver_monitor = Arc::clone(&weight_evolver);
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(5));
-            loop {
-                interval.tick().await;
-                let new_weights = weight_evolver_monitor.get_current_weights();
-                // Update ERAG client weights (would need to add setter method)
-                // For now, weights are accessed via weight_evolver when needed
-            }
-        });
-
         Ok(Self {
             config: config.clone(),
             config_arc: config_arc.clone(),
@@ -419,20 +338,10 @@ impl Pipeline {
             learning: AsyncMutex::new(learning),
             curator,
             tcs_analyzer,
-            embedding_cache: Arc::new(AsyncMutex::new(LruCache::new(cache_capacity))),
-            collapse_cache: Arc::new(AsyncMutex::new(LruCache::new(cache_capacity))),
+            embedding_cache: LruCache::new(cache_capacity),
+            collapse_cache: LruCache::new(cache_capacity),
             retry_count: Arc::new(AtomicU32::new(0)),
-            cascade_tracker: Arc::new(AsyncMutex::new(CascadeTracker::new())),
-            hyperfocus_detector: Arc::new(HyperfocusDetector::new()),
-            last_compass_outcome: Arc::new(AsyncMutex::new(None)),
             qdrant_process,
-            // Weighted Episodic Memory components
-            weight_evolver,
-            gpu_fitness_calculator,
-            topology_analyzer,
-            consolidation_manager,
-            mcts_daydreamer,
-            discovery_queue,
         })
     }
 
@@ -469,10 +378,9 @@ impl Pipeline {
 
     pub async fn initialise_with_seed(args: CliArgs, seed: u64) -> Result<Self> {
         set_global_seed(seed);
-        let manager = seed_manager();
-        if manager.master_seed() != seed {
+        if seed_manager().master_seed() != seed {
             warn!(
-                existing = manager.master_seed(),
+                existing = seed_manager().master_seed(),
                 requested = seed,
                 "Seed override ignored; global seed already initialised"
             );
@@ -544,45 +452,22 @@ impl Pipeline {
         let cache_key = cache_key(prompt);
         let now = Instant::now();
 
-        info!(
-            target: "pipeline::process_prompt",
-            prompt_len = prompt.len(),
-            cache_key = cache_key,
-            "Starting pipeline processing for prompt"
-        );
-
         // Stage 1: Embedding (with cache)
         let embedding_start = Instant::now();
         let embedding_ttl = Duration::from_secs(self.config.embedding_cache_ttl_secs);
         let collapse_ttl = Duration::from_secs(self.config.collapse_cache_ttl_secs);
-        let embedding = {
-            if let Some(entry) = self.embedding_cache.get(&cache_key) {
-                if !entry.is_expired(now, embedding_ttl) {
-                    info!(target: "pipeline::process_prompt", "Using cached embedding");
-                    entry.value.clone()
-                } else {
-                    self.embedding_cache.remove(&cache_key);
-                    info!(target: "pipeline::process_prompt", "Computing new embedding");
-                    let emb = self.embedder
-                        .embed(prompt)
-                        .await
-                        .context("Embedding computation failed")?;
-                    self.embedding_cache.insert(cache_key, CacheEntry::new(emb.clone(), now));
-                    emb
-                }
-            } else {
-                info!(target: "pipeline::process_prompt", "Computing new embedding");
-                let emb = self.embedder
-                    .embed(prompt)
-                    .await
-                    .context("Embedding computation failed")?;
-                self.embedding_cache.insert(cache_key, CacheEntry::new(emb.clone(), now));
+        let embedding = match self.embedding_cache.get(&cache_key) {
+            Some(entry) if !entry.is_expired(now, embedding_ttl) => entry.value.clone(),
+            _ => {
+                self.embedding_cache.pop(&cache_key);
+                let emb = self.embedder.embed(prompt).await?;
+                self.embedding_cache
+                    .put(cache_key, CacheEntry::new(emb.clone(), now));
                 emb
             }
         };
         timings.embedding_ms = embedding_start.elapsed().as_secs_f64() * 1000.0;
         info!(
-            target: "pipeline::process_prompt",
             "Pipeline stage: embedding completed in {:.2}ms",
             timings.embedding_ms
         );
@@ -590,15 +475,8 @@ impl Pipeline {
         // Stage 2: Torus projection
         let torus_start = Instant::now();
         let mut torus_mapper = self.next_torus_mapper();
-        let pad_state = torus_mapper
-            .project(&embedding)
-            .context("Torus projection failed")?;
+        let pad_state = torus_mapper.project(&embedding)?;
         timings.torus_ms = torus_start.elapsed().as_secs_f64() * 1000.0;
-        info!(
-            target: "pipeline::process_prompt",
-            "Pipeline stage: torus projection completed in {:.2}ms",
-            timings.torus_ms
-        );
 
         let tcs_start = Instant::now();
         let (topology, analysis_label) = match self.config.topology_mode {
@@ -650,47 +528,49 @@ impl Pipeline {
             topology.spectral_gap
         );
 
-        // Evaluate compass directly since Pipeline is now Send
+        // Evaluate compass on blocking thread without locking inside closure
+        let pad_state_for_compass = pad_state.clone();
+        let topology_for_compass = topology.clone();
+        let compass_guard = self.compass.clone().lock_owned().await;
         let compass_scope = format!("compass/{}", cache_key);
-        let compass = {
-            let mut compass_guard = self.compass.lock().await;
+        let compass_task = tokio::task::spawn_blocking(move || {
+            let mut engine = compass_guard;
             let mut rng = crate::util::seed_manager().get_rng(&compass_scope);
-            let result = compass_guard.evaluate_with_rng(
-                &pad_state,
-                Some(&topology),
+            engine.evaluate_with_rng(
+                &pad_state_for_compass,
+                Some(&topology_for_compass),
                 &mut rng,
             )
-            .context("Compass evaluation failed")?;
-            drop(compass_guard); // Release the lock
-            result
-        };
+        });
 
         // Start timing BEFORE the parallel work begins
         let compass_erag_start = Instant::now();
-        let collapse = {
-            if let Some(entry) = self.collapse_cache.get(&cache_key) {
-                if !entry.is_expired(now, collapse_ttl) {
-                    entry.value.clone()
-                } else {
-                    self.collapse_cache.remove(&cache_key);
-                    // Dynamic top_k based on config knobs (reuses retrieval_top_k_increment as delta)
-                    let top_k = (3i32 + self.config.phase2_retrieval_top_k_increment)
-                        .clamp(1, 50) as usize;
-                    let collapse = self.erag.collapse_with_limit(&embedding, top_k).await
-                        .context("ERAG collapse operation failed")?;
-                    self.collapse_cache.insert(cache_key, CacheEntry::new(collapse.clone(), now));
-                    collapse
+        let (compass, collapse) = tokio::try_join!(
+            async {
+                match compass_task.await {
+                    Ok(inner) => inner,
+                    Err(e) => Err(anyhow::anyhow!(format!(
+                        "compass evaluation panicked: {}",
+                        e
+                    ))),
                 }
-            } else {
-                // Dynamic top_k based on config knobs (reuses retrieval_top_k_increment as delta)
-                let top_k = (3i32 + self.config.phase2_retrieval_top_k_increment)
-                    .clamp(1, 50) as usize;
-                let collapse = self.erag.collapse_with_limit(&embedding, top_k).await
-                    .context("ERAG collapse operation failed")?;
-                self.collapse_cache.insert(cache_key, CacheEntry::new(collapse.clone(), now));
-                collapse
+            },
+            async {
+                match self.collapse_cache.get(&cache_key) {
+                    Some(entry) if !entry.is_expired(now, collapse_ttl) => Ok(entry.value.clone()),
+                    _ => {
+                        self.collapse_cache.pop(&cache_key);
+                        // Dynamic top_k based on config knobs (reuses retrieval_top_k_increment as delta)
+                        let top_k = (3i32 + self.config.phase2_retrieval_top_k_increment)
+                            .clamp(1, 50) as usize;
+                        let collapse = self.erag.collapse_with_limit(&embedding, top_k).await?;
+                        self.collapse_cache
+                            .put(cache_key, CacheEntry::new(collapse.clone(), now));
+                        Ok(collapse)
+                    }
+                }
             }
-        };
+        )?;
         // Measure elapsed time AFTER the work completes
         let compass_erag_elapsed = compass_erag_start.elapsed().as_secs_f64() * 1000.0;
         timings.compass_ms = compass_erag_elapsed / 2.0;
@@ -700,61 +580,6 @@ impl Pipeline {
             timings.compass_ms
         );
         info!("Pipeline stage: erag completed in {:.2}ms", timings.erag_ms);
-
-        // EMOTIONAL CASCADE INTEGRATION: Compute consonance and detect hyperfocus
-        let last_compass = self.last_compass_outcome.lock().await.clone();
-        
-        // Compute partial consonance (without curator for now)
-        let partial_consonance = compute_consonance(
-            &pad_state,
-            &compass,
-            &collapse,
-            &topology,
-            None, // Curator not available yet
-            last_compass.as_ref(),
-        );
-        
-        // Track cascade transition
-        let cascade_transition = {
-            let mut tracker = self.cascade_tracker.lock().await;
-            tracker.detect_transition(&compass, partial_consonance.score)
-        };
-        
-        // Update compass with cascade stage
-        let mut compass_with_cascade = compass.clone();
-        if let Some(ref transition) = cascade_transition {
-            compass_with_cascade.cascade_stage = Some(transition.to);
-        } else {
-            // Use current stage if no transition
-            let tracker = self.cascade_tracker.lock().await;
-            compass_with_cascade.cascade_stage = tracker.current_stage();
-        }
-        
-        // Update last compass outcome
-        *self.last_compass_outcome.lock().await = Some(compass_with_cascade.clone());
-        
-        // Detect hyperfocus (need to build signal map)
-        use std::collections::HashMap;
-        let mut hyperfocus_signals = HashMap::new();
-        hyperfocus_signals.insert("compass".to_string(), partial_consonance.clone());
-        hyperfocus_signals.insert("erag".to_string(), partial_consonance.clone()); // Will refine after curator
-        hyperfocus_signals.insert("topology".to_string(), partial_consonance.clone());
-        
-        let mut hyperfocus_event = self.hyperfocus_detector.detect(&hyperfocus_signals);
-        
-        // Use cascade-aware ERAG collapse if we have a cascade stage
-        let collapse = if let Some(stage) = compass_with_cascade.cascade_stage {
-            self.erag.collapse_with_cascade_preference(&embedding, Some(stage)).await?
-        } else {
-            collapse
-        };
-
-        // Update fitness scores for retrieved memories and record metrics
-        for memory in &collapse.top_hits {
-            if let Some(ref metadata) = memory.weighted_metadata {
-                weighted_memory_metrics().record_fitness_score(metadata.fitness_score);
-            }
-        }
 
         // Stage 5: Tokenizer
         let tokenizer_start = Instant::now();
@@ -766,11 +591,11 @@ impl Pipeline {
 
         // Update generation engine with latest config params (before generation)
         let current_config = self.config_arc.read().clone();
-        // Note: apply_runtime_from_config takes CliArgs, not RuntimeConfig
-        // Skip for now - generator params are set at initialization
+        self.generator.apply_runtime_from_config(&current_config);
         self.generator.update_params(
             current_config.temperature,
             current_config.top_p,
+            current_config.repetition_penalty,
         );
         self.config = current_config;
 
@@ -782,15 +607,14 @@ impl Pipeline {
         // Apply latest runtime parameters before generation
         {
             let cfg = self.config_arc.read().clone();
-            // Note: apply_runtime_from_config takes CliArgs, not RuntimeConfig - skip for now
-            // self.generator.apply_runtime_from_config(&cfg);
+            self.generator.apply_runtime_from_config(&cfg);
             self.recompute_thresholds();
             self.config = cfg;
         }
         let generation = if self.config.enable_consistency_voting {
             let voting = self
                 .generator
-                .generate_with_consistency(&tokenizer_output, &compass_with_cascade)
+                .generate_with_consistency(&tokenizer_output, &compass)
                 .await?;
 
             let selected = match voting.winner_index {
@@ -811,19 +635,19 @@ impl Pipeline {
                     / voting.rouge_scores.len() as f64,
                 entropy_delta: 0.0,
                 source: "consistency".to_string(),
-                ucb1_score: Some(compass_with_cascade
+                ucb1_score: compass
                     .mcts_branches
                     .iter()
                     .map(|b| b.ucb_score)
                     .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .unwrap_or(0.5)),
+                    .unwrap_or(0.5),
+                curator_quality: 0.8, // Default quality for consistency voting
                 failure_type: None,
                 failure_details: None,
-                curator_quality: Some(0.8), // Default quality for consistency voting
             }
         } else {
             self.generator
-                .generate_with_topology(&tokenizer_output, &compass_with_cascade, Some(&topology), false)
+                .generate_with_topology(&tokenizer_output, &compass, Some(&topology), false)
                 .await?
         };
         timings.generation_ms = generation_start.elapsed().as_secs_f64() * 1000.0;
@@ -832,46 +656,18 @@ impl Pipeline {
             timings.generation_ms
         );
 
-        // NEW: Phase 2 Integration - Call curator after generation WITH TOPOLOGY and CONSONANCE
+        // NEW: Phase 2 Integration - Call curator after generation WITH TOPOLOGY
         let curated_experience = self
             .integrate_curator(
                 prompt,
                 &generation.hybrid_response,
                 &pad_state,
-                &compass_with_cascade,
+                &compass,
                 &collapse.aggregated_context,
                 &topology,
                 &tokenizer_output,
-                Some(&partial_consonance), // Pass consonance
             )
             .await?;
-        
-        // Compute full consonance with curator now available
-        let full_consonance = if let Some(ref curator) = self.curator {
-            // Create a CuratedResponse-like structure for consonance computation
-            use crate::curator::CuratedResponse;
-            let curator_response = CuratedResponse {
-                refined_response: curated_experience.refined_response.clone(),
-                learned: curated_experience.learned,
-                reason: curated_experience.reason.clone(),
-                processing_time_ms: 0.0,
-                consonance_score: curated_experience.quality_score as f64,
-            };
-            compute_consonance(
-                &pad_state,
-                &compass_with_cascade,
-                &collapse,
-                &topology,
-                Some(&curator_response),
-                last_compass.as_ref(),
-            )
-        } else {
-            partial_consonance
-        };
-        
-        // Update hyperfocus signals with full consonance
-        hyperfocus_signals.insert("curator".to_string(), full_consonance.clone());
-        let hyperfocus_event = self.hyperfocus_detector.detect(&hyperfocus_signals);
 
         // Feed curator output to learning loop if learned=true
         if curated_experience.learned {
@@ -906,18 +702,12 @@ impl Pipeline {
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(self.thresholds.mcts_c); // Fallback to configured threshold
 
-        let failure_signals = FailureSignals::evaluate(
+        let (mut failure, mut details) = FailureSignals::evaluate(
             generation.rouge_score,
             entropy_delta,
-            Some(ucb1_score),
-            0.0f32, // average_similarity - placeholder
-            Some(curator_quality),
-            false, // fallback_source
-            0.0,   // oov_rate
-            0,     // low_quality_hits - placeholder
+            curator_quality,
+            ucb1_score,
         );
-        let mut failure = failure_signals.severity().to_string();
-        let mut details = failure_signals.summary();
 
         let reason_lower = curated_experience.reason.to_lowercase();
         let curator_unavailable = self.curator.is_none()
@@ -959,7 +749,7 @@ impl Pipeline {
                 &failure,
                 &details,
                 &generation,
-                &compass_with_cascade,
+                &compass,
                 &collapse,
                 &curated_experience,
                 entropy_delta,
@@ -974,19 +764,17 @@ impl Pipeline {
 
         // Log to ERAG if failure != "none"
         if final_failure != "none" {
-            if let Err(e) = self
-                .erag
+            let metrics_ref = metrics();
+            self.erag
                 .store_failure(
                     prompt,
                     &final_generation.hybrid_response,
+                    metrics_ref,
                     Some(details.to_string()),
                     &final_failure,
                     self.retry_count.load(Ordering::Relaxed),
                 )
-                .await
-            {
-                warn!(?e, "Failed to store failure; continuing");
-            }
+                .await?;
         }
 
         // Proceed with learning using curated response (with retry-corrected generation)
@@ -998,7 +786,7 @@ impl Pipeline {
             .await
             .update(
                 &pad_state,
-                &compass_with_cascade,
+                &compass,
                 &collapse,
                 &final_generation,
                 &topology,
@@ -1026,7 +814,7 @@ impl Pipeline {
             experience_output,
             experience_embedding,
             &pad_state,
-            &compass_with_cascade,
+            &compass,
             experience_context.clone(),
         );
 
@@ -1046,7 +834,7 @@ impl Pipeline {
                 entropy: pad_state.entropy,
                 rouge: final_generation.rouge_to_baseline,
                 latency_ms: overall_start.elapsed().as_secs_f64() * 1000.0,
-                compass: compass_with_cascade.clone(),
+                compass,
                 generation: final_generation,
                 tokenizer: tokenizer_output,
                 collapse,
@@ -1057,39 +845,32 @@ impl Pipeline {
                 pad_state: pad_state.clone(),
                 topology: topology.clone(),
                 topology_mode: self.config.topology_mode,
-                consonance: Some(full_consonance),
-                hyperfocus: hyperfocus_event,
-                cascade_transition,
             });
         }
 
-        let _solution_path = Vec::<String>::new(); // Removed solution_path field
-        // Experience doesn't have embedding field - use the embedding from earlier in the pipeline
-        if self.config.disable_memory_store {
-            info!("Memory store disabled via config; skipping ERAG upsert");
-        } else if let Err(e) = self
-            .erag
-            .upsert_memory_with_cascade(
-                &embedding,
+        let solution_path = experience.solution_path.clone();
+        self.erag
+            .upsert_memory(
+                &experience.embedding.as_ref().unwrap(),
                 &pad_state,
-                &compass_with_cascade,
+                &compass,
                 &experience_input,
                 &response_to_store,
                 &experience_context,
                 pad_state.entropy,
-                compass_with_cascade.cascade_stage,
+                final_quality_score,
+                Some(&topology),
+                solution_path,
+                experience.iteration_count,
             )
-            .await
-        {
-            warn!(?e, "ERAG upsert failed; continuing without store");
-        }
+            .await?; // Propagate error
 
         metrics().observe_cycle(
             pad_state.entropy,
             final_generation.latency_ms,
             final_generation.rouge_to_baseline,
-            compass_with_cascade.is_threat,
-            compass_with_cascade.is_healing,
+            compass.is_threat,
+            compass.is_healing,
         );
 
         // Emit per-cycle WebSocket event (best-effort)
@@ -1101,18 +882,9 @@ impl Pipeline {
                     "entropy": pad_state.entropy,
                     "knot": topology.knot_complexity,
                     "betti": topology.betti_numbers,
-                    "ucb1": compass_with_cascade.mcts_branches
-                        .iter()
-                        .map(|b| b.ucb_score)
-                        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                        .unwrap_or(0.0),
+                    "ucb1": compass.ucb1_score,
                     "retries": self.retry_count.load(Ordering::Relaxed),
                     "latency_ms": final_generation.latency_ms,
-                    "consonance": full_consonance.score,
-                    "hyperfocus": hyperfocus_event.is_some(),
-                    "cascade_stage": compass_with_cascade.cascade_stage
-                        .map(|s| s.name())
-                        .unwrap_or("none"),
                 });
                 async move {
                     let _ = reqwest::Client::new()
@@ -1126,39 +898,25 @@ impl Pipeline {
 
         // learning_ms already set above
 
-        let result = PipelineCycle {
+        Ok(PipelineCycle {
             prompt: prompt.to_string(),
             baseline_response: final_generation.baseline_response.clone(),
             hybrid_response: final_generation.hybrid_response.clone(),
             entropy: pad_state.entropy,
             rouge: final_generation.rouge_to_baseline,
             latency_ms: overall_start.elapsed().as_secs_f64() * 1000.0,
-            compass: compass_with_cascade,
+            compass,
             generation: final_generation,
             tokenizer: tokenizer_output,
             collapse,
             learning: learning_outcome,
             stage_timings: timings,
             last_entropy: pad_state.entropy,
-            failure: final_failure.clone(),
+            failure: final_failure,
             pad_state,
             topology,
             topology_mode: self.config.topology_mode,
-            consonance: Some(full_consonance),
-            hyperfocus: hyperfocus_event,
-            cascade_transition,
-        };
-
-        info!(
-            target: "pipeline::process_prompt",
-            total_latency_ms = result.latency_ms,
-            failure = %result.failure,
-            entropy = result.entropy,
-            rouge = result.rouge,
-            "Pipeline processing completed"
-        );
-
-        Ok(result)
+        })
     }
 
     pub fn hardware_profile(&self) -> HardwareProfile {
@@ -1197,24 +955,7 @@ impl Pipeline {
                     .generate_with_params(&enhancement_prompt, 0.3, 0.95) // Low temp for stability
                     .await
                 {
-                    return Ok((
-                        GenerationResult {
-                            baseline_response: generation.baseline_response.clone(),
-                            hybrid_response: enhanced,
-                            echoes: Vec::new(),
-                            rouge_to_baseline: generation.rouge_to_baseline,
-                            latency_ms: generation.latency_ms,
-                            rouge_score: generation.rouge_score,
-                            entropy_delta: generation.entropy_delta,
-                            source: "enhanced".to_string(),
-                            ucb1_score: generation.ucb1_score,
-                            failure_type: None,
-                            failure_details: None,
-                            curator_quality: generation.curator_quality,
-                        },
-                        "none".to_string(),
-                        0.0,
-                    ));
+                    return Ok((enhanced, "none".to_string(), 0.0));
                 }
             }
             return Ok((generation.clone(), "none".to_string(), 0.0));
@@ -1249,11 +990,13 @@ impl Pipeline {
             info!(retry = retry_count, tier = ?current_failure, detail = ?details, "retry loop attempt");
 
             // Store failure in ERAG before retry
+            let metrics_ref = metrics();
             if let Err(e) = self
                 .erag
                 .store_failure(
                     prompt,
                     &current_gen.hybrid_response,
+                    metrics_ref,
                     Some(format!("Retry {}: {}", retry_count, details)),
                     &current_failure,
                     retry_count,
@@ -1278,18 +1021,12 @@ impl Pipeline {
             }
 
             // Determine retry strategy based on failure type
-            let retry_response: String = if current_failure == "hard" {
+            let retry_response = if current_failure == "hard" {
                 // Meso: Reflexion for hard failures, but fallback to baseline if worse
-                // Note: reflexion_retry doesn't exist - use generate_with_params as fallback
-                let reflexion_prompt = format!(
-                    "Previous attempt failed. Please reconsider: {}\n\nWhat went wrong: {}\n\nProvide an improved response:",
-                    prompt, details
-                );
-                let reflexion_response: String = self
+                let reflexion_response = self
                     .generator
-                    .generate_with_params(&reflexion_prompt, 0.7, 0.9)
-                    .await
-                    .unwrap_or_else(|_| current_gen.baseline_response.clone());
+                    .reflexion_retry(prompt, current_gen.rouge_score, details)
+                    .await?;
 
                 // Compare with baseline and keep the better one
                 let baseline_rouge = rouge_l(&current_gen.baseline_response, prompt);
@@ -1310,27 +1047,24 @@ impl Pipeline {
                 }
             } else {
                 // Micro: Topology-aware CoT for soft failures (2-3 iterations)
-                // Note: apply_cot_repair_with_topology doesn't exist - use generate_with_params as fallback
                 let mut best_response = current_gen.hybrid_response.clone();
                 let mut best_rouge = current_gen.rouge_score;
 
                 for cot_iter in 0..cot_iterations {
-                    let cot_prompt = format!(
-                        "Iteration {}: Previous attempt: {}\n\nWhat went wrong: {}\n\nProvide an improved response:",
-                        cot_iter + 1,
-                        best_response,
-                        details
-                    );
                     let cot_result = self
                         .generator
-                        .generate_with_params(&cot_prompt, 0.7, 0.9)
-                        .await
-                        .unwrap_or_else(|_| best_response.clone());
+                        .apply_cot_repair_with_topology(
+                            prompt,
+                            details,
+                            cot_iter as u32,
+                            Some(topology),
+                        )
+                        .await?;
 
                     // Recompute ROUGE
-                    let new_rouge = rouge_l(&cot_result, &current_gen.baseline_response);
+                    let new_rouge = rouge_l(&cot_result.hybrid_response, &best_response);
                     if new_rouge > best_rouge {
-                        best_response = cot_result;
+                        best_response = cot_result.hybrid_response;
                         best_rouge = new_rouge;
                     }
 
@@ -1376,18 +1110,12 @@ impl Pipeline {
                 ucb1_score
             };
 
-            let failure_signals = FailureSignals::evaluate(
+            let (failure, _new_details) = FailureSignals::evaluate(
                 retry_gen.rouge_score,
                 entropy_delta,
-                Some(adjusted_ucb1),
-                0.0f32, // average_similarity
-                current_gen.curator_quality,
-                false, // fallback_source
-                0.0,   // oov_rate
-                0,     // low_quality_hits
+                curator_quality,
+                adjusted_ucb1,
             );
-            let failure = failure_signals.severity().to_string();
-            let _new_details = failure_signals.summary();
 
             current_gen = retry_gen;
             current_failure = failure.clone();
@@ -1450,20 +1178,17 @@ impl Pipeline {
         context: &str,
         topology: &crate::tcs_analysis::TopologicalSignature,
         tokenizer_output: &TokenizerOutput,
-        consonance: Option<&ConsonanceMetrics>, // Add consonance parameter
     ) -> Result<CuratedExperience> {
         // Call curator_executor logic here
         // (either spawn as subprocess or integrate as library)
 
-        // Create a proper Experience using the from_pipeline constructor
-        // Note: Experience::new doesn't exist, use from_pipeline or create manually
-        let _experience = Experience::from_pipeline(
+        // Create a proper Experience using the new constructor
+        let _experience = Experience::new(
             input.to_string(),
             output.to_string(),
-            vec![], // embedding - placeholder
-            pad_state,
-            compass,
-            vec![context.to_string()],
+            context.to_string(),
+            "curator_refinement".to_string(),
+            0.5, // Initial score, will be updated
         );
 
         // TOPOLOGY INTEGRATION: Analyze quality with topological insights
@@ -1562,7 +1287,7 @@ impl Pipeline {
                     .await
                 {
                     Ok(autonomous) => {
-                        let candidate = autonomous.trim();
+                        let candidate = autonomous.hybrid_response.trim();
                         if !candidate.is_empty() {
                             auto_improvement = rouge_l(candidate, output);
                             if auto_improvement.is_finite() {
@@ -1596,7 +1321,7 @@ impl Pipeline {
                                     .await
                                 {
                                     Ok(second_pass) => {
-                                        let second_candidate = second_pass.trim();
+                                        let second_candidate = second_pass.hybrid_response.trim();
                                         if !second_candidate.is_empty() {
                                             let second_improvement =
                                                 rouge_l(second_candidate, output);
@@ -1658,31 +1383,22 @@ impl Pipeline {
 
             if should_call_curator {
                 if let Some(ref curator) = self.curator {
-                    // Use curate_with_consonance if consonance is available
-                    // Note: Experience::new doesn't exist, use from_pipeline or create manually
-                    let experience = Experience::from_pipeline(
-                        input.to_string(),
-                        refined.clone(),
-                        vec![], // embedding - placeholder
-                        pad_state,
-                        compass,
-                        vec![context.to_string()],
-                    );
-                    
-                    match if let Some(cons) = consonance {
-                        curator.curate_with_consonance(&experience, topology.knot_complexity, pad_state.entropy, Some(cons)).await
-                    } else {
-                        curator.curate(&experience, topology.knot_complexity, pad_state.entropy).await
-                    } {
+                    match curator
+                        .refine(
+                            &refined,
+                            quality_score as f64,
+                            topology.knot_complexity,
+                            topology.persistence_entropy,
+                        )
+                        .await
+                    {
                         Ok(result) => {
                             reason = result.reason.clone();
-                            refined = result.refined_response;
+                            refined = result.refined;
                             learned = result.learned;
-                            quality_score = result.consonance_score as f32;
                             info!(
-                                "Curator refined response (quality={:.3}, consonance={:.3}, knot={:.3}, learned={}, reason={})",
+                                "Curator refined response (quality={:.3}, knot={:.3}, learned={}, reason={})",
                                 quality_score,
-                                result.consonance_score,
                                 topology.knot_complexity,
                                 result.learned,
                                 result.reason
@@ -1766,36 +1482,6 @@ fn tokenizer_path() -> Result<PathBuf> {
         }
     }
 
-    // Fallback: try common locations
-    let fallback_paths = vec![
-        "/workspace/models/Qwen2.5-7B-Instruct-AWQ/tokenizer.json",
-        "/workspace/models/Qwen2-0.5B-Instruct/tokenizer.json",
-        "./models/tokenizer.json",
-        "models/tokenizer.json",
-    ];
-
-    for path_str in fallback_paths {
-        let path = PathBuf::from(path_str);
-        if path.exists() {
-            return Ok(path);
-        }
-    }
-
-    // If VLLM_MODEL_PATH is set, try tokenizer.json in that directory
-    if let Some(model_path) = env_value("VLLM_MODEL_PATH") {
-        let path = PathBuf::from(&model_path).join("tokenizer.json");
-        if path.exists() {
-            return Ok(path);
-        }
-        // Also try parent directory if model_path is a file
-        if let Some(parent) = PathBuf::from(&model_path).parent() {
-            let path = parent.join("tokenizer.json");
-            if path.exists() {
-                return Ok(path);
-            }
-        }
-    }
-
     anyhow::bail!("Tokenizer JSON not found; set TOKENIZER_JSON or QWEN_TOKENIZER")
 }
 
@@ -1825,19 +1511,19 @@ fn baseline_topological_signature(
         .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
 
     let persistence_features = vec![
-        PersistentFeature {
-            birth: pad_min as f32,
-            death: pad_max as f32,
+        PersistenceFeature {
+            birth: pad_min,
+            death: pad_max,
             dimension: 0,
         },
-        PersistentFeature {
-            birth: mu_min as f32,
-            death: mu_max as f32,
+        PersistenceFeature {
+            birth: mu_min,
+            death: mu_max,
             dimension: 1,
         },
-        PersistentFeature {
-            birth: sigma_min as f32,
-            death: sigma_max as f32,
+        PersistenceFeature {
+            birth: sigma_min,
+            death: sigma_max,
             dimension: 2,
         },
     ];
@@ -1851,7 +1537,7 @@ fn baseline_topological_signature(
     };
     let betti2 = sigma
         .iter()
-        .zip(pad_state.sigma.iter())
+        .zip(pad_state.raw_stds.iter())
         .filter(|(sigma_value, raw_std)| {
             **sigma_value > sigma_threshold && **sigma_value > **raw_std
         })

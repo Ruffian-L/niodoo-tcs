@@ -39,6 +39,7 @@ pub struct GenerationEngine {
     temperature: f64,
     top_p: f64,
     max_tokens: usize,
+    mock_mode: bool,
 }
 
 impl GenerationEngine {
@@ -51,6 +52,7 @@ impl GenerationEngine {
             temperature: 0.6,
             top_p: 0.7,
             max_tokens: 16,
+            mock_mode: false,
         })
     }
 
@@ -60,6 +62,24 @@ impl GenerationEngine {
         tokenizer_output: &crate::token_manager::TokenizerOutput,
         compass: &CompassOutcome,
     ) -> Result<GenerationResult> {
+        if self.mock_mode {
+            // Return mock generation result
+            return Ok(GenerationResult {
+                baseline_response: format!("[Mock baseline to: {}]", tokenizer_output.augmented_prompt.chars().take(50).collect::<String>()),
+                hybrid_response: format!("[Mock hybrid response to: {}]", tokenizer_output.augmented_prompt.chars().take(50).collect::<String>()),
+                echoes: vec![],
+                rouge_to_baseline: 0.5,
+                rouge_score: 0.5,
+                latency_ms: 10.0,
+                ucb1_score: None,
+                source: "mock".to_string(),
+                failure_type: None,
+                failure_details: None,
+                entropy_delta: 0.0,
+                curator_quality: Some(0.7),
+            });
+        }
+        
         let start = Instant::now();
         let baseline_future = self.request_text(&tokenizer_output.augmented_prompt);
         let claude_future = self.request_lens_response(
@@ -158,6 +178,15 @@ impl GenerationEngine {
     }
 
     async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
+        if self.mock_mode {
+            // Return mock response based on prompt
+            let user_message = messages.iter()
+                .find(|m| m.role == "user")
+                .map(|m| m.content.as_str())
+                .unwrap_or("mock prompt");
+            return Ok(format!("[Mock response to: {}]", user_message.chars().take(100).collect::<String>()));
+        }
+        
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
             messages,
@@ -166,18 +195,25 @@ impl GenerationEngine {
             max_tokens: self.max_tokens,
         };
 
+        // Ensure endpoint has the correct path
+        let endpoint_url = if self.endpoint.contains("/v1/chat/completions") {
+            self.endpoint.clone()
+        } else {
+            format!("{}/v1/chat/completions", self.endpoint.trim_end_matches('/'))
+        };
+
         let response = self
             .client
-            .post(&self.endpoint)
+            .post(&endpoint_url)
             .json(&payload)
             .send()
             .await
-            .with_context(|| format!("failed to call vLLM endpoint {}", self.endpoint))?;
+            .with_context(|| format!("failed to call vLLM endpoint {}", endpoint_url))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            warn!(%status, %body, "vLLM returned error status");
+            warn!(%status, %body, endpoint = %endpoint_url, "vLLM returned error status");
             anyhow::bail!("vLLM request failed: {status}");
         }
 
@@ -196,6 +232,10 @@ impl GenerationEngine {
     }
 
     pub async fn warmup(&self) -> Result<()> {
+        if self.mock_mode {
+            return Ok(());
+        }
+        
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
             messages: vec![
@@ -213,9 +253,16 @@ impl GenerationEngine {
             max_tokens: 1,
         };
 
+        // Ensure endpoint has the correct path
+        let endpoint_url = if self.endpoint.contains("/v1/chat/completions") {
+            self.endpoint.clone()
+        } else {
+            format!("{}/v1/chat/completions", self.endpoint.trim_end_matches('/'))
+        };
+
         let response = self
             .client
-            .post(&self.endpoint)
+            .post(&endpoint_url)
             .json(&payload)
             .timeout(Duration::from_secs(30))
             .send()
@@ -223,7 +270,7 @@ impl GenerationEngine {
             .with_context(|| {
                 format!(
                     "failed to call vLLM endpoint {} during warmup",
-                    self.endpoint
+                    endpoint_url
                 )
             })?;
 
@@ -312,12 +359,34 @@ fn snippet(text: &str, limit: usize) -> String {
 impl GenerationEngine {
     /// Create with config
     pub fn new_with_config(
-        endpoint: impl Into<String>,
-        model: impl Into<String>,
+        endpoint: &str,
+        model: &str,
         max_tokens: usize,
-        consistency_variance_threshold: f64,
+        _consistency_variance_threshold: f64,
     ) -> Result<Self> {
-        Self::new(endpoint, model)
+        let client = Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()?;
+        
+        // Use model ID from vLLM if model path is provided, otherwise use as-is
+        let model_id = if model.starts_with("/workspace/models/") {
+            // Try to get the actual model ID from vLLM
+            model.to_string() // Use the path as model ID since vLLM accepts it
+        } else {
+            model.to_string()
+        };
+        
+        Ok(Self {
+            client,
+            endpoint: endpoint.to_string(),
+            model: model_id,
+            temperature: 0.7,
+            top_p: 0.9,
+            max_tokens,
+            mock_mode: std::env::var("MOCK_MODE")
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+        })
     }
 
     /// Apply runtime config
@@ -332,8 +401,8 @@ impl GenerationEngine {
     }
 
     /// Set mock mode
-    pub fn set_mock_mode(&mut self, _mock: bool) {
-        // Stub implementation
+    pub fn set_mock_mode(&mut self, mock: bool) {
+        self.mock_mode = mock;
     }
 
     /// Set system prompt
@@ -343,6 +412,10 @@ impl GenerationEngine {
 
     /// Generate with params
     pub async fn generate_with_params(&self, prompt: &str, temperature: f64, top_p: f64) -> Result<String> {
+        if self.mock_mode {
+            return Ok(format!("[Mock response to: {}]", prompt.chars().take(100).collect::<String>()));
+        }
+        
         let mut temp_engine = Self {
             client: self.client.clone(),
             endpoint: self.endpoint.clone(),
@@ -350,6 +423,7 @@ impl GenerationEngine {
             temperature,
             top_p,
             max_tokens: self.max_tokens,
+            mock_mode: false,
         };
         temp_engine.request_text(prompt).await
     }

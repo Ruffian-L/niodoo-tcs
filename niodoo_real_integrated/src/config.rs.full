@@ -632,89 +632,6 @@ pub struct RuntimeConfig {
     pub cache_capacity: usize,
     #[serde(default = "default_retry_backoff_exponent_cap")]
     pub retry_backoff_exponent_cap: u32,
-
-    // Weighted Episodic Memory configuration
-    #[serde(default)]
-    pub weighted_memory_config: WeightedMemoryConfig,
-    /// Disable memory storage to ERAG/Qdrant (best-effort store becomes a no-op)
-    #[serde(default)]
-    pub disable_memory_store: bool,
-}
-
-/// Weighted Episodic Memory configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WeightedMemoryConfig {
-    /// Fitness weights [temporal, pad, beta1, retrieval, consonance]
-    #[serde(default = "default_fitness_weights")]
-    pub fitness_weights: [f32; 5],
-    /// Enable weight evolution
-    #[serde(default = "default_weight_evolution_enabled")]
-    pub weight_evolution_enabled: bool,
-    /// Minimum discoveries needed to trigger weight update
-    #[serde(default = "default_weight_evolution_update_threshold")]
-    pub weight_evolution_update_threshold: usize,
-    /// Enable MCTS daydreaming
-    #[serde(default = "default_daydreaming_enabled")]
-    pub daydreaming_enabled: bool,
-    /// Daydreaming duration in seconds
-    #[serde(default = "default_daydreaming_duration_seconds")]
-    pub daydreaming_duration_seconds: u64,
-    /// Topology update interval in seconds
-    #[serde(default = "default_topology_update_interval_seconds")]
-    pub topology_update_interval_seconds: u64,
-    /// Enable memory consolidation
-    #[serde(default = "default_consolidation_enabled")]
-    pub consolidation_enabled: bool,
-    /// GPU device preference ("cuda", "cpu", "auto")
-    #[serde(default = "default_gpu_device")]
-    pub gpu_device: String,
-}
-
-fn default_fitness_weights() -> [f32; 5] {
-    [0.25, 0.20, 0.20, 0.15, 0.20] // temporal, pad, beta1, retrieval, consonance
-}
-
-fn default_weight_evolution_enabled() -> bool {
-    true
-}
-
-fn default_weight_evolution_update_threshold() -> usize {
-    10
-}
-
-fn default_daydreaming_enabled() -> bool {
-    true
-}
-
-fn default_daydreaming_duration_seconds() -> u64 {
-    60
-}
-
-fn default_topology_update_interval_seconds() -> u64 {
-    3600 // 1 hour
-}
-
-fn default_consolidation_enabled() -> bool {
-    true
-}
-
-fn default_gpu_device() -> String {
-    "cpu".to_string()
-}
-
-impl Default for WeightedMemoryConfig {
-    fn default() -> Self {
-        Self {
-            fitness_weights: default_fitness_weights(),
-            weight_evolution_enabled: true,
-            weight_evolution_update_threshold: 10,
-            daydreaming_enabled: true,
-            daydreaming_duration_seconds: 60,
-            topology_update_interval_seconds: 3600,
-            consolidation_enabled: true,
-            gpu_device: "cpu".to_string(),
-        }
-    }
 }
 
 impl RuntimeConfig {
@@ -1108,10 +1025,6 @@ impl RuntimeConfig {
             mcts_c_scale,
             cache_capacity,
             retry_backoff_exponent_cap,
-            weighted_memory_config: WeightedMemoryConfig::default(),
-            disable_memory_store: env_with_fallback(&["DISABLE_MEMORY_STORE"])\
-                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))\
-                .unwrap_or(false),
         };
 
         info!(model = %runtime.curator_model_name, "Config loaded: CURATOR_MODEL={}", runtime.curator_model_name);

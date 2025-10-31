@@ -1,0 +1,29 @@
+graph TB
+    A[User Prompt] --> B[Embedding Layer<br/>768D Vectors]
+    B --> C[ERAG Memory Retrieval<br/>Top-k Similar Experiences]
+    C --> D[Topology Analysis<br/>Knot Complexity, Betti Numbers]
+    D --> E[Consciousness Compass<br/>Panic/Persist/Discover/Master]
+    E --> F[Tokenizer Enhancement<br/>Augmented Prompt + Context]
+    F --> G[Generation Engine<br/>vLLM with Topology Guidance]
+    G --> H[Curator Refinement<br/>Quality Check + Improvement]
+    H --> I[Response Output]
+    
+    I --> J{Quality Assessment<br/>ROUGE Scoring}
+    J -->|Low Quality| K[Create Training Sample]
+    J -->|High Quality| L[Store in Memory]
+    
+    K --> M{Buffer Size<br/>>= 20 samples?}
+    M -->|Yes| N[QLoRA Training<br/>Loss Decreasing]
+    M -->|No| L
+    
+    N --> O[Save Adapter Weights<br/>lora_weights.safetensors]
+    O --> P[Load Adapter for Next Cycle]
+    P --> A
+    
+    L --> Q[ERAG Memory Store<br/>601 Conversations]
+    Q --> C
+    
+    style A fill:#e1f5ff
+    style I fill:#c8e6c9
+    style N fill:#fff9c4
+    style Q fill:#f3e5f5
