@@ -1,5 +1,5 @@
 //! Comprehensive Soak Test Suite for WeightedEpisodicMem
-//! 
+//!
 //! Tests the system under extended load using the 50-prompt gauntlet.
 //! Detects memory leaks, concurrent load issues, and stability problems
 //! that only show up after hours of operation.
@@ -13,9 +13,9 @@ use anyhow::Result;
 use niodoo_real_integrated::config::CliArgs;
 use niodoo_real_integrated::pipeline::Pipeline;
 use serde::Serialize;
-use tokio::sync::{Mutex as AsyncMutex, mpsc, broadcast};
+use tokio::sync::{broadcast, mpsc, Mutex as AsyncMutex};
 use tokio::time::sleep;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Soak test configuration
 #[derive(Debug, Clone)]
@@ -89,21 +89,30 @@ impl SoakMetrics {
         }
     }
 
-    fn record_operation(&self, success: bool, latency_ms: f64, is_threat: bool, is_healing: bool, breakthroughs: usize) {
+    fn record_operation(
+        &self,
+        success: bool,
+        latency_ms: f64,
+        is_threat: bool,
+        is_healing: bool,
+        breakthroughs: usize,
+    ) {
         self.total_operations.fetch_add(1, Ordering::Relaxed);
         if success {
             self.successful_operations.fetch_add(1, Ordering::Relaxed);
         } else {
             self.failed_operations.fetch_add(1, Ordering::Relaxed);
         }
-        self.total_latency_ms.fetch_add(latency_ms as u64, Ordering::Relaxed);
+        self.total_latency_ms
+            .fetch_add(latency_ms as u64, Ordering::Relaxed);
         if is_threat {
             self.threat_count.fetch_add(1, Ordering::Relaxed);
         }
         if is_healing {
             self.healing_count.fetch_add(1, Ordering::Relaxed);
         }
-        self.breakthroughs.fetch_add(breakthroughs as u64, Ordering::Relaxed);
+        self.breakthroughs
+            .fetch_add(breakthroughs as u64, Ordering::Relaxed);
     }
 
     async fn record_memory(&self, mb: f64) {
@@ -112,7 +121,7 @@ impl SoakMetrics {
         if samples.len() > 1000 {
             samples.pop_front();
         }
-        
+
         let mut peak = self.peak_memory_mb.lock().await;
         if mb > *peak {
             *peak = mb;
@@ -135,7 +144,7 @@ impl SoakMetrics {
         let threats = self.threat_count.load(Ordering::Relaxed);
         let healings = self.healing_count.load(Ordering::Relaxed);
         let breakthroughs = self.breakthroughs.load(Ordering::Relaxed);
-        
+
         let avg_latency = if total > 0 {
             total_latency as f64 / total as f64
         } else {
@@ -242,7 +251,10 @@ fn generate_raw_rut_prompts() -> Vec<String> {
 async fn prompt_worker(
     worker_id: usize,
     request_tx: mpsc::Sender<(String, usize)>,
-    mut response_rx: broadcast::Receiver<(usize, Arc<Result<niodoo_real_integrated::pipeline::PipelineCycle>>)>,
+    mut response_rx: broadcast::Receiver<(
+        usize,
+        Arc<Result<niodoo_real_integrated::pipeline::PipelineCycle>>,
+    )>,
     metrics: Arc<SoakMetrics>,
     prompts: Arc<Vec<String>>,
     stop_flag: Arc<AtomicBool>,
@@ -258,14 +270,14 @@ async fn prompt_worker(
         let prompt = prompts[prompt_index].clone();
 
         let start = Instant::now();
-        
+
         // Send request
         if request_tx.send((prompt, worker_id)).await.is_err() {
             break; // Channel closed
         }
 
-        // Wait for response
-        let response_timeout = tokio::time::timeout(Duration::from_secs(30), async {
+        // Wait for response - increased timeout for CPU embeddings (60s)
+        let response_timeout = tokio::time::timeout(Duration::from_secs(60), async {
             loop {
                 match response_rx.recv().await {
                     Ok((id, result_arc)) if id == worker_id => {
@@ -280,14 +292,18 @@ async fn prompt_worker(
                                     cycle_result.learning.breakthroughs.len(),
                                 );
                                 if cycle % 10 == 0 {
-                                    info!("Worker {} cycle {}: SUCCESS (latency: {:.1}ms)", worker_id, cycle, latency_ms);
+                                    info!(
+                                        "Worker {} cycle {}: SUCCESS (latency: {:.1}ms)",
+                                        worker_id, cycle, latency_ms
+                                    );
                                 }
                                 return Ok(());
                             }
                             Err(e) => {
                                 metrics.record_operation(false, latency_ms, false, false, 0);
                                 local_errors += 1;
-                                let error_msg = format!("Worker {} cycle {}: {}", worker_id, cycle, e);
+                                let error_msg =
+                                    format!("Worker {} cycle {}: {}", worker_id, cycle, e);
                                 warn!("{}", error_msg);
                                 error!("Worker {} cycle {} FAILED: {}", worker_id, cycle, e);
                                 metrics.record_error(error_msg).await;
@@ -304,16 +320,23 @@ async fn prompt_worker(
                         continue;
                     }
                     Err(e) => {
-                        warn!("Worker {} cycle {}: broadcast channel error: {}", worker_id, cycle, e);
+                        warn!(
+                            "Worker {} cycle {}: broadcast channel error: {}",
+                            worker_id, cycle, e
+                        );
                         return Err(());
                     }
                 }
             }
-        }).await;
-        
+        })
+        .await;
+
         if response_timeout.is_err() {
-            warn!("Worker {} cycle {}: Response timeout after 30s", worker_id, cycle);
-            metrics.record_operation(false, 30000.0, false, false, 0);
+            warn!(
+                "Worker {} cycle {}: Response timeout after 60s",
+                worker_id, cycle
+            );
+            metrics.record_operation(false, 60000.0, false, false, 0);
             local_errors += 1;
         }
 
@@ -321,25 +344,27 @@ async fn prompt_worker(
         sleep(Duration::from_millis(100)).await;
     }
 
-    info!(worker_id, cycles = cycle, errors = local_errors, "Worker {} completed", worker_id);
+    info!(
+        worker_id,
+        cycles = cycle,
+        errors = local_errors,
+        "Worker {} completed",
+        worker_id
+    );
 }
 
 /// Memory monitoring worker
-async fn memory_monitor(
-    metrics: Arc<SoakMetrics>,
-    config: SoakConfig,
-    stop_flag: Arc<AtomicBool>,
-) {
+async fn memory_monitor(metrics: Arc<SoakMetrics>, config: SoakConfig, stop_flag: Arc<AtomicBool>) {
     let mut last_check = Instant::now();
 
     while !stop_flag.load(Ordering::Relaxed) {
         sleep(Duration::from_secs(1)).await;
-        
+
         let elapsed = last_check.elapsed();
         if elapsed.as_secs() >= config.memory_check_interval {
             let memory_mb = get_memory_mb();
             metrics.record_memory(memory_mb).await;
-            
+
             let stats = metrics.get_stats().await;
             info!(
                 memory_mb = memory_mb,
@@ -368,7 +393,10 @@ async fn memory_monitor(
 async fn pipeline_processor(
     mut pipeline: Pipeline,
     mut request_rx: mpsc::Receiver<(String, usize)>,
-    response_tx: broadcast::Sender<(usize, Arc<Result<niodoo_real_integrated::pipeline::PipelineCycle>>)>,
+    response_tx: broadcast::Sender<(
+        usize,
+        Arc<Result<niodoo_real_integrated::pipeline::PipelineCycle>>,
+    )>,
     stop_flag: Arc<AtomicBool>,
 ) {
     info!("Pipeline processor started");
@@ -412,23 +440,58 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         rng_seed_override: Some(42), // Deterministic for testing
     };
 
-    // Set LD_LIBRARY_PATH for ONNX runtime
-    let onnx_lib_path = "/workspace/Niodoo-Final/third_party/onnxruntime-linux-x64-1.18.1/lib";
-    if std::path::Path::new(&format!("{}/libonnxruntime.so", onnx_lib_path)).exists() {
-        let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-        let new_ld_path = if current_ld_path.is_empty() {
-            onnx_lib_path.to_string()
+    // Set LD_LIBRARY_PATH for ONNX runtime - prefer GPU build if available
+    let onnx_gpu_lib_path =
+        "/workspace/Niodoo-Final/third_party/onnxruntime-linux-x64-gpu-1.18.1/lib";
+    let onnx_cpu_lib_path = "/workspace/Niodoo-Final/third_party/onnxruntime-linux-x64-1.18.1/lib";
+
+    let onnx_lib_path = if std::path::Path::new(&format!(
+        "{}/libonnxruntime_providers_cuda.so",
+        onnx_gpu_lib_path
+    ))
+    .exists()
+    {
+        info!("Using CUDA-enabled ONNX Runtime build for GPU acceleration");
+        // Also add CUDA compatibility symlinks directory if it exists
+        let compat_path = format!("{}/cuda_compat", onnx_gpu_lib_path);
+        if std::path::Path::new(&compat_path).exists() {
+            format!("{}:{}", onnx_gpu_lib_path, compat_path)
         } else {
-            format!("{}:{}", onnx_lib_path, current_ld_path)
+            onnx_gpu_lib_path.to_string()
+        }
+    } else if std::path::Path::new(&format!("{}/libonnxruntime.so", onnx_cpu_lib_path)).exists() {
+        warn!("CUDA build not found, using CPU-only ONNX Runtime");
+        onnx_cpu_lib_path.to_string()
+    } else {
+        warn!("ONNX Runtime not found!");
+        String::new()
+    };
+
+    if !onnx_lib_path.is_empty() {
+        let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+        // Add cuDNN extract directory first (for ops_infer), then CUDA 11.8, then CUDA 12.8, then ONNX libs
+        let cudnn_extract = "/tmp/cudnn8_extract/cudnn-linux-x86_64-8.9.7.29_cuda11-archive/lib";
+        let new_ld_path = if current_ld_path.is_empty() {
+            format!(
+                "{}:{}:/usr/local/cuda-11.8/lib64:/usr/local/cuda-12.8/lib64",
+                cudnn_extract, onnx_lib_path
+            )
+        } else {
+            format!(
+                "{}:{}:/usr/local/cuda-11.8/lib64:/usr/local/cuda-12.8/lib64:{}",
+                cudnn_extract, onnx_lib_path, current_ld_path
+            )
         };
         std::env::set_var("LD_LIBRARY_PATH", &new_ld_path);
         info!("Set LD_LIBRARY_PATH for ONNX runtime: {}", new_ld_path);
     }
 
     // Check if services are available, use real services if they are
-    let vllm_endpoint = std::env::var("VLLM_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:5001".to_string());
-    let ollama_url = std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
-    
+    let vllm_endpoint =
+        std::env::var("VLLM_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:5001".to_string());
+    let ollama_url =
+        std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+
     // Extract port from endpoint URL
     let vllm_port = vllm_endpoint
         .strip_prefix("http://")
@@ -437,7 +500,7 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         .split(':')
         .nth(1)
         .unwrap_or("5001");
-    
+
     let ollama_port = ollama_url
         .strip_prefix("http://")
         .or_else(|| ollama_url.strip_prefix("https://"))
@@ -445,19 +508,24 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         .split(':')
         .nth(1)
         .unwrap_or("11434");
-    
+
     let vllm_available = tokio::time::timeout(
         Duration::from_secs(2),
-        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", vllm_port))
-    ).await.is_ok();
-    
+        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", vllm_port)),
+    )
+    .await
+    .is_ok();
+
     let ollama_available = tokio::time::timeout(
         Duration::from_secs(2),
-        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", ollama_port))
-    ).await.is_ok();
-    
+        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", ollama_port)),
+    )
+    .await
+    .is_ok();
+
     // Check Qdrant availability
-    let qdrant_url = std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
+    let qdrant_url =
+        std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
     let qdrant_port = qdrant_url
         .trim_start_matches("http://")
         .trim_start_matches("https://")
@@ -466,8 +534,10 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         .unwrap_or("6333");
     let qdrant_available = tokio::time::timeout(
         Duration::from_secs(2),
-        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", qdrant_port))
-    ).await.is_ok();
+        tokio::net::TcpStream::connect(format!("127.0.0.1:{}", qdrant_port)),
+    )
+    .await
+    .is_ok();
 
     if !vllm_available || !ollama_available || !qdrant_available {
         warn!(
@@ -479,7 +549,10 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         std::env::set_var("MOCK_MODE", "1");
         std::env::set_var("DISABLE_MEMORY_STORE", "1");
     } else {
-        info!("Using real services: vLLM={}, Ollama={}, Qdrant={}", vllm_available, ollama_available, qdrant_available);
+        info!(
+            "Using real services: vLLM={}, Ollama={}, Qdrant={}",
+            vllm_available, ollama_available, qdrant_available
+        );
         // Ensure VLLM_ENDPOINT is set correctly
         if std::env::var("VLLM_ENDPOINT").is_err() {
             std::env::set_var("VLLM_ENDPOINT", "http://127.0.0.1:5001");
@@ -522,7 +595,13 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
     let stop_flag_for_processor = stop_flag.clone();
     let pipeline_task = tokio::spawn(async move {
         info!("Pipeline processor starting");
-        pipeline_processor(pipeline, request_rx, response_tx_for_processor, stop_flag_for_processor).await
+        pipeline_processor(
+            pipeline,
+            request_rx,
+            response_tx_for_processor,
+            stop_flag_for_processor,
+        )
+        .await
     });
 
     // Spawn workers
@@ -533,9 +612,17 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         let metrics_clone = metrics.clone();
         let prompts_clone = prompts.clone();
         let stop_flag_clone = stop_flag.clone();
-        
+
         let handle = tokio::spawn(async move {
-            prompt_worker(worker_id, request_tx, response_rx, metrics_clone, prompts_clone, stop_flag_clone).await
+            prompt_worker(
+                worker_id,
+                request_tx,
+                response_rx,
+                metrics_clone,
+                prompts_clone,
+                stop_flag_clone,
+            )
+            .await
         });
         handles.push(handle);
     }
@@ -574,13 +661,22 @@ fn print_report(stats: &SoakStats) {
     println!("SOAK TEST REPORT");
     println!("{}", "=".repeat(80));
     println!();
-    println!("Duration:           {:.2} seconds ({:.2} minutes)", 
-             stats.duration_secs, stats.duration_secs / 60.0);
+    println!(
+        "Duration:           {:.2} seconds ({:.2} minutes)",
+        stats.duration_secs,
+        stats.duration_secs / 60.0
+    );
     println!("Total Operations:   {}", stats.total_operations);
-    println!("Successful:         {} ({:.2}%)", 
-             stats.successful_operations, stats.success_rate * 100.0);
-    println!("Failed:             {} ({:.2}%)", 
-             stats.failed_operations, (1.0 - stats.success_rate) * 100.0);
+    println!(
+        "Successful:         {} ({:.2}%)",
+        stats.successful_operations,
+        stats.success_rate * 100.0
+    );
+    println!(
+        "Failed:             {} ({:.2}%)",
+        stats.failed_operations,
+        (1.0 - stats.success_rate) * 100.0
+    );
     println!("Throughput:         {:.2} ops/sec", stats.ops_per_sec);
     println!("Avg Latency:        {:.2} ms", stats.avg_latency_ms);
     println!();
@@ -594,27 +690,39 @@ fn print_report(stats: &SoakStats) {
     println!("  Healings:         {}", stats.healing_count);
     println!("  Breakthroughs:    {}", stats.breakthroughs);
     println!();
-    
+
     // Health checks
     println!("Health Checks:");
     let success_ok = stats.success_rate >= 0.99;
     let memory_ok = stats.memory_growth_mb < 500.0 || stats.duration_secs < 300.0;
     let latency_ok = stats.avg_latency_ms < 1000.0;
-    
-    println!("  Success Rate:     {} ({:.2}%)", 
-             if success_ok { "✅ PASS" } else { "❌ FAIL" },
-             stats.success_rate * 100.0);
-    println!("  Memory Growth:    {} ({:.2} MB)", 
-             if memory_ok { "✅ PASS" } else { "❌ FAIL" },
-             stats.memory_growth_mb);
-    println!("  Avg Latency:      {} ({:.2} ms)", 
-             if latency_ok { "✅ PASS" } else { "❌ FAIL" },
-             stats.avg_latency_ms);
+
+    println!(
+        "  Success Rate:     {} ({:.2}%)",
+        if success_ok { "✅ PASS" } else { "❌ FAIL" },
+        stats.success_rate * 100.0
+    );
+    println!(
+        "  Memory Growth:    {} ({:.2} MB)",
+        if memory_ok { "✅ PASS" } else { "❌ FAIL" },
+        stats.memory_growth_mb
+    );
+    println!(
+        "  Avg Latency:      {} ({:.2} ms)",
+        if latency_ok { "✅ PASS" } else { "❌ FAIL" },
+        stats.avg_latency_ms
+    );
     println!();
-    
+
     let overall_health = success_ok && memory_ok && latency_ok;
-    println!("Overall Status:     {}", 
-             if overall_health { "✅ HEALTHY" } else { "❌ ISSUES DETECTED" });
+    println!(
+        "Overall Status:     {}",
+        if overall_health {
+            "✅ HEALTHY"
+        } else {
+            "❌ ISSUES DETECTED"
+        }
+    );
     println!("{}", "=".repeat(80));
 }
 
@@ -627,7 +735,8 @@ async fn main() -> Result<()> {
     // Parse args
     let args: Vec<String> = std::env::args().collect();
     let quick_test = args.iter().any(|a| a == "--quick" || a == "-q");
-    let duration = args.iter()
+    let duration = args
+        .iter()
         .find_map(|a| {
             if a.starts_with("--duration=") {
                 a.split('=').nth(1)?.parse::<u64>().ok()

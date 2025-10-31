@@ -6,10 +6,10 @@
 //! Run with: cargo test --package niodoo_real_integrated --test phase2_e2e
 
 use anyhow::Result;
+use niodoo_core::memory::EmotionalVector;
 use niodoo_real_integrated::conversation_log::{ConversationEntry, ConversationLogStore};
 use niodoo_real_integrated::emotional_graph::EmotionalGraphBuilder;
 use niodoo_real_integrated::graph_exporter::GraphExporter;
-use niodoo_core::memory::EmotionalVector;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use tracing::info;
@@ -79,7 +79,7 @@ async fn test_phase2_modules_standalone(
     info!("Testing EmotionalGraphBuilder...");
     let mut graph_builder = EmotionalGraphBuilder::default();
     graph_builder.build_from_conversations(&log_store)?;
-    
+
     assert!(graph_builder.sphere_count() >= 3);
     info!("✅ EmotionalGraphBuilder test passed");
 
@@ -87,7 +87,7 @@ async fn test_phase2_modules_standalone(
     info!("Testing GraphExporter...");
     let graph = graph_builder.graph();
     let export = GraphExporter::export_to_json(graph, graph_export_path)?;
-    
+
     assert_eq!(export.nodes.len(), graph_builder.sphere_count());
     info!("✅ GraphExporter test passed");
 
@@ -101,9 +101,9 @@ async fn test_phase2_query_capabilities() -> Result<()> {
 
     let temp_dir = TempDir::new()?;
     let log_path = temp_dir.path().join("test_conversations.json");
-    
+
     let mut log_store = ConversationLogStore::new(&log_path);
-    
+
     // Add diverse conversations
     let entries = vec![
         ConversationEntry::new(
@@ -127,7 +127,10 @@ async fn test_phase2_query_capabilities() -> Result<()> {
     // Test emotion query
     let query_emotion = EmotionalVector::new(0.8, 0.1, 0.0, 0.0, 0.1);
     let results = log_store.query_by_emotion(&query_emotion, 0.5, 10);
-    assert!(!results.is_empty(), "Should find at least one matching conversation");
+    assert!(
+        !results.is_empty(),
+        "Should find at least one matching conversation"
+    );
     info!("✅ Emotion query test passed");
 
     // Test content query - use lower threshold for better matching
@@ -138,4 +141,3 @@ async fn test_phase2_query_capabilities() -> Result<()> {
     info!("=== Query Capabilities Test Complete ===");
     Ok(())
 }
-

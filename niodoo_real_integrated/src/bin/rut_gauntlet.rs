@@ -7,10 +7,7 @@ use csv::Writer;
 use plotters::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use niodoo_real_integrated::{
-    pipeline::Pipeline,
-    config::CliArgs,
-};
+use niodoo_real_integrated::{config::CliArgs, pipeline::Pipeline};
 
 #[derive(Deserialize, Clone)]
 struct RutGauntletConfig {
@@ -80,7 +77,10 @@ fn generate_raw_rut_prompts() -> Vec<String> {
     prompts
 }
 
-fn compute_dynamic_thresholds_from_first_20(results: &[TestResult], config: &RutGauntletConfig) -> DynamicThresholds {
+fn compute_dynamic_thresholds_from_first_20(
+    results: &[TestResult],
+    config: &RutGauntletConfig,
+) -> DynamicThresholds {
     if results.len() < 20 {
         return DynamicThresholds {
             entropy_high: config.default_entropy_high,
@@ -93,7 +93,12 @@ fn compute_dynamic_thresholds_from_first_20(results: &[TestResult], config: &Rut
 
     let first_20_entropies: Vec<f64> = results.iter().take(20).map(|r| r.entropy).collect();
     let entropy_mean = first_20_entropies.iter().sum::<f64>() / first_20_entropies.len() as f64;
-    let entropy_std = (first_20_entropies.iter().map(|&e| (e - entropy_mean).powi(2)).sum::<f64>() / first_20_entropies.len() as f64).sqrt();
+    let entropy_std = (first_20_entropies
+        .iter()
+        .map(|&e| (e - entropy_mean).powi(2))
+        .sum::<f64>()
+        / first_20_entropies.len() as f64)
+        .sqrt();
 
     DynamicThresholds {
         entropy_high: entropy_mean + entropy_std,
@@ -109,7 +114,11 @@ fn calculate_jaccard_similarity(response: &str, prompt: &str) -> f64 {
     let response_words: std::collections::HashSet<&str> = response.split_whitespace().collect();
     let intersection = prompt_words.intersection(&response_words).count();
     let union = prompt_words.union(&response_words).count();
-    if union == 0 { 0.0 } else { intersection as f64 / union as f64 }
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f64 / union as f64
+    }
 }
 
 async fn run_100_prompt_test() -> Result<()> {
@@ -171,12 +180,21 @@ async fn run_100_prompt_test() -> Result<()> {
         entropies.push(cycle.entropy);
         breakthroughs += cycle.learning.breakthroughs.len();
 
-        println!("Cycle {}/20: H={:.2}, Threat={}, Healing={}, Latency={:.0}ms", i+1, cycle.entropy, cycle.compass.is_threat, cycle.compass.is_healing, latency);
+        println!(
+            "Cycle {}/20: H={:.2}, Threat={}, Healing={}, Latency={:.0}ms",
+            i + 1,
+            cycle.entropy,
+            cycle.compass.is_threat,
+            cycle.compass.is_healing,
+            latency
+        );
     }
 
     let dynamic_thresholds = compute_dynamic_thresholds_from_first_20(&first_20_results, &config);
-    println!("🔧 Dynamic thresholds computed: entropy_high={:.2}, mcts_c={:.3}, mirage_sigma={:.3}", 
-        dynamic_thresholds.entropy_high, dynamic_thresholds.mcts_c, dynamic_thresholds.mirage_sigma);
+    println!(
+        "🔧 Dynamic thresholds computed: entropy_high={:.2}, mcts_c={:.3}, mirage_sigma={:.3}",
+        dynamic_thresholds.entropy_high, dynamic_thresholds.mcts_c, dynamic_thresholds.mirage_sigma
+    );
 
     println!("\n🚀 Running remaining 80 cycles with dynamic thresholds...");
     for (i, prompt) in prompts.iter().enumerate().skip(20) {
@@ -203,23 +221,37 @@ async fn run_100_prompt_test() -> Result<()> {
         breakthroughs += cycle.learning.breakthroughs.len();
 
         if (i + 1) % 20 == 0 {
-            println!("Cycle {}/100: H={:.2}, Threats={}, Healings={}, Latency={:.0}ms", i+1, cycle.entropy,
-                results.iter().filter(|r| r.is_threat).count(), results.iter().filter(|r| r.is_healing).count(), latency);
+            println!(
+                "Cycle {}/100: H={:.2}, Threats={}, Healings={}, Latency={:.0}ms",
+                i + 1,
+                cycle.entropy,
+                results.iter().filter(|r| r.is_threat).count(),
+                results.iter().filter(|r| r.is_healing).count(),
+                latency
+            );
         }
     }
 
     let total_prompts = results.len();
     let avg_entropy = entropies.iter().sum::<f64>() / entropies.len() as f64;
-    let entropy_std = (entropies.iter().map(|&e| (e - avg_entropy).powi(2)).sum::<f64>() / entropies.len() as f64).sqrt();
+    let entropy_std = (entropies
+        .iter()
+        .map(|&e| (e - avg_entropy).powi(2))
+        .sum::<f64>()
+        / entropies.len() as f64)
+        .sqrt();
     let threat_count = results.iter().filter(|r| r.is_threat).count();
     let healing_count = results.iter().filter(|r| r.is_healing).count();
     let avg_latency = latencies.iter().sum::<f64>() / latencies.len() as f64;
-    let avg_coherence = results.iter().map(|r| r.coherence_rouge).sum::<f64>() / results.len() as f64;
+    let avg_coherence =
+        results.iter().map(|r| r.coherence_rouge).sum::<f64>() / results.len() as f64;
 
     let entropy_stability = entropy_std < config.entropy_stability_threshold;
-    let emotional_activation = (threat_count + healing_count) as f64 > (total_prompts as f64 * config.emotional_activation_min_percent) / 100.0;
+    let emotional_activation = (threat_count + healing_count) as f64
+        > (total_prompts as f64 * config.emotional_activation_min_percent) / 100.0;
     let latency_ok = avg_latency < config.latency_max_ms;
-    let breakthroughs_ok = breakthroughs as f64 > (total_prompts as f64 * config.breakthroughs_min_percent) / 100.0;
+    let breakthroughs_ok =
+        breakthroughs as f64 > (total_prompts as f64 * config.breakthroughs_min_percent) / 100.0;
 
     let verdict = if entropy_stability && emotional_activation && latency_ok && breakthroughs_ok {
         "Validated: Full operational torque achieved".to_string()
@@ -248,10 +280,24 @@ async fn run_100_prompt_test() -> Result<()> {
 
     println!("\n🔬 Operational Torque Validation Results:");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("Entropy Stability (< 0.3 std): {} ({:.3} ✓)", entropy_stability, entropy_std);
-    println!("Emotional Activation (>20%): {} ({:.1}%) ✓", emotional_activation, (threat_count + healing_count) as f64 / total_prompts as f64 * 100.0);
-    println!("Average Latency (<500ms): {} ({:.0}ms) ✓", latency_ok, avg_latency);
-    println!("Breakthroughs (>60%): {} ({:.1}%) ✓", breakthroughs_ok, breakthroughs as f64 / total_prompts as f64 * 100.0);
+    println!(
+        "Entropy Stability (< 0.3 std): {} ({:.3} ✓)",
+        entropy_stability, entropy_std
+    );
+    println!(
+        "Emotional Activation (>20%): {} ({:.1}%) ✓",
+        emotional_activation,
+        (threat_count + healing_count) as f64 / total_prompts as f64 * 100.0
+    );
+    println!(
+        "Average Latency (<500ms): {} ({:.0}ms) ✓",
+        latency_ok, avg_latency
+    );
+    println!(
+        "Breakthroughs (>60%): {} ({:.1}%) ✓",
+        breakthroughs_ok,
+        breakthroughs as f64 / total_prompts as f64 * 100.0
+    );
     println!("Average Coherence ROUGE: {:.3}", avg_coherence);
     println!("\n🎯 VERDICT: {}", verdict);
 
@@ -261,7 +307,17 @@ async fn run_100_prompt_test() -> Result<()> {
 fn export_csv(results: &[TestResult]) -> Result<()> {
     let file = File::create("niodoo_rut_gauntlet_results.csv")?;
     let mut writer = csv::Writer::from_writer(BufWriter::new(file));
-    writer.write_record(&["cycle", "prompt", "response", "entropy", "is_threat", "is_healing", "latency_ms", "learning_events", "coherence_rouge"])?;
+    writer.write_record(&[
+        "cycle",
+        "prompt",
+        "response",
+        "entropy",
+        "is_threat",
+        "is_healing",
+        "latency_ms",
+        "learning_events",
+        "coherence_rouge",
+    ])?;
 
     for result in results {
         writer.serialize(result)?;
@@ -290,7 +346,8 @@ fn generate_plot(entropies: &[f64]) -> Result<()> {
         .y_label_area_size(40)
         .build_cartesian_2d(0..entropies.len(), 0.0..3.0)?;
 
-    chart.configure_mesh()
+    chart
+        .configure_mesh()
         .x_desc("Cycle")
         .y_desc("Entropy")
         .draw()?;

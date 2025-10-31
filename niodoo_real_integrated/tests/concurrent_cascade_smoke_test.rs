@@ -1,5 +1,5 @@
 //! Concurrent Smoke Soak Test for Emotional Cascade Integration
-//! 
+//!
 //! Tests the emotional cascade integration with concurrent pipeline executions:
 //! - Consonance computation
 //! - Cascade tracking
@@ -9,13 +9,13 @@
 //! Run: cargo test --test concurrent_cascade_smoke_test concurrent_smoke_test -- --nocapture
 
 use anyhow::Result;
-use niodoo_real_integrated::config::{CliArgs, prime_environment, init};
+use niodoo_real_integrated::config::{init, prime_environment, CliArgs};
 use niodoo_real_integrated::pipeline::Pipeline;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Semaphore;
-use tracing::{info, warn, error};
-use std::collections::HashMap;
+use tracing::{error, info, warn};
 
 // 50 prompts from qwen_comparison_test - comprehensive test suite
 const TEST_PROMPTS: &[&str] = &[
@@ -99,49 +99,60 @@ async fn concurrent_smoke_test() -> Result<()> {
     init();
 
     info!("=== CONCURRENT CASCADE SMOKE TEST: 10 iterations with max concurrency ===");
-    info!("Testing emotional cascade integration with {} prompts", TEST_PROMPTS.len());
-    
+    info!(
+        "Testing emotional cascade integration with {} prompts",
+        TEST_PROMPTS.len()
+    );
+
     let iterations = 10;
     let start_time = Instant::now();
-    
+
     // Create pipeline wrapped in Arc<Mutex> for concurrent access
     let args = CliArgs::from_env();
     let pipeline = Arc::new(tokio::sync::Mutex::new(Pipeline::initialise(args).await?));
-    
+
     // Use semaphore to control concurrency - allow as many as possible
     // Limit to 20 concurrent tasks to avoid overwhelming the system
     let max_concurrent = std::env::var("MAX_CONCURRENT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(20);
-    
+
     let semaphore = Arc::new(Semaphore::new(max_concurrent));
     let metrics = Arc::new(tokio::sync::Mutex::new(TestMetrics::default()));
-    
-    info!("Running {} iterations with max {} concurrent tasks", iterations, max_concurrent);
-    
+
+    info!(
+        "Running {} iterations with max {} concurrent tasks",
+        iterations, max_concurrent
+    );
+
     // Collect all tasks
     let mut tasks = Vec::new();
-    
+
     for i in 0..iterations {
         let prompt_idx = i % TEST_PROMPTS.len();
         let prompt = TEST_PROMPTS[prompt_idx].to_string();
         let pipeline_ref = pipeline.clone();
         let sem = semaphore.clone();
         let metrics_ref = metrics.clone();
-        
+
         let task = tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
-            
+
             let cycle_start = Instant::now();
             let prompt_display = if prompt.len() > 60 {
                 format!("{}...", &prompt[..60])
             } else {
                 prompt.clone()
             };
-            
-            info!("[Cycle {}/{}] Processing: {}", i + 1, iterations, prompt_display);
-            
+
+            info!(
+                "[Cycle {}/{}] Processing: {}",
+                i + 1,
+                iterations,
+                prompt_display
+            );
+
             let mut pipeline_guard = pipeline_ref.lock().await;
             match pipeline_guard.process_prompt(&prompt).await {
                 Ok(cycle) => {
@@ -149,26 +160,28 @@ async fn concurrent_smoke_test() -> Result<()> {
                     let mut m = metrics_ref.lock().await;
                     m.total_cycles += 1;
                     m.successful += 1;
-                    
+
                     // Track cascade metrics
                     if let Some(ref consonance) = cycle.consonance {
                         m.consonance_samples.push(consonance.score);
-                        m.avg_consonance = m.consonance_samples.iter().sum::<f64>() 
+                        m.avg_consonance = m.consonance_samples.iter().sum::<f64>()
                             / m.consonance_samples.len() as f64;
                     }
-                    
+
                     if cycle.cascade_transition.is_some() {
                         m.cascade_transitions += 1;
                     }
-                    
+
                     if cycle.hyperfocus.is_some() {
                         m.hyperfocus_events += 1;
                     }
-                    
+
                     if let Some(stage) = cycle.compass.cascade_stage {
-                        *m.cascade_stages.entry(stage.name().to_string()).or_insert(0) += 1;
+                        *m.cascade_stages
+                            .entry(stage.name().to_string())
+                            .or_insert(0) += 1;
                     }
-                    
+
                     info!(
                         "[Cycle {}/{}] ✅ Success | Latency: {:.2}ms | Entropy: {:.3} | Consonance: {:.3} | Cascade: {:?} | Hyperfocus: {}",
                         i + 1,
@@ -188,66 +201,96 @@ async fn concurrent_smoke_test() -> Result<()> {
                 }
             }
         });
-        
+
         tasks.push(task);
     }
-    
+
     // Wait for all tasks to complete
-    info!("Waiting for {} concurrent tasks to complete...", tasks.len());
+    info!(
+        "Waiting for {} concurrent tasks to complete...",
+        tasks.len()
+    );
     for task in tasks {
         let _ = task.await;
     }
-    
+
     let total_elapsed = start_time.elapsed();
     let final_metrics = metrics.lock().await;
-    
+
     // Print summary
     info!("");
     info!("=== CONCURRENT CASCADE SMOKE TEST RESULTS ===");
     info!("Total time: {:.2}s", total_elapsed.as_secs_f64());
     info!("Total cycles: {}", final_metrics.total_cycles);
-    info!("Successful: {} ({:.1}%)", 
-          final_metrics.successful,
-          if final_metrics.total_cycles > 0 {
-              final_metrics.successful as f64 / final_metrics.total_cycles as f64 * 100.0
-          } else { 0.0 });
-    info!("Failed: {} ({:.1}%)",
-          final_metrics.failed,
-          if final_metrics.total_cycles > 0 {
-              final_metrics.failed as f64 / final_metrics.total_cycles as f64 * 100.0
-          } else { 0.0 });
+    info!(
+        "Successful: {} ({:.1}%)",
+        final_metrics.successful,
+        if final_metrics.total_cycles > 0 {
+            final_metrics.successful as f64 / final_metrics.total_cycles as f64 * 100.0
+        } else {
+            0.0
+        }
+    );
+    info!(
+        "Failed: {} ({:.1}%)",
+        final_metrics.failed,
+        if final_metrics.total_cycles > 0 {
+            final_metrics.failed as f64 / final_metrics.total_cycles as f64 * 100.0
+        } else {
+            0.0
+        }
+    );
     info!("");
     info!("=== EMOTIONAL CASCADE METRICS ===");
-    info!("Cascade transitions detected: {}", final_metrics.cascade_transitions);
+    info!(
+        "Cascade transitions detected: {}",
+        final_metrics.cascade_transitions
+    );
     info!("Hyperfocus events: {}", final_metrics.hyperfocus_events);
     info!("Average consonance: {:.3}", final_metrics.avg_consonance);
-    info!("Consonance samples: {}", final_metrics.consonance_samples.len());
-    
+    info!(
+        "Consonance samples: {}",
+        final_metrics.consonance_samples.len()
+    );
+
     if !final_metrics.cascade_stages.is_empty() {
         info!("Cascade stage distribution:");
         for (stage, count) in &final_metrics.cascade_stages {
             info!("  {}: {}", stage, count);
         }
     }
-    
+
     info!("");
     info!("=== PERFORMANCE ===");
-    info!("Avg latency per cycle: {:.2}ms",
-          if final_metrics.total_cycles > 0 {
-              total_elapsed.as_secs_f64() * 1000.0 / final_metrics.total_cycles as f64
-          } else { 0.0 });
-    info!("Throughput: {:.2} cycles/sec",
-          if total_elapsed.as_secs_f64() > 0.0 {
-              final_metrics.total_cycles as f64 / total_elapsed.as_secs_f64()
-          } else { 0.0 });
-    
+    info!(
+        "Avg latency per cycle: {:.2}ms",
+        if final_metrics.total_cycles > 0 {
+            total_elapsed.as_secs_f64() * 1000.0 / final_metrics.total_cycles as f64
+        } else {
+            0.0
+        }
+    );
+    info!(
+        "Throughput: {:.2} cycles/sec",
+        if total_elapsed.as_secs_f64() > 0.0 {
+            final_metrics.total_cycles as f64 / total_elapsed.as_secs_f64()
+        } else {
+            0.0
+        }
+    );
+
     // Verify cascade integration is working
-    assert!(final_metrics.total_cycles > 0, "Should process at least one cycle");
-    assert!(final_metrics.consonance_samples.len() > 0, "Should compute consonance for at least one cycle");
-    
+    assert!(
+        final_metrics.total_cycles > 0,
+        "Should process at least one cycle"
+    );
+    assert!(
+        final_metrics.consonance_samples.len() > 0,
+        "Should compute consonance for at least one cycle"
+    );
+
     info!("");
     info!("✅ Concurrent cascade smoke test completed successfully!");
-    
+
     Ok(())
 }
-

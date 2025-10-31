@@ -1,8 +1,9 @@
 //! FINAL VALIDATOR SOAK TEST: Niodoo-TCS Production Gate
-//! 
+//!
 //! 4 concurrent threads × 1000 cycles each = 4000 total interactions
 //! Tests: ROUGE stability, latency tails, entropy convergence, breakthroughs, token evolution
 
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -17,8 +18,8 @@ use tokio::sync::Mutex as AsyncMutex;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
-use niodoo_real_integrated::config::{CliArgs, HardwareProfile};
 use niodoo_real_integrated::compass::CompassQuadrant;
+use niodoo_real_integrated::config::{CliArgs, HardwareProfile};
 use niodoo_real_integrated::pipeline::Pipeline;
 
 // Full 50 Prompts: Real-world chaos for Niodoo-TCS validation
@@ -91,7 +92,10 @@ const PROMPTS: &[&[&str]] = &[
 ];
 
 #[derive(Debug, Parser)]
-#[command(name = "soak_validator", about = "FINAL VALIDATOR SOAK TEST: Niodoo-TCS Production Gate")]
+#[command(
+    name = "soak_validator",
+    about = "FINAL VALIDATOR SOAK TEST: Niodoo-TCS Production Gate"
+)]
 struct Args {
     /// Number of concurrent threads (default: 4)
     #[arg(long, default_value_t = 4)]
@@ -116,12 +120,12 @@ struct CycleMetrics {
     thread_id: usize,
     prompt: String,
     prompt_category: usize,
-    
+
     // Core metrics
     rouge: f64,
     latency_ms: f64,
     entropy_bits: f64,
-    
+
     // Topology metrics
     betti_0: usize,
     betti_1: usize,
@@ -129,17 +133,17 @@ struct CycleMetrics {
     knot_complexity: f64,
     persistence_entropy: f64,
     spectral_gap: f64,
-    
+
     // Compass metrics
     compass_quadrant: String,
     is_threat: bool,
     is_healing: bool,
     breakthrough: bool, // Discover quadrant or knot untangling
-    
+
     // Learning metrics
     new_tokens: usize,
     learning_events: usize,
-    
+
     // Response metadata
     baseline_response_preview: String,
     hybrid_response_preview: String,
@@ -150,31 +154,31 @@ struct ValidationReport {
     status: String,
     total_cycles: usize,
     num_threads: usize,
-    
+
     // Aggregated metrics
     avg_rouge: f64,
     rouge_variance: f64,
     rouge_delta: f64, // Hybrid vs baseline
-    
+
     avg_latency_ms: f64,
     p50_latency_ms: f64,
     p95_latency_ms: f64,
     p99_latency_ms: f64,
-    
+
     avg_entropy_bits: f64,
     entropy_convergence: bool,
-    
+
     breakthrough_rate: f64,
     avg_betti_1: f64,
     avg_knot_complexity: f64,
-    
+
     total_new_tokens: usize,
     crdt_consensus_rate: f64,
-    
+
     // Pass/fail criteria
     passed: bool,
     failures: Vec<String>,
-    
+
     // Thread breakdown
     thread_metrics: Vec<ThreadMetrics>,
 }
@@ -221,17 +225,17 @@ async fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
-    
+
     // Load environment
     niodoo_real_integrated::config::prime_environment();
-    
+
     // Override env vars for gRPC + vLLM curator
     unsafe {
         std::env::set_var("QDRANT_USE_GRPC", "true");
         std::env::set_var("CURATOR_BACKEND", "vllm");
         std::env::set_var("ENABLE_CURATOR", "true");
     }
-    
+
     info!(
         threads = args.num_threads,
         cycles_per_thread = args.cycles_per_thread,
@@ -240,70 +244,74 @@ async fn main() -> Result<()> {
     );
 
     // Create output directory
-    std::fs::create_dir_all(&args.output_dir)
-        .context("Failed to create output directory")?;
+    std::fs::create_dir_all(&args.output_dir).context("Failed to create output directory")?;
 
     // Set topology mode via environment
     unsafe {
         std::env::set_var("TOPOLOGY_MODE", "hybrid");
     }
-    
+
     // Initialize pipeline (shared across threads)
     let cli_args = CliArgs {
         hardware: HardwareProfile::Beelink,
         config: args.config.clone(),
         ..Default::default()
     };
-    
+
     // Create pipeline pool (one per thread for safety) - initialize sequentially
     let mut pipelines = Vec::new();
     for tid in 0..args.num_threads {
         let mut cli_args_clone = cli_args.clone();
         cli_args_clone.rng_seed_override = Some(42 + tid as u64);
-        
-        let pipeline = Pipeline::initialise_with_seed(cli_args_clone, 42 + tid as u64).await
+
+        let pipeline = Pipeline::initialise_with_seed(cli_args_clone, 42 + tid as u64)
+            .await
             .context(format!("Failed to initialize pipeline for thread {}", tid))?;
         pipelines.push(Arc::new(AsyncMutex::new(pipeline)));
     }
 
     // Shared metrics collection
     let metrics_log = Arc::new(Mutex::new(Vec::<CycleMetrics>::new()));
-    
+
     // Spawn concurrent threads
     let handles: Vec<_> = (0..args.num_threads)
         .map(|thread_id| {
             let pipeline = pipelines[thread_id].clone();
             let metrics_log = metrics_log.clone();
             let cycles_per = args.cycles_per_thread;
-            
+
             tokio::spawn(async move {
                 let mut rng = StdRng::seed_from_u64(42 + thread_id as u64);
                 let mut local_metrics = Vec::new();
-                
-                info!(thread_id, "Thread {} starting {} cycles", thread_id, cycles_per);
-                
+
+                info!(
+                    thread_id,
+                    "Thread {} starting {} cycles", thread_id, cycles_per
+                );
+
                 for cycle in 0..cycles_per {
                     // Random prompt selection
                     let cat = rng.gen_range(0..PROMPTS.len());
                     let idx = rng.gen_range(0..PROMPTS[cat].len());
                     let prompt = PROMPTS[cat][idx].to_string();
-                    
+
                     let start = Instant::now();
-                    
+
                     // Process prompt
                     let cycle_result = {
                         let mut pipeline_guard = pipeline.lock().await;
                         pipeline_guard.process_prompt(&prompt).await
                     };
-                    
+
                     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
-                    
+
                     match cycle_result {
                         Ok(cycle_result) => {
                             // Extract metrics
-                            let breakthrough = matches!(cycle_result.compass.quadrant, CompassQuadrant::Discover)
-                                || cycle_result.topology.knot_complexity > 0.5;
-                            
+                            let breakthrough =
+                                matches!(cycle_result.compass.quadrant, CompassQuadrant::Discover)
+                                    || cycle_result.topology.knot_complexity > 0.5;
+
                             let metric = CycleMetrics {
                                 cycle,
                                 thread_id,
@@ -323,20 +331,30 @@ async fn main() -> Result<()> {
                                 is_healing: cycle_result.compass.is_healing,
                                 breakthrough,
                                 new_tokens: cycle_result.tokenizer.promoted_tokens.len(),
-                                learning_events: if !cycle_result.learning.breakthroughs.is_empty() { 1 } else { 0 },
-                                baseline_response_preview: cycle_result.baseline_response.chars().take(100).collect(),
-                                hybrid_response_preview: cycle_result.hybrid_response.chars().take(100).collect(),
+                                learning_events: if !cycle_result.learning.breakthroughs.is_empty()
+                                {
+                                    1
+                                } else {
+                                    0
+                                },
+                                baseline_response_preview: cycle_result
+                                    .baseline_response
+                                    .chars()
+                                    .take(100)
+                                    .collect(),
+                                hybrid_response_preview: cycle_result
+                                    .hybrid_response
+                                    .chars()
+                                    .take(100)
+                                    .collect(),
                             };
-                            
+
                             local_metrics.push(metric);
-                            
+
                             if cycle % 100 == 0 {
                                 info!(
                                     thread_id,
-                                    cycle,
-                                    "Thread {} completed cycle {}",
-                                    thread_id,
-                                    cycle
+                                    cycle, "Thread {} completed cycle {}", thread_id, cycle
                                 );
                             }
                         }
@@ -353,28 +371,35 @@ async fn main() -> Result<()> {
                         }
                     }
                 }
-                
+
                 // Merge local metrics into shared log
-                let mut shared = metrics_log.lock().unwrap();
+                let mut shared = metrics_log
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 shared.extend(local_metrics);
-                
+
                 info!(thread_id, "Thread {} completed all cycles", thread_id);
             })
         })
         .collect();
-    
+
     // Wait for all threads
-    info!("Waiting for all {} threads to complete...", args.num_threads);
+    info!(
+        "Waiting for all {} threads to complete...",
+        args.num_threads
+    );
     for handle in handles {
         handle.await.context("Thread panicked")?;
     }
-    
+
     info!("All threads completed! Generating report...");
-    
+
     // Generate report
-    let metrics = metrics_log.lock().unwrap();
+    let metrics = metrics_log
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let report = generate_report(&metrics, args.num_threads)?;
-    
+
     // Write CSV
     let csv_path = format!("{}/soak_results.csv", args.output_dir);
     let mut wtr = Writer::from_path(&csv_path)?;
@@ -383,13 +408,13 @@ async fn main() -> Result<()> {
     }
     wtr.flush()?;
     info!("CSV written to {}", csv_path);
-    
+
     // Write validation report
     let report_path = format!("{}/VALIDATION.md", args.output_dir);
     let mut report_file = File::create(&report_path)?;
     write_validation_report(&mut report_file, &report)?;
     info!("Validation report written to {}", report_path);
-    
+
     if report.passed {
         info!("🎉🎉🎉 VALIDATION PASSED 🎉🎉🎉");
         info!("GitHub bomb authorized! System proven.");
@@ -398,7 +423,7 @@ async fn main() -> Result<()> {
         warn!("Failures: {:?}", report.failures);
         warn!("Tune system and re-run.");
     }
-    
+
     Ok(())
 }
 
@@ -406,76 +431,96 @@ fn generate_report(metrics: &[CycleMetrics], num_threads: usize) -> Result<Valid
     if metrics.is_empty() {
         anyhow::bail!("No metrics collected");
     }
-    
+
     let total_cycles = metrics.len();
-    
+
     // Extract metrics
     let rouges: Vec<f64> = metrics.iter().map(|m| m.rouge).collect();
     let latencies: Vec<f64> = metrics.iter().map(|m| m.latency_ms).collect();
     let entropies: Vec<f64> = metrics.iter().map(|m| m.entropy_bits).collect();
-    
+
     // Calculate statistics
     let avg_rouge = rouges.iter().sum::<f64>() / rouges.len() as f64;
     let rouge_variance = variance(&rouges);
     let rouge_delta = -0.15; // Approximate (hybrid typically lower)
-    
+
     let mut sorted_latencies = latencies.clone();
-    sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    
+    sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
+
     let avg_latency = latencies.iter().sum::<f64>() / latencies.len() as f64;
     let p50_latency = percentile(&sorted_latencies, 0.50);
     let p95_latency = percentile(&sorted_latencies, 0.95);
     let p99_latency = percentile(&sorted_latencies, 0.99);
-    
+
     let avg_entropy = entropies.iter().sum::<f64>() / entropies.len() as f64;
     let entropy_convergence = avg_entropy >= 1.8 && avg_entropy <= 2.2;
-    
+
     let breakthroughs = metrics.iter().filter(|m| m.breakthrough).count();
     let breakthrough_rate = breakthroughs as f64 / total_cycles as f64;
-    
+
     let avg_betti_1 = metrics.iter().map(|m| m.betti_1 as f64).sum::<f64>() / total_cycles as f64;
-    let avg_knot_complexity = metrics.iter().map(|m| m.knot_complexity).sum::<f64>() / total_cycles as f64;
-    
+    let avg_knot_complexity =
+        metrics.iter().map(|m| m.knot_complexity).sum::<f64>() / total_cycles as f64;
+
     let total_new_tokens: usize = metrics.iter().map(|m| m.new_tokens).sum();
     let crdt_consensus_rate = 0.95; // Assume 95% (would need actual CRDT tracking)
-    
+
     // Pass/fail criteria
     let mut failures = Vec::new();
-    
+
     // ROUGE: -10% to -20% (synthesis, not mimicry)
     if rouge_delta < -0.20 || rouge_delta > -0.10 {
-        failures.push(format!("ROUGE delta {}% outside valid range [-20%, -10%]", rouge_delta * 100.0));
+        failures.push(format!(
+            "ROUGE delta {}% outside valid range [-20%, -10%]",
+            rouge_delta * 100.0
+        ));
     }
-    
+
     // Latency thresholds
     if avg_latency > 5000.0 {
-        failures.push(format!("Mean latency {}ms exceeds 5s threshold", avg_latency));
+        failures.push(format!(
+            "Mean latency {}ms exceeds 5s threshold",
+            avg_latency
+        ));
     }
     if p99_latency > 10000.0 {
-        failures.push(format!("P99 latency {}ms exceeds 10s threshold", p99_latency));
+        failures.push(format!(
+            "P99 latency {}ms exceeds 10s threshold",
+            p99_latency
+        ));
     }
-    
+
     // Entropy convergence
     if !entropy_convergence {
-        failures.push(format!("Entropy {} bits not in range [1.8, 2.2]", avg_entropy));
+        failures.push(format!(
+            "Entropy {} bits not in range [1.8, 2.2]",
+            avg_entropy
+        ));
     }
-    
+
     // Breakthrough rate
     if breakthrough_rate < 0.15 {
-        failures.push(format!("Breakthrough rate {}% below 15% threshold", breakthrough_rate * 100.0));
+        failures.push(format!(
+            "Breakthrough rate {}% below 15% threshold",
+            breakthrough_rate * 100.0
+        ));
     }
-    
+
     // Token promotion
     if total_new_tokens < 5 {
-        failures.push(format!("Total new tokens {} below 5 threshold", total_new_tokens));
+        failures.push(format!(
+            "Total new tokens {} below 5 threshold",
+            total_new_tokens
+        ));
     }
-    
+
     let passed = failures.is_empty();
-    
+
     // Thread breakdown
     let thread_metrics: Vec<ThreadMetrics> = (0..num_threads)
         .map(|tid| {
-            let thread_metrics: Vec<&CycleMetrics> = metrics.iter().filter(|m| m.thread_id == tid).collect();
+            let thread_metrics: Vec<&CycleMetrics> =
+                metrics.iter().filter(|m| m.thread_id == tid).collect();
             let cycles = thread_metrics.len();
             if cycles == 0 {
                 return ThreadMetrics {
@@ -489,13 +534,15 @@ fn generate_report(metrics: &[CycleMetrics], num_threads: usize) -> Result<Valid
                     new_tokens: 0,
                 };
             }
-            
+
             let breakthroughs = thread_metrics.iter().filter(|m| m.breakthrough).count();
-            let avg_latency = thread_metrics.iter().map(|m| m.latency_ms).sum::<f64>() / cycles as f64;
+            let avg_latency =
+                thread_metrics.iter().map(|m| m.latency_ms).sum::<f64>() / cycles as f64;
             let avg_rouge = thread_metrics.iter().map(|m| m.rouge).sum::<f64>() / cycles as f64;
-            let avg_entropy = thread_metrics.iter().map(|m| m.entropy_bits).sum::<f64>() / cycles as f64;
+            let avg_entropy =
+                thread_metrics.iter().map(|m| m.entropy_bits).sum::<f64>() / cycles as f64;
             let new_tokens: usize = thread_metrics.iter().map(|m| m.new_tokens).sum();
-            
+
             ThreadMetrics {
                 thread_id: tid,
                 cycles,
@@ -508,9 +555,13 @@ fn generate_report(metrics: &[CycleMetrics], num_threads: usize) -> Result<Valid
             }
         })
         .collect();
-    
+
     Ok(ValidationReport {
-        status: if passed { "PASS 🚀".to_string() } else { "TUNE & RETRY".to_string() },
+        status: if passed {
+            "PASS 🚀".to_string()
+        } else {
+            "TUNE & RETRY".to_string()
+        },
         total_cycles,
         num_threads,
         avg_rouge,
@@ -536,23 +587,44 @@ fn generate_report(metrics: &[CycleMetrics], num_threads: usize) -> Result<Valid
 fn write_validation_report(file: &mut File, report: &ValidationReport) -> Result<()> {
     writeln!(file, "# FINAL SOAK VALIDATION")?;
     writeln!(file, "\n**Status: {}**\n", report.status)?;
-    
+
     writeln!(file, "## Key Metrics")?;
     writeln!(file, "- **Total Cycles**: {}", report.total_cycles)?;
     writeln!(file, "- **Threads**: {}", report.num_threads)?;
-    writeln!(file, "- **ROUGE Avg**: {:.3} (Δ: {:.1}%)", report.avg_rouge, report.rouge_delta * 100.0)?;
+    writeln!(
+        file,
+        "- **ROUGE Avg**: {:.3} (Δ: {:.1}%)",
+        report.avg_rouge,
+        report.rouge_delta * 100.0
+    )?;
     writeln!(file, "- **ROUGE Variance**: {:.4}", report.rouge_variance)?;
     writeln!(file, "- **Mean Latency**: {:.0}ms", report.avg_latency_ms)?;
     writeln!(file, "- **P50 Latency**: {:.0}ms", report.p50_latency_ms)?;
     writeln!(file, "- **P95 Latency**: {:.0}ms", report.p95_latency_ms)?;
     writeln!(file, "- **P99 Latency**: {:.0}ms", report.p99_latency_ms)?;
-    writeln!(file, "- **Avg Entropy**: {:.2} bits (converged: {})", report.avg_entropy_bits, report.entropy_convergence)?;
-    writeln!(file, "- **Breakthrough Rate**: {:.1}%", report.breakthrough_rate * 100.0)?;
+    writeln!(
+        file,
+        "- **Avg Entropy**: {:.2} bits (converged: {})",
+        report.avg_entropy_bits, report.entropy_convergence
+    )?;
+    writeln!(
+        file,
+        "- **Breakthrough Rate**: {:.1}%",
+        report.breakthrough_rate * 100.0
+    )?;
     writeln!(file, "- **Avg Betti₁**: {:.2}", report.avg_betti_1)?;
-    writeln!(file, "- **Avg Knot Complexity**: {:.3}", report.avg_knot_complexity)?;
+    writeln!(
+        file,
+        "- **Avg Knot Complexity**: {:.3}",
+        report.avg_knot_complexity
+    )?;
     writeln!(file, "- **Total New Tokens**: {}", report.total_new_tokens)?;
-    writeln!(file, "- **CRDT Consensus Rate**: {:.1}%", report.crdt_consensus_rate * 100.0)?;
-    
+    writeln!(
+        file,
+        "- **CRDT Consensus Rate**: {:.1}%",
+        report.crdt_consensus_rate * 100.0
+    )?;
+
     writeln!(file, "\n## Thread Breakdown")?;
     writeln!(file, "| Thread | Cycles | Breakthroughs | Breakthrough Rate | Avg Latency | Avg ROUGE | Avg Entropy | New Tokens |")?;
     writeln!(file, "|--------|--------|---------------|------------------|-------------|-----------|-------------|------------|")?;
@@ -570,23 +642,28 @@ fn write_validation_report(file: &mut File, report: &ValidationReport) -> Result
             tm.new_tokens
         )?;
     }
-    
+
     if !report.failures.is_empty() {
         writeln!(file, "\n## Failures")?;
         for failure in &report.failures {
             writeln!(file, "- {}", failure)?;
         }
     }
-    
+
     writeln!(file, "\n## Full Logs")?;
-    writeln!(file, "See `soak_results.csv` for complete cycle-by-cycle metrics.")?;
-    
+    writeln!(
+        file,
+        "See `soak_results.csv` for complete cycle-by-cycle metrics."
+    )?;
+
     if report.passed {
-        writeln!(file, "\n---\n\n🎉 **GITBOMB AUTHORIZED**: System proven. Drop that repo! 🚀")?;
+        writeln!(
+            file,
+            "\n---\n\n🎉 **GITBOMB AUTHORIZED**: System proven. Drop that repo! 🚀"
+        )?;
     } else {
         writeln!(file, "\n---\n\n⚠️ **Threshold miss**—check logs, tweak Curator threshold or gRPC batch size.")?;
     }
-    
+
     Ok(())
 }
-

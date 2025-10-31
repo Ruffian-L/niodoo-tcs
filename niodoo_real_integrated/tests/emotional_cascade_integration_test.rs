@@ -1,10 +1,12 @@
 //! Integration test for emotional cascade functionality
 //! Tests consonance computation, cascade tracking, and hyperfocus detection
 
-use niodoo_real_integrated::compass::{CascadeStage, CascadeTracker, CompassOutcome, CompassQuadrant};
+use niodoo_real_integrated::compass::{
+    CascadeStage, CascadeTracker, CompassOutcome, CompassQuadrant,
+};
 use niodoo_real_integrated::consonance::{compute_consonance, ConsonanceMetrics};
-use niodoo_real_integrated::hyperfocus::{HyperfocusDetector, CoherentAction};
-use niodoo_real_integrated::erag::{CollapseResult, EragMemory, EmotionalVector};
+use niodoo_real_integrated::erag::{CollapseResult, EmotionalVector, EragMemory};
+use niodoo_real_integrated::hyperfocus::{CoherentAction, HyperfocusDetector};
 use niodoo_real_integrated::tcs_analysis::TopologicalSignature;
 use niodoo_real_integrated::torus::PadGhostState;
 use std::collections::HashMap;
@@ -110,10 +112,7 @@ fn test_cascade_progression() {
     }
 
     // Test that Motivation cycles back to Recognition
-    assert_eq!(
-        CascadeStage::Motivation.next(),
-        CascadeStage::Recognition
-    );
+    assert_eq!(CascadeStage::Motivation.next(), CascadeStage::Recognition);
 }
 
 #[test]
@@ -126,7 +125,10 @@ fn test_cascade_tracker_transitions() {
 
     // First call initializes the tracker
     let transition1 = tracker.detect_transition(&compass_recognition, consonance_high);
-    assert!(transition1.is_none(), "First call should initialize, not transition");
+    assert!(
+        transition1.is_none(),
+        "First call should initialize, not transition"
+    );
 
     // Move to Satisfaction stage (Recognition → Satisfaction)
     let compass_satisfaction = create_test_compass(CompassQuadrant::Master, None);
@@ -246,7 +248,10 @@ fn test_hyperfocus_detection() {
     let event = detector.detect(&signals);
 
     // Should detect hyperfocus with high consonance
-    assert!(event.is_some(), "Should detect hyperfocus with high consonance");
+    assert!(
+        event.is_some(),
+        "Should detect hyperfocus with high consonance"
+    );
     let event = event.unwrap();
     assert!(event.overall_consonance >= 0.85);
     assert_eq!(event.aligned_signals.len(), 3);
@@ -403,8 +408,7 @@ fn test_cascade_stage_serialization() {
     // Test that CascadeStage can be serialized/deserialized
     let stage = CascadeStage::Recognition;
     let serialized = serde_json::to_string(&stage).expect("Should serialize");
-    let deserialized: CascadeStage =
-        serde_json::from_str(&serialized).expect("Should deserialize");
+    let deserialized: CascadeStage = serde_json::from_str(&serialized).expect("Should deserialize");
 
     assert_eq!(stage, deserialized, "Serialization roundtrip should work");
 }
@@ -424,4 +428,3 @@ fn test_consonance_helper_methods() {
     assert!(metrics.is_dissonant(0.2));
     assert!(!metrics.is_dissonant(0.3));
 }
-

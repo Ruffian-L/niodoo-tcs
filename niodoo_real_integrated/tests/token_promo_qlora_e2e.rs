@@ -50,38 +50,41 @@ async fn test_token_promotion_and_qlora_full_e2e() -> Result<()> {
         .try_init();
 
     info!("=== Token Promotion + QLoRA E2E Test ===");
-    
+
     // Build CLI args for test environment (using available fields only)
     let args = CliArgs::default();
-    
+
     // Lower token promotion thresholds for test
     unsafe {
         std::env::set_var("TOKEN_PROMOTION_MIN_SCORE", "0.4"); // Lower than default 0.5
         std::env::set_var("TOKEN_PROMOTION_MAX_PER_CYCLE", "20"); // Allow more promotions
         std::env::remove_var("DISABLE_LORA"); // Ensure LORA is enabled
     }
-    
+
     info!("Initializing pipeline...");
     let mut pipeline = Pipeline::initialise(args).await?;
-    
+
     // Get initial vocabulary size - use cycle output
     let initial_vocab_size = {
         let test_cycle = pipeline.process_prompt("test").await?;
         test_cycle.tokenizer.promoted_tokens.len() // Approximate
     };
     info!("Initial vocabulary size estimate: {}", initial_vocab_size);
-    
+
     // Track promoted tokens across cycles
     let mut total_promoted = 0;
     let mut cycles_with_promotions = 0;
-    
+
     // Process all emotional prompts
-    info!("Processing {} emotional prompts...", EMOTIONAL_PROMPTS.len());
+    info!(
+        "Processing {} emotional prompts...",
+        EMOTIONAL_PROMPTS.len()
+    );
     for (i, prompt) in EMOTIONAL_PROMPTS.iter().enumerate() {
         info!("=== Processing prompt {}: {} ===", i + 1, prompt);
-        
+
         let cycle = pipeline.process_prompt(prompt).await?;
-        
+
         // Check for promoted tokens in this cycle
         let promoted_count = cycle.tokenizer.promoted_tokens.len();
         if promoted_count > 0 {
@@ -91,13 +94,15 @@ async fn test_token_promotion_and_qlora_full_e2e() -> Result<()> {
                 "✅ Cycle {} promoted {} tokens: {:?}",
                 i + 1,
                 promoted_count,
-                cycle.tokenizer.promoted_tokens
+                cycle
+                    .tokenizer
+                    .promoted_tokens
                     .iter()
                     .map(|t| String::from_utf8_lossy(&t.bytes))
                     .collect::<Vec<_>>()
             );
         }
-        
+
         // Log metrics
         info!(
             "Cycle {} metrics - ROUGE: {:.3}, Entropy: {:.3}, Latency: {:.1}ms",
@@ -106,44 +111,46 @@ async fn test_token_promotion_and_qlora_full_e2e() -> Result<()> {
             cycle.entropy,
             cycle.latency_ms
         );
-        
+
         // Give tokenizer time to process
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     // Manually trigger token promotion cycle to discover patterns
     info!("=== Token promotion happens automatically in pipeline ===");
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     // Check final vocabulary state
     let final_cycle = pipeline.process_prompt("final vocabulary check").await?;
     let final_promoted = final_cycle.tokenizer.promoted_tokens.len();
-    
+
     info!("Final promoted tokens in last cycle: {}", final_promoted);
-    
+
     if total_promoted > 0 {
-        info!("✅ Token promotion verified: {} tokens promoted across {} cycles", 
-              total_promoted, cycles_with_promotions);
+        info!(
+            "✅ Token promotion verified: {} tokens promoted across {} cycles",
+            total_promoted, cycles_with_promotions
+        );
     } else {
         warn!("⚠️  No tokens were promoted during processing. This may indicate:");
         warn!("   - Patterns need more repetition to be discovered");
         warn!("   - Promotion thresholds may be too high");
         warn!("   - Memory system needs more data");
     }
-    
+
     // Trigger QLoRA fine-tuning by accumulating enough training data
     info!("=== Triggering QLoRA Fine-tuning ===");
-    
+
     // Check final vocabulary state
     let final_cycle = pipeline.process_prompt("final vocabulary check").await?;
     let final_promoted = final_cycle.tokenizer.promoted_tokens.len();
-    
+
     info!("Final promoted tokens in last cycle: {}", final_promoted);
-    
+
     // Training happens automatically in the learning loop
     info!("QLoRA training happens automatically in learning loop");
     tokio::time::sleep(Duration::from_secs(2)).await;
-    
+
     info!("=== Token Promotion + QLoRA E2E Test Complete ===");
     Ok(())
 }
@@ -156,21 +163,21 @@ async fn test_token_promotion_with_emotional_patterns() -> Result<()> {
         .try_init();
 
     info!("=== Token Promotion Pattern Test ===");
-    
+
     let temp_dir = TempDir::new()?;
     let state_dir = temp_dir.path().join("state");
     std::fs::create_dir_all(&state_dir)?;
-    
+
     let args = CliArgs::default();
-    
+
     // Very permissive thresholds for testing
     unsafe {
         std::env::set_var("TOKEN_PROMOTION_MIN_SCORE", "0.3");
         std::env::set_var("TOKEN_PROMOTION_MAX_PER_CYCLE", "30");
     }
-    
+
     let mut pipeline = Pipeline::initialise(args).await?;
-    
+
     // Process prompts with repeated patterns
     let patterns = vec![
         "möbius_twist appears in emotional states",
@@ -179,19 +186,19 @@ async fn test_token_promotion_with_emotional_patterns() -> Result<()> {
         "möbius_twist correlates with breakthroughs",
         "möbius_twist connects to emotional_coherence",
     ];
-    
+
     for prompt in patterns {
         let _cycle = pipeline.process_prompt(prompt).await?;
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    
+
     // Verify promotion occurred through cycle output
     let final_cycle = pipeline.process_prompt("final check").await?;
     let promoted_count = final_cycle.tokenizer.promoted_tokens.len();
-    
+
     assert!(promoted_count >= 0, "Should track promoted tokens");
     info!("✅ Final promoted tokens: {}", promoted_count);
-    
+
     Ok(())
 }
 
@@ -203,19 +210,19 @@ async fn test_qlora_adapter_save_reload() -> Result<()> {
         .try_init();
 
     info!("=== QLoRA Adapter Save/Reload Test ===");
-    
+
     let temp_dir = TempDir::new()?;
     let state_dir = temp_dir.path().join("state");
     std::fs::create_dir_all(&state_dir)?;
-    
+
     let args = CliArgs::default();
-    
+
     unsafe {
         std::env::remove_var("DISABLE_LORA");
     }
-    
+
     let mut pipeline = Pipeline::initialise(args).await?;
-    
+
     // Process enough prompts to build up training data
     let prompts = vec![
         "I feel joy",
@@ -229,20 +236,19 @@ async fn test_qlora_adapter_save_reload() -> Result<()> {
         "Fine-tuning adapts behavior",
         "Continuous improvement matters",
     ];
-    
+
     for prompt in prompts {
         let _cycle = pipeline.process_prompt(prompt).await?;
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     // Wait for potential training to complete
     tokio::time::sleep(Duration::from_secs(3)).await;
-    
+
     // QLoRA adapter saving happens automatically in learning loop
     // For this test, we verify the pipeline processes correctly
     info!("✅ Pipeline processed all prompts successfully");
     info!("QLoRA training occurs automatically when training data threshold is met");
-    
+
     Ok(())
 }
-
