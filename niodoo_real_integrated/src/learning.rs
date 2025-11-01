@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -8,7 +8,11 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 use rand::prelude::*;
 use rayon::prelude::*;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
+
+const EXECUTOR_MEMORY_LIMIT: usize = 256;
+const EXECUTOR_CLUSTER_THRESHOLD: f32 = 0.82;
 
 use crate::compass::CompassOutcome;
 use crate::config::RuntimeConfig;
@@ -119,6 +123,14 @@ struct CuratedSample {
     spectral_gap: f64,
 }
 
+/// Phase 3.2: Training batch for async processing
+#[derive(Debug, Clone)]
+struct TrainingBatch {
+    samples: Vec<(Vec<f32>, Vec<f32>)>,
+    epochs: usize,
+    learning_rate: f32,
+}
+
 pub struct LearningLoop {
     entropy_history: VecDeque<f64>,
     window: usize,
@@ -139,13 +151,17 @@ pub struct LearningLoop {
     recent_topologies: VecDeque<TopologicalSignature>, // INTEGRATION FIX: Track topology history
     evolution: EvolutionLoop,
     predictor: TcsPredictor, // FIXED: Removed underscore to make it active
-    lora_trainer: LoRATrainer,
+    lora_trainer: Arc<RwLock<LoRATrainer>>, // Shared trainer for sync and async paths
     reward_threshold: f64,
     tokenizer: Option<Arc<DynamicTokenizerManager>>,
     curated_buffer: Vec<CuratedSample>,
     lora_epochs: usize,
     #[allow(dead_code)]
     rng: rand::rngs::StdRng,
+    executor_memory: VecDeque<Experience>,
+    executor_distill_threshold: usize,
+    // Phase 3.2: Async training channel for batched replay buffer processing
+    training_tx: Option<mpsc::UnboundedSender<TrainingBatch>>,
 }
 
 impl LearningLoop {
@@ -188,11 +204,13 @@ impl LearningLoop {
         let lora_trainer = {
             let guard = config.read();
             let embedding_dim = guard.qdrant_vector_dim;
+            let use_fp16 = guard.fp16_qlora_adapters; // Phase 3.1: Use config flag
             let lora_config = LoRAConfig {
                 rank: lora_rank,
                 alpha: lora_alpha,
                 input_dim: embedding_dim,
                 output_dim: embedding_dim,
+                use_fp16, // Phase 3.1: Enabled via config.fp16_qlora_adapters
             };
             LoRATrainer::with_config(lora_config).unwrap_or_else(|err| {
                 warn!(error = %err, "Failed to initialise LoRA trainer with config, using default adapter");
@@ -201,6 +219,8 @@ impl LearningLoop {
         };
 
         let rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
+
+        let lora_trainer = Arc::new(RwLock::new(lora_trainer));
 
         Self {
             entropy_history: VecDeque::with_capacity(window),
@@ -222,13 +242,97 @@ impl LearningLoop {
             recent_topologies: VecDeque::with_capacity(50), // INTEGRATION FIX: Initialize topology tracking
             evolution: EvolutionLoop::new(20, 5, 0.05, rng_seed),
             predictor: TcsPredictor::new(), // FIXED: Removed underscore
-            lora_trainer,
+            lora_trainer: Arc::clone(&lora_trainer),
             reward_threshold: -0.5,
             tokenizer: Some(tokenizer.clone()),
             curated_buffer: Vec::new(),
             lora_epochs,
             #[allow(dead_code)]
             rng,
+            executor_memory: VecDeque::new(),
+            executor_distill_threshold: 32,
+            training_tx: None, // Phase 3.2: Will be initialized with spawn_async_trainer
+        }
+    }
+
+    /// Phase 3.2: Spawn async training task for batched replay buffer processing
+    /// This allows training to happen in the background without blocking the main loop
+    pub fn spawn_async_trainer(&mut self) -> Result<()> {
+        if self.training_tx.is_some() {
+            // Already spawned
+            return Ok(());
+        }
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<TrainingBatch>();
+        let trainer = Arc::clone(&self.lora_trainer);
+        let trainer_clone = Arc::clone(&trainer);
+
+        // Spawn background task that processes training batches
+        tokio::spawn(async move {
+            while let Some(batch) = rx.recv().await {
+                let samples = batch.samples;
+                let epochs = batch.epochs;
+                let learning_rate = batch.learning_rate;
+                let sample_count = samples.len();
+
+                // Perform training in blocking task pool to avoid blocking async runtime
+                let trainer_for_block = Arc::clone(&trainer_clone);
+                let result = tokio::task::spawn_blocking(move || {
+                    let mut trainer_guard = trainer_for_block.write();
+                    trainer_guard.train(&samples, epochs, learning_rate)
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(loss)) => {
+                        info!(
+                            samples = sample_count,
+                            epochs,
+                            loss,
+                            "Async LoRA training completed"
+                        );
+                    }
+                    Ok(Err(e)) => {
+                        warn!(%e, "Async LoRA training failed");
+                    }
+                    Err(e) => {
+                        warn!(%e, "Async LoRA training task panicked");
+                    }
+                }
+            }
+        });
+
+        self.training_tx = Some(tx);
+        info!("Async LoRA trainer spawned");
+        Ok(())
+    }
+
+    /// Phase 3.2: Queue training batch for async processing
+    fn queue_training_batch(&mut self, samples: Vec<(Vec<f32>, Vec<f32>)>, epochs: usize, learning_rate: f32) {
+        if let Some(tx) = &self.training_tx {
+            let batch = TrainingBatch {
+                samples,
+                epochs,
+                learning_rate,
+            };
+            if tx.send(batch).is_err() {
+                warn!("Failed to queue training batch: channel closed");
+            }
+        } else {
+            // Fallback to synchronous training if async trainer not spawned
+            warn!("Async trainer not available, falling back to synchronous training");
+            if let Err(e) = self
+                .lora_trainer
+                .write()
+                .train(&samples, epochs, learning_rate)
+            {
+                warn!(
+                    error = %e,
+                    samples = samples.len(),
+                    epochs,
+                    "Synchronous LoRA training failed"
+                );
+            }
         }
     }
 
@@ -514,9 +618,14 @@ impl LearningLoop {
         topology: &TopologicalSignature,
         prompt: &str,
         promoted_tokens: &[String],
+        experience: Option<&Experience>,
     ) -> Result<()> {
         if !learned {
             return Ok(());
+        }
+
+        if let Some(exp) = experience {
+            self.record_executor_experience(exp);
         }
 
         // Get embedding dimension from config
@@ -539,6 +648,7 @@ impl LearningLoop {
         });
 
         if self.curated_buffer.len() <= 10 {
+            self.maybe_run_executor_distillation();
             return Ok(());
         }
 
@@ -616,23 +726,21 @@ impl LearningLoop {
         {
             info!("LoRA training disabled via DISABLE_LORA");
             self.curated_buffer.clear();
+            self.maybe_run_executor_distillation();
             return Ok(());
         }
         let epochs = self.lora_epochs;
-        match self.lora_trainer.train(&training_samples, epochs, 1e-3_f32) {
-            Ok(_) => {
-                info!(
-                    count = training_samples.len(),
-                    "QLoRA trained on {} curated",
-                    training_samples.len()
-                );
-                self.curated_buffer.clear();
-            }
-            Err(error) => {
-                warn!(%error, "QLoRA training failed on curated data");
-            }
-        }
-
+        
+        // Phase 3.2: Use async training if available, otherwise fallback to sync
+        self.queue_training_batch(training_samples.clone(), epochs, 1e-3_f32);
+        
+        info!(
+            count = training_samples.len(),
+            "QLoRA training queued for {} curated samples",
+            training_samples.len()
+        );
+        self.curated_buffer.clear();
+        self.maybe_run_executor_distillation();
         Ok(())
     }
 
@@ -641,6 +749,198 @@ impl LearningLoop {
             self.entropy_history.pop_front();
         }
         self.entropy_history.push_back(value);
+    }
+
+    fn record_executor_experience(&mut self, experience: &Experience) {
+        if self.executor_memory.len() >= EXECUTOR_MEMORY_LIMIT {
+            self.executor_memory.pop_front();
+        }
+        self.executor_memory.push_back(experience.clone());
+    }
+
+    fn maybe_run_executor_distillation(&mut self) {
+        if self.executor_memory.len() < self.executor_distill_threshold {
+            return;
+        }
+
+        let snapshot: Vec<Experience> = self.executor_memory.iter().cloned().collect();
+        if snapshot.is_empty() {
+            self.executor_memory.clear();
+            return;
+        }
+
+        let sample_size = snapshot.len();
+        let avg_score = snapshot
+            .iter()
+            .map(|exp| exp.success_score as f64)
+            .sum::<f64>()
+            / sample_size as f64;
+        let distinct_tasks = snapshot
+            .iter()
+            .map(|exp| exp.task_type.clone())
+            .collect::<HashSet<_>>()
+            .len();
+
+        let clusters = Self::cluster_executor_experiences(&snapshot, EXECUTOR_CLUSTER_THRESHOLD);
+        if clusters.is_empty() {
+            info!(
+                memory = sample_size,
+                avg_success = avg_score,
+                task_buckets = distinct_tasks,
+                "Executor distillation skipped: insufficient similarity"
+            );
+            self.executor_memory.clear();
+            self.executor_distill_threshold =
+                (self.executor_distill_threshold + 8).min(EXECUTOR_MEMORY_LIMIT.saturating_sub(32));
+            return;
+        }
+
+        let mut cluster_summaries: Vec<(Vec<Experience>, f32)> = clusters
+            .into_iter()
+            .map(|cluster| {
+                let score_sum: f32 = cluster.iter().map(|exp| exp.success_score).sum();
+                let average = if cluster.is_empty() {
+                    0.0
+                } else {
+                    score_sum / cluster.len() as f32
+                };
+                (cluster, average)
+            })
+            .collect();
+
+        cluster_summaries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+
+        let mut distilled_samples = 0usize;
+        for (cluster, score) in cluster_summaries.into_iter().take(3) {
+            if cluster.is_empty() {
+                continue;
+            }
+
+            let aggregated_prompt = cluster
+                .iter()
+                .map(|exp| format!("Prompt: {}", exp.input))
+                .collect::<Vec<_>>()
+                .join("\n---\n");
+            let aggregated_response = cluster
+                .iter()
+                .map(|exp| exp.output.clone())
+                .collect::<Vec<_>>()
+                .join("\n---\n");
+
+            self.curated_buffer.push(CuratedSample {
+                input: aggregated_prompt,
+                output: aggregated_response,
+                reward: score as f64,
+                knot_complexity: 0.45,
+                spectral_gap: 0.55,
+            });
+            distilled_samples += 1;
+        }
+
+        if distilled_samples > 0 {
+            info!(
+                memory = sample_size,
+                avg_success = avg_score,
+                task_buckets = distinct_tasks,
+                distilled_samples,
+                "Executor memory distilled into curated buffer"
+            );
+        } else {
+            info!(
+                memory = sample_size,
+                avg_success = avg_score,
+                task_buckets = distinct_tasks,
+                "Executor memory clustering produced no distillable batches"
+            );
+        }
+
+        self.executor_memory.clear();
+
+        // Exponentially back off distillation threshold to avoid constant spam once active
+        self.executor_distill_threshold =
+            (self.executor_distill_threshold + 8).min(EXECUTOR_MEMORY_LIMIT.saturating_sub(32));
+    }
+
+    fn cluster_executor_experiences(
+        experiences: &[Experience],
+        threshold: f32,
+    ) -> Vec<Vec<Experience>> {
+        if experiences.len() <= 1 {
+            return experiences.iter().cloned().map(|e| vec![e]).collect();
+        }
+
+        let mut clusters: Vec<Vec<Experience>> =
+            experiences.iter().cloned().map(|e| vec![e]).collect();
+        let threshold = threshold.clamp(0.0, 1.0);
+
+        let mut merged = true;
+        while merged {
+            merged = false;
+            'outer: for i in 0..clusters.len() {
+                for j in (i + 1)..clusters.len() {
+                    if Self::cluster_similarity(&clusters[i], &clusters[j]) >= threshold {
+                        let cluster_j = clusters.remove(j);
+                        clusters[i].extend(cluster_j);
+                        merged = true;
+                        break 'outer;
+                    }
+                }
+            }
+        }
+
+        clusters
+    }
+
+    fn cluster_similarity(a: &[Experience], b: &[Experience]) -> f32 {
+        if a.is_empty() || b.is_empty() {
+            return 0.0;
+        }
+
+        let mut sum = 0.0f32;
+        let mut count = 0u32;
+        for ea in a {
+            for eb in b {
+                sum += Self::experience_similarity(ea, eb);
+                count += 1;
+            }
+        }
+
+        if count == 0 {
+            0.0
+        } else {
+            sum / count as f32
+        }
+    }
+
+    fn experience_similarity(a: &Experience, b: &Experience) -> f32 {
+        if a.state.is_empty() || b.state.is_empty() {
+            return 0.0;
+        }
+        Self::cosine_similarity(&a.state, &b.state)
+    }
+
+    fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+        let len = a.len().min(b.len());
+        if len == 0 {
+            return 0.0;
+        }
+
+        let mut dot = 0.0f32;
+        let mut norm_a = 0.0f32;
+        let mut norm_b = 0.0f32;
+        for idx in 0..len {
+            let av = a[idx];
+            let bv = b[idx];
+            dot += av * bv;
+            norm_a += av * av;
+            norm_b += bv * bv;
+        }
+
+        if norm_a <= f32::EPSILON || norm_b <= f32::EPSILON {
+            0.0
+        } else {
+            (dot / (norm_a.sqrt() * norm_b.sqrt())).clamp(-1.0, 1.0)
+        }
     }
 
     pub fn compute_reward(&self, delta: f64, rouge: f64) -> f64 {
@@ -942,39 +1242,35 @@ impl LearningLoop {
                 info!("QLoRA fine-tuning disabled via DISABLE_LORA");
                 return Ok(());
             }
-            match self.lora_trainer.train(&training_samples, 10, 1e-3_f32) {
-                Ok(_loss) => {
-                    info!(
-                        "QLoRA fine-tuning completed on {} samples",
-                        training_samples.len()
-                    );
-
-                    // Step 4: Apply configuration nudges based on low-reward tuples
-                    if !external_replay.is_empty() {
-                        let mut param_deltas: HashMap<String, f64> = HashMap::new();
-                        for tuple in &external_replay {
-                            if tuple.reward >= 0.0 {
-                                continue;
-                            }
-                            let entry = param_deltas
-                                .entry(tuple.action.param.clone())
-                                .or_insert(0.0);
-                            let penalty = tuple.reward.abs();
-                            *entry -= penalty * tuple.action.delta;
-                        }
-
-                        if !param_deltas.is_empty() {
-                            let mut config = self.config.write();
-                            let normaliser = external_replay.len() as f64;
-                            for (param, total_delta) in param_deltas {
-                                let adjustment = (total_delta / normaliser) * self.alpha;
-                                Self::adjust_runtime_param(&mut config, &param, adjustment);
-                            }
-                        }
+            
+            // Phase 3.2: Use async training for batched replay buffer
+            self.queue_training_batch(training_samples.clone(), 10, 1e-3_f32);
+            info!(
+                samples = training_samples.len(),
+                "QLoRA training queued for replay buffer samples"
+            );
+            
+            // Step 4: Apply configuration nudges based on low-reward tuples
+            if !external_replay.is_empty() {
+                let mut param_deltas: HashMap<String, f64> = HashMap::new();
+                for tuple in &external_replay {
+                    if tuple.reward >= 0.0 {
+                        continue;
                     }
+                    let entry = param_deltas
+                        .entry(tuple.action.param.clone())
+                        .or_insert(0.0);
+                    let penalty = tuple.reward.abs();
+                    *entry -= penalty * tuple.action.delta;
                 }
-                Err(error) => {
-                    warn!(%error, "QLoRA fine-tuning failed");
+
+                if !param_deltas.is_empty() {
+                    let mut config = self.config.write();
+                    let normaliser = external_replay.len() as f64;
+                    for (param, total_delta) in param_deltas {
+                        let adjustment = (total_delta / normaliser) * self.alpha;
+                        Self::adjust_runtime_param(&mut config, &param, adjustment);
+                    }
                 }
             }
         }
@@ -1197,7 +1493,7 @@ impl LearningLoop {
                 std::fs::create_dir_all(parent)?;
             }
         }
-        self.lora_trainer.save_adapter(path_ref)?;
+        self.lora_trainer.read().save_adapter(path_ref)?;
         info!(adapter = %path_ref.display(), "LoRA adapter saved");
         Ok(())
     }
@@ -1205,7 +1501,7 @@ impl LearningLoop {
     pub fn load_lora_adapter<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path_ref = path.as_ref();
         let trainer = LoRATrainer::load_adapter(path_ref)?;
-        self.lora_trainer = trainer;
+        *self.lora_trainer.write() = trainer;
         info!(adapter = %path_ref.display(), "LoRA adapter loaded");
         Ok(())
     }
@@ -1310,10 +1606,13 @@ impl LearningLoop {
                 info!("LoRA fine-tuning disabled via DISABLE_LORA");
                 return;
             }
-            match self.lora_trainer.train(&training_samples, 10, 1e-3_f32) {
-                Ok(loss) => info!(loss, "LoRA fine-tuning completed"),
-                Err(error) => warn!(%error, "LoRA fine-tuning failed"),
-            }
+            
+            // Phase 3.2: Use async training for batched replay buffer
+            self.queue_training_batch(training_samples.clone(), 10, 1e-3_f32);
+            info!(
+                samples = training_samples.len(),
+                "LoRA fine-tuning queued for low-reward samples"
+            );
         }
     }
 

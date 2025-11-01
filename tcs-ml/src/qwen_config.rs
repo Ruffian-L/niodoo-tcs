@@ -8,8 +8,11 @@ use serde::{Deserialize, Serialize};
 pub struct QwenConfig {
     /// Number of transformer layers
     pub num_layers: usize,
-    /// Number of attention heads
+    /// Number of attention heads (query heads)
     pub num_heads: usize,
+    /// Number of key-value heads (for GQA/MQA)
+    #[serde(default)]
+    pub num_kv_heads: Option<usize>,
     /// Dimension of each attention head
     pub head_dim: usize,
     /// Maximum sequence length supported
@@ -32,8 +35,9 @@ impl QwenConfig {
     pub fn qwen25_coder_05b() -> Self {
         Self {
             num_layers: 24,
-            num_heads: 2, // Simplified for 0.5B model
-            head_dim: 64,
+            num_heads: 24,         // Query heads
+            num_kv_heads: Some(2), // KV heads for GQA (model expects 2 KV heads)
+            head_dim: 64,          // Head dimension per KV head (model expects 64, not 896)
             max_seq_len: 2048,
             cache_window: 2048,
             embed_dim: 512,
@@ -46,6 +50,7 @@ impl QwenConfig {
         Self {
             num_layers: 32,
             num_heads: 32,
+            num_kv_heads: None, // Standard MHA
             head_dim: 128,
             max_seq_len: 4096,
             cache_window: 2048,
@@ -71,6 +76,18 @@ impl QwenConfig {
         }
         if self.head_dim == 0 {
             return Err(anyhow::anyhow!("head_dim must be > 0"));
+        }
+        if let Some(kv_heads) = self.num_kv_heads {
+            if kv_heads == 0 {
+                return Err(anyhow::anyhow!("num_kv_heads must be > 0 if specified"));
+            }
+            if kv_heads > self.num_heads {
+                return Err(anyhow::anyhow!(
+                    "num_kv_heads ({}) cannot exceed num_heads ({})",
+                    kv_heads,
+                    self.num_heads
+                ));
+            }
         }
         if self.max_seq_len == 0 {
             return Err(anyhow::anyhow!("max_seq_len must be > 0"));

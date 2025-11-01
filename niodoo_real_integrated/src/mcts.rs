@@ -449,13 +449,13 @@ impl MctsDaydreamer {
             .map(|(idx, (_, pad_state, visit_count))| {
                 // High arousal (pad[1]) = high priority
                 let arousal_score = (pad_state.pad[1] + 1.0) / 2.0; // Normalize [-1,1] to [0,1] as f64
-                
+
                 // Low visit count = high priority (under-explored)
                 let exploration_score = 1.0 / (1.0 + *visit_count as f64);
-                
+
                 // High entropy = high priority (surprising/unresolved)
                 let entropy_score = pad_state.entropy.min(1.0);
-                
+
                 // Weighted combination (all f64)
                 let score = 0.4 * arousal_score + 0.3 * exploration_score + 0.3 * entropy_score;
                 (idx, score)
@@ -542,10 +542,7 @@ impl MctsDaydreamer {
             return None;
         }
 
-        let source_path: Vec<String> = path
-            .iter()
-            .map(|n| format!("{:?}", n.action))
-            .collect();
+        let source_path: Vec<String> = path.iter().map(|n| format!("{:?}", n.action)).collect();
 
         let final_state = path.last().unwrap().state.clone();
 
@@ -581,11 +578,7 @@ impl MctsDaydreamer {
         let mut simulations = 0;
 
         // Create root node from seed memory
-        let mut root = MctsNode::new(
-            MctsAction::Explore,
-            seed_memory.clone(),
-            None,
-        );
+        let mut root = MctsNode::new(MctsAction::Explore, seed_memory.clone(), None);
 
         // Track node IDs for weak link discovery
         let mut node_ids: HashMap<*const MctsNode, String> = HashMap::new();
@@ -634,4 +627,3 @@ impl Default for MctsDaydreamer {
         Self::new(1.414, 5) // sqrt(2) exploration, depth 5
     }
 }
-

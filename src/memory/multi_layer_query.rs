@@ -253,7 +253,11 @@ impl MultiLayerMemoryQuery {
         }
 
         // 1. Get semantic matches from RAG
-        let rag_results = self.rag_engine.lock().unwrap().retrieve(query_text, state);
+        let rag_results = self
+            .rag_engine
+            .lock()
+            .unwrap()
+            .search_similar(query_text, top_k)?;
         debug!("🧠 Multi-layer: RAG returned {} results", rag_results.len());
 
         // 2. Get emotional resonance from Gaussian spheres

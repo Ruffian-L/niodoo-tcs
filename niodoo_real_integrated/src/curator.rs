@@ -29,7 +29,7 @@ pub struct CuratedResponse {
     pub learned: bool,
     pub reason: String,
     pub processing_time_ms: f64,
-    pub consonance_score: f64,  // Truth attractor score (0.0-1.0)
+    pub consonance_score: f64, // Truth attractor score (0.0-1.0)
 }
 
 #[derive(Debug, Clone)]
@@ -92,7 +92,8 @@ impl Curator {
         knot: f64,
         entropy: f64,
     ) -> Result<CuratedResponse> {
-        self.curate_with_consonance(experience, knot, entropy, None).await
+        self.curate_with_consonance(experience, knot, entropy, None)
+            .await
     }
 
     /// Set curator mode for degradation-aware processing
@@ -121,21 +122,25 @@ impl Curator {
 
         // Include consonance context in prompt if available
         let consonance_context = if let Some(cons) = consonance {
-            format!(" Context consonance: {:.2} ({}), confidence: {:.2}.", 
-                cons.score, 
-                if cons.score > 0.7 { "high resonance" } else if cons.score > 0.5 { "moderate" } else { "low resonance" },
-                cons.confidence)
+            format!(
+                " Context consonance: {:.2} ({}), confidence: {:.2}.",
+                cons.score,
+                if cons.score > 0.7 {
+                    "high resonance"
+                } else if cons.score > 0.5 {
+                    "moderate"
+                } else {
+                    "low resonance"
+                },
+                cons.confidence
+            )
         } else {
             String::new()
         };
 
         // Format prompt based on curator mode
-        let prompt = self.format_prompt_for_mode(
-            &experience.output,
-            knot,
-            entropy,
-            &consonance_context,
-        );
+        let prompt =
+            self.format_prompt_for_mode(&experience.output, knot, entropy, &consonance_context);
 
         // Use backend-specific refinement
         let result = match self.config.curator_backend {
@@ -149,7 +154,7 @@ impl Curator {
             Ok(refined) => {
                 // Compute truth attractor score (consonance-based)
                 let consonance_score = self.compute_truth_attractor_score(&refined, consonance);
-                
+
                 Ok(CuratedResponse {
                     refined_response: refined.refined,
                     learned: refined.learned,
@@ -161,7 +166,7 @@ impl Curator {
             Err(e) => {
                 error!(error = %e, "Curator refinement failed; using original response");
                 let consonance_score = consonance.map(|c| c.score).unwrap_or(0.5);
-                
+
                 Ok(CuratedResponse {
                     refined_response: experience.output.clone(),
                     learned: false,
@@ -193,7 +198,7 @@ impl Curator {
             // High consonance → boost score (truth attractor)
             // Low consonance → reduce score (dissonance detector)
             let consonance_factor = cons.score;
-            
+
             // Combine base score with consonance
             // If consonance is high (>0.7), boost significantly
             // If consonance is low (<0.5), reduce
@@ -277,7 +282,10 @@ impl Curator {
             anyhow::bail!("vLLM curator returned status: {}", response.status());
         }
 
-        let json: serde_json::Value = response.json().await.context("failed to parse vLLM response")?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .context("failed to parse vLLM response")?;
         let text = json["choices"][0]["text"]
             .as_str()
             .context("vLLM response missing text")?;
@@ -316,7 +324,10 @@ impl Curator {
             anyhow::bail!("Ollama curator returned status: {}", response.status());
         }
 
-        let json: serde_json::Value = response.json().await.context("failed to parse Ollama response")?;
+        let json: serde_json::Value = response
+            .json()
+            .await
+            .context("failed to parse Ollama response")?;
         let text = json["response"]
             .as_str()
             .context("Ollama response missing text")?;
@@ -328,7 +339,10 @@ impl Curator {
         // Try to extract JSON from response
         let json_start = text.find('{').unwrap_or(0);
         let json_text = &text[json_start..];
-        let json_end = json_text.rfind('}').map(|i| i + 1).unwrap_or(json_text.len());
+        let json_end = json_text
+            .rfind('}')
+            .map(|i| i + 1)
+            .unwrap_or(json_text.len());
         let json_str = &json_text[..json_end];
 
         match serde_json::from_str::<CuratorJson>(json_str) {
@@ -359,7 +373,3 @@ impl Curator {
         }
     }
 }
-
-
-
-

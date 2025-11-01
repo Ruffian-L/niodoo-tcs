@@ -58,7 +58,7 @@ pub struct SmoothWeightEvolution {
     updates_since_ga: Arc<RwLock<usize>>,
     /// Frequency of GA runs (every N hill-climbing updates)
     ga_frequency: usize,
-    
+
     /// Current weights [temporal, pad, beta1, retrieval, consonance]
     current_weights: Arc<RwLock<[f32; 5]>>,
     /// Performance history (maxlen=50)
@@ -67,15 +67,15 @@ pub struct SmoothWeightEvolution {
     best_weights: Arc<RwLock<[f32; 5]>>,
     /// Best score achieved
     best_score: Arc<RwLock<f32>>,
-    
+
     /// Hill-climbing parameters
     step_size: f32,
     momentum: f32,
     velocity: Arc<RwLock<[f32; 5]>>,
-    
+
     /// Mini-GA population (lazy init, population of 8)
     mini_population: Arc<RwLock<Option<Vec<[f32; 5]>>>>,
-    
+
     /// Evolution lock to prevent concurrent updates
     evolution_lock: Arc<AsyncMutex<()>>,
 }
@@ -88,18 +88,18 @@ impl SmoothWeightEvolution {
             min_discoveries_for_update: 10,
             updates_since_ga: Arc::new(RwLock::new(0)),
             ga_frequency: 5, // Run GA every 5 hill-climbing updates
-            
+
             current_weights: Arc::new(RwLock::new(DEFAULT_FITNESS_WEIGHTS_LEGACY)),
             weight_performance_history: Arc::new(RwLock::new(VecDeque::with_capacity(50))),
             best_weights: Arc::new(RwLock::new(DEFAULT_FITNESS_WEIGHTS_LEGACY)),
             best_score: Arc::new(RwLock::new(0.0)),
-            
+
             step_size: 0.02,
             momentum: 0.9,
             velocity: Arc::new(RwLock::new([0.0; 5])),
-            
+
             mini_population: Arc::new(RwLock::new(None)),
-            
+
             evolution_lock: Arc::new(AsyncMutex::new(())),
         }
     }
@@ -107,17 +107,17 @@ impl SmoothWeightEvolution {
     /// Register a discovery event (non-blocking)
     pub async fn register_discovery(&self, discovery: Discovery) {
         let mut buffer = self.discovery_buffer.lock().await;
-        
+
         // Add discovery to buffer
         if buffer.len() >= 100 {
             buffer.pop_front(); // Remove oldest if full
         }
         buffer.push_back(discovery);
-        
+
         // Check if we should trigger evolution
         if buffer.len() >= self.min_discoveries_for_update {
             drop(buffer); // Release lock before async evolution
-            
+
             // Fire and forget - don't await
             let evolution = self.clone();
             tokio::spawn(async move {
@@ -130,16 +130,16 @@ impl SmoothWeightEvolution {
     async fn _async_evolve_weights(&self) {
         // Acquire lock to prevent concurrent evolution
         let _lock = self.evolution_lock.lock().await;
-        
+
         // Snapshot discoveries for processing
         let mut buffer = self.discovery_buffer.lock().await;
         if buffer.len() < self.min_discoveries_for_update {
             return; // Not enough discoveries yet
         }
-        
+
         let discoveries_snapshot: Vec<Discovery> = buffer.drain(..).collect();
         drop(buffer);
-        
+
         // Decide evolution strategy
         let updates_since_ga = *self.updates_since_ga.read();
         let new_weights = if updates_since_ga < self.ga_frequency {
@@ -149,18 +149,18 @@ impl SmoothWeightEvolution {
             // Occasional GA for exploration
             self._mini_ga_evolution(&discoveries_snapshot).await
         };
-        
+
         // Atomic weight update
         {
             *self.current_weights.write() = new_weights;
-            
+
             if updates_since_ga < self.ga_frequency {
                 *self.updates_since_ga.write() += 1;
             } else {
                 *self.updates_since_ga.write() = 0;
             }
         }
-        
+
         // Log performance
         let score = self._evaluate_discoveries(&discoveries_snapshot);
         {
@@ -169,7 +169,7 @@ impl SmoothWeightEvolution {
                 history.pop_front();
             }
             history.push_back(score);
-            
+
             let mut best_score = self.best_score.write();
             if score > *best_score {
                 *best_score = score;
@@ -182,39 +182,39 @@ impl SmoothWeightEvolution {
     async fn _hill_climb_step(&self, discoveries: &[Discovery]) -> [f32; 5] {
         let current = *self.current_weights.read();
         let base_score = self._evaluate_discoveries(discoveries);
-        
+
         // Estimate gradient via finite differences (sample 3-4 dimensions)
         let mut gradient = [0.0; 5];
         let sampled_dims = [0, 1, 2, 3]; // Sample first 4 dimensions
-        
+
         for &dim in &sampled_dims {
             // Perturb weight
             let mut perturbed = current;
             perturbed[dim] += self.step_size;
-            
+
             // Normalize to maintain sum=1 constraint
             perturbed = self._project_to_simplex(perturbed);
-            
+
             // Evaluate perturbation
             let perturbed_score = self._evaluate_weight_config(perturbed, discoveries);
-            
+
             // Gradient estimate
             gradient[dim] = (perturbed_score - base_score) / self.step_size;
         }
-        
+
         // Momentum update
         let mut velocity = *self.velocity.read();
         for i in 0..5 {
             velocity[i] = self.momentum * velocity[i] + (1.0 - self.momentum) * gradient[i];
         }
         *self.velocity.write() = velocity;
-        
+
         // Apply update
         let mut new_weights = current;
         for i in 0..5 {
             new_weights[i] += self.step_size * velocity[i];
         }
-        
+
         // Project to simplex
         self._project_to_simplex(new_weights)
     }
@@ -233,24 +233,28 @@ impl SmoothWeightEvolution {
             }
             pop
         });
-        
+
         // Evaluate population
         let mut scores: Vec<(usize, f32)> = population
             .iter()
             .enumerate()
             .map(|(idx, w)| (idx, self._evaluate_weight_config(*w, discoveries)))
             .collect();
-        
+
         // Tournament selection (fast)
         let mut new_population = Vec::new();
         let mut rng = rand::thread_rng();
         for _ in 0..4 {
             let idx1 = rng.gen_range(0..8);
             let idx2 = rng.gen_range(0..8);
-            let winner_idx = if scores[idx1].1 > scores[idx2].1 { idx1 } else { idx2 };
+            let winner_idx = if scores[idx1].1 > scores[idx2].1 {
+                idx1
+            } else {
+                idx2
+            };
             new_population.push(population[winner_idx]);
         }
-        
+
         // Crossover and mutation
         let mut offspring = Vec::new();
         for i in 0..2 {
@@ -259,25 +263,25 @@ impl SmoothWeightEvolution {
             offspring.push(self._mutate(child1, 0.1));
             offspring.push(self._mutate(child2, 0.1));
         }
-        
+
         // Combine and select best 8
         let mut combined = new_population;
         combined.extend(offspring);
-        
+
         let mut combined_scores: Vec<(usize, f32)> = combined
             .iter()
             .enumerate()
             .map(|(idx, w)| (idx, self._evaluate_weight_config(*w, discoveries)))
             .collect();
-        
+
         combined_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         // Update population with best 8
         *population = combined_scores[..8]
             .iter()
             .map(|(idx, _)| combined[*idx])
             .collect();
-        
+
         // Return best from population
         combined_scores[0].1; // Use score for logging
         combined[combined_scores[0].0]
@@ -288,19 +292,18 @@ impl SmoothWeightEvolution {
         if discoveries.is_empty() {
             return 0.0;
         }
-        
+
         let values: Vec<f32> = discoveries.iter().map(|d| d.value).collect();
         let diversities: Vec<f32> = discoveries.iter().map(|d| d.diversity).collect();
         let entropies: Vec<f32> = discoveries.iter().map(|d| d.source_entropy).collect();
-        
+
         // Score components
         let mean_value = values.iter().sum::<f32>() / values.len() as f32;
-        let value_variance = values.iter()
-            .map(|v| (v - mean_value).powi(2))
-            .sum::<f32>() / values.len() as f32;
+        let value_variance =
+            values.iter().map(|v| (v - mean_value).powi(2)).sum::<f32>() / values.len() as f32;
         let mean_diversity = diversities.iter().sum::<f32>() / diversities.len() as f32;
         let entropy_gain = entropies.iter().sum::<f32>() / entropies.len() as f32;
-        
+
         // Weighted combination using candidate weights
         weights[0] * mean_value
             + weights[1] * (1.0 / (1.0 + value_variance)) // Reward consistency
@@ -318,12 +321,12 @@ impl SmoothWeightEvolution {
     /// Project weights to probability simplex (sum to 1, all positive)
     fn _project_to_simplex(&self, weights: [f32; 5]) -> [f32; 5] {
         let mut weights = weights;
-        
+
         // Clip negative values
         for w in &mut weights {
             *w = w.max(0.0);
         }
-        
+
         // Normalize
         let sum: f32 = weights.iter().sum();
         if sum > 0.0 {
@@ -334,20 +337,14 @@ impl SmoothWeightEvolution {
             // Uniform if all zeros
             weights = [0.2; 5];
         }
-        
+
         weights
     }
 
     /// Generate random weight vector on simplex
     fn _random_weight_vector(&self) -> [f32; 5] {
         let mut rng = rand::thread_rng();
-        let mut weights = [
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-        ];
+        let mut weights = [rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen()];
         self._project_to_simplex(weights)
     }
 
@@ -388,7 +385,7 @@ impl SmoothWeightEvolution {
         let history = self.weight_performance_history.read();
         let updates_since_ga = *self.updates_since_ga.read();
         let buffer = self.discovery_buffer.lock().await;
-        
+
         EvolutionStats {
             current_score: history.back().copied().unwrap_or(0.0),
             best_score: *self.best_score.read(),
@@ -448,7 +445,7 @@ mod tests {
     #[tokio::test]
     async fn test_discovery_registration() {
         let evolution = SmoothWeightEvolution::new();
-        
+
         for _ in 0..5 {
             let discovery = Discovery {
                 value: 0.7,
@@ -458,9 +455,8 @@ mod tests {
             };
             evolution.register_discovery(discovery).await;
         }
-        
+
         let stats = evolution.get_evolution_stats().await;
         assert_eq!(stats.buffer_size, 5);
     }
 }
-

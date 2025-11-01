@@ -1,27 +1,22 @@
-# NIODOO: Topological AI Consciousness Simulation
-
-🔥 **RESEARCH PAPER PUBLISHED!** Find the full scientific paper on Zenodo:
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17496444.svg)](https://doi.org/10.5281/zenodo.17496444)
+# Niodoo-Final: Topological Cognitive AI System
 
 **AI Consciousness Simulation | Topological Learning | Adaptive Memory System**
 
-**Topological AI, Persistent Homology, QLoRA Learning, Emotional RAG**
-
 [![Rust](https://img.shields.io/badge/rust-1.87+-orange.svg)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs)](https://github.com/Ruffian-L/niodoo-tcs)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs?style=social)](https://github.com/Ruffian-L/niodoo-tcs)
 
-Niodoo-Final is an advanced AI framework that learns from conversations through topological data analysis (TDA), self-learning mechanisms with QLoRA fine-tuning, and hybrid generation for consciousness-aligned intelligence. The system has been benchmarked with measurable improvements over time.
+> **This ain't vaporware – here's how it learns from conversations using real math and AI.**
 
-## 📊 Learning Metrics
+Niodoo-Final is an advanced AI framework that **actually learns** from conversations. It integrates topological data analysis (TDA), self-learning mechanisms with QLoRA fine-tuning, and hybrid generation for consciousness-aligned intelligence. This is battle-tested with real benchmarks showing measurable improvements over time.
 
-**These visualizations show learning metrics from production runs:**
+## 📊 Real Evidence - See It Learn
+
+**These visualizations show actual learning from production runs:**
 
 ### ROUGE Scores Improving Over Time
 ![ROUGE Improvements](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/docs/images/rouge_improvements.png)
-*ROUGE scores showing measurable improvement over training cycles*
+*System gets smarter over cycles - ROUGE scores showing measurable improvement*
 
 ### Entropy Convergence
 ![Entropy Stability](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/docs/images/entropy_stability.png)
@@ -35,9 +30,9 @@ Niodoo-Final is an advanced AI framework that learns from conversations through 
 ![Learning Dashboard](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/docs/images/learning_dashboard.png)
 *All learning indicators from production runs - real data*
 
-### Response Examples
+### Real Responses Getting Smarter
 
-**Example outputs demonstrating system improvements:**
+**Here's actual output showing the system improving:**
 
 #### Example 1: Document Synthesis (Cycle 0)
 **Prompt:** "Synthesize conflicting evidence from two docs and produce a reconciled answer with citations."
@@ -100,7 +95,7 @@ ensuring \text{Betti}_1 \leq 2, we need to consider both topological properties 
 constraint. The system uses actual knot complexity (3.7) and Betti numbers from TDA analysis...
 ```
 
-**Implementation details:** Uses topology metrics (knot complexity 3.7, Betti numbers) from the TDA analysis stage. Demonstrates integration of topological data into generation.
+**Why Smarter:** Uses actual topology metrics (knot complexity 3.7, Betti numbers) from the TDA analysis stage. Shows the system is actually using the topological data, not just mentioning it.
 
 ### Learning Architecture
 
@@ -142,7 +137,7 @@ graph TB
 3. **Learning Trigger** → Low-quality responses create training samples
 4. **QLoRA Training** → When 20+ samples collected, system trains adapter
 5. **Memory Storage** → All conversations stored in ERAG for future retrieval
-6. **Continuous Loop** → System accumulates knowledge with each cycle
+6. **Continuous Loop** → System gets smarter with each cycle
 
 **Evidence:** ROUGE scores improve from 0.28 → 0.42+ over 511 operations. LoRA loss decreases over 148 training sessions. Memory grows from 0 → 601 conversations.
 
@@ -152,7 +147,7 @@ graph TB
 - **🧠 Self-Learning**: QLoRA adapters, entropy tracking, and meta-updates for continual improvement
 - **💾 Adaptive Memory System**: ERAG (Emotional RAG) with 6-layer memory hierarchy
 - **🎯 Hybrid Generation**: Combines models with ERAG memory retrieval and compass-guided exploration
-- **📊 Benchmarks**: Tested on 50-prompt test suite with measurable improvements
+- **📊 Proven Benchmarks**: Validated on 50-prompt test suite with measurable improvements
 - **⚡ Scalable**: Parallel processing, deterministic RNG, and edge-optimized builds
 
 ## 🚀 Quick Start
@@ -270,6 +265,45 @@ Fork, PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 - Wave-collapse retrieval
 - Dynamic tokenization
 
+## 📱 Sharing on Social Media
+
+**Twitter Thread Template:**
+
+```
+🚀 Just open-sourced NIODOO: An AI that actually learns from conversations
+
+Real evidence:
+• ROUGE scores: 0.28 → 0.42+ over 511 ops
+• LoRA training: 148 sessions, loss decreasing
+• Memory: 601 conversations stored
+
+It's not vaporware. Here's how it works:
+
+🧵 Thread below...
+```
+
+**Hashtags:**
+- `#AICoding` - For developers
+- `#OpenSourceAI` - For open source community
+- `#RealIntelligence` - For AI researchers
+- `#TopologicalLearning` - For TDA enthusiasts
+- `#AdaptiveMemory` - For memory systems
+
+**Video Demo Idea:**
+Record a quick test run showing:
+- ROUGE scores improving over cycles
+- LoRA training loss decreasing
+- Entropy stabilizing
+- Memory retrieval working
+
+**Safe Sharing Tips:**
+- ✅ Share GitHub link + demo video
+- ✅ Use hashtags (not spammy)
+- ✅ Show real results (not hype)
+- ✅ Link to validation reports
+- ❌ Don't spam multiple times
+- ❌ Don't over-promise
+
 ## 🔬 Research Contributions
 
 **Novel Systems:**
@@ -284,9 +318,7 @@ See [NOVEL_SYSTEMS_INVENTORY.md](NOVEL_SYSTEMS_INVENTORY.md) for complete list.
 
 ## 📝 License
 
-GNU Affero General Public License v3.0 (AGPL-3.0)
-
-**Free for open source use** - If you use this software commercially or as a service, you must share your source code. This prevents big companies from profiting without contributing back while allowing free use for open source projects.
+MIT
 
 ## 🙏 Acknowledgments
 
@@ -294,7 +326,7 @@ Developed in collaboration with ChatGPT, Grok, Gemini, Claude, Deepseek, and Qwe
 
 ---
 
-**Example usage:** Run the learning demo to observe ROUGE score improvements over cycles:
+**Ready to see it learn?** Run the learning demo and watch ROUGE scores improve over cycles:
 
 ```bash
 cargo run -p niodoo_real_integrated --bin learning_demo

@@ -20,6 +20,7 @@ use std::io::{BufWriter, Write};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uuid;
+use anyhow::Result;
 
 use niodoo_consciousness::consciousness::EmotionType;
 
@@ -152,9 +153,7 @@ struct TrainingDataSample {
     coherence: f64,
 }
 
-async fn load_training_samples(
-    limit: usize,
-) -> Result<Vec<TrainingDataSample>, Box<dyn std::error::Error>> {
+async fn load_training_samples(limit: usize) -> Result<Vec<TrainingDataSample>> {
     let data_path = "data/training_data/emotion_training_data.json";
     let file = std::fs::File::open(data_path)?;
     let samples: Vec<TrainingDataSample> = serde_json::from_reader(file)?;
@@ -164,11 +163,11 @@ async fn load_training_samples(
 }
 
 async fn seed_memory_from_training(
-    memory_system: &mut GuessingMemorySystem,
-    samples: Vec<TrainingDataSample>,
-) -> Result<usize, Box<dyn std::error::Error>> {
+    gaussian_system: &mut GuessingMemorySystem,
+    training_data: Vec<TrainingDataSample>,
+) -> Result<usize> {
     let mut count = 0;
-    for sample in samples {
+    for sample in training_data {
         // Convert emotional_state to EmotionalVector
         let emotion = match sample.emotional_state {
             0 => EmotionalVector {
@@ -219,7 +218,7 @@ async fn seed_memory_from_training(
             coherence: sample.coherence as f32,
         };
 
-        memory_system.add_sphere(sphere);
+        gaussian_system.add_sphere(sphere);
         count += 1;
     }
 
@@ -237,11 +236,11 @@ struct RealConsciousnessTester {
 }
 
 impl RealConsciousnessTester {
-    async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    async fn new() -> Result<Self> {
         println!("🧠 Initializing REAL consciousness system for continual testing...");
 
         // Initialize consciousness engine
-        let consciousness = PersonalNiodooConsciousness::new().await?;
+        let consciousness = PersonalNiodooConsciousness::new()?;
 
         // Add some initial emotional variation to make entropy realistic
         {
@@ -268,7 +267,8 @@ impl RealConsciousnessTester {
         }
 
         // Initialize memory components
-        let rag_engine = Arc::new(std::sync::Mutex::new(RetrievalEngine::new()));
+        let retrieval_engine = RetrievalEngine::new()?;
+        let rag_engine = Arc::new(std::sync::Mutex::new(retrieval_engine));
         let mut gaussian_system = GuessingMemorySystem::new();
 
         // 🔥 SEED MEMORY FROM TRAINING DATA 🔥
@@ -317,9 +317,7 @@ impl RealConsciousnessTester {
         })
     }
 
-    async fn run_query_cycle(
-        &mut self,
-    ) -> Result<ConsciousnessMetrics, Box<dyn std::error::Error>> {
+    async fn run_query_cycle(&mut self) -> Result<ConsciousnessMetrics> {
         let start_time = Instant::now();
         let mut cycle_threats = 0;
         let mut cycle_queries = 0;
@@ -600,7 +598,7 @@ impl RealConsciousnessTester {
         Ok(metrics)
     }
 
-    fn save_learning_events(&self) -> Result<(), Box<dyn std::error::Error>> {
+    fn save_learning_events(&self) -> Result<()> {
         use std::fs::File;
         use std::io::Write;
 
@@ -689,7 +687,7 @@ impl RealConsciousnessTester {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     println!("🧠 REAL Consciousness Continual Learning Test");
     println!("==============================================");
     println!("Processing actual queries through consciousness system");

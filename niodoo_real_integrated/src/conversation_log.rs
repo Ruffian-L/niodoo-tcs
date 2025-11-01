@@ -95,11 +95,15 @@ impl ConversationLogStore {
 
         let file = File::open(&self.storage_path).context("Failed to open storage file")?;
         let reader = BufReader::new(file);
-        
+
         match serde_json::from_reader::<_, Vec<ConversationEntry>>(reader) {
             Ok(entries) => {
                 self.entries = entries;
-                info!("Loaded {} conversation entries from {:?}", self.entries.len(), self.storage_path);
+                info!(
+                    "Loaded {} conversation entries from {:?}",
+                    self.entries.len(),
+                    self.storage_path
+                );
                 Ok(())
             }
             Err(e) => {
@@ -112,12 +116,13 @@ impl ConversationLogStore {
     /// Store a new conversation entry
     pub fn store(&mut self, entry: ConversationEntry) -> Result<()> {
         self.entries.push(entry.clone());
-        
+
         // Auto-save periodically
         if self.entries.len() % self.auto_save_interval == 0 {
-            self.save().context("Failed to auto-save conversation log")?;
+            self.save()
+                .context("Failed to auto-save conversation log")?;
         }
-        
+
         debug!("Stored conversation entry: {}", entry.id);
         Ok(())
     }
@@ -126,19 +131,23 @@ impl ConversationLogStore {
     pub fn save(&self) -> Result<()> {
         std::fs::create_dir_all(self.storage_path.parent().unwrap_or(Path::new(".")))
             .context("Failed to create storage directory")?;
-            
+
         let file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .open(&self.storage_path)
             .context("Failed to open storage file for writing")?;
-            
+
         let writer = BufWriter::new(file);
         serde_json::to_writer_pretty(writer, &self.entries)
             .context("Failed to serialize conversation log")?;
-            
-        debug!("Saved {} conversation entries to {:?}", self.entries.len(), self.storage_path);
+
+        debug!(
+            "Saved {} conversation entries to {:?}",
+            self.entries.len(),
+            self.storage_path
+        );
         Ok(())
     }
 
@@ -158,9 +167,13 @@ impl ConversationLogStore {
             })
             .filter(|(_, similarity)| *similarity >= threshold)
             .collect();
-            
+
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-        results.into_iter().take(limit).map(|(entry, _)| entry).collect()
+        results
+            .into_iter()
+            .take(limit)
+            .map(|(entry, _)| entry)
+            .collect()
     }
 
     /// Query conversations by time range
@@ -194,9 +207,13 @@ impl ConversationLogStore {
             })
             .filter(|(_, similarity)| *similarity >= threshold)
             .collect();
-            
+
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
-        results.into_iter().take(limit).map(|(entry, _)| entry).collect()
+        results
+            .into_iter()
+            .take(limit)
+            .map(|(entry, _)| entry)
+            .collect()
     }
 
     /// Get all entries
@@ -222,10 +239,10 @@ fn emotional_similarity(a: &EmotionalVector, b: &EmotionalVector) -> f32 {
         + a.anger * b.anger
         + a.fear * b.fear
         + a.surprise * b.surprise;
-    
+
     let mag_a = a.magnitude();
     let mag_b = b.magnitude();
-    
+
     if mag_a > 0.0 && mag_b > 0.0 {
         (dot_product / (mag_a * mag_b)).clamp(-1.0, 1.0)
     } else {
@@ -284,14 +301,14 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let store_path = temp_dir.join("test_conversations.json");
         let mut store = ConversationLogStore::new(&store_path);
-        
+
         let entry = ConversationEntry::new(
             "Test".to_string(),
             "Response".to_string(),
             EmotionalVector::new(0.5, 0.5, 0.0, 0.0, 0.0),
             "neutral".to_string(),
         );
-        
+
         assert!(store.store(entry).is_ok());
         assert_eq!(store.count(), 1);
     }
@@ -304,4 +321,3 @@ mod tests {
         assert!(similarity > 0.99);
     }
 }
-

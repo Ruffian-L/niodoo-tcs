@@ -33,4 +33,3 @@ impl TcsLoRaPredictor {
         Ok(0)
     }
 }
-

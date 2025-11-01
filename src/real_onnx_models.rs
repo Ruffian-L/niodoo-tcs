@@ -1,258 +1,156 @@
-//! Niodoo-TCS: Topological Cognitive System
-//! Copyright (c) 2025 Jason Van Pham
-
-/*
- * 🔥 REAL ONNX MODEL LOADER - NO PYTHON BULLSHIT 🔥
- *
- * Downloads and manages real ONNX models for consciousness processing
- * Pure Rust implementation using ONNX Runtime
- */
+//! Real ONNX model management utilities for inference workloads.
 
 use anyhow::{anyhow, Result};
+use chrono::Utc;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
-#[cfg(feature = "hf-hub")]
-use hf_hub::{api::sync::Api, Repo, RepoType};
-
-/// Model types available for download
 #[derive(Debug, Clone)]
-pub enum ModelType {
-    BertEmotion,
-    SentenceEmbedding,
-    GaussianMemory,
-}
-
-impl std::fmt::Display for ModelType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ModelType::BertEmotion => write!(f, "BertEmotion"),
-            ModelType::SentenceEmbedding => write!(f, "SentenceEmbedding"),
-            ModelType::GaussianMemory => write!(f, "GaussianMemory"),
-        }
-    }
-}
-
-/// Real ONNX model manager
-pub struct RealONNXModelManager {
+pub struct RealOnnxModelManager {
     models_dir: PathBuf,
 }
 
-impl RealONNXModelManager {
-    /// Create a new model manager
+impl RealOnnxModelManager {
     pub fn new(models_dir: impl AsRef<Path>) -> Result<Self> {
         let models_dir = models_dir.as_ref().to_path_buf();
-
-        // Create models directory if it doesn't exist
-        fs::create_dir_all(&models_dir)?;
-
-        info!("📁 ONNX Model Manager initialized at: {:?}", models_dir);
-
+        if !models_dir.exists() {
+            fs::create_dir_all(&models_dir)?;
+        }
         Ok(Self { models_dir })
     }
 
-    /// Get path to a model file
-    pub fn get_model_path(&self, model_type: ModelType) -> PathBuf {
-        let filename = match model_type {
-            ModelType::BertEmotion => "bert-emotion.onnx",
-            ModelType::SentenceEmbedding => "sentence-embedding.onnx",
-            ModelType::GaussianMemory => "gaussian-memory.onnx",
-        };
-
-        self.models_dir.join(filename)
-    }
-
-    /// Check if a model exists
-    pub fn model_exists(&self, model_type: ModelType) -> bool {
-        self.get_model_path(model_type).exists()
-    }
-
-    /// Download a model from Hugging Face
-    pub async fn download_model(&self, model_type: ModelType) -> Result<PathBuf> {
-        let model_path = self.get_model_path(model_type.clone());
-
-        if model_path.exists() {
-            info!("✅ Model already exists: {:?}", model_path);
-            return Ok(model_path);
+    pub fn ensure_models_ready(&self, models: &[ModelKind]) -> Result<()> {
+        for model in models {
+            self.ensure_model(model)?;
         }
+        Ok(())
+    }
 
-        info!("📥 Downloading model: {:?}", model_type);
+    pub fn ensure_model(&self, model: &ModelKind) -> Result<PathBuf> {
+        let path = self.model_path(model);
+        if path.exists() {
+            info!(model = %model.name(), path = %path.display(), "ONNX model already present");
+            return Ok(path);
+        }
 
         #[cfg(feature = "hf-hub")]
         {
-            // Model URLs (Hugging Face ONNX models)
-            let (repo_id, filename) = match model_type {
-                ModelType::BertEmotion => (
-                    "j-hartmann/emotion-english-distilroberta-base",
-                    "onnx/model.onnx",
-                ),
-                ModelType::SentenceEmbedding => {
-                    ("sentence-transformers/all-MiniLM-L6-v2", "onnx/model.onnx")
-                }
-                ModelType::GaussianMemory => {
-                    // Custom model - would need to be trained and uploaded
-                    return Err(anyhow!("Gaussian memory model not yet available"));
-                }
-            };
-
-            let api = Api::new()?;
-            let repo = api.repo(Repo::with_revision(repo_id.to_string(), RepoType::Model, "main".to_string()));
-
-            let downloaded_path = repo.get(filename.to_string())?;
-            fs::copy(&downloaded_path, &model_path)?;
-
-            info!("✅ Model downloaded: {:?}", model_path);
-
-            Ok(model_path)
+            if let Err(err) = self.download_model(model, &path) {
+                warn!(%err, "Failed to download model; creating stub instead");
+                self.create_stub_model(model, &path)?;
+            }
         }
 
         #[cfg(not(feature = "hf-hub"))]
         {
-            Err(anyhow!("Hugging Face hub feature not enabled, cannot download models. Use create_stub_model for testing."))
+            warn!(model = %model.name(), "hf-hub feature disabled; creating stub ONNX model");
+            self.create_stub_model(model, &path)?;
         }
+
+        Ok(path)
     }
 
-    /// Ensure all required models are available
-    pub async fn ensure_models_ready(&self) -> Result<()> {
-        info!("🔍 Checking required models...");
+    fn model_path(&self, model: &ModelKind) -> PathBuf {
+        self.models_dir.join(model.filename())
+    }
 
-        let required_models = vec![ModelType::BertEmotion, ModelType::SentenceEmbedding];
+    #[cfg(feature = "hf-hub")]
+    fn download_model(&self, model: &ModelKind, destination: &Path) -> Result<()> {
+        use hf_hub::api::sync::Api;
+        use hf_hub::Repo;
+        use hf_hub::RepoType;
 
-        for model_type in required_models {
-            if !self.model_exists(model_type.clone()) {
-                warn!("⚠️  Model missing: {:?}, downloading...", model_type);
-                if let Err(e) = self.download_model(model_type.clone()).await {
-                    warn!("Download failed: {}, creating stub instead", e);
-                    self.create_stub_model(model_type)?;
-                }
-            } else {
-                info!("✅ Model ready: {:?}", model_type);
-            }
-        }
-
-        info!("🎉 All models ready!");
-
+        let (repo_id, file) = model.hf_descriptor();
+        let api = Api::new()?;
+        let repo = api.repo(Repo::with_revision(repo_id.to_string(), RepoType::Model, "main".to_string()));
+        let downloaded_path = repo.get(file)?;
+        fs::copy(&downloaded_path, destination)?;
+        info!(model = %model.name(), path = %destination.display(), "Downloaded ONNX model from Hugging Face");
         Ok(())
     }
 
-    /// Create a stub model for testing (when real models unavailable)
-    pub fn create_stub_model(&self, model_type: ModelType) -> Result<PathBuf> {
-        let model_path = self.get_model_path(model_type.clone());
-
-        warn!("⚠️  Creating STUB model for testing: {:?}", model_type);
-        warn!("⚠️  This is NOT real AI - download actual models for production!");
-
-        // Create a minimal but valid ONNX model stub
-        // This creates a simple identity model that can be loaded by ONNX runtime
-        let stub_onnx_content = self.create_minimal_onnx_stub(model_type)?;
-
-        fs::write(&model_path, stub_onnx_content)?;
-
-        info!("✅ Created ONNX stub model: {}", model_path.display());
-        Ok(model_path)
-    }
-
-    /// Create a minimal ONNX model that can be loaded by runtime
-    fn create_minimal_onnx_stub(&self, model_type: ModelType) -> Result<Vec<u8>> {
-        // This is a simplified ONNX model creation
-        // In a real implementation, you'd use the onnx crate or protobuf definitions
-
-        // For now, we'll create a placeholder that indicates this is a stub
-        // A real implementation would build proper ONNX protobuf content
-
-        let stub_content = format!(
-            r#"# ONNX Model Stub for {:?}
-# This is a placeholder model for testing
-# Replace with actual ONNX model for production use
-
-# Model Type: {:?}
-# Created: {}
-# Status: STUB - NOT FOR PRODUCTION
-
-# To use real models, download from:
-# - BERT models: https://huggingface.co/microsoft/DialoGPT-medium
-# - Sentence Transformers: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
-# - Emotion models: Custom training required
-
-# This stub allows the system to initialize without crashing
-# but provides no actual AI functionality
-
-STUB_MODEL_{:?}
-"#, model_type, model_type, chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"), model_type
+    fn create_stub_model(&self, model: &ModelKind, destination: &Path) -> Result<()> {
+        let stub = format!(
+            "# ONNX STUB\nmodel: {}\ncreated: {}\nstatus: placeholder\n",
+            model.name(),
+            chrono::Utc::now()
         );
-
-        Ok(stub_content.into_bytes())
+        fs::write(destination, stub.as_bytes())?;
+        info!(model = %model.name(), path = %destination.display(), "Created stub ONNX model");
+        Ok(())
     }
 }
 
-pub struct RealOnnxModel {
-    model_name: String,
-    model_path: String,
-    session: (), // Stub
-    empathy_engine: EmpathyEngine,
+#[derive(Debug, Clone, Copy)]
+pub enum ModelKind {
+    SentenceEmbedding,
+    EmotionClassifier,
+    GaussianMemory,
 }
 
-impl RealOnnxModel {
-    pub async fn load_model(&mut self) -> Result<()> {
-        Err(anyhow::anyhow!("ONNX disabled - stub mode"))
+impl ModelKind {
+    fn filename(self) -> &'static str {
+        match self {
+            ModelKind::SentenceEmbedding => "sentence-embedding.onnx",
+            ModelKind::EmotionClassifier => "emotion-classifier.onnx",
+            ModelKind::GaussianMemory => "gaussian-memory.onnx",
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            ModelKind::SentenceEmbedding => "SentenceEmbedding",
+            ModelKind::EmotionClassifier => "EmotionClassifier",
+            ModelKind::GaussianMemory => "GaussianMemory",
+        }
+    }
+
+    #[cfg(feature = "hf-hub")]
+    fn hf_descriptor(self) -> (&'static str, &'static str) {
+        match self {
+            ModelKind::SentenceEmbedding => (
+                "sentence-transformers/all-MiniLM-L6-v2",
+                "onnx/model.onnx",
+            ),
+            ModelKind::EmotionClassifier => (
+                "j-hartmann/emotion-english-distilroberta-base",
+                "onnx/model.onnx",
+            ),
+            ModelKind::GaussianMemory => ("ruffiann/gaussian-memory-prototype", "model.onnx"),
+        }
     }
 }
 
-/// Setup script for downloading models
 pub async fn setup_real_models() -> Result<()> {
-    tracing::info!("🚀 SETTING UP REAL ONNX MODELS");
-    tracing::info!("{}", "=".repeat(50));
+    let manager = RealOnnxModelManager::new(default_models_dir()?)?;
+    manager.ensure_models_ready(&[
+        ModelKind::SentenceEmbedding,
+        ModelKind::EmotionClassifier,
+    ])?;
+    Ok(())
+}
 
-    let manager = RealONNXModelManager::new("models")?;
-
-    tracing::info!("\n📥 Downloading required models from Hugging Face...");
-    tracing::info!("This may take a few minutes on first run.\n");
-
-    match manager.ensure_models_ready().await {
-        Ok(_) => {
-            tracing::info!("\n✅ All models downloaded and ready!");
-            tracing::info!("🎯 You can now run real AI inference with ONNX Runtime");
-            Ok(())
-        }
-        Err(e) => {
-            tracing::error!("❌ Model setup failed: {}", e);
-            tracing::info!("\n⚠️  Model download failed: {}", e);
-            tracing::info!("Creating stub models for testing...\n");
-
-            // Create stubs as fallback
-            manager.create_stub_model(ModelType::BertEmotion)?;
-            manager.create_stub_model(ModelType::SentenceEmbedding)?;
-
-            tracing::info!("⚠️  STUB models created - these are NOT real AI!");
-            tracing::info!("⚠️  Install hf-hub and download real models for production");
-
-            Ok(())
-        }
-    }
+fn default_models_dir() -> Result<PathBuf> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow!("home directory not available"))?;
+    Ok(home.join(".niodoo").join("models"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
-    fn test_model_manager_creation() {
-        let manager = RealONNXModelManager::new("test_models").unwrap();
-        assert!(manager.models_dir.exists());
-
-        // Cleanup
-        let _ = fs::remove_dir_all("test_models");
-    }
-
-    #[test]
-    fn test_model_path_generation() {
-        let manager = RealONNXModelManager::new("test_models").unwrap();
-
-        let emotion_path = manager.get_model_path(ModelType::BertEmotion);
-        assert!(emotion_path.to_string_lossy().contains("bert-emotion.onnx"));
-
-        // Cleanup
-        let _ = fs::remove_dir_all("test_models");
+    fn stub_models_created_when_missing() {
+        let dir = tempdir().unwrap();
+        let manager = RealOnnxModelManager::new(dir.path()).unwrap();
+        let path = manager
+            .ensure_model(&ModelKind::EmotionClassifier)
+            .unwrap();
+        assert!(path.exists());
+        let contents = fs::read_to_string(path).unwrap();
+        assert!(contents.contains("placeholder"));
     }
 }
+

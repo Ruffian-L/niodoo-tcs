@@ -3,8 +3,10 @@ use std::io::BufReader;
 
 use crate::util::shannon_entropy;
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use rand::{seq::SliceRandom, thread_rng};
 use serde::Deserialize;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
@@ -53,20 +55,26 @@ pub struct RutPrompt {
     pub text: String,
 }
 
-/// Experience tuple for learning/replay buffers and curator
+/// Experience tuple for learning/replay buffers and curator/executor integration
 #[derive(Debug, Clone)]
 pub struct Experience {
+    pub id: Uuid,
+    pub timestamp: DateTime<Utc>,
+    pub input: String,
+    pub output: String,
+    pub context: Vec<String>,
+    pub task_type: String,
+    pub success_score: f32,
     pub state: Vec<f32>,
     pub action: usize,
     pub reward: f64,
     pub next_state: Vec<f32>,
     pub done: bool,
-    pub output: String, // Response text for curator refinement
     pub replay: Option<DqnReplayMetadata>,
 }
 
 impl Experience {
-    /// Create experience from pipeline
+    /// Create experience from pipeline state transitions
     pub fn from_pipeline(
         input: String,
         output: String,
@@ -75,24 +83,30 @@ impl Experience {
         compass: &crate::compass::CompassOutcome,
         context: Vec<String>,
     ) -> Self {
-        let state = embedding.clone();
-        let next_state = embedding;
         let action = match compass.quadrant {
             crate::compass::CompassQuadrant::Panic => 0,
             crate::compass::CompassQuadrant::Persist => 1,
             crate::compass::CompassQuadrant::Discover => 2,
             crate::compass::CompassQuadrant::Master => 3,
         };
+
+        // Embed PAD state entropy as baseline reward shaping input
         let reward = compass.intrinsic_reward;
-        let done = false;
+        let next_state = embedding.clone();
 
         Self {
-            state,
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            input,
+            output,
+            context,
+            task_type: "hybrid_generation".to_string(),
+            success_score: 0.0,
+            state: embedding,
             action,
             reward,
             next_state,
-            done,
-            output,
+            done: pad_state.entropy < 0.05,
             replay: None,
         }
     }
@@ -100,6 +114,18 @@ impl Experience {
     /// Attach DQN replay metadata to the experience for downstream learning integration
     pub fn with_replay(mut self, replay: Option<DqnReplayMetadata>) -> Self {
         self.replay = replay;
+        self
+    }
+
+    /// Store curator/executor success score for later knowledge distillation
+    pub fn with_success_score(mut self, score: f32) -> Self {
+        self.success_score = score;
+        self
+    }
+
+    /// Update task type label (e.g., "code_generation", "analysis") for executor interoperability
+    pub fn with_task_type<S: Into<String>>(mut self, task_type: S) -> Self {
+        self.task_type = task_type.into();
         self
     }
 }

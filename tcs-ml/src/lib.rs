@@ -749,6 +749,7 @@ impl MotorBrain {
             .expect("qwen embedder mutex poisoned");
 
         if let Some(embedder) = guard.as_mut() {
+            embedder.reset_cache();
             let embeddings = embedder.embed(input)?;
             let context_len = embedder.context_length();
             Ok(Some((embeddings, context_len)))

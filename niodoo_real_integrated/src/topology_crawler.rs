@@ -358,4 +358,3 @@ pub struct HealingTestResults {
     pub failed: usize,
     pub total: usize,
 }
-

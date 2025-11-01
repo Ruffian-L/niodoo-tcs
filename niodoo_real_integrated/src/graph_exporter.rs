@@ -63,25 +63,24 @@ impl GraphExporter {
         output_path: impl AsRef<Path>,
     ) -> Result<GraphExport> {
         info!("Exporting graph to JSON: {:?}", output_path.as_ref());
-        
+
         let export = Self::build_export(graph)?;
-        
-        let json = serde_json::to_string_pretty(&export)
-            .context("Failed to serialize graph to JSON")?;
-        
-        let mut file = File::create(&output_path)
-            .context("Failed to create output file")?;
-        
+
+        let json =
+            serde_json::to_string_pretty(&export).context("Failed to serialize graph to JSON")?;
+
+        let mut file = File::create(&output_path).context("Failed to create output file")?;
+
         file.write_all(json.as_bytes())
             .context("Failed to write JSON to file")?;
-        
+
         info!(
             "Exported {} nodes and {} edges to {:?}",
             export.nodes.len(),
             export.edges.len(),
             output_path.as_ref()
         );
-        
+
         Ok(export)
     }
 
@@ -91,39 +90,62 @@ impl GraphExporter {
         output_path: impl AsRef<Path>,
     ) -> Result<()> {
         info!("Exporting graph to GraphML: {:?}", output_path.as_ref());
-        
+
         let export = Self::build_export(graph)?;
-        
-        let mut file = File::create(&output_path)
-            .context("Failed to create output file")?;
-        
+
+        let mut file = File::create(&output_path).context("Failed to create output file")?;
+
         // Write GraphML header
         writeln!(file, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;
         writeln!(
             file,
             r#"<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">"#
         )?;
-        
+
         // Define attributes
-        writeln!(file, r#"  <key id="emotion" for="node" attr.name="emotion" attr.type="string"/>"#)?;
-        writeln!(file, r#"  <key id="concept" for="node" attr.name="concept" attr.type="string"/>"#)?;
-        writeln!(file, r#"  <key id="x" for="node" attr.name="x" attr.type="float"/>"#)?;
-        writeln!(file, r#"  <key id="y" for="node" attr.name="y" attr.type="float"/>"#)?;
-        writeln!(file, r#"  <key id="z" for="node" attr.name="z" attr.type="float"/>"#)?;
-        writeln!(file, r#"  <key id="probability" for="edge" attr.name="probability" attr.type="float"/>"#)?;
-        writeln!(file, r#"  <key id="weight" for="edge" attr.name="weight" attr.type="float"/>"#)?;
-        
+        writeln!(
+            file,
+            r#"  <key id="emotion" for="node" attr.name="emotion" attr.type="string"/>"#
+        )?;
+        writeln!(
+            file,
+            r#"  <key id="concept" for="node" attr.name="concept" attr.type="string"/>"#
+        )?;
+        writeln!(
+            file,
+            r#"  <key id="x" for="node" attr.name="x" attr.type="float"/>"#
+        )?;
+        writeln!(
+            file,
+            r#"  <key id="y" for="node" attr.name="y" attr.type="float"/>"#
+        )?;
+        writeln!(
+            file,
+            r#"  <key id="z" for="node" attr.name="z" attr.type="float"/>"#
+        )?;
+        writeln!(
+            file,
+            r#"  <key id="probability" for="edge" attr.name="probability" attr.type="float"/>"#
+        )?;
+        writeln!(
+            file,
+            r#"  <key id="weight" for="edge" attr.name="weight" attr.type="float"/>"#
+        )?;
+
         // Write graph
-        writeln!(file, r#"  <graph id="emotional_graph" edgedefault="directed">"#)?;
-        
+        writeln!(
+            file,
+            r#"  <graph id="emotional_graph" edgedefault="directed">"#
+        )?;
+
         // Write nodes
         for node in &export.nodes {
+            writeln!(file, r#"    <node id="{}">"#, xml_escape(&node.id))?;
             writeln!(
                 file,
-                r#"    <node id="{}">"#,
-                xml_escape(&node.id)
+                r#"      <data key="label">{}</data>"#,
+                xml_escape(&node.label)
             )?;
-            writeln!(file, r#"      <data key="label">{}</data>"#, xml_escape(&node.label))?;
             writeln!(
                 file,
                 r#"      <data key="concept">{}</data>"#,
@@ -143,7 +165,7 @@ impl GraphExporter {
             writeln!(file, r#"      <data key="z">{}</data>"#, node.position[2])?;
             writeln!(file, r#"    </node>"#)?;
         }
-        
+
         // Write edges
         for edge in &export.edges {
             writeln!(
@@ -152,21 +174,25 @@ impl GraphExporter {
                 xml_escape(&edge.source),
                 xml_escape(&edge.target)
             )?;
-            writeln!(file, r#"      <data key="probability">{}</data>"#, edge.probability)?;
+            writeln!(
+                file,
+                r#"      <data key="probability">{}</data>"#,
+                edge.probability
+            )?;
             writeln!(file, r#"      <data key="weight">{}</data>"#, edge.weight)?;
             writeln!(file, r#"    </edge>"#)?;
         }
-        
+
         writeln!(file, r#"  </graph>"#)?;
         writeln!(file, r#"</graphml>"#)?;
-        
+
         info!(
             "Exported {} nodes and {} edges to GraphML {:?}",
             export.nodes.len(),
             export.edges.len(),
             output_path.as_ref()
         );
-        
+
         Ok(())
     }
 
@@ -174,7 +200,7 @@ impl GraphExporter {
     fn build_export(graph: &GuessingMemorySystem) -> Result<GraphExport> {
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
-        
+
         // Collect all spheres as nodes
         for sphere in graph.spheres() {
             let node = GraphNode {
@@ -187,7 +213,7 @@ impl GraphExporter {
             };
             nodes.push(node);
         }
-        
+
         // Collect all links as edges
         for sphere in graph.spheres() {
             for (target_id, link) in &sphere.links {
@@ -201,19 +227,19 @@ impl GraphExporter {
                 edges.push(edge);
             }
         }
-        
+
         let metadata = GraphMetadata {
             export_timestamp: Utc::now(),
             sphere_count: nodes.len(),
             link_count: edges.len(),
             version: env!("CARGO_PKG_VERSION").to_string(),
         };
-        
+
         debug!(
             "Built export: {} nodes, {} edges",
             metadata.sphere_count, metadata.link_count
         );
-        
+
         Ok(GraphExport {
             metadata,
             nodes,
@@ -232,17 +258,17 @@ impl GraphExporter {
             "Exporting graph filtered by emotion similarity (threshold={})",
             threshold
         );
-        
+
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
         let mut included_sphere_ids = std::collections::HashSet::new();
-        
+
         // Filter nodes by emotion similarity
         for sphere in graph.spheres() {
             let similarity = sphere.emotional_similarity(query_emotion);
             if similarity >= threshold {
                 included_sphere_ids.insert(sphere.id.0.clone());
-                
+
                 let node = GraphNode {
                     id: sphere.id.0.clone(),
                     label: sphere.core_concept.clone(),
@@ -254,13 +280,13 @@ impl GraphExporter {
                 nodes.push(node);
             }
         }
-        
+
         // Include edges only between included nodes
         for sphere in graph.spheres() {
             if !included_sphere_ids.contains(&sphere.id.0) {
                 continue;
             }
-            
+
             for (target_id, link) in &sphere.links {
                 if included_sphere_ids.contains(&target_id.0) {
                     let edge = GraphEdge {
@@ -274,36 +300,35 @@ impl GraphExporter {
                 }
             }
         }
-        
+
         let metadata = GraphMetadata {
             export_timestamp: Utc::now(),
             sphere_count: nodes.len(),
             link_count: edges.len(),
             version: env!("CARGO_PKG_VERSION").to_string(),
         };
-        
+
         let export = GraphExport {
             metadata,
             nodes,
             edges,
         };
-        
+
         let json = serde_json::to_string_pretty(&export)
             .context("Failed to serialize filtered graph to JSON")?;
-        
-        let mut file = File::create(&output_path)
-            .context("Failed to create output file")?;
-        
+
+        let mut file = File::create(&output_path).context("Failed to create output file")?;
+
         file.write_all(json.as_bytes())
             .context("Failed to write JSON to file")?;
-        
+
         info!(
             "Exported {} filtered nodes and {} edges to {:?}",
             export.nodes.len(),
             export.edges.len(),
             output_path.as_ref()
         );
-        
+
         Ok(export)
     }
 }
@@ -325,10 +350,10 @@ mod tests {
     #[test]
     fn test_build_export() {
         let mut graph = GuessingMemorySystem::new();
-        
+
         let id1 = SphereId("sphere1".to_string());
         let id2 = SphereId("sphere2".to_string());
-        
+
         graph.store_memory(
             id1.clone(),
             "Test concept 1".to_string(),
@@ -336,7 +361,7 @@ mod tests {
             EmotionalVector::new(0.8, 0.1, 0.0, 0.0, 0.1),
             "Fragment 1".to_string(),
         );
-        
+
         graph.store_memory(
             id2.clone(),
             "Test concept 2".to_string(),
@@ -344,7 +369,7 @@ mod tests {
             EmotionalVector::new(0.7, 0.2, 0.0, 0.0, 0.1),
             "Fragment 2".to_string(),
         );
-        
+
         // Add a link
         if let Some(sphere) = graph.spheres_mut().find(|s| s.id == id1) {
             sphere.add_link(
@@ -353,9 +378,9 @@ mod tests {
                 EmotionalVector::new(0.75, 0.15, 0.0, 0.0, 0.1),
             );
         }
-        
-        let export = GraphExporter::build_export(&graph)
-            .expect("build_export should succeed in test");
+
+        let export =
+            GraphExporter::build_export(&graph).expect("build_export should succeed in test");
         assert_eq!(export.nodes.len(), 2);
         assert_eq!(export.edges.len(), 1);
     }
@@ -367,4 +392,3 @@ mod tests {
         assert_eq!(xml_escape("test>test"), "test&gt;test");
     }
 }
-

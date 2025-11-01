@@ -48,10 +48,8 @@ pub struct GenerationEngine {
 impl GenerationEngine {
     pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self> {
         let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
-        let circuit_breaker = Arc::new(CircuitBreaker::new(
-            "vllm",
-            CircuitBreakerConfig::default(),
-        ));
+        let circuit_breaker =
+            Arc::new(CircuitBreaker::new("vllm", CircuitBreakerConfig::default()));
         Ok(Self {
             client,
             endpoint: endpoint.into(),
@@ -73,8 +71,22 @@ impl GenerationEngine {
         if self.mock_mode {
             // Return mock generation result
             return Ok(GenerationResult {
-                baseline_response: format!("[Mock baseline to: {}]", tokenizer_output.augmented_prompt.chars().take(50).collect::<String>()),
-                hybrid_response: format!("[Mock hybrid response to: {}]", tokenizer_output.augmented_prompt.chars().take(50).collect::<String>()),
+                baseline_response: format!(
+                    "[Mock baseline to: {}]",
+                    tokenizer_output
+                        .augmented_prompt
+                        .chars()
+                        .take(50)
+                        .collect::<String>()
+                ),
+                hybrid_response: format!(
+                    "[Mock hybrid response to: {}]",
+                    tokenizer_output
+                        .augmented_prompt
+                        .chars()
+                        .take(50)
+                        .collect::<String>()
+                ),
                 echoes: vec![],
                 rouge_to_baseline: 0.5,
                 rouge_score: 0.5,
@@ -87,7 +99,7 @@ impl GenerationEngine {
                 curator_quality: Some(0.7),
             });
         }
-        
+
         let start = Instant::now();
         let baseline_future = self.request_text(&tokenizer_output.augmented_prompt);
         let claude_future = self.request_lens_response(
@@ -188,13 +200,17 @@ impl GenerationEngine {
     async fn send_chat(&self, messages: Vec<ChatMessage>) -> Result<String> {
         if self.mock_mode {
             // Return mock response based on prompt
-            let user_message = messages.iter()
+            let user_message = messages
+                .iter()
                 .find(|m| m.role == "user")
                 .map(|m| m.content.as_str())
                 .unwrap_or("mock prompt");
-            return Ok(format!("[Mock response to: {}]", user_message.chars().take(100).collect::<String>()));
+            return Ok(format!(
+                "[Mock response to: {}]",
+                user_message.chars().take(100).collect::<String>()
+            ));
         }
-        
+
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
             messages,
@@ -207,7 +223,10 @@ impl GenerationEngine {
         let endpoint_url = if self.endpoint.contains("/v1/chat/completions") {
             self.endpoint.clone()
         } else {
-            format!("{}/v1/chat/completions", self.endpoint.trim_end_matches('/'))
+            format!(
+                "{}/v1/chat/completions",
+                self.endpoint.trim_end_matches('/')
+            )
         };
 
         // Use circuit breaker for vLLM request
@@ -250,7 +269,7 @@ impl GenerationEngine {
         if self.mock_mode {
             return Ok(());
         }
-        
+
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
             messages: vec![
@@ -272,7 +291,10 @@ impl GenerationEngine {
         let endpoint_url = if self.endpoint.contains("/v1/chat/completions") {
             self.endpoint.clone()
         } else {
-            format!("{}/v1/chat/completions", self.endpoint.trim_end_matches('/'))
+            format!(
+                "{}/v1/chat/completions",
+                self.endpoint.trim_end_matches('/')
+            )
         };
 
         let response = self
@@ -379,10 +401,8 @@ impl GenerationEngine {
         max_tokens: usize,
         _consistency_variance_threshold: f64,
     ) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(60))
-            .build()?;
-        
+        let client = Client::builder().timeout(Duration::from_secs(60)).build()?;
+
         // Normalise model identifier: vLLM registers the served model by name, not path.
         let model_id = if model.starts_with("/home/beelink/models/") {
             model.replacen("/home/beelink/models/", "/workspace/models/", 1)
@@ -396,12 +416,10 @@ impl GenerationEngine {
         } else {
             model.to_string()
         };
-        
-        let circuit_breaker = Arc::new(CircuitBreaker::new(
-            "vllm",
-            CircuitBreakerConfig::default(),
-        ));
-        
+
+        let circuit_breaker =
+            Arc::new(CircuitBreaker::new("vllm", CircuitBreakerConfig::default()));
+
         Ok(Self {
             client,
             endpoint: endpoint.to_string(),
@@ -438,11 +456,19 @@ impl GenerationEngine {
     }
 
     /// Generate with params
-    pub async fn generate_with_params(&self, prompt: &str, temperature: f64, top_p: f64) -> Result<String> {
+    pub async fn generate_with_params(
+        &self,
+        prompt: &str,
+        temperature: f64,
+        top_p: f64,
+    ) -> Result<String> {
         if self.mock_mode {
-            return Ok(format!("[Mock response to: {}]", prompt.chars().take(100).collect::<String>()));
+            return Ok(format!(
+                "[Mock response to: {}]",
+                prompt.chars().take(100).collect::<String>()
+            ));
         }
-        
+
         let mut temp_engine = Self {
             client: self.client.clone(),
             endpoint: self.endpoint.clone(),
@@ -476,11 +502,17 @@ impl GenerationEngine {
     /// Generate with topology
     /// Generate with fallback to mock if primary fails
     pub async fn generate_with_fallback(&self, prompt: &str) -> Result<(String, String)> {
-        match self.generate_with_params(prompt, self.temperature, self.top_p).await {
+        match self
+            .generate_with_params(prompt, self.temperature, self.top_p)
+            .await
+        {
             Ok(response) => Ok((response, "primary".to_string())),
             Err(_) => {
                 // Fallback to mock
-                Ok((format!("[Mock response to: {}]", prompt), "mock".to_string()))
+                Ok((
+                    format!("[Mock response to: {}]", prompt),
+                    "mock".to_string(),
+                ))
             }
         }
     }
@@ -494,6 +526,71 @@ impl GenerationEngine {
     ) -> Result<GenerationResult> {
         // Fallback to regular generation
         self.generate(tokenizer, compass).await
+    }
+
+    /// Retry generation with reflexion-style prompt repair.
+    pub async fn reflexion_retry(
+        &self,
+        prompt: &str,
+        baseline_rouge: f64,
+        details: &str,
+    ) -> Result<String> {
+        let stability = 1.0_f64 - baseline_rouge.clamp(0.0, 1.0);
+        let temperature = (self.temperature * 0.7) + (0.3 * stability);
+        let top_p = (self.top_p + 0.05 + (0.2 * stability)).min(0.99);
+        let reflexion_prompt = format!(
+            "{prompt}\n\n[Context]\nPrior attempt struggled because: {details}. Improve the response with clear reasoning, explicit decisions, and emotionally grounded alignment.]"
+        );
+
+        self.generate_with_params(&reflexion_prompt, temperature, top_p)
+            .await
+    }
+
+    /// Apply a light chain-of-thought repair pass using topology awareness for guidance.
+    pub async fn apply_cot_repair_with_topology(
+        &self,
+        prompt: &str,
+        details: &str,
+        iteration: u32,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Result<GenerationResult> {
+        let start = Instant::now();
+        let mut repair_prompt = format!(
+            "{prompt}\n\n[Repair Objective]\nIteration {iteration}: clarify reasoning, address: {details}."
+        );
+
+        if let Some(sig) = topology {
+            use std::fmt::Write as _;
+            let _ = write!(
+                repair_prompt,
+                "\nTopology cues → knot: {:.3}, spectral_gap: {:.3}, persistence_entropy: {:.3}. Use these cues to stabilize the narrative.",
+                sig.knot_complexity, sig.spectral_gap, sig.persistence_entropy
+            );
+        }
+
+        let temperature = (self.temperature * 0.6) + (0.1 * iteration as f64);
+        let top_p = (self.top_p + 0.05).min(0.98);
+        let repaired = self
+            .generate_with_params(&repair_prompt, temperature.clamp(0.1, 1.2), top_p)
+            .await?;
+
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let rouge = rouge_l(&repaired, prompt);
+
+        Ok(GenerationResult {
+            baseline_response: repaired.clone(),
+            hybrid_response: repaired,
+            echoes: Vec::new(),
+            rouge_to_baseline: rouge,
+            rouge_score: rouge,
+            latency_ms,
+            ucb1_score: None,
+            source: format!("cot_repair_iter_{}", iteration),
+            failure_type: None,
+            failure_details: Some(details.to_string()),
+            entropy_delta: 0.0,
+            curator_quality: None,
+        })
     }
 }
 

@@ -108,7 +108,7 @@ async fn concurrent_smoke_test() -> Result<()> {
     let start_time = Instant::now();
 
     // Create pipeline wrapped in Arc<Mutex> for concurrent access
-    let args = CliArgs::from_env();
+    let args = CliArgs::default();
     let pipeline = Arc::new(tokio::sync::Mutex::new(Pipeline::initialise(args).await?));
 
     // Use semaphore to control concurrency - allow as many as possible

@@ -141,4 +141,3 @@ impl fmt::Display for Severity {
         }
     }
 }
-

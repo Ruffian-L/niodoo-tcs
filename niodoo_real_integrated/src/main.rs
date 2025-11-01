@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::future::pending;
+use std::io::{self, BufRead, BufReader};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -44,20 +47,38 @@ async fn main() -> Result<()> {
     let shutdown_flag_clone = shutdown_flag.clone();
 
     tokio::spawn(async move {
-        let mut ctrl_c = tokio::signal::ctrl_c();
         #[cfg(unix)]
-        let mut sigterm = {
+        {
             use tokio::signal::unix::{signal, SignalKind};
-            signal(SignalKind::terminate()).ok()
-        };
 
-        tokio::select! {
-            _ = ctrl_c.recv() => {
-                info!("Received SIGINT (Ctrl-C), shutting down gracefully...");
+            let ctrl_c = tokio::signal::ctrl_c();
+            tokio::pin!(ctrl_c);
+            let mut sigterm = signal(SignalKind::terminate()).ok();
+
+            tokio::select! {
+                result = &mut ctrl_c => {
+                    match result {
+                        Ok(_) => info!("Received SIGINT (Ctrl-C), shutting down gracefully..."),
+                        Err(error) => warn!(%error, "Ctrl-C handler error"),
+                    }
+                }
+                _ = async {
+                    if let Some(stream) = sigterm.as_mut() {
+                        stream.recv().await;
+                    } else {
+                        pending::<()>().await;
+                    }
+                } => {
+                    info!("Received SIGTERM, shutting down gracefully...");
+                }
             }
-            #[cfg(unix)]
-            _ = sigterm.as_mut().map(|s| s.recv()) => {
-                info!("Received SIGTERM, shutting down gracefully...");
+        }
+
+        #[cfg(not(unix))]
+        {
+            match tokio::signal::ctrl_c().await {
+                Ok(_) => info!("Received SIGINT (Ctrl-C), shutting down gracefully..."),
+                Err(error) => warn!(%error, "Ctrl-C handler error"),
             }
         }
 
@@ -83,12 +104,6 @@ async fn main() -> Result<()> {
     }
 
     // Cleanup if shutdown was requested
-    if shutdown_flag.load(Ordering::Relaxed) {
-        if let Err(e) = pipeline.shutdown().await {
-            warn!(error = %e, "Error during pipeline shutdown");
-        }
-    }
-
     match args.output {
         OutputFormat::Csv => emit_csv(&cycles)?,
         OutputFormat::Json => emit_json(&cycles)?,

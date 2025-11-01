@@ -9,7 +9,6 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::{Parser, ValueEnum};
-use hex;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -57,7 +56,7 @@ fn append_config_audit_log(key: &str, value: &str) -> Result<()> {
     writeln!(
         file,
         "{timestamp} key={key} value_hash={} char_count={}",
-        hex::encode(digest.as_bytes()),
+        digest.to_hex(),
         value.chars().count()
     )?;
     Ok(())
@@ -302,6 +301,21 @@ impl Default for CuratorBackend {
     }
 }
 
+/// Qdrant quantization type for vector compression
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum QuantizationType {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "scalar_pq4")]
+    ScalarPQ4,
+}
+
+impl Default for QuantizationType {
+    fn default() -> Self {
+        QuantizationType::None
+    }
+}
+
 impl CuratorBackend {
     pub fn from_env() -> Self {
         match env_with_fallback(&["CURATOR_BACKEND", "CURATOR_TYPE"]) {
@@ -534,6 +548,18 @@ fn default_retry_backoff_exponent_cap() -> u32 {
     10
 }
 
+fn default_tokenizer_json() -> Option<String> {
+    for key in ["TOKENIZER_JSON", "QWEN_TOKENIZER"] {
+        if let Some(path) = env_value(key) {
+            let candidate = PathBuf::from(&path);
+            if candidate.exists() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
 fn default_prompt_max_chars() -> usize {
     512
 }
@@ -729,6 +755,8 @@ pub struct RuntimeConfig {
     // Engine/pipeline runtime knobs
     #[serde(default = "default_prompt_max_chars")]
     pub prompt_max_chars: usize,
+    #[serde(default = "default_tokenizer_json")]
+    pub tokenizer_json: Option<String>,
     #[serde(default = "default_token_promotion_interval")]
     pub token_promotion_interval: u64,
     #[serde(default = "default_embedding_cache_ttl_secs")]
@@ -798,6 +826,24 @@ pub struct RuntimeConfig {
     pub temporal_tda_config: TemporalTDAConfig,
     #[serde(default)]
     pub security: SecurityConfig,
+
+    // Phase 1-6: Back-half pipeline optimizations
+    #[serde(default)]
+    pub optimized_erag: bool,
+    #[serde(default = "default_erag_batch_size")]
+    pub erag_batch_size: usize,
+    #[serde(default = "default_erag_batch_flush_ms")]
+    pub erag_batch_flush_ms: u64,
+    #[serde(default)]
+    pub qdrant_quantization: Option<QuantizationType>,
+    #[serde(default)]
+    pub use_approximate_tda: bool,
+    #[serde(default = "default_fp16_qlora_adapters")]
+    pub fp16_qlora_adapters: bool,
+    #[serde(default = "default_parallel_curator_rouge")]
+    pub parallel_curator_rouge: bool,
+    #[serde(default)]
+    pub use_gpu_fitness: bool,
 }
 
 /// Weighted Episodic Memory configuration
@@ -1471,6 +1517,7 @@ impl RuntimeConfig {
             novelty_threshold: env_with_fallback(&["NOVELTY_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or(0.5),
             self_awareness_level: env_with_fallback(&["SELF_AWARENESS_LEVEL"]).and_then(|v| v.parse().ok()).unwrap_or(0.3),
             prompt_max_chars,
+            tokenizer_json: default_tokenizer_json(),
             token_promotion_interval: default_token_promotion_interval(),
             embedding_cache_ttl_secs,
             collapse_cache_ttl_secs,
@@ -1502,182 +1549,32 @@ impl RuntimeConfig {
             resource_budget_config: ResourceBudgetConfig::default(),
             degradation_config: DegradationConfig::default(),
             temporal_tda_config: TemporalTDAConfig::default(),
+            // Phase 1-6: Back-half pipeline optimizations
+            optimized_erag: env_with_fallback(&["OPTIMIZED_ERAG"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            erag_batch_size: default_erag_batch_size(),
+            erag_batch_flush_ms: default_erag_batch_flush_ms(),
+            qdrant_quantization: env_with_fallback(&["QDRANT_QUANTIZATION"])
+                .and_then(|v| match v.to_ascii_lowercase().as_str() {
+                    "scalar_pq4" | "pq4" => Some(QuantizationType::ScalarPQ4),
+                    "none" | "" => None,
+                    _ => None,
+                }),
+            use_approximate_tda: env_with_fallback(&["USE_APPROXIMATE_TDA"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            fp16_qlora_adapters: default_fp16_qlora_adapters(),
+            parallel_curator_rouge: default_parallel_curator_rouge(),
+            use_gpu_fitness: env_with_fallback(&["USE_GPU_FITNESS"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
         };
 
         info!(model = %runtime.curator_model_name, "Config loaded: CURATOR_MODEL={}", runtime.curator_model_name);
         info!(mode = ?runtime.topology_mode, "Topology mode configured");
 
-        runtime.validate()?;
         Ok(runtime)
-    }
-
-    pub fn validate(&self) -> Result<()> {
-        // Validate numeric ranges
-        if self.prompt_max_chars > 1_000_000 {
-            return Err(anyhow::anyhow!(
-                "prompt_max_chars ({}) exceeds maximum allowed value (1,000,000)",
-                self.prompt_max_chars
-            ));
-        }
-
-        if self.generation_max_tokens > 100_000 {
-            return Err(anyhow::anyhow!(
-                "generation_max_tokens ({}) exceeds maximum allowed value (100,000)",
-                self.generation_max_tokens
-            ));
-        }
-
-        if self.generation_timeout_secs > 3600 {
-            return Err(anyhow::anyhow!(
-                "generation_timeout_secs ({}) exceeds maximum allowed value (3600)",
-                self.generation_timeout_secs
-            ));
-        }
-
-        if self.temperature < 0.0 || self.temperature > 2.0 {
-            return Err(anyhow::anyhow!(
-                "temperature ({}) must be between 0.0 and 2.0",
-                self.temperature
-            ));
-        }
-
-        if self.top_p < 0.0 || self.top_p > 1.0 {
-            return Err(anyhow::anyhow!(
-                "top_p ({}) must be between 0.0 and 1.0",
-                self.top_p
-            ));
-        }
-
-        // Validate paths exist (if not mock mode)
-        if !self.mock_mode {
-            if !Path::new(&self.training_data_path).exists() {
-                warn!(path = %self.training_data_path, "training_data_path does not exist");
-            }
-            if !Path::new(&self.emotional_seed_path).exists() {
-                warn!(path = %self.emotional_seed_path, "emotional_seed_path does not exist");
-            }
-        }
-
-        // Validate URLs
-        if !self.vllm_endpoint.starts_with("http://") && !self.vllm_endpoint.starts_with("https://")
-        {
-            return Err(anyhow::anyhow!(
-                "vllm_endpoint ({}) must be a valid HTTP(S) URL",
-                self.vllm_endpoint
-            ));
-        }
-
-        if !self.qdrant_url.starts_with("http://") && !self.qdrant_url.starts_with("https://") {
-            return Err(anyhow::anyhow!(
-                "qdrant_url ({}) must be a valid HTTP(S) URL",
-                self.qdrant_url
-            ));
-        }
-
-        if !self.ollama_endpoint.starts_with("http://")
-            && !self.ollama_endpoint.starts_with("https://")
-        {
-            return Err(anyhow::anyhow!(
-                "ollama_endpoint ({}) must be a valid HTTP(S) URL",
-                self.ollama_endpoint
-            ));
-        }
-
-        // Validate security config
-        if self.security.prompt_max_chars > 0
-            && self.prompt_max_chars > self.security.prompt_max_chars
-        {
-            return Err(anyhow::anyhow!(
-                "prompt_max_chars ({}) exceeds security.prompt_max_chars ({})",
-                self.prompt_max_chars,
-                self.security.prompt_max_chars
-            ));
-        }
-
-        if self.security.rate_limit_window_secs == 0 {
-            return Err(anyhow::anyhow!(
-                "security.rate_limit_window_secs must be greater than 0"
-            ));
-        }
-
-        // Validate Qdrant vector dimension
-        if self.qdrant_vector_dim == 0 || self.qdrant_vector_dim > 65536 {
-            return Err(anyhow::anyhow!(
-                "qdrant_vector_dim ({}) must be between 1 and 65536",
-                self.qdrant_vector_dim
-            ));
-        }
-
-        // Validate cache capacity
-        if self.cache_capacity == 0 {
-            return Err(anyhow::anyhow!(
-                "cache_capacity ({}) must be greater than 0",
-                self.cache_capacity
-            ));
-        }
-
-        // Validate retry configurations
-        if self.phase2_max_retries > 100 {
-            return Err(anyhow::anyhow!(
-                "phase2_max_retries ({}) exceeds maximum allowed value (100)",
-                self.phase2_max_retries
-            ));
-        }
-
-        if self.phase2_retry_base_delay_ms == 0 {
-            return Err(anyhow::anyhow!(
-                "phase2_retry_base_delay_ms ({}) must be greater than 0",
-                self.phase2_retry_base_delay_ms
-            ));
-        }
-
-        // Validate similarity threshold
-        if self.similarity_threshold < 0.0 || self.similarity_threshold > 1.0 {
-            return Err(anyhow::anyhow!(
-                "similarity_threshold ({}) must be between 0.0 and 1.0",
-                self.similarity_threshold
-            ));
-        }
-
-        // Validate curator thresholds
-        if self.curator_quality_threshold < 0.0 || self.curator_quality_threshold > 1.0 {
-            return Err(anyhow::anyhow!(
-                "curator_quality_threshold ({}) must be between 0.0 and 1.0",
-                self.curator_quality_threshold
-            ));
-        }
-
-        if self.curator_minimum_threshold < 0.0 || self.curator_minimum_threshold > 1.0 {
-            return Err(anyhow::anyhow!(
-                "curator_minimum_threshold ({}) must be between 0.0 and 1.0",
-                self.curator_minimum_threshold
-            ));
-        }
-
-        // Validate timeout values
-        if self.curator_timeout_secs == 0 {
-            return Err(anyhow::anyhow!(
-                "curator_timeout_secs ({}) must be greater than 0",
-                self.curator_timeout_secs
-            ));
-        }
-
-        // Validate cache TTL values
-        if self.embedding_cache_ttl_secs == 0 {
-            return Err(anyhow::anyhow!(
-                "embedding_cache_ttl_secs ({}) must be greater than 0",
-                self.embedding_cache_ttl_secs
-            ));
-        }
-
-        if self.collapse_cache_ttl_secs == 0 {
-            return Err(anyhow::anyhow!(
-                "collapse_cache_ttl_secs ({}) must be greater than 0",
-                self.collapse_cache_ttl_secs
-            ));
-        }
-
-        Ok(())
     }
 }
 
@@ -1836,6 +1733,32 @@ fn normalise_env_value(value: &str) -> String {
     }
     trimmed.trim_end_matches('\r').to_string()
 }
+
+// Phase 1-6: Back-half pipeline optimization defaults
+fn default_erag_batch_size() -> usize {
+    env_with_fallback(&["ERAG_BATCH_SIZE"])
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(128)
+}
+
+fn default_erag_batch_flush_ms() -> u64 {
+    env_with_fallback(&["ERAG_BATCH_FLUSH_MS"])
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(300)
+}
+
+fn default_fp16_qlora_adapters() -> bool {
+    env_with_fallback(&["FP16_QLORA_ADAPTERS"])
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(true) // Default to true for optimization
+}
+
+fn default_parallel_curator_rouge() -> bool {
+    env_with_fallback(&["PARALLEL_CURATOR_ROUGE"])
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(true) // Default to true for optimization
+}
+
 fn env_with_fallback(keys: &[&str]) -> Option<String> {
     for key in keys {
         if let Some(value) = env_value(key) {

@@ -73,6 +73,7 @@ See `config/default.toml` for full configuration options. Key settings:
 - `vllm_endpoint`: vLLM server URL
 - `qdrant_url`: Qdrant vector database URL
 - `token_promotion_interval`: How often to promote new tokens
+- `tokenizer_json`: Optional override for the base tokenizer path (falls back to `TOKENIZER_JSON` / `QWEN_TOKENIZER` env vars)
 - `learning_window`: DQN learning window size
 
 ## Development

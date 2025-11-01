@@ -2,7 +2,7 @@
 //! Copyright (c) 2025 Jason Van Pham
 
 use ndarray::{concatenate, s, Array2, Array4, Axis, CowArray};
-use ort::execution_providers::ExecutionProvider;
+use ort::execution_providers::{CUDAExecutionProviderOptions, ExecutionProvider};
 use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -46,12 +46,21 @@ impl QwenEmbedder {
             .with_intra_threads(4)?;
 
         // Explicitly enable CUDA execution provider if available
+        let mut cuda_options = CUDAExecutionProviderOptions::default();
+        let gpu_mem_limit_mb = std::env::var("QWEN_CUDA_MEM_LIMIT_MB")
+            .ok()
+            .and_then(|raw| raw.parse::<usize>().ok())
+            .filter(|&mb| mb > 0)
+            .unwrap_or(512);
+        cuda_options.gpu_mem_limit = gpu_mem_limit_mb * 1024 * 1024;
+
         let session_builder = match session_builder
-            .with_execution_providers([ExecutionProvider::CUDA(Default::default())])
+            .with_execution_providers([ExecutionProvider::CUDA(cuda_options.clone())])
         {
             Ok(builder) => {
                 info!(
                     target: "tcs-ml::qwen_embedder",
+                    gpu_mem_limit_mb,
                     "CUDA execution provider enabled successfully"
                 );
                 builder
@@ -69,7 +78,21 @@ impl QwenEmbedder {
             }
         };
 
-        let session = session_builder.with_model_from_file(model_path)?;
+        let session = match session_builder.with_model_from_file(model_path) {
+            Ok(session) => session,
+            Err(error) => {
+                warn!(
+                    target: "tcs-ml::qwen_embedder",
+                    error = %error,
+                    "Failed to initialise CUDA session, falling back to CPU"
+                );
+                let fallback_builder = SessionBuilder::new(&env)?
+                    .with_optimization_level(GraphOptimizationLevel::Level1)?
+                    .with_intra_threads(4)?
+                    .with_execution_providers([ExecutionProvider::CPU(Default::default())])?;
+                fallback_builder.with_model_from_file(model_path)?
+            }
+        };
 
         info!(
             target: "tcs-ml::qwen_embedder",
@@ -151,13 +174,14 @@ impl QwenEmbedder {
     /// Initialize empty KV cache for first inference
     fn init_kv_cache(&mut self) {
         self.kv_cache.clear();
+        // Use num_kv_heads if specified (for GQA), otherwise use num_heads (for MHA)
+        let kv_heads = self.config.num_kv_heads.unwrap_or(self.config.num_heads);
         for layer in 0..self.config.num_layers {
             let key_name = format!("past_key_values.{}.key", layer);
             let value_name = format!("past_key_values.{}.value", layer);
 
-            // Empty cache: [batch=1, heads, seq_len=0, head_dim]
-            let empty_cache =
-                Array4::<f32>::zeros((1, self.config.num_heads, 0, self.config.head_dim));
+            // Empty cache: [batch=1, kv_heads, seq_len=0, head_dim]
+            let empty_cache = Array4::<f32>::zeros((1, kv_heads, 0, self.config.head_dim));
             self.kv_cache.insert(key_name, empty_cache.clone());
             self.kv_cache.insert(value_name, empty_cache);
         }
@@ -186,24 +210,11 @@ impl QwenEmbedder {
             vec![1i64; tokens.len()]
         };
 
-        if self.kv_cache.is_empty() {
-            self.init_kv_cache();
-        }
+        // Always reset cache for each embedding call to avoid incompatible incremental states
+        self.init_kv_cache();
 
-        // If we have no past context, run the whole prompt in a single pass.
-        if self.current_seq_len == 0 {
-            return self.run_inference_step(&tokens, &attention_mask);
-        }
-
-        // Otherwise stream tokens one by one to satisfy the ONNX incremental contract.
-        let mut last_embeddings = Vec::new();
-        for (token, mask_value) in tokens.iter().zip(attention_mask.iter()) {
-            let token_slice = [*token];
-            let mask_slice = [*mask_value];
-            last_embeddings = self.run_inference_step(&token_slice, &mask_slice)?;
-        }
-
-        Ok(last_embeddings)
+        // Run the whole prompt in a single pass
+        self.run_inference_step(&tokens, &attention_mask)
     }
 
     fn run_inference_step(

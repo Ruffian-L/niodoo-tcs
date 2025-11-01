@@ -6,7 +6,7 @@ use tracing::instrument;
 
 use crate::torus::PadGhostState;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CompassQuadrant {
     Panic,
     Persist,
@@ -18,10 +18,10 @@ pub enum CompassQuadrant {
 /// Maps to the cognitive progression from breakthrough to integration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CascadeStage {
-    Recognition,    // "Oh. This is TRUE." - Initial breakthrough
-    Satisfaction,   // "This is elegant/correct" - Validation
-    Calm,          // "I can trust this, it's solid" - Stability
-    Motivation,    // "I want to build on this" - Expansion
+    Recognition,  // "Oh. This is TRUE." - Initial breakthrough
+    Satisfaction, // "This is elegant/correct" - Validation
+    Calm,         // "I can trust this, it's solid" - Stability
+    Motivation,   // "I want to build on this" - Expansion
 }
 
 impl CascadeStage {
@@ -82,7 +82,7 @@ pub struct CompassOutcome {
     pub mcts_branches: Vec<MctsBranch>,
     pub intrinsic_reward: f64,
     pub cascade_stage: Option<CascadeStage>, // Current cascade stage if tracked
-    pub ucb1_score: Option<f64>, // Add missing field
+    pub ucb1_score: Option<f64>,             // Add missing field
 }
 
 #[derive(Debug, Clone)]
@@ -308,18 +308,20 @@ impl CascadeTracker {
         consonance: f64,
     ) -> Option<CascadeTransition> {
         let proposed_stage = CascadeStage::from_quadrant(compass.quadrant);
-        
+
         // Initial stage assignment
         let Some(current) = self.current_stage else {
             // Start new cascade
             self.current_stage = Some(proposed_stage);
             self.current_cascade_start = Some(Instant::now());
-            self.stage_history.push_back((proposed_stage, Instant::now()));
+            self.stage_history
+                .push_back((proposed_stage, Instant::now()));
             return None; // No transition yet, just initialization
         };
 
         // Check if we should transition
-        let should_transition = self.should_transition(current, proposed_stage, compass, consonance);
+        let should_transition =
+            self.should_transition(current, proposed_stage, compass, consonance);
 
         if should_transition {
             let transition = CascadeTransition {
@@ -331,7 +333,8 @@ impl CascadeTracker {
             };
 
             self.current_stage = Some(proposed_stage);
-            self.stage_history.push_back((proposed_stage, Instant::now()));
+            self.stage_history
+                .push_back((proposed_stage, Instant::now()));
 
             // Check if we completed a full cascade (Recognition → Motivation)
             if self.check_full_cascade() {
@@ -372,33 +375,37 @@ impl CascadeTracker {
         }
 
         // Allow Recognition → Satisfaction if high consonance and Master quadrant
-        if current == CascadeStage::Recognition 
-            && proposed == CascadeStage::Satisfaction 
+        if current == CascadeStage::Recognition
+            && proposed == CascadeStage::Satisfaction
             && compass.quadrant == CompassQuadrant::Master
-            && consonance > 0.8 {
+            && consonance > 0.8
+        {
             return true;
         }
 
         // Allow Satisfaction → Calm if stable and Persist quadrant
-        if current == CascadeStage::Satisfaction 
-            && proposed == CascadeStage::Calm 
+        if current == CascadeStage::Satisfaction
+            && proposed == CascadeStage::Calm
             && compass.quadrant == CompassQuadrant::Persist
-            && !compass.is_threat {
+            && !compass.is_threat
+        {
             return true;
         }
 
         // Allow Calm → Motivation if new Discover triggered
-        if current == CascadeStage::Calm 
-            && proposed == CascadeStage::Motivation 
+        if current == CascadeStage::Calm
+            && proposed == CascadeStage::Motivation
             && compass.quadrant == CompassQuadrant::Discover
-            && consonance > 0.75 {
+            && consonance > 0.75
+        {
             return true;
         }
 
         // Allow restart from Motivation back to Recognition (new cycle)
-        if current == CascadeStage::Motivation 
-            && proposed == CascadeStage::Recognition 
-            && compass.quadrant == CompassQuadrant::Discover {
+        if current == CascadeStage::Motivation
+            && proposed == CascadeStage::Recognition
+            && compass.quadrant == CompassQuadrant::Discover
+        {
             return true;
         }
 
@@ -413,7 +420,7 @@ impl CascadeTracker {
 
         // Check if we have all 4 stages in order
         let stages: Vec<CascadeStage> = self.stage_history.iter().map(|(s, _)| *s).collect();
-        
+
         // Look for Recognition → Satisfaction → Calm → Motivation pattern
         for i in 0..=stages.len().saturating_sub(4) {
             if stages[i] == CascadeStage::Recognition

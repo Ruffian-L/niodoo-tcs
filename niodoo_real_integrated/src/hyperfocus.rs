@@ -2,8 +2,8 @@
 //! Detects when all parallel threads find consonance and collapse into coherent action
 //! This represents "zero internal conflict, pure aligned momentum"
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::consonance::ConsonanceMetrics;
 
@@ -20,11 +20,11 @@ pub struct HyperfocusEvent {
 /// Coherent actions to take when hyperfocus is detected
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CoherentAction {
-    StoreBreakthrough,    // Store as aligned breakthrough memory
-    PromoteToken,         // Promote token to vocabulary
-    ConsolidateMemory,    // Consolidate memory
-    ReduceExploration,    // Reduce exploration noise
-    All,                 // Do all actions
+    StoreBreakthrough, // Store as aligned breakthrough memory
+    PromoteToken,      // Promote token to vocabulary
+    ConsolidateMemory, // Consolidate memory
+    ReduceExploration, // Reduce exploration noise
+    All,               // Do all actions
 }
 
 impl CoherentAction {
@@ -42,8 +42,8 @@ impl CoherentAction {
 /// Hyperfocus detector that monitors multiple parallel signals
 pub struct HyperfocusDetector {
     signal_weights: HashMap<String, f64>,
-    threshold: f64,  // Default: 0.85 = hyperfocus trigger
-    min_signal_threshold: f64,  // Each signal must be > this (default: 0.7)
+    threshold: f64,            // Default: 0.85 = hyperfocus trigger
+    min_signal_threshold: f64, // Each signal must be > this (default: 0.7)
 }
 
 impl HyperfocusDetector {
@@ -86,9 +86,9 @@ impl HyperfocusDetector {
         }
 
         // Check that all signals meet minimum threshold
-        let all_signals_above_threshold = signals.iter().all(|(_, metrics)| {
-            metrics.score >= self.min_signal_threshold
-        });
+        let all_signals_above_threshold = signals
+            .iter()
+            .all(|(_, metrics)| metrics.score >= self.min_signal_threshold);
 
         if !all_signals_above_threshold {
             return None;
@@ -103,7 +103,7 @@ impl HyperfocusDetector {
             let weight = self.signal_weights.get(signal_name).copied().unwrap_or(0.1);
             weighted_sum += metrics.score * weight;
             total_weight += weight;
-            
+
             if metrics.score >= self.min_signal_threshold {
                 aligned_signals.push(signal_name.clone());
             }
@@ -205,14 +205,14 @@ mod tests {
     fn test_hyperfocus_detection() {
         let detector = HyperfocusDetector::new();
         let mut signals = HashMap::new();
-        
+
         signals.insert("compass".to_string(), create_test_consonance(0.9));
         signals.insert("erag".to_string(), create_test_consonance(0.85));
         signals.insert("topology".to_string(), create_test_consonance(0.88));
 
         let event = detector.detect(&signals);
         assert!(event.is_some());
-        
+
         let event = event.expect("hyperfocus detection should succeed in test");
         assert!(event.overall_consonance >= 0.85);
         assert_eq!(event.aligned_signals.len(), 3);
@@ -222,7 +222,7 @@ mod tests {
     fn test_hyperfocus_no_detection() {
         let detector = HyperfocusDetector::new();
         let mut signals = HashMap::new();
-        
+
         signals.insert("compass".to_string(), create_test_consonance(0.6)); // Too low
         signals.insert("erag".to_string(), create_test_consonance(0.65));
 
@@ -234,17 +234,16 @@ mod tests {
     fn test_coherent_action_determination() {
         let detector = HyperfocusDetector::new();
         let mut signals = HashMap::new();
-        
+
         signals.insert("curator".to_string(), create_test_consonance(0.95));
         signals.insert("compass".to_string(), create_test_consonance(0.85));
         signals.insert("erag".to_string(), create_test_consonance(0.85));
 
         let event = detector.detect(&signals);
         assert!(event.is_some());
-        
+
         let event = event.expect("hyperfocus detection should succeed in test");
         // Should choose StoreBreakthrough because curator is high
         assert_eq!(event.coherent_action, CoherentAction::StoreBreakthrough);
     }
 }
-

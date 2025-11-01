@@ -7,8 +7,8 @@
 //! - Prediction error guidance for consolidation depth
 
 use crate::erag::EragMemory;
-use std::collections::VecDeque;
 use rand::Rng;
+use std::collections::VecDeque;
 
 /// TD (Temporal Difference) learning value estimator
 pub struct MemoryValueEstimator {
@@ -36,24 +36,16 @@ impl MemoryValueEstimator {
     /// - R = immediate reward (e.g., fitness score improvement)
     /// - V(s') = value of next state/memory
     /// - V(s) = current value
-    pub fn compute_td_error(
-        &self,
-        current_value: f32,
-        next_value: f32,
-        reward: f32,
-    ) -> f32 {
+    pub fn compute_td_error(&self, current_value: f32, next_value: f32, reward: f32) -> f32 {
         reward + self.gamma * next_value - current_value
     }
 
     /// Update value estimate using TD learning
-    pub fn update_value(
-        &mut self,
-        memory_id: &str,
-        td_error: f32,
-    ) {
+    pub fn update_value(&mut self, memory_id: &str, td_error: f32) {
         let current_value = self.value_cache.get(memory_id).copied().unwrap_or(0.5);
         let new_value = current_value + self.learning_rate * td_error;
-        self.value_cache.insert(memory_id.to_string(), new_value.clamp(0.0, 1.0));
+        self.value_cache
+            .insert(memory_id.to_string(), new_value.clamp(0.0, 1.0));
     }
 
     /// Get value estimate for memory
@@ -73,7 +65,7 @@ impl MemoryValueEstimator {
         for i in 0..memories.len() {
             let (mem_id, reward) = &memories[i];
             let current_value = self.get_value(mem_id);
-            
+
             // Next value (if available)
             let next_value = if i + 1 < memories.len() {
                 let (next_id, _) = &memories[i + 1];
@@ -128,7 +120,8 @@ impl PrioritizedReplaySampler {
         }
 
         // Calculate priorities
-        let priorities: Vec<f32> = self.td_errors
+        let priorities: Vec<f32> = self
+            .td_errors
             .iter()
             .map(|(_, error)| error.abs().powf(self.priority_exponent))
             .collect();
@@ -136,7 +129,8 @@ impl PrioritizedReplaySampler {
         let sum_priorities: f32 = priorities.iter().sum();
         if sum_priorities == 0.0 {
             // Uniform sampling if all priorities are zero
-            return self.td_errors
+            return self
+                .td_errors
                 .iter()
                 .take(batch_size)
                 .map(|(id, _)| id.clone())
@@ -150,7 +144,7 @@ impl PrioritizedReplaySampler {
         for _ in 0..batch_size.min(self.td_errors.len()) {
             let random = rng.gen::<f32>() * sum_priorities;
             let mut cumulative = 0.0;
-            
+
             for (idx, &priority) in priorities.iter().enumerate() {
                 cumulative += priority;
                 if cumulative >= random {
@@ -167,8 +161,9 @@ impl PrioritizedReplaySampler {
     pub fn get_high_priority_memories(&self, top_k: usize) -> Vec<String> {
         let mut sorted: Vec<_> = self.td_errors.iter().collect();
         sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
-        sorted.iter()
+
+        sorted
+            .iter()
             .take(top_k)
             .map(|(id, _)| id.clone())
             .collect()
@@ -271,7 +266,9 @@ impl MemoryConsolidationManager {
         actual_fitness: f32,
     ) -> f32 {
         // Calculate prediction error
-        let prediction_error = self.error_calculator.calculate_error(predicted_fitness, actual_fitness);
+        let prediction_error = self
+            .error_calculator
+            .calculate_error(predicted_fitness, actual_fitness);
         let avg_error = self.error_calculator.add_error(prediction_error);
 
         // Determine consolidation level
@@ -289,7 +286,8 @@ impl MemoryConsolidationManager {
         self.value_estimator.update_value(memory_id, td_error);
 
         // Add to replay buffer
-        self.replay_sampler.add_memory(memory_id.to_string(), td_error.abs());
+        self.replay_sampler
+            .add_memory(memory_id.to_string(), td_error.abs());
 
         consolidation_level
     }
@@ -336,9 +334,8 @@ mod tests {
         let mut sampler = PrioritizedReplaySampler::new(100);
         sampler.add_memory("mem1".to_string(), 0.8);
         sampler.add_memory("mem2".to_string(), 0.2);
-        
+
         let batch = sampler.sample_replay_batch(1);
         assert_eq!(batch.len(), 1);
     }
 }
-

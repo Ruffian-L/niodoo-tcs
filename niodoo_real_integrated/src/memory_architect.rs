@@ -10,13 +10,9 @@
 use anyhow::Result;
 use niodoo_core::config::AppConfig;
 use niodoo_core::consciousness::ConsciousnessState;
-use niodoo_core::memory::{
-    EmotionalVector, GuessingMemorySystem, MemoryLayer, MobiusMemorySystem,
-};
-use niodoo_core::{
-    MemoryConsolidationEngine, MemoryWithResonance, MultiLayerMemoryQuery,
-};
+use niodoo_core::memory::{EmotionalVector, GuessingMemorySystem, MemoryLayer, MobiusMemorySystem};
 use niodoo_core::rag::RetrievalEngine;
+use niodoo_core::{MemoryConsolidationEngine, MemoryWithResonance, MultiLayerMemoryQuery};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
@@ -74,7 +70,7 @@ impl MemoryArchitect {
     ) -> Self {
         let multi_layer_query = MultiLayerMemoryQuery::new(rag_engine, gaussian_system);
         let consolidation_engine = MemoryConsolidationEngine::new();
-        
+
         Self {
             multi_layer_query,
             memory_system,
@@ -107,8 +103,11 @@ impl MemoryArchitect {
         emotional_vector: &EmotionalVector,
         initial_stability: Option<f64>,
     ) -> Result<MemoryLayer> {
-        info!("Deciding memory layer for content: {}", &content[..content.len().min(50)]);
-        
+        info!(
+            "Deciding memory layer for content: {}",
+            &content[..content.len().min(50)]
+        );
+
         // Query existing memories to find similar ones
         let mut state = ConsciousnessState::default();
         let query_results = self.multi_layer_query.query(
@@ -117,12 +116,12 @@ impl MemoryArchitect {
             self.config.max_query_results,
             &mut state,
         )?;
-        
+
         debug!("Query returned {} results", query_results.len());
-        
+
         // Analyze query results to determine layer
         let layer = self.analyze_results_for_layer(&query_results, initial_stability)?;
-        
+
         info!("Decided layer: {:?}", layer);
         Ok(layer)
     }
@@ -137,32 +136,26 @@ impl MemoryArchitect {
             // No similar memories found - start at Working layer
             return Ok(MemoryLayer::Working);
         }
-        
+
         // Calculate average resonance and novelty
-        let avg_resonance: f32 = results
-            .iter()
-            .map(|r| r.emotional_resonance)
-            .sum::<f32>()
-            / results.len() as f32;
-        
-        let avg_novelty: f32 = results
-            .iter()
-            .map(|r| r.novelty_score)
-            .sum::<f32>()
-            / results.len() as f32;
-        
+        let avg_resonance: f32 =
+            results.iter().map(|r| r.emotional_resonance).sum::<f32>() / results.len() as f32;
+
+        let avg_novelty: f32 =
+            results.iter().map(|r| r.novelty_score).sum::<f32>() / results.len() as f32;
+
         // Use initial stability if provided, otherwise calculate from results
         let stability = initial_stability.unwrap_or_else(|| {
             // Calculate stability from resonance and novelty
             let stability_score = (avg_resonance as f64 + avg_novelty as f64) / 2.0;
             stability_score.clamp(0.0, 1.0)
         });
-        
+
         debug!(
             "Analysis: avg_resonance={:.3}, avg_novelty={:.3}, stability={:.3}",
             avg_resonance, avg_novelty, stability
         );
-        
+
         // Determine layer based on stability thresholds
         if stability >= self.config.core_burned_threshold {
             Ok(MemoryLayer::CoreBurned)
@@ -188,10 +181,10 @@ impl MemoryArchitect {
     ) -> Result<String> {
         // Decide layer
         let layer = self.decide_layer(&content, &emotional_vector, initial_stability)?;
-        
+
         // Calculate emotional weight from vector magnitude
         let emotional_weight = emotional_vector.magnitude() as f64;
-        
+
         // Store in memory system
         let memory_id = self.memory_system.add_memory(
             content,
@@ -199,7 +192,7 @@ impl MemoryArchitect {
             emotional_weight,
             &self.app_config,
         )?;
-        
+
         info!("Stored memory {} in layer {:?}", memory_id, layer);
         Ok(memory_id)
     }
@@ -207,17 +200,18 @@ impl MemoryArchitect {
     /// Promote memories to higher layers based on consolidation
     pub async fn consolidate_and_promote(&mut self) -> Result<()> {
         info!("Starting memory consolidation and promotion");
-        
+
         // Apply emotional transformation to update stabilities
-        self.memory_system.apply_emotional_transformation(&self.app_config)?;
-        
+        self.memory_system
+            .apply_emotional_transformation(&self.app_config)?;
+
         // Get consolidation stats
         let metrics = self.memory_system.get_stability_metrics();
         info!(
             "Consolidation metrics: overall_stability={:.3}, consolidation_rate={:.3}",
             metrics.overall_stability, metrics.consolidation_rate
         );
-        
+
         Ok(())
     }
 
@@ -229,7 +223,8 @@ impl MemoryArchitect {
         top_k: usize,
     ) -> Result<Vec<MemoryWithResonance>> {
         let mut state = ConsciousnessState::default();
-        self.multi_layer_query.query(query_text, query_emotion, top_k, &mut state)
+        self.multi_layer_query
+            .query(query_text, query_emotion, top_k, &mut state)
     }
 
     /// Get memory system reference
@@ -274,14 +269,14 @@ mod tests {
         let gaussian_system = GuessingMemorySystem::new();
         let memory_system = MobiusMemorySystem::new(&create_test_config());
         let app_config = create_test_config();
-        
+
         let architect = MemoryArchitect::with_default_config(
             rag_engine,
             gaussian_system,
             memory_system,
             app_config,
         );
-        
+
         // Architect should be created successfully
         assert!(architect.memory_system().get_total_memories() >= 0);
     }
@@ -292,20 +287,20 @@ mod tests {
         let gaussian_system = GuessingMemorySystem::new();
         let memory_system = MobiusMemorySystem::new(&create_test_config());
         let app_config = create_test_config();
-        
+
         let mut architect = MemoryArchitect::with_default_config(
             rag_engine,
             gaussian_system,
             memory_system,
             app_config,
         );
-        
+
         let emotion = EmotionalVector::new(0.5, 0.5, 0.0, 0.0, 0.0);
-        let layer = architect.decide_layer("New memory", &emotion, None)
+        let layer = architect
+            .decide_layer("New memory", &emotion, None)
             .expect("decide_layer should succeed in test");
-        
+
         // With no similar memories, should start at Working layer
         assert_eq!(layer, MemoryLayer::Working);
     }
 }
-

@@ -1,0 +1,22 @@
+# .dockerignore for NIODOO Real Integrated
+target/
+Cargo.lock
+.git/
+.gitignore
+*.log
+logs/
+*.md
+!README.md
+.env*
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/
+.idea/
+*.iml
+test_reports/
+results/
+backups/
+backupversions/
+

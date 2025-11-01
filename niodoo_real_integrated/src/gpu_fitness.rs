@@ -20,8 +20,11 @@ impl GPUMemoryFitnessCalculator {
     /// Create new calculator with device preference
     pub fn new(device: &str) -> Self {
         let gpu_available = Self::check_gpu_available();
-        info!("GPU fitness calculator initialized: device={}, gpu_available={}", device, gpu_available);
-        
+        info!(
+            "GPU fitness calculator initialized: device={}, gpu_available={}",
+            device, gpu_available
+        );
+
         Self {
             device: device.to_string(),
             gpu_available,
@@ -69,19 +72,21 @@ impl GPUMemoryFitnessCalculator {
 
         memories
             .par_iter()
-            .map(|(pad_state, age_days, retrieval_count, beta1, consonance, consolidation_level)| {
-                calculate_fitness_score(
-                    *age_days,
-                    pad_state,
-                    *retrieval_count,
-                    *beta1,
-                    *consonance,
-                    *consolidation_level,
-                    weights,
-                    temporal_config,
-                    None, // resource_availability
-                )
-            })
+            .map(
+                |(pad_state, age_days, retrieval_count, beta1, consonance, consolidation_level)| {
+                    calculate_fitness_score(
+                        *age_days,
+                        pad_state,
+                        *retrieval_count,
+                        *beta1,
+                        *consonance,
+                        *consolidation_level,
+                        weights,
+                        temporal_config,
+                        None, // resource_availability
+                    )
+                },
+            )
             .collect()
     }
 
@@ -215,9 +220,7 @@ mod tests {
     fn test_batch_fitness_cpu() {
         let calculator = GPUMemoryFitnessCalculator::new("cpu");
         let pad_state = create_test_pad_state();
-        let memories = vec![
-            (pad_state.clone(), 1.0, 5, 0.6, 0.7, 0.2),
-        ];
+        let memories = vec![(pad_state.clone(), 1.0, 5, 0.6, 0.7, 0.2)];
         let weights = DEFAULT_FITNESS_WEIGHTS;
         let config = TemporalDecayConfig::default();
 
@@ -241,4 +244,3 @@ mod tests {
         assert_eq!(scores.len(), 2);
     }
 }
-

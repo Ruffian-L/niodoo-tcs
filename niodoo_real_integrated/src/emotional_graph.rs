@@ -8,9 +8,7 @@
 //! based on emotional and semantic similarity.
 
 use anyhow::{Context, Result};
-use niodoo_core::memory::{
-    EmotionalVector, GuessingMemorySystem, SphereId, TraversalDirection,
-};
+use niodoo_core::memory::{EmotionalVector, GuessingMemorySystem, SphereId, TraversalDirection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
@@ -69,36 +67,42 @@ impl EmotionalGraphBuilder {
         &mut self,
         conversation_store: &ConversationLogStore,
     ) -> Result<()> {
-        info!("Building emotional graph from {} conversations", conversation_store.count());
-        
+        info!(
+            "Building emotional graph from {} conversations",
+            conversation_store.count()
+        );
+
         // First pass: create spheres from all conversations
         for entry in conversation_store.all_entries() {
             self.add_conversation_entry(entry)?;
         }
-        
+
         // Second pass: create links based on similarity
         self.create_links_from_conversations(conversation_store)?;
-        
-        info!("Emotional graph built: {} spheres", self.graph.sphere_count());
+
+        info!(
+            "Emotional graph built: {} spheres",
+            self.graph.sphere_count()
+        );
         Ok(())
     }
 
     /// Add a single conversation entry as a sphere
     fn add_conversation_entry(&mut self, entry: &ConversationEntry) -> Result<()> {
         let sphere_id = SphereId(format!("sphere_{}", entry.id));
-        
+
         // Calculate 3D position from emotional vector and timestamp
         let position = self.calculate_position(&entry.emotional_vector, &entry.timestamp);
-        
+
         // Create concept from conversation content
         let concept = format!("{} → {}", entry.user_input, entry.ai_response);
-        
+
         // Store memory fragment
         let fragment = format!(
             "{} | {} | {}",
             entry.user_input, entry.ai_response, entry.emotion_state
         );
-        
+
         // Store the sphere
         self.graph.store_memory(
             sphere_id.clone(),
@@ -107,10 +111,10 @@ impl EmotionalGraphBuilder {
             entry.emotional_vector.clone(),
             fragment,
         );
-        
+
         // Track mapping
         self.entry_to_sphere.insert(entry.id.clone(), sphere_id);
-        
+
         debug!("Added sphere for conversation entry: {}", entry.id);
         Ok(())
     }
@@ -122,42 +126,42 @@ impl EmotionalGraphBuilder {
     ) -> Result<()> {
         let entries: Vec<_> = conversation_store.all_entries().to_vec();
         let mut link_count = 0;
-        
+
         for (i, entry_a) in entries.iter().enumerate() {
             let sphere_id_a = self
                 .entry_to_sphere
                 .get(&entry_a.id)
                 .context("Missing sphere for entry")?;
-            
+
             // Find similar entries
             let mut similarities: Vec<(SphereId, f32)> = Vec::new();
-            
+
             for entry_b in entries.iter().skip(i + 1) {
                 let sphere_id_b = self
                     .entry_to_sphere
                     .get(&entry_b.id)
                     .context("Missing sphere for entry")?;
-                
+
                 // Calculate combined similarity
                 let emotional_sim = self.calculate_emotional_similarity(
                     &entry_a.emotional_vector,
                     &entry_b.emotional_vector,
                 );
-                
+
                 let semantic_sim = entry_a.content_similarity(entry_b);
-                
+
                 let combined_similarity = (emotional_sim * self.config.emotional_weight)
                     + (semantic_sim * self.config.semantic_weight);
-                
+
                 if combined_similarity >= self.config.min_link_similarity {
                     similarities.push((sphere_id_b.clone(), combined_similarity));
                 }
             }
-            
+
             // Sort by similarity and take top N
             similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             similarities.truncate(self.config.max_links_per_sphere);
-            
+
             // Create links - need to store entry_b references for later use
             let entry_emotions: Vec<(SphereId, f32, EmotionalVector)> = similarities
                 .into_iter()
@@ -168,19 +172,19 @@ impl EmotionalGraphBuilder {
                         .iter()
                         .find(|(_, sid)| **sid == sphere_id_b)
                         .map(|(id, _)| id.clone())?;
-                    
+
                     let entry_b = entries.iter().find(|e| e.id == entry_b_id)?;
-                    
+
                     // Calculate link emotion before mutable borrow
                     let link_emotion = self.calculate_link_emotion(
                         &entry_a.emotional_vector,
                         &entry_b.emotional_vector,
                     );
-                    
+
                     Some((sphere_id_b, similarity, link_emotion))
                 })
                 .collect();
-            
+
             // Create links
             if let Some(sphere_a) = self.graph.spheres_mut().find(|s| &s.id == sphere_id_a) {
                 for (sphere_id_b, similarity, link_emotion) in entry_emotions {
@@ -189,7 +193,7 @@ impl EmotionalGraphBuilder {
                 }
             }
         }
-        
+
         info!("Created {} links between spheres", link_count);
         Ok(())
     }
@@ -203,7 +207,7 @@ impl EmotionalGraphBuilder {
         // Use emotional vector components for x, y
         // Use timestamp as z component (normalized)
         let timestamp_factor = timestamp.timestamp() as f32 / 1_000_000_000.0; // Normalize to reasonable range
-        
+
         [
             emotion.joy * 10.0 - emotion.sadness * 10.0, // x: joy-sadness axis
             emotion.anger * 10.0 - emotion.fear * 10.0,  // y: anger-fear axis
@@ -218,10 +222,10 @@ impl EmotionalGraphBuilder {
             + a.anger * b.anger
             + a.fear * b.fear
             + a.surprise * b.surprise;
-        
+
         let mag_a = a.magnitude();
         let mag_b = b.magnitude();
-        
+
         if mag_a > 0.0 && mag_b > 0.0 {
             (dot_product / (mag_a * mag_b)).clamp(-1.0, 1.0)
         } else {
@@ -262,7 +266,8 @@ impl EmotionalGraphBuilder {
         direction: TraversalDirection,
         depth: usize,
     ) -> Vec<(SphereId, String)> {
-        self.graph.mobius_traverse(start_sphere_id, direction, depth)
+        self.graph
+            .mobius_traverse(start_sphere_id, direction, depth)
     }
 
     /// Find spheres by emotional similarity
@@ -311,7 +316,7 @@ mod tests {
         let temp_dir = std::env::temp_dir();
         let store_path = temp_dir.join("test_conv.json");
         let mut store = ConversationLogStore::new(&store_path);
-        
+
         let entry1 = ConversationEntry::new(
             "Hello".to_string(),
             "Hi!".to_string(),
@@ -324,13 +329,12 @@ mod tests {
             EmotionalVector::new(0.7, 0.2, 0.0, 0.0, 0.1),
             "joyful".to_string(),
         );
-        
+
         store.store(entry1).unwrap();
         store.store(entry2).unwrap();
-        
+
         let mut builder = EmotionalGraphBuilder::default();
         assert!(builder.build_from_conversations(&store).is_ok());
         assert!(builder.sphere_count() >= 2);
     }
 }
-

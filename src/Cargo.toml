@@ -15,6 +15,7 @@ parking_lot = "0.12"
 
 # Workspace dependencies (member package)
 niodoo-core = { path = "../niodoo-core" }
+niodoo_real_integrated = { path = "../niodoo_real_integrated" }
 
 # Data structures and serialization
 serde = { workspace = true }
@@ -110,7 +111,7 @@ qmetaobject = { version = "0.2", optional = true }
 ort = { version = "1.16.3", features = ["cuda"], optional = true }
 hf-hub = { version = "0.3", optional = true }
 # ring = "=0.16.20"  # Pin to working version to avoid linking issues with 0.17.14
-# tokenizers = { version = "0.20", default-features = false, features = ["http", "fancy-regex"] }  # Use fancy-regex instead of onig
+tokenizers = { workspace = true }
 llama-cpp-2 = "0.1"  # Keep as is
 # TODO: Restore ORT once the pipeline uses the new crate-based ONNX wrapper.
 

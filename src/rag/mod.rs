@@ -105,7 +105,7 @@ impl RetrievalEngine {
             .collect();
         // Ethical nurturing: adjust threshold dynamically
         for (doc, score) in &scored_docs {
-            if *score < self.retrieval_config().base_threshold {
+            if *score < self.config().base_threshold {
                 // Add ()
                 let meta_msg = format!(
                     "Why suppress low-similarity doc? Nurturing as LearningWill: {:?}",

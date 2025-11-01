@@ -2,9 +2,10 @@
 ///
 /// Implements a real LoRA adapter using candle-core for efficient fine-tuning
 /// with rank-8 low-rank decomposition and Kaiming initialization.
-use anyhow::{Result, anyhow};
-use candle_core::{Device, Shape, Tensor};
+use anyhow::{anyhow, Result};
+use candle_core::{Device, DType, Shape, Tensor};
 use chrono::{DateTime, Utc};
+use half::f16;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -21,6 +22,13 @@ pub struct LoRAConfig {
     pub input_dim: usize,
     /// Output dimension
     pub output_dim: usize,
+    /// Phase 3.1: Use fp16 precision for adapters (50% VRAM reduction)
+    #[serde(default = "default_fp16")]
+    pub use_fp16: bool,
+}
+
+fn default_fp16() -> bool {
+    false // Default to fp32 for backward compatibility
 }
 
 impl Default for LoRAConfig {
@@ -30,12 +38,13 @@ impl Default for LoRAConfig {
             alpha: 16.0f32,
             input_dim: 896,
             output_dim: 896,
+            use_fp16: false, // Phase 3.1: Default to fp32 for backward compatibility
         }
     }
 }
 
 /// LoRA Adapter using candle-core tensors
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LoRAAdapter {
     /// Configuration
     config: LoRAConfig,
@@ -70,9 +79,9 @@ impl LoRAAdapter {
 
         // Create lora_a with random values from Kaiming distribution
         let lora_a_data = {
+            use rand::rngs::StdRng;
             use rand::Rng;
             use rand::SeedableRng;
-            use rand::rngs::StdRng;
             let mut rng = StdRng::seed_from_u64(42); // Deterministic seed
             let mut values = vec![0.0_f32; config.input_dim * config.rank];
             for val in &mut values {
@@ -87,18 +96,27 @@ impl LoRAAdapter {
             &device,
         )?;
 
+        // Phase 3.1: Convert to fp16 if enabled
+        let lora_a = if config.use_fp16 {
+            lora_a.to_dtype(DType::F16)?
+        } else {
+            lora_a
+        };
+
         // Initialize lora_b with zeros
+        let lora_b_dtype = if config.use_fp16 { DType::F16 } else { DType::F32 };
         let lora_b = Tensor::zeros(
             Shape::from((config.rank, config.output_dim)),
-            candle_core::DType::F32,
+            lora_b_dtype,
             &device,
         )?;
 
         tracing::info!(
-            "Initialized LoRA adapter: input_dim={}, output_dim={}, rank={}",
+            "Initialized LoRA adapter: input_dim={}, output_dim={}, rank={}, dtype={:?}",
             config.input_dim,
             config.output_dim,
-            config.rank
+            config.rank,
+            lora_a.dtype()
         );
 
         Ok(Self {
@@ -158,50 +176,89 @@ impl LoRAAdapter {
     }
 
     /// Save adapter to safetensors format using safetensors v0.4 API
+    /// Phase 3.1: Supports fp16 storage when use_fp16 is enabled
     pub fn save_adapter<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
 
-        // Convert tensors to flat f32 vectors
-        let lora_a_data = self.lora_a.to_vec2::<f32>()?;
-        let lora_b_data = self.lora_b.to_vec2::<f32>()?;
+        // Phase 3.1: Convert tensors to target dtype
+        let lora_a_tensor = if self.config.use_fp16 && self.lora_a.dtype() != DType::F16 {
+            self.lora_a.to_dtype(DType::F16)?
+        } else {
+            self.lora_a.clone()
+        };
 
-        // Flatten for safetensors
-        let lora_a_flat: Vec<f32> = lora_a_data.iter().flatten().copied().collect();
-        let lora_b_flat: Vec<f32> = lora_b_data.iter().flatten().copied().collect();
+        let lora_b_tensor = if self.config.use_fp16 && self.lora_b.dtype() != DType::F16 {
+            self.lora_b.to_dtype(DType::F16)?
+        } else {
+            self.lora_b.clone()
+        };
 
-        // Convert f32 to bytes safely using into_raw_parts and byte buffer
-        // This is safer than unsafe casting and maintains proper alignment
-        let lora_a_bytes: Vec<u8> = lora_a_flat.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let use_fp16 = self.config.use_fp16;
 
-        let lora_b_bytes: Vec<u8> = lora_b_flat.iter().flat_map(|f| f.to_le_bytes()).collect();
+        // Convert tensors to flat vectors based on dtype
+        let (lora_a_bytes, lora_a_dtype, lora_a_shape) = if use_fp16 {
+            // Convert to f16
+            let lora_a_data = lora_a_tensor.to_vec2::<f32>()?; // Read as f32 first
+            let lora_a_flat: Vec<f32> = lora_a_data.iter().flatten().copied().collect();
+            // Convert f32 to f16 (half precision)
+            let lora_a_f16: Vec<u16> = lora_a_flat.iter().map(|f| f16::from_f32(*f).to_bits()).collect();
+            let lora_a_bytes: Vec<u8> = lora_a_f16.iter().flat_map(|bits| bits.to_le_bytes()).collect();
+            (lora_a_bytes, safetensors::Dtype::F16, vec![self.config.input_dim, self.config.rank])
+        } else {
+            // Use f32
+            let lora_a_data = lora_a_tensor.to_vec2::<f32>()?;
+            let lora_a_flat: Vec<f32> = lora_a_data.iter().flatten().copied().collect();
+            let lora_a_bytes: Vec<u8> = lora_a_flat.iter().flat_map(|f| f.to_le_bytes()).collect();
+            (lora_a_bytes, safetensors::Dtype::F32, vec![self.config.input_dim, self.config.rank])
+        };
+
+        let (lora_b_bytes, lora_b_dtype, lora_b_shape) = if use_fp16 {
+            // Convert to f16
+            let lora_b_data = lora_b_tensor.to_vec2::<f32>()?;
+            let lora_b_flat: Vec<f32> = lora_b_data.iter().flatten().copied().collect();
+            let lora_b_f16: Vec<u16> = lora_b_flat.iter().map(|f| f16::from_f32(*f).to_bits()).collect();
+            let lora_b_bytes: Vec<u8> = lora_b_f16.iter().flat_map(|bits| bits.to_le_bytes()).collect();
+            (lora_b_bytes, safetensors::Dtype::F16, vec![self.config.rank, self.config.output_dim])
+        } else {
+            // Use f32
+            let lora_b_data = lora_b_tensor.to_vec2::<f32>()?;
+            let lora_b_flat: Vec<f32> = lora_b_data.iter().flatten().copied().collect();
+            let lora_b_bytes: Vec<u8> = lora_b_flat.iter().flat_map(|f| f.to_le_bytes()).collect();
+            (lora_b_bytes, safetensors::Dtype::F32, vec![self.config.rank, self.config.output_dim])
+        };
 
         let mut tensors = std::collections::HashMap::new();
 
-        // Create lora_a TensorView with proper safetensors v0.4 API
+        // Create lora_a TensorView
         let lora_a_view = safetensors::tensor::TensorView::new(
-            safetensors::Dtype::F32,
-            vec![self.config.input_dim, self.config.rank],
+            lora_a_dtype,
+            lora_a_shape,
             &lora_a_bytes,
         )?;
         tensors.insert("lora_a".to_string(), lora_a_view);
 
-        // Create lora_b TensorView with proper safetensors v0.4 API
+        // Create lora_b TensorView
         let lora_b_view = safetensors::tensor::TensorView::new(
-            safetensors::Dtype::F32,
-            vec![self.config.rank, self.config.output_dim],
+            lora_b_dtype,
+            lora_b_shape,
             &lora_b_bytes,
         )?;
         tensors.insert("lora_b".to_string(), lora_b_view);
 
-        // Serialize tensors to file using serialize_to_file
+        // Serialize tensors to file
         safetensors::serialize_to_file(&tensors, &None, path)
             .map_err(|e| anyhow!("Failed to save safetensors: {}", e))?;
 
-        tracing::info!("Saved LoRA adapter to: {}", path.display());
+        tracing::info!(
+            "Saved LoRA adapter to: {} (dtype: {:?})",
+            path.display(),
+            if use_fp16 { "F16" } else { "F32" }
+        );
         Ok(())
     }
 
     /// Load adapter from safetensors format
+    /// Phase 3.1: Supports loading fp16 adapters
     pub fn load_adapter<P: AsRef<Path>>(path: P, config: LoRAConfig) -> Result<Self> {
         let path = path.as_ref();
 
@@ -229,42 +286,117 @@ impl LoRAAdapter {
             .tensor("lora_a")
             .map_err(|e| anyhow!("Failed to load lora_a tensor: {}", e))?;
         let lora_a_bytes = lora_a_tensor.data();
-        let lora_a_data: Vec<f32> = lora_a_bytes
-            .chunks_exact(4)
-            .map(|chunk| {
-                let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(chunk);
-                f32::from_le_bytes(bytes)
-            })
-            .collect();
-
-        let lora_a = Tensor::from_vec(
-            lora_a_data,
-            Shape::from((config.input_dim, config.rank)),
-            &device,
-        )?;
+        
+        // Phase 3.1: Detect dtype from safetensors and convert accordingly
+        let lora_a = match lora_a_tensor.dtype() {
+            safetensors::Dtype::F16 => {
+                // Load as f16, convert to f32 for computation
+                let lora_a_f16: Vec<f16> = lora_a_bytes
+                    .chunks_exact(2)
+                    .map(|chunk| {
+                        let mut bytes = [0u8; 2];
+                        bytes.copy_from_slice(chunk);
+                        f16::from_bits(u16::from_le_bytes(bytes))
+                    })
+                    .collect();
+                let lora_a_f32: Vec<f32> = lora_a_f16.iter().map(|f| f.to_f32()).collect();
+                
+                // Create tensor in target dtype (f16 if config.use_fp16, else f32)
+                let tensor = Tensor::from_vec(
+                    lora_a_f32,
+                    Shape::from((config.input_dim, config.rank)),
+                    &device,
+                )?;
+                if config.use_fp16 {
+                    tensor.to_dtype(DType::F16)?
+                } else {
+                    tensor
+                }
+            }
+            safetensors::Dtype::F32 => {
+                let lora_a_data: Vec<f32> = lora_a_bytes
+                    .chunks_exact(4)
+                    .map(|chunk| {
+                        let mut bytes = [0u8; 4];
+                        bytes.copy_from_slice(chunk);
+                        f32::from_le_bytes(bytes)
+                    })
+                    .collect();
+                let tensor = Tensor::from_vec(
+                    lora_a_data,
+                    Shape::from((config.input_dim, config.rank)),
+                    &device,
+                )?;
+                if config.use_fp16 {
+                    tensor.to_dtype(DType::F16)?
+                } else {
+                    tensor
+                }
+            }
+            _ => {
+                return Err(anyhow!("Unsupported dtype for lora_a: {:?}", lora_a_tensor.dtype()));
+            }
+        };
 
         // Load lora_b
         let lora_b_tensor = safetensors
             .tensor("lora_b")
             .map_err(|e| anyhow!("Failed to load lora_b tensor: {}", e))?;
         let lora_b_bytes = lora_b_tensor.data();
-        let lora_b_data: Vec<f32> = lora_b_bytes
-            .chunks_exact(4)
-            .map(|chunk| {
-                let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(chunk);
-                f32::from_le_bytes(bytes)
-            })
-            .collect();
+        
+        let lora_b = match lora_b_tensor.dtype() {
+            safetensors::Dtype::F16 => {
+                let lora_b_f16: Vec<f16> = lora_b_bytes
+                    .chunks_exact(2)
+                    .map(|chunk| {
+                        let mut bytes = [0u8; 2];
+                        bytes.copy_from_slice(chunk);
+                        f16::from_bits(u16::from_le_bytes(bytes))
+                    })
+                    .collect();
+                let lora_b_f32: Vec<f32> = lora_b_f16.iter().map(|f| f.to_f32()).collect();
+                
+                let tensor = Tensor::from_vec(
+                    lora_b_f32,
+                    Shape::from((config.rank, config.output_dim)),
+                    &device,
+                )?;
+                if config.use_fp16 {
+                    tensor.to_dtype(DType::F16)?
+                } else {
+                    tensor
+                }
+            }
+            safetensors::Dtype::F32 => {
+                let lora_b_data: Vec<f32> = lora_b_bytes
+                    .chunks_exact(4)
+                    .map(|chunk| {
+                        let mut bytes = [0u8; 4];
+                        bytes.copy_from_slice(chunk);
+                        f32::from_le_bytes(bytes)
+                    })
+                    .collect();
+                let tensor = Tensor::from_vec(
+                    lora_b_data,
+                    Shape::from((config.rank, config.output_dim)),
+                    &device,
+                )?;
+                if config.use_fp16 {
+                    tensor.to_dtype(DType::F16)?
+                } else {
+                    tensor
+                }
+            }
+            _ => {
+                return Err(anyhow!("Unsupported dtype for lora_b: {:?}", lora_b_tensor.dtype()));
+            }
+        };
 
-        let lora_b = Tensor::from_vec(
-            lora_b_data,
-            Shape::from((config.rank, config.output_dim)),
-            &device,
-        )?;
-
-        tracing::info!("Loaded LoRA adapter from: {}", path.display());
+        tracing::info!(
+            "Loaded LoRA adapter from: {} (dtype: {:?})",
+            path.display(),
+            lora_a.dtype()
+        );
 
         Ok(Self {
             config,
@@ -276,7 +408,7 @@ impl LoRAAdapter {
 }
 
 /// LoRA Trainer for integration with pipeline
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LoRATrainer {
     /// The underlying LoRA adapter
     adapter: LoRAAdapter,

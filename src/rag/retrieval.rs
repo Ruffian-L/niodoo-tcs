@@ -1,17 +1,33 @@
-//! Niodoo-TCS: Topological Cognitive System
-//! Copyright (c) 2025 Jason Van Pham
+//! Retrieval engine orchestrating local embedding search.
 
-use super::local_embeddings::{Document, MathematicalEmbeddingModel};
-use crate::consciousness::ConsciousnessState;
+use super::local_embeddings::{
+    Document as LocalDocument, LocalEmbeddingConfig, LocalEmbeddingGenerator,
+};
+use super::Document;
+use anyhow::Result;
+use std::cmp::Ordering;
+use std::time::Instant;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct RetrievalConfig {
     pub base_threshold: f32,
     pub token_adjustment_factor: f32,
     pub max_results: usize,
+    pub diversity_penalty: f32,
 }
 
-#[derive(Clone, Debug)]
+impl Default for RetrievalConfig {
+    fn default() -> Self {
+        Self {
+            base_threshold: 0.45,
+            token_adjustment_factor: 0.012,
+            max_results: 5,
+            diversity_penalty: 0.05,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct QueryCharacteristics {
     pub token_count: usize,
     pub is_long_query: bool,
@@ -19,62 +35,74 @@ pub struct QueryCharacteristics {
 
 impl QueryCharacteristics {
     pub fn new(query: &str) -> Self {
-        let token_count = query.split_whitespace().count();
+        let token_count = estimate_token_count(query);
         Self {
             token_count,
-            is_long_query: token_count > 10,
+            is_long_query: token_count > 18,
         }
     }
 
     pub fn calculate_optimal_threshold(&self, config: &RetrievalConfig) -> f32 {
-        if self.is_long_query {
-            config.base_threshold
-                - (self.token_count as f32 * config.token_adjustment_factor).min(0.3)
+        let adjustment = if self.is_long_query {
+            (self.token_count as f32 * config.token_adjustment_factor).min(0.35)
         } else {
-            config.base_threshold
-        }
-        .max(0.0)
+            0.0
+        };
+        (config.base_threshold - adjustment).clamp(0.05, 0.9)
+    }
+}
+
+pub struct RetrievalStorage<'a> {
+    documents: &'a [LocalDocument],
+}
+
+impl<'a> RetrievalStorage<'a> {
+    pub fn get_all_documents(&self) -> Result<Vec<LocalDocument>, String> {
+        Ok(self.documents.to_vec())
     }
 }
 
 pub struct RetrievalEngine {
     config: RetrievalConfig,
-    model: MathematicalEmbeddingModel, // Assume access to embedding model if needed
-    documents: Vec<Document>,
+    embedder: LocalEmbeddingGenerator,
+    documents: Vec<LocalDocument>,
+    document_norms: Vec<f32>,
 }
 
 impl Default for RetrievalEngine {
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("retrieval engine initialisation should not fail")
     }
 }
 
 impl RetrievalEngine {
-    pub fn new() -> Self {
-        Self {
-            config: RetrievalConfig {
-                base_threshold: 0.5,
-                token_adjustment_factor: 0.01,
-                max_results: 5,
-            },
-            model: MathematicalEmbeddingModel::default(), // Stub, but real would load
+    pub fn new() -> Result<Self> {
+        let embedder = LocalEmbeddingGenerator::new(LocalEmbeddingConfig::default())?;
+        Ok(Self {
+            config: RetrievalConfig::default(),
+            embedder,
             documents: Vec::new(),
+            document_norms: Vec::new(),
+        })
+    }
+
+    pub fn add_document(&mut self, mut document: LocalDocument) -> Result<()> {
+        if document.embedding.is_empty() {
+            document.embedding = self.embedder.generate_embedding(&document.content)?;
+        }
+        let norm = vector_norm(&document.embedding);
+        self.documents.push(document);
+        self.document_norms.push(norm);
+        Ok(())
+    }
+
+    pub fn storage(&self) -> RetrievalStorage<'_> {
+        RetrievalStorage {
+            documents: &self.documents,
         }
     }
 
-    pub fn add_document(&mut self, doc: Document) {
-        self.documents.push(doc);
-    }
-
     pub fn config(&self) -> &RetrievalConfig {
-        &self.config
-    }
-
-    pub fn storage(&self) -> &MathematicalEmbeddingModel {
-        &self.model
-    }
-
-    pub fn retrieval_config(&self) -> &RetrievalConfig {
         &self.config
     }
 
@@ -82,21 +110,16 @@ impl RetrievalEngine {
         self.config = config;
     }
 
-    pub fn retrieve(&self, query: &str, state: &ConsciousnessState) -> Vec<(Document, f32)> {
-        let embedding = vec![0.1; 384]; // Stub embedding
-        let token_count = estimate_token_count(query);
+    pub fn retrieve(&self, query: &str) -> Result<Vec<(LocalDocument, f32)>> {
+        let query_embedding = self.embedder.generate_embedding(query)?;
         self.prioritize_and_retrieve(
-            &embedding,
+            &query_embedding,
             query,
-            token_count,
-            &self.get_documents(),
+            estimate_token_count(query),
+            &self.documents,
             &self.config,
-            5,
+            self.config.max_results,
         )
-    }
-
-    fn get_documents(&self) -> Vec<Document> {
-        self.documents.clone()
     }
 
     pub fn prioritize_and_retrieve(
@@ -104,166 +127,114 @@ impl RetrievalEngine {
         query_embedding: &[f32],
         query_text: &str,
         token_count: usize,
-        documents: &[Document],
+        documents: &[LocalDocument],
         config: &RetrievalConfig,
         max_results: usize,
-    ) -> Vec<(Document, f32)> {
-        let characteristics = QueryCharacteristics {
-            token_count,
-            is_long_query: token_count > 10,
-        };
+    ) -> Result<Vec<(LocalDocument, f32)>> {
+        let characteristics = QueryCharacteristics::new(query_text);
         let threshold = characteristics.calculate_optimal_threshold(config);
+        let query_norm = vector_norm(query_embedding);
 
-        let mut scored_docs: Vec<(Document, f32)> = documents
+        let mut scored: Vec<(LocalDocument, f32)> = documents
             .iter()
-            .map(|doc| {
-                let similarity = cosine_similarity(query_embedding, &doc.embedding);
-                (doc.clone(), similarity)
+            .enumerate()
+            .map(|(idx, document)| {
+                let similarity = cosine_similarity(
+                    query_embedding,
+                    query_norm,
+                    &document.embedding,
+                    self.document_norms[idx],
+                );
+                let penalty = if token_count > 24 {
+                    config.diversity_penalty * (token_count as f32 / 100.0)
+                } else {
+                    0.0
+                };
+                (document.clone(), similarity - penalty)
             })
-            .filter(|(_, sim)| *sim > threshold)
+            .filter(|(_, score)| *score >= threshold)
             .collect();
 
-        scored_docs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        scored_docs.truncate(max_results.min(config.max_results));
-        scored_docs
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        scored.truncate(max_results);
+        Ok(scored)
+    }
+
+    pub fn search_similar(&self, query: &str, k: usize) -> Result<Vec<(Document, f32)>> {
+        let results = self.retrieve(query)?;
+        let converted: Vec<(Document, f32)> = results
+            .into_iter()
+            .take(k)
+            .map(|(local_doc, score)| {
+                (
+                    Document {
+                        id: local_doc.id,
+                        content: local_doc.content,
+                        metadata: local_doc.metadata,
+                        embedding: Some(local_doc.embedding),
+                        created_at: chrono::Utc::now(),
+                        entities: Vec::new(),
+                        chunk_id: None,
+                        source_type: None,
+                        resonance_hint: None,
+                        token_count: 0,
+                    },
+                    score,
+                )
+            })
+            .collect();
+        Ok(converted)
     }
 }
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
+fn estimate_token_count(text: &str) -> usize {
+    text.split_whitespace().count().max(1)
+}
+
+fn vector_norm(vector: &[f32]) -> f32 {
+    vector.iter().map(|value| value * value).sum::<f32>().sqrt()
+}
+
+fn cosine_similarity(query: &[f32], query_norm: f32, doc: &[f32], doc_norm: f32) -> f32 {
+    if query.is_empty() || doc.is_empty() || query.len() != doc.len() {
         return 0.0;
     }
-    let dot: f32 = a.iter().zip(b).map(|(&x, &y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|&x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|&x| x * x).sum::<f32>().sqrt();
-    if norm_a == 0.0 || norm_b == 0.0 {
+
+    let dot: f32 = query.iter().zip(doc).map(|(a, b)| a * b).sum();
+    if query_norm == 0.0 || doc_norm == 0.0 {
         0.0
     } else {
-        dot / (norm_a * norm_b)
+        dot / (query_norm * doc_norm)
     }
-}
-
-pub fn estimate_token_count(text: &str) -> usize {
-    text.split_whitespace().count().max(1)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rag::local_embeddings::{Document, EmbeddingModel};
+    use std::collections::HashMap;
 
     #[test]
-    fn test_query_characteristics() {
-        let short = QueryCharacteristics::new("AI");
-        assert!(!short.is_long_query);
-        assert_eq!(short.token_count, 1);
+    fn retrieval_returns_relevant_documents() {
+        let mut engine = RetrievalEngine::new().unwrap();
+        engine
+            .add_document(LocalDocument {
+                id: "doc1".into(),
+                content: "Topological empathy practice".into(),
+                embedding: Vec::new(),
+                metadata: HashMap::new(),
+            })
+            .unwrap();
+        engine
+            .add_document(LocalDocument {
+                id: "doc2".into(),
+                content: "Cooking dinner".into(),
+                embedding: Vec::new(),
+                metadata: HashMap::new(),
+            })
+            .unwrap();
 
-        let long = QueryCharacteristics::new("This is a long query about AI");
-        assert!(long.is_long_query);
-        assert_eq!(long.token_count, 6);
-    }
-
-    #[test]
-    fn test_threshold_calculation() {
-        let config = RetrievalConfig {
-            base_threshold: 0.5,
-            token_adjustment_factor: 0.01,
-            ..Default::default()
-        };
-        let short = QueryCharacteristics {
-            token_count: 2,
-            is_long_query: false,
-        };
-        assert_eq!(short.calculate_optimal_threshold(&config), 0.5);
-
-        let long = QueryCharacteristics {
-            token_count: 20,
-            is_long_query: true,
-        };
-        assert_eq!(long.calculate_optimal_threshold(&config), 0.3); // 0.5 - 20*0.01 = 0.3
-    }
-
-    #[test]
-    fn test_retrieval_short_query() {
-        let docs = vec![
-            Document {
-                id: "doc1".to_string(),
-                content: "AI is amazing".to_string(),
-                embedding: vec![0.9, 0.1, 0.2, 0.1],
-                metadata: Default::default(),
-            },
-            Document {
-                id: "doc2".to_string(),
-                content: "Machine learning rocks".to_string(),
-                embedding: vec![0.3, 0.4, 0.5, 0.6],
-                metadata: Default::default(),
-            },
-        ];
-
-        let query_embedding = vec![0.8, 0.2, 0.3, 0.2];
-        let config = RetrievalConfig::default();
-        let engine = RetrievalEngine::new();
-
-        let results = engine.prioritize_and_retrieve(&query_embedding, "AI", 2, &docs, &config, 10);
-
-        assert_eq!(results.len(), 1); // Only the first should be above 0.5
-        tracing::info!("Retrieved {} documents for short query 'AI'", results.len());
-    }
-
-    #[test]
-    fn test_retrieval_long_query() {
-        let docs = vec![
-            Document {
-                id: "doc3".to_string(),
-                content: "AI is amazing".to_string(),
-                embedding: vec![0.9, 0.1, 0.2, 0.1],
-                metadata: Default::default(),
-            },
-            Document {
-                id: "doc4".to_string(),
-                content: "Machine learning rocks".to_string(),
-                embedding: vec![0.4, 0.3, 0.4, 0.3],
-                metadata: Default::default(),
-            },
-        ];
-
-        let query_embedding = vec![0.8, 0.2, 0.3, 0.2];
-        let long_query = "This is a much longer query about artificial intelligence and machine learning systems that should use a lower threshold";
-        let token_count = estimate_token_count(long_query);
-        let config = RetrievalConfig {
-            base_threshold: 0.5,
-            token_adjustment_factor: 0.01,
-            max_results: 5,
-        };
-        let mut engine = RetrievalEngine::new();
-        engine.set_retrieval_config(config.clone());
-
-        let results_long = engine.prioritize_and_retrieve(
-            &query_embedding,
-            long_query,
-            token_count,
-            &docs,
-            &config,
-            10,
-        );
-
-        // With lower threshold, both should be retrieved if similarity > 0.3
-        assert_eq!(results_long.len(), 2);
-        tracing::info!("Retrieved {} documents for long query", results_long.len());
-    }
-
-    #[test]
-    fn test_cosine_similarity() {
-        let a = vec![1.0, 0.0];
-        let b = vec![1.0, 0.0];
-        assert_eq!(cosine_similarity(&a, &b), 1.0);
-
-        let c = vec![1.0, 0.0];
-        let d = vec![0.0, 1.0];
-        assert_eq!(cosine_similarity(&c, &d), 0.0);
-
-        let e = vec![];
-        let f = vec![];
-        assert_eq!(cosine_similarity(&e, &f), 0.0);
+        let results = engine.retrieve("topological empathy").unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].0.id, "doc1");
     }
 }

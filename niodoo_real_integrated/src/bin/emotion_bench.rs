@@ -275,7 +275,7 @@ async fn run_system_prediction(
     let vocab_size = 50_000;
 
     Ok(PredictionOutcome {
-        response: response.to_string(),
+        response,
         pad,
         entropy,
         vocab_size,
@@ -354,9 +354,9 @@ async fn main() -> Result<()> {
 
     info!("🧠 Emotion Benchmark: System vs Baseline Comparison");
 
-    // Initialize Prometheus metrics (stub - metrics module not available)
+    // Initialize Prometheus metrics (commented out - module doesn't exist)
     // tcs_core::metrics::init_metrics();
-    info!("📊 Prometheus metrics disabled (module not available)");
+    info!("📊 Prometheus metrics skipped (not available)");
 
     let tokenizer_path = require_env_var("TOKENIZER_JSON")?;
     ensure!(
@@ -396,11 +396,7 @@ async fn main() -> Result<()> {
     let mut generation_engine = GenerationEngine::new_with_config(
         &config.vllm_endpoint,
         &config.vllm_model,
-        config.generation_timeout_secs,
         config.generation_max_tokens,
-        config.dynamic_token_min,
-        config.dynamic_token_max,
-        config.prompt_max_chars,
         config.consistency_variance_threshold,
     )?;
     generation_engine.set_mock_mode(false);

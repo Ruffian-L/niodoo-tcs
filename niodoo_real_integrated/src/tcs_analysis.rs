@@ -18,6 +18,11 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::{PyDict, PyList, PyTuple};
+
 use crate::torus::PadGhostState;
 use tcs_core::PersistentFeature;
 
@@ -197,7 +202,11 @@ pub fn baseline_topological_signature(
         .iter()
         .map(|value| {
             let p = value.abs() / pad_energy;
-            if p > 0.0 { -p * p.log2() } else { 0.0 }
+            if p > 0.0 {
+                -p * p.log2()
+            } else {
+                0.0
+            }
         })
         .sum::<f64>();
 
@@ -289,7 +298,10 @@ impl TopologyCache {
     fn new(ttl: Duration, max_entries: usize, path: PathBuf) -> Result<Self> {
         if !path.exists() {
             fs::create_dir_all(&path).with_context(|| {
-                format!("failed to create topology cache directory at {}", path.display())
+                format!(
+                    "failed to create topology cache directory at {}",
+                    path.display()
+                )
             })?;
         }
         Ok(Self {
@@ -335,8 +347,10 @@ impl TopologyCache {
 
         match File::open(&path)
             .with_context(|| format!("failed to open cached topology at {}", path.display()))
-            .and_then(|file| serde_json::from_reader::<_, TopologicalSignature>(file).with_context(|| "failed to deserialize cached topological signature"))
-        {
+            .and_then(|file| {
+                serde_json::from_reader::<_, TopologicalSignature>(file)
+                    .with_context(|| "failed to deserialize cached topological signature")
+            }) {
             Ok(signature) => {
                 let _ = self.insert(key, &signature);
                 Some(signature)
@@ -356,17 +370,20 @@ impl TopologyCache {
             Instant::now()
         };
 
-        self.entries
-            .insert(key.to_string(), CachedSignature {
+        self.entries.insert(
+            key.to_string(),
+            CachedSignature {
                 signature: signature.clone(),
                 expires_at,
-            });
+            },
+        );
 
         self.evict_if_needed();
 
         let path = self.cache_path(key);
-        let mut file = File::create(&path)
-            .with_context(|| format!("failed to create topology cache file at {}", path.display()))?;
+        let mut file = File::create(&path).with_context(|| {
+            format!("failed to create topology cache file at {}", path.display())
+        })?;
         serde_json::to_writer_pretty(&mut file, signature)
             .context("failed to write topology cache entry")?;
         file.flush().ok();
@@ -426,6 +443,11 @@ pub struct TCSAnalyzer {
     cache: Arc<TopologyCache>,
     device: Device,
     enable_gpu: bool,
+    use_approximate_tda: bool, // Phase 2.1: Enable giotto-tda approximate computation
+    // Phase 2.2: Adaptive fallback tracking
+    giotto_failure_count: Arc<Mutex<usize>>, // Track consecutive failures
+    giotto_success_count: Arc<Mutex<usize>>, // Track consecutive successes
+    last_rust_result: Arc<Mutex<Option<PersistenceResult>>>, // Cache last Rust result for comparison
 }
 
 impl TCSAnalyzer {
@@ -437,7 +459,8 @@ impl TCSAnalyzer {
         let tqft_engine = TQFTEngine::new(2)
             .map_err(|e| anyhow::anyhow!("Failed to initialize TQFT engine: {}", e))?;
 
-        let cache_dir = env::var("TOPOLOGY_CACHE_DIR").unwrap_or_else(|_| "storage/topology_cache".to_string());
+        let cache_dir =
+            env::var("TOPOLOGY_CACHE_DIR").unwrap_or_else(|_| "storage/topology_cache".to_string());
         let cache_ttl = env::var("TOPOLOGY_CACHE_TTL_SECS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
@@ -477,7 +500,23 @@ impl TCSAnalyzer {
             cache,
             device,
             enable_gpu,
+            use_approximate_tda: env::var("USE_APPROXIMATE_TDA")
+                .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
+                .unwrap_or(false),
+            giotto_failure_count: Arc::new(Mutex::new(0)),
+            giotto_success_count: Arc::new(Mutex::new(0)),
+            last_rust_result: Arc::new(Mutex::new(None)),
         })
+    }
+
+    /// Initialize TCS analyzer with configuration (Phase 2.1)
+    pub fn new_with_config(use_approximate_tda: bool) -> Result<Self> {
+        let mut analyzer = Self::new()?;
+        analyzer.use_approximate_tda = use_approximate_tda;
+        if use_approximate_tda {
+            info!("TCSAnalyzer initialized with approximate TDA (giotto-tda) enabled");
+        }
+        Ok(analyzer)
     }
 
     /// Apply TQFT reasoning to evolve a state through cobordism transitions
@@ -518,8 +557,15 @@ impl TCSAnalyzer {
 
         if let Some(signature) = self.cache.get(&cache_key) {
             debug!(cache_hit = true, "Topology cache hit");
+            // Phase 2.3: Record cache hit metric
+            crate::metrics::tcs_analyzer_metrics().record_cache_hit();
+            let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+            crate::metrics::tcs_analyzer_metrics().record_computation_latency(latency_ms);
             return Ok(signature);
         }
+
+        // Phase 2.3: Record cache miss
+        crate::metrics::tcs_analyzer_metrics().record_cache_miss();
 
         let tcs_state = Arc::new(Mutex::new(TCSState::default()));
         let mut guard = tcs_state
@@ -543,6 +589,9 @@ impl TCSAnalyzer {
         let persistence = self.compute_persistence(&points, max_filtration)?;
 
         let mut betti = self.compute_betti_numbers(&persistence);
+
+        // Phase 2.3: Record Betti number distribution
+        crate::metrics::tcs_analyzer_metrics().record_betti_numbers(&betti);
 
         let num_points = points.len();
         let theoretical_max = num_points.saturating_sub(1);
@@ -659,6 +708,9 @@ impl TCSAnalyzer {
             mean_persistence,
             laplacian_spectral_radius,
         );
+
+        // Phase 2.3: Record computation latency
+        crate::metrics::tcs_analyzer_metrics().record_computation_latency(computation_time_ms);
 
         if let Err(error) = self.cache.insert(&cache_key, &signature) {
             warn!(?error, "failed to persist topology signature to cache");
@@ -814,7 +866,10 @@ impl TCSAnalyzer {
         if self.enable_gpu {
             match Self::pairwise_gpu(points, &self.device) {
                 Ok(distances) => return Ok(distances),
-                Err(error) => warn!(?error, "GPU distance computation failed; falling back to CPU"),
+                Err(error) => warn!(
+                    ?error,
+                    "GPU distance computation failed; falling back to CPU"
+                ),
             }
         }
         Ok(Self::pairwise_cpu(points))
@@ -825,7 +880,10 @@ impl TCSAnalyzer {
             return Ok(Vec::new());
         }
         let dims = points[0].len();
-        let flat: Vec<f32> = points.iter().flat_map(|point| point.iter().copied()).collect();
+        let flat: Vec<f32> = points
+            .iter()
+            .flat_map(|point| point.iter().copied())
+            .collect();
         let tensor = Tensor::from_vec(flat, (points.len(), dims), device)?;
         let norms = tensor.sqr()?.sum_keepdim(1)?;
         let norms_t = norms.transpose(0, 1)?;
@@ -868,6 +926,360 @@ impl TCSAnalyzer {
         points: &[Point],
         max_filtration: f32,
     ) -> Result<PersistenceResult> {
+        // Phase 2.1: Use giotto-tda approximate computation if enabled
+        if self.use_approximate_tda {
+            // Phase 2.2: Check if we should skip giotto due to recent failures
+            let should_skip_giotto = {
+                let failures = self.giotto_failure_count.lock().unwrap();
+                *failures >= 5 // Skip if 5+ consecutive failures
+            };
+
+            if !should_skip_giotto {
+                // Phase 2.2: Try giotto with adaptive fallback
+                let giotto_start = Instant::now();
+                match self.compute_persistence_giotto(points, max_filtration) {
+                    Ok(result) => {
+                        let giotto_latency_ms = giotto_start.elapsed().as_secs_f64() * 1000.0;
+                        // Phase 2.2: Validate quality and fallback if needed
+                        if self.validate_giotto_result(&result, points.len()) {
+                            // Success: reset failure count, increment success count
+                            let (failures, successes) = {
+                                let mut failures = self.giotto_failure_count.lock().unwrap();
+                                *failures = 0;
+                                let mut successes = self.giotto_success_count.lock().unwrap();
+                                *successes += 1;
+                                let success_count = *successes;
+                                
+                                // Phase 2.3: Record metrics
+                                crate::metrics::tcs_analyzer_metrics().record_giotto_success();
+                                crate::metrics::tcs_analyzer_metrics().record_giotto_latency(giotto_latency_ms);
+                                crate::metrics::tcs_analyzer_metrics().record_giotto_stats(0, success_count);
+                                
+                                (*failures, success_count)
+                            };
+                            
+                            // Phase 2.2: If we've had 10+ consecutive successes, we're stable
+                            if successes >= 10 {
+                                debug!("giotto-tda stable: {} consecutive successes", successes);
+                            }
+                            
+                            debug!(
+                                "Giotto-tda computation succeeded: latency={:.2}ms, β₀={}, β₁={}, β₂={}, features={}",
+                                giotto_latency_ms, result.betti[0], result.betti[1], result.betti[2], result.features.len()
+                            );
+                            return Ok(result);
+                        } else {
+                            // Quality check failed: fallback to Rust
+                            warn!("giotto-tda result failed quality validation; falling back to Rust implementation");
+                            let (failures, successes) = {
+                                let mut failures = self.giotto_failure_count.lock().unwrap();
+                                *failures += 1;
+                                let failure_count = *failures;
+                                let mut successes = self.giotto_success_count.lock().unwrap();
+                                *successes = 0;
+                                
+                                // Phase 2.3: Record metrics
+                                crate::metrics::tcs_analyzer_metrics().record_giotto_failure();
+                                crate::metrics::tcs_analyzer_metrics().record_giotto_fallback();
+                                crate::metrics::tcs_analyzer_metrics().record_giotto_stats(failure_count, 0);
+                                
+                                (failure_count, 0)
+                            };
+                            // Continue to Rust implementation below
+                        }
+                    }
+                    Err(e) => {
+                        // Phase 2.2: Python error - fallback to Rust
+                        warn!(%e, "giotto-tda computation failed; falling back to Rust implementation");
+                        let (failures, successes) = {
+                            let mut failures = self.giotto_failure_count.lock().unwrap();
+                            *failures += 1;
+                            let failure_count = *failures;
+
+                            // If too many failures, disable approximate TDA temporarily
+                            if failure_count >= 5 {
+                                warn!("Too many giotto-tda failures ({}); temporarily skipping giotto calls", failure_count);
+                            }
+                            
+                            let mut successes = self.giotto_success_count.lock().unwrap();
+                            *successes = 0;
+                            
+                            // Phase 2.3: Record metrics
+                            crate::metrics::tcs_analyzer_metrics().record_giotto_failure();
+                            crate::metrics::tcs_analyzer_metrics().record_giotto_fallback();
+                            crate::metrics::tcs_analyzer_metrics().record_giotto_stats(failure_count, 0);
+                            
+                            (failure_count, 0)
+                        };
+                        // Continue to Rust implementation below
+                    }
+                }
+            } else {
+                // Phase 2.2: Too many failures - skip giotto and use Rust directly
+                debug!("Skipping giotto-tda due to recent failures; using Rust implementation");
+                // Phase 2.3: Record skip metric
+                let (failures, successes) = {
+                    let failures = self.giotto_failure_count.lock().unwrap();
+                    let successes = self.giotto_success_count.lock().unwrap();
+                    (*failures, *successes)
+                };
+                crate::metrics::tcs_analyzer_metrics().record_giotto_stats(failures, successes);
+            }
+        }
+
+        // Original Rust implementation (or fallback)
+        let rust_start = Instant::now();
+        let vectors: Vec<DVector<f32>> = points
+            .iter()
+            .map(|point| DVector::from_vec(point.clone()))
+            .collect();
+
+        let homology = PersistentHomology::new(2, max_filtration);
+        let raw_features = homology.compute(&vectors);
+
+        let mut features = Vec::with_capacity(raw_features.len());
+        let mut entropy_weights = Vec::new();
+        let mut betti = [0usize; 3];
+        let mut total_weight = 0.0f64;
+
+        for feature in raw_features {
+            let persistence = feature.persistence();
+            if persistence.is_finite() && persistence > 0.0 {
+                entropy_weights.push((feature.dimension, persistence));
+                total_weight += persistence as f64;
+            }
+
+            if feature.dimension < 3 && feature.death.is_infinite() {
+                betti[feature.dimension] += 1;
+            }
+
+            features.push(PersistentFeature {
+                birth: feature.birth,
+                death: feature.death,
+                dimension: feature.dimension,
+            });
+        }
+
+        if total_weight > 0.0 {
+            for (_, weight) in entropy_weights.iter_mut() {
+                *weight = (*weight as f64 / total_weight) as f32;
+            }
+        }
+
+        let result = PersistenceResult {
+            features,
+            entropy: entropy_weights,
+            betti,
+        };
+
+        // Phase 2.2: Cache Rust result for comparison
+        {
+            let mut last_result = self.last_rust_result.lock().unwrap();
+            *last_result = Some(result.clone());
+        }
+
+        // Phase 2.3: Record Rust computation latency
+        let rust_latency_ms = rust_start.elapsed().as_secs_f64() * 1000.0;
+        crate::metrics::tcs_analyzer_metrics().record_rust_latency(rust_latency_ms);
+        
+        debug!(
+            "Rust persistent homology computation completed: latency={:.2}ms, β₀={}, β₁={}, β₂={}, features={}",
+            rust_latency_ms, result.betti[0], result.betti[1], result.betti[2], result.features.len()
+        );
+
+        Ok(result)
+    }
+
+    /// Phase 2.2: Validate giotto-tda result quality
+    /// Uses differential metrics: β₁ count sanity checks, feature count validation
+    fn validate_giotto_result(&self, result: &PersistenceResult, num_points: usize) -> bool {
+        // Check 1: Betti numbers sanity
+        // β₀ should be at least 1 (one connected component)
+        if result.betti[0] == 0 {
+            warn!("giotto-tda validation failed: β₀ = 0 (should be ≥1)");
+            return false;
+        }
+
+        // β₁ should not exceed theoretical maximum
+        let theoretical_max_betti1 = num_points.saturating_sub(1);
+        if result.betti[1] > theoretical_max_betti1 {
+            warn!(
+                "giotto-tda validation failed: β₁ = {} exceeds theoretical max {}",
+                result.betti[1], theoretical_max_betti1
+            );
+            return false;
+        }
+
+        // Check 2: Feature count sanity
+        // Should have reasonable number of features
+        if result.features.is_empty() && num_points > 1 {
+            warn!(
+                "giotto-tda validation failed: no features but {} points",
+                num_points
+            );
+            return false;
+        }
+
+        // Check 3: Entropy weights consistency
+        // Should have reasonable entropy distribution
+        let total_entropy_weight: f32 = result.entropy.iter().map(|(_, w)| *w).sum();
+        if total_entropy_weight < 0.01 && !result.entropy.is_empty() {
+            warn!(
+                "giotto-tda validation failed: suspiciously low entropy weight sum: {}",
+                total_entropy_weight
+            );
+            return false;
+        }
+
+        // Check 4: Compare with last Rust result if available (differential metric)
+        if let Ok(last_result) = self.last_rust_result.lock() {
+            if let Some(ref rust_result) = *last_result {
+                // Calculate Δβ₁ (change in β₁)
+                let delta_betti1 = rust_result.betti[1].abs_diff(result.betti[1]);
+
+                // If β₁ differs significantly (>3), suspect quality issue
+                if delta_betti1 > 3 {
+                    warn!(
+                        "giotto-tda validation warning: Δβ₁ = {} (Rust: {}, Giotto: {})",
+                        delta_betti1, rust_result.betti[1], result.betti[1]
+                    );
+                    // Don't fail on this, but log for monitoring
+                }
+            }
+        }
+
+        debug!(
+            "giotto-tda result passed validation: β₀={}, β₁={}, β₂={}, features={}",
+            result.betti[0],
+            result.betti[1],
+            result.betti[2],
+            result.features.len()
+        );
+        true
+    }
+
+    /// Compute persistence using giotto-tda Python library (Phase 2.1)
+    #[cfg(feature = "pyo3")]
+    fn compute_persistence_giotto(
+        &self,
+        points: &[Point],
+        max_filtration: f32,
+    ) -> Result<PersistenceResult> {
+        use pyo3::prelude::*;
+        use pyo3::types::{PyDict, PyList, PyTuple};
+
+        Python::with_gil(|py| {
+            // Import the wrapper module
+            let sys = py.import("sys")?;
+            let path: &PyList = sys.getattr("path")?.downcast()?;
+
+            // Add python directory to path
+            let python_dir = env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("python");
+            path.insert(0, python_dir.to_str().unwrap_or("python"))?;
+
+            // Import our wrapper module
+            let giotto_module = py.import("giotto_tda_wrapper")?;
+            let compute_func = giotto_module.getattr("compute_approximate_persistence")?;
+
+            // Convert points to Python list
+            let py_points = PyList::empty(py);
+            for point in points {
+                let py_point = PyList::empty(py);
+                for coord in point {
+                    py_point.append(*coord)?;
+                }
+                py_points.append(py_point)?;
+            }
+
+            // Call the function
+            let result = compute_func.call1((py_points, max_filtration))?;
+            let result_dict = result.downcast::<PyDict>()?;
+
+            // Extract features
+            let features_py = result_dict
+                .get_item("features")?
+                .ok_or_else(|| anyhow!("Missing 'features' key in result"))?;
+            let features_list = features_py.downcast::<PyList>()?;
+
+            let mut features = Vec::new();
+            let mut entropy_weights = Vec::new();
+            let mut betti = [0usize; 3];
+
+            // Parse features
+            for item in features_list.iter() {
+                let feature_tuple = item.downcast::<PyTuple>()?;
+                let birth: f32 = feature_tuple.get_item(0)?.extract()?;
+                let death: f64 = feature_tuple.get_item(1)?.extract()?;
+                let dimension: usize = feature_tuple.get_item(2)?.extract()?;
+
+                let death_f32 = if death.is_infinite() {
+                    f32::INFINITY
+                } else {
+                    death as f32
+                };
+
+                let persistence = if death_f32.is_infinite() {
+                    if dimension < 3 {
+                        betti[dimension] += 1;
+                    }
+                    f32::INFINITY
+                } else {
+                    death_f32 - birth
+                };
+
+                features.push(PersistentFeature {
+                    birth,
+                    death: death_f32,
+                    dimension,
+                });
+
+                if persistence.is_finite() && persistence > 0.0 {
+                    entropy_weights.push((dimension, persistence));
+                }
+            }
+
+            // Extract betti numbers (may be overridden by features processing)
+            if let Ok(Some(betti_py)) = result_dict.get_item("betti") {
+                if let Ok(betti_list) = betti_py.downcast::<PyList>() {
+                    for (i, betti_val) in betti_list.iter().enumerate().take(3) {
+                        if let Ok(val) = betti_val.extract::<usize>() {
+                            betti[i] = val;
+                        }
+                    }
+                }
+            }
+
+            // Extract and normalize entropy weights
+            let mut total_weight = 0.0f64;
+            for (_, weight) in &entropy_weights {
+                total_weight += *weight as f64;
+            }
+
+            if total_weight > 0.0 {
+                for (_, weight) in entropy_weights.iter_mut() {
+                    *weight = (*weight as f64 / total_weight) as f32;
+                }
+            }
+
+            Ok(PersistenceResult {
+                features,
+                entropy: entropy_weights,
+                betti,
+            })
+        })
+    }
+
+    /// Fallback for when pyo3 is not available
+    #[cfg(not(feature = "pyo3"))]
+    fn compute_persistence_giotto(
+        &self,
+        points: &[Point],
+        max_filtration: f32,
+    ) -> Result<PersistenceResult> {
+        warn!("giotto-tda requested but pyo3 feature not enabled; falling back to Rust implementation");
+        // Fall back to original Rust implementation
         let vectors: Vec<DVector<f32>> = points
             .iter()
             .map(|point| DVector::from_vec(point.clone()))

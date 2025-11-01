@@ -51,12 +51,12 @@ use crate::personal_memory::{PersonalConsciousnessStats, PersonalInsight, Person
 use crate::personality::{PersonalityManager, PersonalityType};
 use crate::qt_mock::QtEmotionBridge;
 use crate::soul_resonance::SoulResonanceEngine;
-use crate::token_promotion::dynamic_tokenizer::Tokenizer;
 use crate::token_promotion::{
     ConsensusEngine, DynamicTokenizer, PatternDiscoveryEngine, PromotionConfig,
     TokenPromotionEngine,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
+use tokenizers::Tokenizer;
 
 // Import from submodules
 use self::brain_coordination::BrainCoordinator;
@@ -1617,7 +1617,11 @@ impl PersonalNiodooConsciousness {
 
         // Use emotional_weight to determine emotion type
         let avg_weight =
-            memories.iter().map(|m| m.emotional_weight).sum::<f64>() / memories.len() as f64;
+            memories
+                .iter()
+                .map(|m| m.emotional_weight as f64)
+                .sum::<f64>()
+                / memories.len() as f64;
 
         // Map weight to emotion type
         if avg_weight > 0.7 {

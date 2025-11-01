@@ -7,9 +7,9 @@
 //! - Consonance calculation (graph-theoretic coherence)
 
 use crate::erag::EragMemory;
-use petgraph::{Graph, Undirected};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Dfs;
+use petgraph::{Graph, Undirected};
 use std::collections::{HashMap, HashSet};
 use tracing::info;
 
@@ -92,7 +92,7 @@ impl TopologyMemoryAnalyzer {
             };
             let node_idx = graph.add_node(node);
             node_indices.insert(memory_id, node_idx);
-            
+
             // Update node index in the node data
             graph[node_idx].node_index = node_idx;
         }
@@ -104,10 +104,9 @@ impl TopologyMemoryAnalyzer {
                 if edge_weight >= self.similarity_threshold {
                     let source_id = format!("mem_{}", i);
                     let target_id = format!("mem_{}", j);
-                    if let (Some(&source_idx), Some(&target_idx)) = (
-                        node_indices.get(&source_id),
-                        node_indices.get(&target_id),
-                    ) {
+                    if let (Some(&source_idx), Some(&target_idx)) =
+                        (node_indices.get(&source_id), node_indices.get(&target_id))
+                    {
                         graph.add_edge(
                             source_idx,
                             target_idx,
@@ -262,7 +261,7 @@ impl TopologyMemoryAnalyzer {
         // Find connected components using DFS
         let mut visited = HashSet::new();
         let mut component_nodes: Vec<Vec<NodeIndex>> = Vec::new();
-        
+
         for node_idx in graph.node_indices() {
             if !visited.contains(&node_idx) {
                 // New component found
@@ -277,7 +276,7 @@ impl TopologyMemoryAnalyzer {
                 component_nodes.push(component);
             }
         }
-        
+
         // Assign community IDs to nodes
         for (component_idx, component) in component_nodes.iter().enumerate() {
             for &node_idx in component {
@@ -323,10 +322,9 @@ impl TopologyMemoryAnalyzer {
             let source_id = graph[source].id.clone();
             let target_id = graph[target].id.clone();
 
-            if let (Some(&comm_source), Some(&comm_target)) = (
-                communities.get(&source_id),
-                communities.get(&target_id),
-            ) {
+            if let (Some(&comm_source), Some(&comm_target)) =
+                (communities.get(&source_id), communities.get(&target_id))
+            {
                 if comm_source == comm_target {
                     let k_i = degrees.get(&source).copied().unwrap_or(0) as f32;
                     let k_j = degrees.get(&target).copied().unwrap_or(0) as f32;
@@ -446,10 +444,7 @@ impl TopologyMemoryAnalyzer {
     }
 
     /// Perform complete topological analysis (convenience wrapper)
-    pub fn analyze_topology(
-        &self,
-        memories: &[EragMemory],
-    ) -> TopologyAnalysis {
+    pub fn analyze_topology(&self, memories: &[EragMemory]) -> TopologyAnalysis {
         let (analysis, _beta_1_scores) = self.analyze_topology_with_beta1(memories);
         analysis
     }
@@ -465,7 +460,7 @@ impl TopologyMemoryAnalyzer {
             if let Some(ref mut metadata) = memory.weighted_metadata {
                 // Use index-based memory ID
                 let memory_id = format!("mem_{}", idx);
-                
+
                 // Update beta_1 connectivity from scores
                 if let Some(&beta_1) = beta_1_scores.get(&memory_id) {
                     metadata.beta_1_connectivity = beta_1;
@@ -494,8 +489,8 @@ impl Default for TopologyMemoryAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::erag::{EragMemory, EmotionalVector};
     use crate::compass::CascadeStage;
+    use crate::erag::{EmotionalVector, EragMemory};
 
     fn create_test_memory(id: usize, timestamp: &str) -> EragMemory {
         EragMemory {
@@ -535,4 +530,3 @@ mod tests {
         assert!(!communities.is_empty());
     }
 }
-

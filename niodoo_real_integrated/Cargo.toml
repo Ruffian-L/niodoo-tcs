@@ -16,9 +16,12 @@ beelink = []
 gauntlet = []
 examples = []
 embedded-qdrant = []
+pyo3 = ["dep:pyo3"]
 otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
 svc = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tonic"]
 edge = []
+gpu = []
+pipeline-v2 = []
 
 [dependencies]
 anyhow = "1"
@@ -49,6 +52,8 @@ once_cell = { workspace = true }
 futures = { workspace = true }
 uuid = { workspace = true }
 plotters = "0.3"
+ratatui = "0.27"
+crossterm = "0.28"
 
 qdrant-client = { version = "1.15", features = [] }
 urlencoding = "2.1"
@@ -70,6 +75,8 @@ petgraph = { workspace = true }
 ahash = "0.8"
 bytemuck = { version = "1.14", default-features = false }
 lz4_flex = { version = "0.11", features = ["std"] }
+pyo3 = { version = "0.22", features = ["auto-initialize"], optional = true }
+half = "2.4"
 
 # Optional dependencies for features
 opentelemetry = { version = "0.24", optional = true, features = ["trace"] }
@@ -85,10 +92,16 @@ serde_json = "1.0"
 reqwest = { workspace = true }
 tokio = { workspace = true }
 criterion = "0.5"
+tempfile = "3.10"
 
 [[bench]]
 name = "niodoo_real_bench"
 harness = false
+
+# Temporarily disabled problematic binaries
+# [[bin]]
+# name = "soak_prompts_v2"
+# path = "src/bin/soak_prompts_v2.rs"
 
 [[bin]]
 name = "niodoo_real_integrated"

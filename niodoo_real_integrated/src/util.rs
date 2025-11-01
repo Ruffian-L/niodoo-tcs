@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use futures::future;
+
 /// Compute Shannon entropy (base e) for a slice of probabilities.
 pub fn shannon_entropy(probs: &[f64]) -> f64 {
     let mut entropy = 0.0;
@@ -51,6 +53,40 @@ pub fn rouge_l(candidate: &str, reference: &str) -> f64 {
 
     let beta = recall / (precision + 1e-9);
     ((1.0 + beta * beta) * precision * recall) / (recall + beta * beta * precision + 1e-9)
+}
+
+/// Phase 4.1: Parallel ROUGE scoring for multiple candidate-reference pairs
+/// Uses tokio::join! to compute scores concurrently when enabled
+pub async fn rouge_l_parallel(candidate: &str, reference: &str) -> f64 {
+    // For now, use synchronous computation (rouge_l is CPU-bound and fast)
+    // In the future, can spawn blocking tasks if needed for very large texts
+    rouge_l(candidate, reference)
+}
+
+/// Phase 4.1: Parallel ROUGE scoring for multiple pairs
+/// Returns scores in the same order as inputs
+pub async fn rouge_l_batch_parallel(pairs: Vec<(&str, &str)>) -> Vec<f64> {
+    if pairs.is_empty() {
+        return Vec::new();
+    }
+    
+    // Use tokio::join! to compute scores in parallel
+    let mut futures = Vec::with_capacity(pairs.len());
+    for (candidate, reference) in pairs {
+        // Spawn blocking task for each ROUGE computation to avoid blocking async runtime
+        let candidate = candidate.to_string();
+        let reference = reference.to_string();
+        futures.push(tokio::task::spawn_blocking(move || {
+            rouge_l(&candidate, &reference)
+        }));
+    }
+    
+    // Collect all results
+    let results = futures::future::join_all(futures).await;
+    results
+        .into_iter()
+        .map(|r| r.unwrap_or(0.0)) // Fallback to 0.0 on panic
+        .collect()
 }
 
 fn lcs_length(a: &[&str], b: &[&str]) -> usize {

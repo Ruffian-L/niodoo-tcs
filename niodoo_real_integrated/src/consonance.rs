@@ -15,19 +15,19 @@ use crate::torus::PadGhostState;
 /// Represents how aligned multiple signals are - high consonance = "this is right"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsonanceMetrics {
-    pub score: f64,              // 0.0 (dissonant) → 1.0 (consonant)
-    pub sources: Vec<ConsonanceSource>,  // Which signals contributed
-    pub confidence: f64,          // How certain we are (0.0-1.0)
-    pub dissonance_score: f64,    // Explicit dissonance (0.0-1.0, inverse of score)
+    pub score: f64,                     // 0.0 (dissonant) → 1.0 (consonant)
+    pub sources: Vec<ConsonanceSource>, // Which signals contributed
+    pub confidence: f64,                // How certain we are (0.0-1.0)
+    pub dissonance_score: f64,          // Explicit dissonance (0.0-1.0, inverse of score)
 }
 
 /// Individual signal sources contributing to consonance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConsonanceSource {
-    EmotionalCoherence(f64),      // PAD stability
-    TopologicalConsistency(f64),  // Knot complexity alignment
-    ERAGRelevance(f64),           // Memory retrieval similarity
-    CompassTransition(f64),       // Smooth state transitions
+    EmotionalCoherence(f64),     // PAD stability
+    TopologicalConsistency(f64), // Knot complexity alignment
+    ERAGRelevance(f64),          // Memory retrieval similarity
+    CompassTransition(f64),      // Smooth state transitions
     CuratorQuality(f64),         // Quality score from curator
 }
 
@@ -73,7 +73,9 @@ pub fn compute_consonance(
     // 2. Topological Consistency: Knot complexity alignment
     // Stable knot complexity = consonance, spikes = dissonance
     let topological_consistency = compute_topological_consistency(topology, pad_state);
-    sources.push(ConsonanceSource::TopologicalConsistency(topological_consistency));
+    sources.push(ConsonanceSource::TopologicalConsistency(
+        topological_consistency,
+    ));
 
     // 3. ERAG Relevance: Memory retrieval quality
     // High similarity scores = relevant memories = consonance
@@ -138,7 +140,10 @@ fn compute_pad_variance(pad_state: &PadGhostState) -> f64 {
 }
 
 /// Compute topological consistency based on knot complexity and entropy alignment
-fn compute_topological_consistency(topology: &TopologicalSignature, pad_state: &PadGhostState) -> f64 {
+fn compute_topological_consistency(
+    topology: &TopologicalSignature,
+    pad_state: &PadGhostState,
+) -> f64 {
     // Stable entropy + reasonable knot complexity = consonance
     let entropy_stable = if pad_state.entropy >= 1.8 && pad_state.entropy <= 2.2 {
         1.0 // Target entropy range
@@ -176,15 +181,18 @@ fn compute_erag_relevance(collapse: &CollapseResult) -> f64 {
     // Average similarity score indicates relevance
     let relevance = collapse.average_similarity as f64;
     let relevance = relevance.clamp(0.0, 1.0);
-    
+
     // Boost if we have multiple relevant hits
     let hit_bonus = (collapse.top_hits.len() as f64 / 3.0).min(0.2);
-    
+
     (relevance + hit_bonus).min(1.0)
 }
 
 /// Compute compass transition smoothness
-fn compute_compass_transition(compass: &CompassOutcome, last_compass: Option<&CompassOutcome>) -> f64 {
+fn compute_compass_transition(
+    compass: &CompassOutcome,
+    last_compass: Option<&CompassOutcome>,
+) -> f64 {
     // If no previous state, assume neutral
     let Some(last) = last_compass else {
         return 0.5;
@@ -192,18 +200,18 @@ fn compute_compass_transition(compass: &CompassOutcome, last_compass: Option<&Co
 
     // Smooth transitions = consonance
     // Chaotic transitions = dissonance
-    
+
     match (last.quadrant, compass.quadrant) {
         // Good transitions (consonance)
         (CompassQuadrant::Panic, CompassQuadrant::Discover) => 0.9,
         (CompassQuadrant::Persist, CompassQuadrant::Master) => 0.9,
         (CompassQuadrant::Discover, CompassQuadrant::Master) => 0.95,
         (CompassQuadrant::Master, CompassQuadrant::Discover) => 0.85,
-        
+
         // Bad transitions (dissonance)
         (CompassQuadrant::Master, CompassQuadrant::Panic) => 0.2,
         (CompassQuadrant::Discover, CompassQuadrant::Panic) => 0.3,
-        
+
         // Same state (neutral/slightly positive)
         (a, b) if a == b => {
             if compass.is_threat {
@@ -214,7 +222,7 @@ fn compute_compass_transition(compass: &CompassOutcome, last_compass: Option<&Co
                 0.6 // Neutral
             }
         }
-        
+
         // Other transitions (neutral)
         _ => 0.5,
     }
@@ -228,18 +236,18 @@ fn compute_confidence(sources: &[ConsonanceSource]) -> f64 {
 
     let scores: Vec<f64> = sources.iter().map(|s| s.score()).collect();
     let mean = scores.iter().sum::<f64>() / scores.len() as f64;
-    
+
     // Standard deviation - lower = more agreement = higher confidence
     let variance = scores.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / scores.len() as f64;
     let std_dev = variance.sqrt();
-    
+
     // Confidence decreases with higher variance
     // Max variance for 0-1 scores is ~0.5, so normalize
     let confidence = 1.0 - (std_dev / 0.5).min(1.0);
-    
+
     // Also boost confidence if we have all sources
     let completeness_bonus = if sources.len() >= 5 { 0.1 } else { 0.0 };
-    
+
     (confidence + completeness_bonus).min(1.0)
 }
 
@@ -365,11 +373,21 @@ mod tests {
             consonance_score: 0.85,
         };
 
-        let metrics = compute_consonance(&pad_state, &compass, &collapse, &topology, Some(&curator), None);
+        let metrics = compute_consonance(
+            &pad_state,
+            &compass,
+            &collapse,
+            &topology,
+            Some(&curator),
+            None,
+        );
 
         assert!(metrics.score > 0.0);
         // Should have curator quality source
-        assert!(metrics.sources.iter().any(|s| matches!(s, ConsonanceSource::CuratorQuality(_))));
+        assert!(metrics
+            .sources
+            .iter()
+            .any(|s| matches!(s, ConsonanceSource::CuratorQuality(_))));
     }
 
     #[test]
@@ -380,10 +398,16 @@ mod tests {
         let collapse = create_test_collapse();
         let topology = create_test_topology();
 
-        let metrics = compute_consonance(&pad_state, &compass, &collapse, &topology, None, Some(&last_compass));
+        let metrics = compute_consonance(
+            &pad_state,
+            &compass,
+            &collapse,
+            &topology,
+            None,
+            Some(&last_compass),
+        );
 
         // Panic→Discover should be high consonance
         assert!(metrics.score > 0.6);
     }
 }
-

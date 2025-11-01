@@ -26,27 +26,29 @@ where
     F: Fn(),
 {
     let config = BenchmarkConfig::default();
-    info!("Running benchmark: {} ({} iterations)", name, config.iterations);
-    
+    info!(
+        "Running benchmark: {} ({} iterations)",
+        name, config.iterations
+    );
+
     // Warmup
     for _ in 0..config.warmup_iterations {
         f();
     }
-    
+
     // Actual benchmark
     let start = std::time::Instant::now();
     for _ in 0..config.iterations {
         f();
     }
     let elapsed = start.elapsed();
-    
+
     info!(
         "Benchmark {} completed: {:?} total, {:?} per iteration",
         name,
         elapsed,
         elapsed / config.iterations as u32
     );
-    
+
     Ok(())
 }
-

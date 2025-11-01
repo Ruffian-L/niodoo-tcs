@@ -75,6 +75,7 @@ pub mod kv_cache;
 pub mod memory;
 pub mod optimization;
 pub mod profiling;
+pub mod mobius_labyrinth;
 
 // Integration modules
 pub mod brain_bridge_ffi;
@@ -202,3 +203,18 @@ pub mod dual_view_refactor;
 pub mod qt_mock;
 // pub mod tcs; // DISABLED: Too many dependencies
 pub mod tqft; // ENABLED: Core TQFT mathematical engine for consciousness reasoning
+
+//--------------------------------------------------------------------------------------------------
+// Modern pipeline re-exports
+//--------------------------------------------------------------------------------------------------
+
+/// Access to the production-ready NIODOO pipeline. Consumers gradually moving off
+/// the legacy modules can `use niodoo_consciousness::real::*` to work directly with
+/// the `niodoo_real_integrated` implementation without losing access to archived code.
+pub mod real {
+    pub use niodoo_real_integrated::*;
+}
+
+pub use real::generation as generation_real;
+pub use real::learning as learning_real;
+pub use real::pipeline as pipeline_real;

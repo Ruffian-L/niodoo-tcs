@@ -1,60 +1,17 @@
-// Stub module for qwen_curator
-// This is a placeholder to fix compilation errors
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EmotionalState {
-    pub joy: f32,
-    pub sadness: f32,
-    pub anger: f32,
-    pub fear: f32,
+mod legacy_impl {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../archive/legacy/src/qwen_curator.rs.legacy"
+    ));
 }
 
-impl Default for EmotionalState {
-    fn default() -> Self {
-        Self {
-            joy: 0.0,
-            sadness: 0.0,
-            anger: 0.0,
-            fear: 0.0,
-        }
-    }
-}
+#[deprecated(note = "Legacy stub module; migrate to niodoo_real_integrated::curator")]
+pub use legacy_impl::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopologyMetrics {
-    pub coherence: f32,
-    pub entropy: f32,
-}
+//! Re-export the production QLoRA curator from niodoo-core.
 
-impl Default for TopologyMetrics {
-    fn default() -> Self {
-        Self {
-            coherence: 0.0,
-            entropy: 0.0,
-        }
-    }
-}
+pub use niodoo_core::qwen_curator::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LearningEvent {
-    pub input: String,
-    pub response: String,
-    pub emotional_state: EmotionalState,
-    pub topology_metrics: Option<TopologyMetrics>,
-}
-
-pub struct QwenCurator;
-
-impl QwenCurator {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for QwenCurator {
-    fn default() -> Self {
-        Self::new()
-    }
-}

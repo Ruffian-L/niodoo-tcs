@@ -22,7 +22,7 @@ impl TcsPredictor {
         weights.insert("betti1".to_string(), -0.3);
         weights.insert("persistence_entropy".to_string(), -0.2);
         weights.insert("spectral_gap".to_string(), 0.8); // Lower gap preferred; boost when low
-        // Slightly lower betti0 influence
+                                                         // Slightly lower betti0 influence
         weights.insert("betti0".to_string(), 0.1);
 
         Self {

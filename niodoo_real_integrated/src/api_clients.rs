@@ -411,4 +411,3 @@ struct GptChoice {
 struct GptResponseMessage {
     content: String,
 }
-

@@ -1,7 +1,7 @@
 //! Response parser trait system for curator quality assessment
 //! Modular parsing strategies with fallback cascading
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde_json::Value;
 use tracing::{debug, warn};
@@ -237,4 +237,3 @@ impl CascadingParser {
         Err(anyhow!("All parsing strategies failed"))
     }
 }
-

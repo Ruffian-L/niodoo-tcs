@@ -84,13 +84,13 @@ pub fn calculate_pad_salience(pad_state: &PadGhostState) -> f32 {
     let pleasure = pad_state.pad[0] as f32;
     let arousal = pad_state.pad[1] as f32;
     let dominance = pad_state.pad[2] as f32;
-    
+
     // Normalize dominance to [0, 1] range (assuming [-1, 1] input)
     let normalized_dominance = (dominance + 1.0) / 2.0;
-    
+
     // Calculate salience
     let salience = (2.0 * arousal.abs() + pleasure.abs() + 0.5 * normalized_dominance) / 3.5;
-    
+
     // Clamp to [0, 1]
     salience.clamp(0.0, 1.0)
 }
@@ -114,13 +114,13 @@ pub fn calculate_temporal_decay(
     } else {
         config.phase3_tau
     };
-    
+
     // Apply consolidation extension
     let tau_effective = tau * (1.0 + 0.5 * consolidation_level as f64);
-    
+
     // Exponential decay: e^(-age/tau)
     let decay = (-age_days / tau_effective).exp();
-    
+
     decay as f32
 }
 
@@ -185,14 +185,14 @@ pub fn calculate_fitness_score(
     let temporal = calculate_temporal_decay(age_days, consolidation_level, temporal_config);
     let pad_salience = calculate_pad_salience(pad_state);
     let retrieval_weight = normalized_retrieval_weight(retrieval_count);
-    
+
     // Normalize beta_1 and consonance to [0, 1] range (assuming they're already normalized)
     let beta1_normalized = beta_1_connectivity.clamp(0.0, 1.0);
     let consonance_normalized = consonance_score.clamp(0.0, 1.0);
-    
+
     // Calculate resource penalty
     let resource_penalty = calculate_resource_penalty(resource_availability);
-    
+
     // Weighted combination: positive terms - resource penalty
     let fitness = weights[0] * temporal
         + weights[1] * pad_salience
@@ -200,7 +200,7 @@ pub fn calculate_fitness_score(
         + weights[3] * retrieval_weight
         + weights[4] * consonance_normalized
         - weights[5] * resource_penalty;
-    
+
     fitness.clamp(0.0, 1.0)
 }
 
@@ -216,7 +216,9 @@ pub fn calculate_fitness_score_legacy(
     temporal_config: &TemporalDecayConfig,
 ) -> f32 {
     // Convert 5 weights to 6 weights (w₆ = 0.0)
-    let weights_6 = [weights[0], weights[1], weights[2], weights[3], weights[4], 0.0];
+    let weights_6 = [
+        weights[0], weights[1], weights[2], weights[3], weights[4], 0.0,
+    ];
     calculate_fitness_score(
         age_days,
         pad_state,
@@ -254,7 +256,7 @@ pub fn initialize_memory_metadata(
         last_accessed: Utc::now(),
         consolidation_level,
         beta_1_connectivity: 0.0, // Will be computed later
-        consonance_score: 0.0,   // Will be computed later
+        consonance_score: 0.0,    // Will be computed later
         community_id: None,
     }
 }
@@ -285,7 +287,7 @@ mod tests {
     fn test_temporal_decay_phase1() {
         let config = TemporalDecayConfig::default();
         let decay = calculate_temporal_decay(0.5, 0.0, &config); // 0.5 days, no consolidation
-        // Should decay significantly in phase 1
+                                                                 // Should decay significantly in phase 1
         assert!(decay < 0.5);
     }
 
@@ -311,21 +313,16 @@ mod tests {
         let pad_state = create_test_pad_state();
         let weights = DEFAULT_FITNESS_WEIGHTS;
         let config = TemporalDecayConfig::default();
-        
+
         let fitness = calculate_fitness_score(
             1.0, // 1 day old
-            &pad_state,
-            5,   // 5 retrievals
+            &pad_state, 5,   // 5 retrievals
             0.6, // beta_1 connectivity
             0.7, // consonance
             0.2, // consolidation level
-            &weights,
-            &config,
-            None, // resource_availability
+            &weights, &config, None, // resource_availability
         );
-        
+
         assert!(fitness >= 0.0 && fitness <= 1.0);
     }
 }
-
-

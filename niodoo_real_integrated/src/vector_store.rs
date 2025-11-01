@@ -1,8 +1,8 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use base64::Engine;
 use reqwest::Client;
-use serde_json::{Map as JsonMap, Value as JsonValue, json};
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::time::Duration;
@@ -194,4 +194,3 @@ impl VectorStore for RealQdrantClient {
         Ok(())
     }
 }
-
