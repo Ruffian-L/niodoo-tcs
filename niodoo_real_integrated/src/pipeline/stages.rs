@@ -1039,6 +1039,7 @@ impl Pipeline {
         };
 
         let mut reason = refinement_reason.to_string();
+        let mut experience_record: Option<Experience> = None;
         let needs_refinement = quality_score < refinement_threshold || topology_needs_refinement;
         let autonomy_enabled = self.config.curator_autonomous || self.curator.is_none();
         let mut refined = output.to_string();
@@ -1067,7 +1068,7 @@ impl Pipeline {
                                 let config = self.config_arc.read();
                                 config.parallel_curator_rouge
                             };
-                            let auto_improvement = if parallel_rouge {
+                            let mut auto_improvement = if parallel_rouge {
                                 tokio::task::spawn_blocking({
                                     let candidate = candidate.to_string();
                                     let output = output.to_string();
@@ -1192,6 +1193,7 @@ impl Pipeline {
                         compass,
                         vec![context.to_string()],
                     );
+                    experience_record = Some(experience.clone());
                     match curator
                         .curate_with_consonance(
                             &experience,
@@ -1224,12 +1226,13 @@ impl Pipeline {
                                 // Compute parameter adjustments
                                 let adjustments = controller.compute_parameter_adjustments();
                                 if !adjustments.is_empty() {
+                                    let adjustment_clone = adjustments.clone();
                                     let mut config = self.config_arc.write();
                                     for (param, delta) in adjustments {
                                         Self::adjust_runtime_param(&mut config, &param, delta);
                                     }
                                     info!(
-                                        adjustments = ?adjustments,
+                                        adjustments = ?adjustment_clone,
                                         "Applied curator feedback parameter adjustments"
                                     );
                                 }
@@ -1259,21 +1262,25 @@ impl Pipeline {
             reason = format!("{}|curator_disabled", reason);
         }
 
-    /// Phase 4.2: Helper to adjust runtime parameters (from LearningLoop)
-    fn adjust_runtime_param(config: &mut crate::config::RuntimeConfig, param: &str, delta: f64) {
-        match param {
-            "temperature" => {
-                config.temperature = (config.temperature + delta).clamp(0.1, 1.0);
-            }
-            "top_p" => {
-                config.top_p = (config.top_p + delta).clamp(0.1, 1.0);
-            }
-            "retrieval_top_k" => {
-                let updated = (config.phase2_retrieval_top_k_increment as f64 + delta).clamp(0.0, 10.0);
-                config.phase2_retrieval_top_k_increment = updated.round() as i32;
-            }
-            _ => {
-                // Unknown parameter, ignore
-            }
+        let promoted_tokens = tokenizer_output
+            .promoted_tokens
+            .iter()
+            .map(|token| String::from_utf8_lossy(&token.bytes).to_string())
+            .collect();
+
+        let mut curated = CuratedExperience {
+            refined_response: refined,
+            quality_score,
+            promoted_tokens,
+            learned,
+            reason,
+            experience: None,
+        };
+
+        if let Some(experience) = experience_record {
+            curated.experience = Some(experience);
         }
+
+        Ok(curated)
     }
+}

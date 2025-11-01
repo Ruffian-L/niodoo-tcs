@@ -1,3 +1,12 @@
+//! Phase 5: Enhanced telemetry for optimization metrics
+//!
+//! Adds comprehensive metrics for tracking optimization performance:
+//! - ERAG batch operations (Phase 1)
+//! - TCS Analyzer performance (Phase 2)
+//! - GPU fitness calculations (Phase 4.3)
+//! - CRDT consolidation operations (Phase 4.4)
+//! - Curator feedback metrics (Phase 4.2)
+
 use anyhow::{Error, Result};
 use once_cell::sync::Lazy;
 use prometheus::{

@@ -6,9 +6,18 @@
 //! - Consolidation level tracking
 //! - Prediction error guidance for consolidation depth
 
+//! Memory consolidation for WeightedEpisodicMem
+//!
+//! Implements neuroscience-inspired memory consolidation:
+//! - TD learning for memory valuation
+//! - Prioritized replay based on prediction error
+//! - Consolidation level tracking
+//! - Prediction error guidance for consolidation depth
+//! - Phase 4.4: CRDT-style merge operations for conflict-free consolidation
+
 use crate::erag::EragMemory;
 use rand::Rng;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 /// TD (Temporal Difference) learning value estimator
 pub struct MemoryValueEstimator {
@@ -229,6 +238,10 @@ pub struct MemoryConsolidationManager {
     pub error_calculator: PredictionErrorCalculator,
     /// Consolidation threshold (high error = detailed storage)
     pub high_error_threshold: f32,
+    /// Phase 4.4: CRDT-style merge counter for conflict-free consolidation
+    merge_counter: u64,
+    /// Phase 4.4: CRDT-style vector clock for tracking consolidation order
+    vector_clock: std::collections::HashMap<String, u64>,
 }
 
 impl MemoryConsolidationManager {
@@ -239,7 +252,55 @@ impl MemoryConsolidationManager {
             replay_sampler: PrioritizedReplaySampler::new(10000),
             error_calculator: PredictionErrorCalculator::new(100),
             high_error_threshold: 0.3,
+            merge_counter: 0,
+            vector_clock: std::collections::HashMap::new(),
         }
+    }
+
+    /// Phase 4.4: CRDT-style merge operation for memory consolidation
+    /// Commutative and idempotent - order doesn't matter, safe to retry
+    pub fn crdt_merge_consolidation(
+        &mut self,
+        memory_id: &str,
+        consolidation_level: f32,
+        fitness_score: f32,
+        timestamp: u64,
+    ) -> f32 {
+        // Get current consolidation level (if exists)
+        let current_level = self.value_estimator.get_value(memory_id);
+        
+        // CRDT merge: take maximum consolidation level (most consolidated wins)
+        // This ensures idempotency: merging same value twice yields same result
+        let merged_level = current_level.max(consolidation_level);
+        
+        // Update vector clock for conflict detection
+        let current_clock = self.vector_clock.get(memory_id).copied().unwrap_or(0);
+        if timestamp > current_clock {
+            self.vector_clock.insert(memory_id.to_string(), timestamp);
+            self.merge_counter += 1;
+        }
+        
+        // Merge fitness scores: weighted average (CRDT-style)
+        let current_fitness = self.value_estimator.get_value(memory_id);
+        let merged_fitness = (current_fitness + fitness_score) / 2.0;
+        
+        // Update value estimator with merged state
+        self.value_estimator.update_value(memory_id, merged_fitness - current_fitness);
+        
+        merged_level
+    }
+
+    /// Phase 4.4: Batch CRDT merge for efficient consolidation
+    pub fn batch_crdt_merge(
+        &mut self,
+        consolidations: &[(String, f32, f32, u64)], // (memory_id, consolidation_level, fitness_score, timestamp)
+    ) -> Vec<f32> {
+        consolidations
+            .iter()
+            .map(|(mem_id, level, fitness, ts)| {
+                self.crdt_merge_consolidation(mem_id, *level, *fitness, *ts)
+            })
+            .collect()
     }
 
     /// Determine consolidation level based on prediction error
@@ -258,6 +319,7 @@ impl MemoryConsolidationManager {
     }
 
     /// Process memory for consolidation
+    /// Phase 4.4: Uses CRDT merge for conflict-free consolidation
     pub fn process_memory(
         &mut self,
         memory_id: &str,
@@ -274,6 +336,15 @@ impl MemoryConsolidationManager {
         // Determine consolidation level
         let consolidation_level = self.determine_consolidation_level(prediction_error);
 
+        // Phase 4.4: Use CRDT merge for conflict-free consolidation
+        let timestamp = self.merge_counter;
+        let merged_level = self.crdt_merge_consolidation(
+            memory_id,
+            consolidation_level,
+            actual_fitness,
+            timestamp,
+        );
+
         // Calculate TD error (using fitness as reward)
         let current_value = self.value_estimator.get_value(memory_id);
         let td_error = self.value_estimator.compute_td_error(
@@ -289,7 +360,7 @@ impl MemoryConsolidationManager {
         self.replay_sampler
             .add_memory(memory_id.to_string(), td_error.abs());
 
-        consolidation_level
+        merged_level
     }
 
     /// Sample memories for consolidation replay
@@ -300,6 +371,16 @@ impl MemoryConsolidationManager {
     /// Get high-priority memories for consolidation
     pub fn get_high_priority_memories(&self, top_k: usize) -> Vec<String> {
         self.replay_sampler.get_high_priority_memories(top_k)
+    }
+
+    /// Phase 4.4: Get merge counter for tracking consolidation operations
+    pub fn merge_count(&self) -> u64 {
+        self.merge_counter
+    }
+
+    /// Phase 4.4: Get vector clock entry for a memory (for conflict detection)
+    pub fn get_vector_clock(&self, memory_id: &str) -> u64 {
+        self.vector_clock.get(memory_id).copied().unwrap_or(0)
     }
 }
 

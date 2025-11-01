@@ -93,7 +93,7 @@ pub struct Pipeline {
     discovery_queue: Arc<AsyncMutex<tokio::sync::mpsc::UnboundedSender<Discovery>>>,
     security: Arc<PromptSecurityManager>,
     // Phase 4.2: Curator feedback controller
-    pub(crate) curator_feedback: Arc<AsyncMutex<CuratorFeedbackController>>,
+    pub(crate) curator_feedback: Option<Arc<AsyncMutex<CuratorFeedbackController>>>,
 }
 
 impl Pipeline {
@@ -197,6 +197,17 @@ impl Pipeline {
         #[cfg(not(feature = "embedded-qdrant"))]
         let qdrant_process: Option<Arc<tokio::sync::Mutex<tokio::process::Child>>> = None;
 
+        // Initialize Weighted Episodic Memory components ahead of ERAG setup
+        let weighted_config = &config.weighted_memory_config;
+        let weight_evolver = Arc::new(SmoothWeightEvolution::new());
+        let gpu_fitness_calculator =
+            Arc::new(GPUMemoryFitnessCalculator::new(&weighted_config.gpu_device));
+        let gpu_fitness_calc = if config.use_gpu_fitness {
+            Some(gpu_fitness_calculator.clone())
+        } else {
+            None
+        };
+
         let erag = if config.optimized_erag {
             EragClient::new_with_config_and_quantization(
                 &config.qdrant_url,
@@ -207,14 +218,19 @@ impl Pipeline {
                 config.erag_batch_size,
                 config.erag_batch_flush_ms,
                 config.qdrant_quantization,
+                gpu_fitness_calc.clone(), // Phase 4.3: Pass GPU calculator
             )
             .await?
         } else {
-            EragClient::new(
+            EragClient::new_with_config(
                 &config.qdrant_url,
                 &config.qdrant_collection,
                 config.qdrant_vector_dim,
                 config.similarity_threshold,
+                config.optimized_erag,
+                config.erag_batch_size,
+                config.erag_batch_flush_ms,
+                gpu_fitness_calc.clone(), // Phase 4.3: Pass GPU calculator
             )
             .await?
         };
@@ -318,11 +334,6 @@ impl Pipeline {
             Duration::from_secs(config.collapse_cache_ttl_secs),
         );
 
-        // Initialize Weighted Episodic Memory components
-        let weighted_config = &config.weighted_memory_config;
-        let weight_evolver = Arc::new(SmoothWeightEvolution::new());
-        let gpu_fitness_calculator =
-            Arc::new(GPUMemoryFitnessCalculator::new(&weighted_config.gpu_device));
         let topology_analyzer = Arc::new(TopologyMemoryAnalyzer::new(0.3));
         let consolidation_manager = Arc::new(AsyncMutex::new(MemoryConsolidationManager::new()));
         let mcts_daydreamer = Arc::new(MctsDaydreamer::new(1.414, 5)); // sqrt(2) exploration, depth 5
@@ -363,18 +374,27 @@ impl Pipeline {
             }
         });
 
-        // Spawn weight update monitor (updates EragClient weights every 5 seconds)
-        let erag_arc_clone = Arc::clone(&erag_arc);
-        let weight_evolver_monitor = Arc::clone(&weight_evolver);
+        // Weighted memory GPU evolution background task (Phase 4.3)
+        let gpu_fitness_calc_clone = gpu_fitness_calc.clone();
+        let erag_refresh = erag_arc.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
                 interval.tick().await;
-                let new_weights = weight_evolver_monitor.get_current_weights();
-                // Update ERAG client weights (would need to add setter method)
-                // For now, weights are accessed via weight_evolver when needed
+                if let Some(ref calc) = gpu_fitness_calc_clone {
+                    if let Err(e) = calc.refresh_metrics().await {
+                        warn!(error = %e, "GPU fitness metrics refresh failed");
+                    }
+                }
+                if let Err(e) = erag_refresh.refresh_weighted_memory().await {
+                    warn!(error = %e, "Failed to refresh weighted memory cache");
+                }
             }
         });
+
+        // Ensure Prometheus metrics are initialised for observability
+        let _ = crate::metrics::metrics();
+        let _ = crate::metrics::weighted_memory_metrics();
 
         Ok(Self {
             config: config.clone(),
@@ -407,8 +427,32 @@ impl Pipeline {
             mcts_daydreamer,
             discovery_queue,
             security: security_manager,
-            curator_feedback, // Phase 4.2: Curator feedback controller
+            curator_feedback: Some(curator_feedback), // Phase 4.2: Curator feedback controller
         })
+    }
+
+    /// Phase 4.2: Helper to adjust runtime parameters based on curator feedback
+    pub(crate) fn adjust_runtime_param(
+        config: &mut RuntimeConfig,
+        param: &str,
+        delta: f64,
+    ) {
+        match param {
+            "temperature" => {
+                config.temperature = (config.temperature + delta).clamp(0.1, 1.0);
+            }
+            "top_p" => {
+                config.top_p = (config.top_p + delta).clamp(0.1, 1.0);
+            }
+            "retrieval_top_k" => {
+                let updated =
+                    (config.phase2_retrieval_top_k_increment as f64 + delta).clamp(0.0, 10.0);
+                config.phase2_retrieval_top_k_increment = updated.round() as i32;
+            }
+            _ => {
+                // Unknown parameter, ignore
+            }
+        }
     }
 
     pub fn set_topology_mode(&mut self, mode: TopologyMode) -> Result<()> {

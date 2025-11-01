@@ -240,7 +240,7 @@ impl RealConsciousnessTester {
         println!("🧠 Initializing REAL consciousness system for continual testing...");
 
         // Initialize consciousness engine
-        let consciousness = PersonalNiodooConsciousness::new()?;
+        let consciousness = PersonalNiodooConsciousness::new().await?;
 
         // Add some initial emotional variation to make entropy realistic
         {

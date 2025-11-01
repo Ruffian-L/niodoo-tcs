@@ -92,6 +92,8 @@ pub struct EragClient {
     batch_flush_ms: u64,
     /// Whether batching is enabled
     optimized_erag: bool,
+    /// Phase 4.3: GPU fitness calculator (optional)
+    pub gpu_fitness_calculator: Option<Arc<crate::gpu_fitness::GPUMemoryFitnessCalculator>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +119,7 @@ impl EragClient {
             false,
             128,
             300,
+            None, // No GPU calculator by default
         )
         .await
     }
@@ -130,6 +133,7 @@ impl EragClient {
         optimized_erag: bool,
         batch_size: usize,
         batch_flush_ms: u64,
+        gpu_calculator: Option<Arc<crate::gpu_fitness::GPUMemoryFitnessCalculator>>,
     ) -> Result<Self> {
         Self::new_with_config_and_quantization(
             url,
@@ -140,6 +144,7 @@ impl EragClient {
             batch_size,
             batch_flush_ms,
             None,
+            gpu_calculator,
         )
         .await
     }
@@ -154,6 +159,7 @@ impl EragClient {
         batch_size: usize,
         batch_flush_ms: u64,
         quantization: Option<crate::config::QuantizationType>,
+        gpu_calculator: Option<Arc<crate::gpu_fitness::GPUMemoryFitnessCalculator>>,
     ) -> Result<Self> {
         // Normalise URL for qdrant-client. We expect to talk to the gRPC endpoint on port 6334
         // using HTTP/2, which the SDK represents as an `http://` URI. Accept a variety of inputs
@@ -214,6 +220,7 @@ impl EragClient {
             batch_size,
             batch_flush_ms,
             optimized_erag,
+            gpu_fitness_calculator: gpu_calculator, // Phase 4.3: Store GPU calculator
         };
 
         // Start background flush task if batching is enabled
@@ -1219,6 +1226,17 @@ impl EragClient {
             Ok(true) // Index is healthy
         }
     }
+
+    /// Phase 4.3: Refresh weighted memory state to keep metrics healthy
+    pub async fn refresh_weighted_memory(&self) -> Result<()> {
+        let healthy = self.ensure_index_health().await?;
+        if healthy {
+            info!(collection = %self.collection, "Weighted memory index is healthy");
+        } else {
+            info!(collection = %self.collection, "Weighted memory index was rebuilt during refresh");
+        }
+        Ok(())
+    }
 }
 
 impl EragClient {
@@ -1256,15 +1274,102 @@ impl EragClient {
     }
 
     /// Batch calculate fitness scores for multiple memories
+    /// Phase 4.3: Uses GPU acceleration if available and enabled
     pub fn batch_calculate_fitness(
         &self,
         memories: &[EragMemory],
         pad_state: &PadGhostState,
     ) -> Vec<f32> {
-        memories
+        // Phase 4.3: Use GPU fitness calculator if available
+        if let Some(ref gpu_calc) = self.gpu_fitness_calculator {
+            self.batch_calculate_fitness_gpu(memories, pad_state, gpu_calc)
+        } else {
+            // Fallback to CPU-based calculation
+            memories
+                .iter()
+                .map(|mem| self.calculate_memory_fitness(mem, pad_state))
+                .collect()
+        }
+    }
+    
+    /// Phase 4.3: GPU-accelerated batch fitness calculation
+    fn batch_calculate_fitness_gpu(
+        &self,
+        memories: &[EragMemory],
+        pad_state: &PadGhostState,
+        gpu_calculator: &crate::gpu_fitness::GPUMemoryFitnessCalculator,
+    ) -> Vec<f32> {
+        // Extract fitness components from memories
+        let pad_states: Vec<_> = memories
             .iter()
-            .map(|mem| self.calculate_memory_fitness(mem, pad_state))
-            .collect()
+            .map(|mem| {
+                // Extract pad_state from memory (would need to store in EragMemory)
+                // For now, use the provided pad_state for all memories
+                pad_state.clone()
+            })
+            .collect();
+        
+        let ages: Vec<f64> = memories
+            .iter()
+            .map(|mem| {
+                let timestamp = DateTime::parse_from_rfc3339(&mem.timestamp)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now());
+                age_in_days(&timestamp)
+            })
+            .collect();
+        
+        let retrieval_counts: Vec<u32> = memories
+            .iter()
+            .map(|mem| {
+                mem.weighted_metadata
+                    .as_ref()
+                    .map(|m| m.retrieval_count)
+                    .unwrap_or(0)
+            })
+            .collect();
+        
+        let beta1_scores: Vec<f32> = memories
+            .iter()
+            .map(|mem| {
+                mem.weighted_metadata
+                    .as_ref()
+                    .map(|m| m.beta_1_connectivity)
+                    .unwrap_or(0.0)
+            })
+            .collect();
+        
+        let consonance_scores: Vec<f32> = memories
+            .iter()
+            .map(|mem| {
+                mem.weighted_metadata
+                    .as_ref()
+                    .map(|m| m.consonance_score)
+                    .unwrap_or(0.0)
+            })
+            .collect();
+        
+        let consolidation_levels: Vec<f32> = memories
+            .iter()
+            .map(|mem| {
+                mem.weighted_metadata
+                    .as_ref()
+                    .map(|m| m.consolidation_level)
+                    .unwrap_or(0.0)
+            })
+            .collect();
+        
+        // Use GPU calculator for batch processing
+        gpu_calculator.batch_fitness_from_arrays(
+            &pad_states,
+            &ages,
+            &retrieval_counts,
+            &beta1_scores,
+            &consonance_scores,
+            &consolidation_levels,
+            &self.fitness_weights,
+            &self.temporal_config,
+        )
     }
 
     /// Update fitness score for a memory
@@ -1296,6 +1401,7 @@ impl Clone for EragClient {
             batch_size: self.batch_size,
             batch_flush_ms: self.batch_flush_ms,
             optimized_erag: self.optimized_erag,
+            gpu_fitness_calculator: self.gpu_fitness_calculator.clone(), // Phase 4.3: Clone GPU calculator
         }
     }
 }

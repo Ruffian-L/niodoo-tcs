@@ -3,6 +3,7 @@
 //! Provides batch fitness calculation with optional GPU acceleration.
 //! Falls back to CPU if GPU is unavailable or feature is disabled.
 
+use anyhow::Result;
 use crate::torus::PadGhostState;
 use crate::weighted_episodic_mem::{calculate_fitness_score, TemporalDecayConfig};
 use ndarray::Array1;
@@ -192,6 +193,18 @@ impl GPUMemoryFitnessCalculator {
 
         let fitness_scores = self.batch_fitness(&memories, weights, temporal_config);
         Array1::from_vec(fitness_scores)
+    }
+
+    /// Refresh metrics and emit telemetry about GPU availability
+    pub async fn refresh_metrics(&self) -> Result<()> {
+        if self.gpu_available && self.device == "cuda" {
+            info!(device = %self.device, "GPU fitness metrics refreshed: CUDA available");
+        } else if self.gpu_available {
+            info!(device = %self.device, "GPU fitness metrics refreshed: GPU detected, using fallback device");
+        } else {
+            info!(device = %self.device, "GPU fitness metrics refreshed: CPU fallback active");
+        }
+        Ok(())
     }
 }
 
