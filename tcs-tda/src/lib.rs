@@ -5,6 +5,13 @@
 //! routines referenced in the README. The goal is to provide solid,
 //! reusable primitives while we continue migrating higher-level logic.
 
+mod laplacian;
+
+pub use laplacian::{
+    FilteredComplex, LaplacianSpectrum, MotifMetrics, PersistentLaplacian, SimplicialComplex,
+    Simplex,
+};
+
 use nalgebra::DVector;
 use ndarray::{Array1, Array2};
 use rayon::prelude::*;

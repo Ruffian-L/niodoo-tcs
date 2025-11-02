@@ -104,6 +104,9 @@ mock_*.rs
 
 # Local working docs and scripts (not for repo)
 /scripts/
+!/scripts/
+scripts/*
+!/scripts/start_h200_bootstrap.sh
 /docs/working/
 /docs/archive/
 
@@ -158,6 +161,7 @@ niodoo_real_integrated/target_local/
 *.md
 !README.md
 !CHANGELOG.md
+!docs/H200_PRIMING_GUIDE.md
 !niodoo_real_integrated/README.md
 COMMANDS_FOR_YOU.txt
 *.txt

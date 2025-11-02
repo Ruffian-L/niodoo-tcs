@@ -6,7 +6,7 @@ use qdrant_client::{
         self, quantization_config_diff, value::Kind as QdrantValueKind, CreateCollection, Distance,
         PointStruct, QuantizationConfig, QuantizationConfigDiff,
         QuantizationType as QdrantQuantizationType, ScalarQuantization, SearchPoints,
-        UpdateCollection, VectorParams, VectorsConfig,
+        VectorParams, VectorsConfig,
     },
 };
 use rand::{thread_rng, Rng};

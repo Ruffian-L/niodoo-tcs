@@ -5,11 +5,13 @@
 //!
 //! Requires `svc` feature for HTTP server functionality.
 
+#[cfg(feature = "svc")]
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::RwLock;
+#[cfg(feature = "svc")]
 use tracing::{info, warn};
 
 /// Health check status

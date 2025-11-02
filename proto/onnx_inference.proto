@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package niodoo.rce;
+
+// ONNX Inference Service for Recursive Connectome Engine
+// Optimized for H200 GPU with FP8 precision and batched inference
+
+import "google/protobuf/timestamp.proto";
+
+// Tensor data types supported by ONNX Runtime
+enum TensorDataType {
+    TENSOR_DATA_TYPE_UNSPECIFIED = 0;
+    TENSOR_DATA_TYPE_FLOAT32 = 1;
+    TENSOR_DATA_TYPE_FLOAT16 = 2;
+    TENSOR_DATA_TYPE_INT64 = 3;
+    TENSOR_DATA_TYPE_INT32 = 4;
+    TENSOR_DATA_TYPE_UINT8 = 5;
+    TENSOR_DATA_TYPE_FP8_E4M3FN = 6;  // H200 FP8 support
+    TENSOR_DATA_TYPE_FP8_E5M2 = 7;    // H200 FP8 support
+}
+
+// Tensor shape information
+message TensorShape {
+    repeated int64 dims = 1;  // Dimensions: [batch, seq_len, ...]
+}
+
+// Tensor data for ONNX inference
+message Tensor {
+    TensorDataType dtype = 1;
+    TensorShape shape = 2;
+    bytes data = 3;  // Raw bytes of tensor data
+    repeated float float_data = 4;  // For FP32/F16 data
+    repeated int64 int64_data = 5;  // For INT64 data
+    repeated int32 int32_data = 6;  // For INT32 data
+}
+
+// Model inference request
+message InferenceRequest {
+    string model_name = 1;  // ONNX model identifier
+    map<string, Tensor> inputs = 2;  // Input tensors by name
+    InferenceOptions options = 3;
+}
+
+// Inference options for H200 optimization
+message InferenceOptions {
+    bool use_fp8 = 1;  // Use FP8 quantization (H200)
+    int32 batch_size = 2;  // Batch size (up to 1024 for H200)
+    int32 max_concurrent_streams = 3;  // HTTP/2 multiplexing (default: 128)
+    bool enable_cuda_graph = 4;  // CUDA Graphs for signal-slot cycles
+    string execution_provider = 5;  // "CUDA" or "CUDAExecutionProvider"
+    int32 gpu_device_id = 6;  // GPU device ID (default: 0)
+}
+
+// Inference response
+message InferenceResponse {
+    map<string, Tensor> outputs = 1;  // Output tensors by name
+    InferenceMetadata metadata = 2;
+    google.protobuf.Timestamp timestamp = 3;
+}
+
+// Inference metadata
+message InferenceMetadata {
+    double inference_time_ms = 1;  // Inference latency in milliseconds
+    int64 gpu_memory_used_bytes = 2;  // GPU memory usage
+    int32 batch_size = 3;
+    bool used_fp8 = 4;
+    string execution_provider = 5;
+}
+
+// Model loading request
+message LoadModelRequest {
+    string model_name = 1;
+    string model_path = 2;  // Path to ONNX model file
+    InferenceOptions default_options = 3;
+}
+
+// Model loading response
+message LoadModelResponse {
+    bool success = 1;
+    string error_message = 2;
+    ModelInfo model_info = 3;
+}
+
+// Model information
+message ModelInfo {
+    string model_name = 1;
+    repeated string input_names = 2;
+    repeated string output_names = 3;
+    map<string, TensorShape> input_shapes = 4;
+    map<string, TensorShape> output_shapes = 5;
+    int64 model_size_bytes = 6;
+    bool supports_fp8 = 7;
+}
+
+// Batch inference request (for multiple prompts)
+message BatchInferenceRequest {
+    string model_name = 1;
+    repeated InferenceRequest requests = 2;  // Batch of requests
+    InferenceOptions options = 3;
+}
+
+// Batch inference response
+message BatchInferenceResponse {
+    repeated InferenceResponse responses = 1;
+    BatchMetadata batch_metadata = 2;
+}
+
+// Batch metadata
+message BatchMetadata {
+    int32 batch_size = 1;
+    double total_time_ms = 2;
+    double avg_time_per_item_ms = 3;
+    int64 peak_gpu_memory_bytes = 4;
+}
+
+// Health check request
+message HealthCheckRequest {
+    string service = 1;
+}
+
+// Health check response
+message HealthCheckResponse {
+    enum ServingStatus {
+        UNKNOWN = 0;
+        SERVING = 1;
+        NOT_SERVING = 2;
+    }
+    ServingStatus status = 1;
+    string gpu_info = 2;  // GPU device information
+    int32 loaded_models_count = 3;
+}
+
+// ONNX Inference Service
+service OnnxInferenceService {
+    // Load an ONNX model
+    rpc LoadModel(LoadModelRequest) returns (LoadModelResponse);
+    
+    // Single inference request
+    rpc Infer(InferenceRequest) returns (InferenceResponse);
+    
+    // Batch inference (for H200 optimization)
+    rpc BatchInfer(BatchInferenceRequest) returns (BatchInferenceResponse);
+    
+    // Streaming inference (for recursive loops)
+    rpc StreamInfer(stream InferenceRequest) returns (stream InferenceResponse);
+    
+    // Health check
+    rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+}
+

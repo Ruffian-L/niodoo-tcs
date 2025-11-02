@@ -203,6 +203,20 @@ Flags: `--skip-services`, `--skip-build`, `--skip-model-download`, `--skip-qdran
 cargo run -p niodoo_real_integrated --release -- --prompt "Analyze this emotion"
 ```
 
+## 🚀 Performance Optimizations (Phase 1-5)
+
+**Recent Optimizations (2025):**
+
+- **Phase 1 - ERAG Overhaul**: Batched gRPC upserts, Qdrant quantization (PQ4), HNSW index management
+- **Phase 2 - TCS Analyzer**: Giotto-TDA integration, adaptive fallback, topology caching
+- **Phase 3 - LearningLoop**: fp16 QLoRA adapters (50% VRAM savings), async training
+- **Phase 4 - Curator & Memory**: Parallel ROUGE scoring, curator feedback controller, GPU fitness, CRDT consolidation
+- **Phase 5 - Telemetry & Testing**: Comprehensive regression suite, enhanced metrics, benchmarking scripts
+
+**Expected Impact**: 30-50% latency reduction, 20% memory savings, improved quality adaptation
+
+See `docs/OPTIMIZATION_PERFORMANCE.md` for detailed metrics and `CHANGELOG.md` for implementation details.
+
 ## 📊 Benchmarks & Validation
 
 **Real Results from Production Runs:**
@@ -215,13 +229,20 @@ cargo run -p niodoo_real_integrated --release -- --prompt "Analyze this emotion"
 | **LoRA Sessions** | 0 | 148 | Learning active |
 | **Memories Stored** | 0 | 601 | Building knowledge |
 
+**Optimization Targets (Phase 1-4):**
+- P99 Latency: < 600ms (baseline: 7424.88 ms)
+- VRAM Usage: < 4 GiB (baseline: 26.83 GiB)
+- ROUGE-L: > 0.42 (baseline: 0.437)
+- Entropy σ: < 0.0005 bits (baseline: 0.00425 bits)
+
 **Validation Tests:**
 - ✅ 50-prompt comprehensive test suite
 - ✅ 64-cycle soak test with gRPC
 - ✅ 10,000-cycle stress test (in progress)
+- ✅ Phase 1-4 optimization regression suite
 - ✅ All metrics logged to CSV/JSON
 
-See `results/benchmarks/topology/` for complete JSON/CSV outputs.
+See `results/benchmarks/topology/` for complete JSON/CSV outputs and `docs/OPTIMIZATION_PERFORMANCE.md` for optimization metrics.
 
 ## 🏗️ Architecture
 

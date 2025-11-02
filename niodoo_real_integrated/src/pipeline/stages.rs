@@ -1,4 +1,5 @@
-use std::sync::atomic::Ordering;
+use std::cmp::Ordering;
+use std::sync::atomic::Ordering as AtomicOrdering;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -206,9 +207,66 @@ impl Pipeline {
 
         // Stage 5: Tokenizer
         let tokenizer_start = Instant::now();
-        let tokenizer_output = self
+
+        let mut top_hits = collapse.top_hits.clone();
+        if self.config.rce_erag_lambda > 0.0 && !top_hits.is_empty() {
+            let lambda = self.config.rce_erag_lambda;
+            top_hits.sort_by(|a, b| {
+                let score = |m: &crate::erag::EragMemory| {
+                    let pad_vec = [pad_state.pad[0] as f64, pad_state.pad[1] as f64, pad_state.pad[2] as f64];
+                    let mem_vec = [
+                        m.emotional_vector.joy as f64,
+                        m.emotional_vector.anger as f64,
+                        m.emotional_vector.surprise as f64,
+                    ];
+                    let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
+                    let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
+                    let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
+                    let cosine = if n1 > 0.0 && n2 > 0.0 {
+                        (dot / (n1 * n2)).clamp(-1.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let ent_after = m.entropy_after;
+                    let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
+                    (0.7 * cosine + 0.3 * ent_score) * lambda
+                };
+                score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
+            });
+        }
+
+        let mut adapted_context = if self.config.rce_erag_lambda > 0.0 && !top_hits.is_empty() {
+            let mut ctx = top_hits
+                .iter()
+                .flat_map(|m| m.erag_context.clone())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if ctx.len() > 100 {
+                ctx.truncate(100);
+            }
+            ctx
+        } else {
+            collapse.aggregated_context.clone()
+        };
+
+        if self.config.rce_actions_enabled && !self.config.rce_shadow_mode {
+            if topology.persistence_entropy > 0.7 || topology.spectral_gap > 0.7 {
+                adapted_context = adapted_context.replace(". ", ".\n");
+                adapted_context = adapted_context.replace("; ", ";\n");
+                adapted_context = adapted_context.replace(", ", ",\n");
+            }
+        }
+
+        let collapse_for_tokenizer = crate::erag::CollapseResult {
+            top_hits: top_hits.clone(),
+            aggregated_context: adapted_context,
+            average_similarity: collapse.average_similarity,
+            curator_quality: collapse.curator_quality,
+        };
+
+        let mut tokenizer_output = self
             .tokenizer
-            .process_with_memories(prompt, &collapse, &pad_state, collapse.top_hits.clone())
+            .process_with_memories(prompt, &collapse_for_tokenizer, &pad_state, top_hits)
             .await?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
@@ -292,6 +350,89 @@ impl Pipeline {
                 &tokenizer_output,
             )
             .await?;
+
+        // Phase 1 — RCE Telemetry (shadow mode): compute β_meta and export metrics
+        let mut rce_retry_approved = true; // default allow
+        if self.config.rce_enabled {
+            // Lazily initialise analyzer on first use
+            if self.rce_analyzer.is_none() {
+                let w = self.config.rce_beta_meta_weights;
+                let weights = tcs_rce::beta_meta::BetaMetaWeights {
+                    alpha_betti: w.alpha_betti,
+                    alpha_meta: w.alpha_meta,
+                    alpha_motif: w.alpha_motif,
+                    alpha_sheaf: w.alpha_sheaf,
+                };
+                let window = self.config.rce_window_seconds as usize;
+                let threshold = self.config.rce_breakthrough_threshold;
+                self.rce_analyzer = Some(crate::rce::analyzer::RceAnalyzer::new(window.max(2), weights, threshold));
+            }
+            if let Some(analyzer) = self.rce_analyzer.as_mut() {
+                let beta = analyzer.update(&pad_state, &topology);
+                // Consensus gate (read-only): combine diverse simple votes
+                let mut approved = true;
+                if self.config.rce_consensus.enabled {
+                    let gate = crate::rce::safety::ensemble::ConsensusGate::new(self.config.rce_consensus.clone());
+                    let vote_beta = beta >= self.config.rce_breakthrough_threshold;
+                    let vote_meta = analyzer.current_metastability() * topology.persistence_entropy > 0.0;
+                    let vote_spec = topology.spectral_gap > 0.0;
+                    approved = gate.approve(&[vote_beta, vote_meta, vote_spec]);
+                    if approved {
+                        tracing::info!("RCE consensus approved (shadow): beta={:.4}", beta);
+                    } else {
+                        tracing::info!("RCE consensus rejected (shadow): beta={:.4}", beta);
+                    }
+                }
+                rce_retry_approved = approved;
+
+                // Hyperfocus + Circuit Breaker (config-gated)
+                if self.config.rce_actions_enabled && !self.config.rce_shadow_mode {
+                    if approved && beta >= self.config.rce_breakthrough_threshold {
+            let streak = self
+                .rce_spike_streak
+                .fetch_add(1, AtomicOrdering::SeqCst)
+                + 1;
+                        if streak >= 3 {
+                            // Circuit breaker: slow mode – avoid further aggressive adjustments
+                            tracing::warn!("RCE circuit breaker: sustained β_meta spikes ({}). Entering slow mode.", streak);
+                        } else {
+                            // Apply focused resource allocation by tightening exploration
+                            // Use existing increments from config to avoid magic numbers
+                            let temp_delta = -self.config.cot_temp_increment;
+                            let top_p_delta = -self.config.phase2_top_p_increment;
+                            crate::pipeline::core::Pipeline::adjust_runtime_param(&mut self.config, "temperature", temp_delta);
+                            crate::pipeline::core::Pipeline::adjust_runtime_param(&mut self.config, "top_p", top_p_delta);
+                        }
+                    } else {
+                        // Reset streak when below threshold or not approved
+                        self.rce_spike_streak
+                            .store(0, AtomicOrdering::SeqCst);
+                    }
+                }
+
+                // Feed RCE as a signal to hyperfocus detector (normalized to threshold)
+                let rce_score = if self.config.rce_breakthrough_threshold > 0.0 {
+                    (beta / self.config.rce_breakthrough_threshold).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                hyperfocus_signals.insert(
+                    "rce".to_string(),
+                    crate::consonance::ConsonanceMetrics {
+                        score: rce_score,
+                        sources: vec![crate::consonance::ConsonanceSource::TopologicalConsistency(rce_score)],
+                        confidence: 0.9,
+                        dissonance_score: 1.0 - rce_score,
+                    },
+                );
+
+                // Topology-driven curriculum scheduling
+                if self.config.rce_actions_enabled && !self.config.rce_shadow_mode {
+                    let mut guard = self.learning.lock().await;
+                    guard.rce_schedule(beta, self.config.rce_breakthrough_threshold, topology.persistence_entropy);
+                }
+            }
+        }
 
         // Compute full consonance with curator now available
         let full_consonance = if let Some(ref curator) = self.curator {
@@ -398,6 +539,7 @@ impl Pipeline {
                 ucb1_score,
                 tokenizer_output.oov_rate,
                 &topology, // TOPOLOGY INTEGRATION: Pass topology to retry logic
+                rce_retry_approved,
             )
             .await?;
 
@@ -412,7 +554,7 @@ impl Pipeline {
                     &final_generation.hybrid_response,
                     Some(details.clone()),
                     &final_failure,
-                    self.retry_count.load(Ordering::Relaxed),
+                    self.retry_count.load(AtomicOrdering::Relaxed),
                 )
                 .await?;
         }
@@ -596,7 +738,7 @@ impl Pipeline {
                     "knot": topology.knot_complexity,
                     "betti": topology.betti_numbers,
                     "ucb1": compass.ucb1_score,
-                    "retries": self.retry_count.load(Ordering::Relaxed),
+                    "retries": self.retry_count.load(AtomicOrdering::Relaxed),
                     "latency_ms": final_generation.latency_ms,
                 });
                 async move {
@@ -650,7 +792,15 @@ impl Pipeline {
         ucb1_score: f64,
         oov_rate: f64,
         topology: &crate::tcs_analysis::TopologicalSignature,
+        rce_retry_approved: bool,
     ) -> Result<(GenerationResult, String, f64)> {
+        let loop_start = Instant::now();
+
+        // RCE consensus gating: skip retries unless approved
+        if !rce_retry_approved {
+            tracing::info!("RCE consensus gating: retries skipped");
+            return Ok((generation.clone(), initial_failure.to_string(), loop_start.elapsed().as_secs_f64() * 1000.0));
+        }
         // INTEGRATION FIX: Handle healing state specially - enhance instead of retry
         if initial_failure == "none" && compass.is_healing {
             // In healing state with good topology - apply enhancement strategies
@@ -908,7 +1058,7 @@ impl Pipeline {
                     "Retry succeeded on attempt {} (ROUGE: {:.3})",
                     retry_count, current_gen.rouge_score
                 );
-                self.retry_count.store(retry_count, Ordering::Relaxed);
+                self.retry_count.store(retry_count, AtomicOrdering::Relaxed);
                 break;
             }
 
@@ -1230,6 +1380,8 @@ impl Pipeline {
                                     let mut config = self.config_arc.write();
                                     for (param, delta) in adjustments {
                                         Self::adjust_runtime_param(&mut config, &param, delta);
+                                        // Phase 5.2: Record metric for each adjustment
+                                        crate::metrics::curator_feedback_metrics().record_parameter_adjustment(&param);
                                     }
                                     info!(
                                         adjustments = ?adjustment_clone,

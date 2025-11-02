@@ -11,6 +11,8 @@ path = "src/lib.rs"
 
 [features]
 default = ["beelink"]
+knot = ["dep:tcs-knot"]
+onnx = []
 beelink = []
 5080-q = []
 gauntlet = []
@@ -20,7 +22,7 @@ pyo3 = ["dep:pyo3"]
 otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
 svc = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tonic"]
 edge = []
-gpu = []
+gpu = ["candle-core/cuda", "candle-nn/cuda"]
 pipeline-v2 = []
 
 [dependencies]
@@ -43,15 +45,16 @@ thiserror = "1.0"
 tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
 tcs-core = { path = "../tcs-core" }
 tcs-tda = { path = "../tcs-tda" }
-tcs-knot = { path = "../tcs-knot" }
+tcs-knot = { path = "../tcs-knot", optional = true }
 tcs-tqft = { path = "../tcs-tqft" }
 niodoo-core = { path = "../niodoo-core" }
+tcs-rce = { path = "../tcs-rce" }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
 once_cell = { workspace = true }
 futures = { workspace = true }
 uuid = { workspace = true }
-plotters = "0.3"
+plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "svg_backend"] }
 ratatui = "0.27"
 crossterm = "0.28"
 
@@ -86,6 +89,14 @@ axum = { workspace = true, optional = true }
 tower = { version = "0.4", optional = true }
 tower-http = { version = "0.6", optional = true }
 tonic = { version = "0.12", optional = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+tokio-stream = "0.1"
+
+[build-dependencies]
+tonic-build = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
 
 [dev-dependencies]
 serde_json = "1.0"

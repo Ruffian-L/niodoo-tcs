@@ -3,11 +3,18 @@
 //! Provides batch fitness calculation with optional GPU acceleration.
 //! Falls back to CPU if GPU is unavailable or feature is disabled.
 
-use anyhow::Result;
 use crate::torus::PadGhostState;
-use crate::weighted_episodic_mem::{calculate_fitness_score, TemporalDecayConfig};
+use crate::weighted_episodic_mem::{
+    calculate_fitness_score, calculate_pad_salience, calculate_temporal_decay,
+    normalized_retrieval_weight, TemporalDecayConfig,
+};
+use anyhow::Result;
+#[cfg(feature = "gpu")]
+use candle_core::{DType, Device, Tensor};
 use ndarray::Array1;
-use tracing::{info, warn};
+use tracing::info;
+#[cfg(feature = "gpu")]
+use tracing::warn;
 
 /// GPU fitness calculator with CPU fallback
 pub struct GPUMemoryFitnessCalculator {
@@ -26,6 +33,9 @@ impl GPUMemoryFitnessCalculator {
             device, gpu_available
         );
 
+        // Phase 5.2: Record GPU availability metric
+        crate::metrics::gpu_fitness_metrics().set_gpu_available(gpu_available);
+
         Self {
             device: device.to_string(),
             gpu_available,
@@ -35,9 +45,7 @@ impl GPUMemoryFitnessCalculator {
     /// Check if GPU is available
     #[cfg(feature = "gpu")]
     fn check_gpu_available() -> bool {
-        // Check for CUDA availability (would require actual CUDA bindings)
-        // For now, always return false - CPU fallback will be used
-        false
+        Device::cuda_if_available(0).is_ok()
     }
 
     #[cfg(not(feature = "gpu"))]
@@ -55,11 +63,22 @@ impl GPUMemoryFitnessCalculator {
         weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
-        if self.gpu_available && self.device == "cuda" {
-            self._batch_fitness_gpu(memories, weights, temporal_config)
+        let start = std::time::Instant::now();
+        let batch_size = memories.len();
+
+        let result = if self.gpu_available && self.device == "cuda" {
+            let res = self._batch_fitness_gpu(memories, weights, temporal_config);
+            let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+            crate::metrics::gpu_fitness_metrics().record_gpu_calculation(batch_size, latency_ms);
+            res
         } else {
-            self._batch_fitness_cpu(memories, weights, temporal_config)
-        }
+            let res = self._batch_fitness_cpu(memories, weights, temporal_config);
+            let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+            crate::metrics::gpu_fitness_metrics().record_cpu_fallback(batch_size, latency_ms);
+            res
+        };
+
+        result
     }
 
     /// CPU-based batch fitness calculation
@@ -99,8 +118,13 @@ impl GPUMemoryFitnessCalculator {
         weights: &[f32; 6],
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
-        warn!("GPU acceleration not yet implemented, falling back to CPU");
-        self._batch_fitness_cpu(memories, weights, temporal_config)
+        match self.batch_fitness_gpu_impl(memories, weights, temporal_config) {
+            Ok(scores) => scores,
+            Err(error) => {
+                warn!(?error, "GPU fitness calculation failed; using CPU fallback");
+                self._batch_fitness_cpu(memories, weights, temporal_config)
+            }
+        }
     }
 
     #[cfg(not(feature = "gpu"))]
@@ -111,6 +135,71 @@ impl GPUMemoryFitnessCalculator {
         temporal_config: &TemporalDecayConfig,
     ) -> Vec<f32> {
         self._batch_fitness_cpu(memories, weights, temporal_config)
+    }
+
+    #[cfg(feature = "gpu")]
+    fn batch_fitness_gpu_impl(
+        &self,
+        memories: &[(PadGhostState, f64, u32, f32, f32, f32)],
+        weights: &[f32; 6],
+        temporal_config: &TemporalDecayConfig,
+    ) -> candle_core::Result<Vec<f32>> {
+        if memories.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let device = Device::cuda_if_available(0)?;
+        let batch = memories.len();
+
+        let mut temporal = Vec::with_capacity(batch);
+        let mut pad_salience = Vec::with_capacity(batch);
+        let mut retrieval = Vec::with_capacity(batch);
+        let mut beta1_norm = Vec::with_capacity(batch);
+        let mut consonance_norm = Vec::with_capacity(batch);
+
+        for (pad_state, age_days, retrieval_count, beta1, consonance, consolidation_level) in
+            memories
+        {
+            temporal.push(calculate_temporal_decay(
+                *age_days,
+                *consolidation_level,
+                temporal_config,
+            ));
+            pad_salience.push(calculate_pad_salience(pad_state));
+            retrieval.push(normalized_retrieval_weight(*retrieval_count));
+            beta1_norm.push(beta1.clamp(0.0, 1.0));
+            consonance_norm.push(consonance.clamp(0.0, 1.0));
+        }
+
+        let temporal_t = Tensor::from_vec(temporal, (batch,), &device)?;
+        let pad_t = Tensor::from_vec(pad_salience, (batch,), &device)?;
+        let retrieval_t = Tensor::from_vec(retrieval, (batch,), &device)?;
+        let beta1_t = Tensor::from_vec(beta1_norm, (batch,), &device)?;
+        let consonance_t = Tensor::from_vec(consonance_norm, (batch,), &device)?;
+        let resource_penalty_t = Tensor::zeros((batch,), DType::F32, &device)?;
+
+        let w0 = Tensor::new(&[weights[0]], &device)?;
+        let w1 = Tensor::new(&[weights[1]], &device)?;
+        let w2 = Tensor::new(&[weights[2]], &device)?;
+        let w3 = Tensor::new(&[weights[3]], &device)?;
+        let w4 = Tensor::new(&[weights[4]], &device)?;
+        let w5 = Tensor::new(&[weights[5]], &device)?;
+
+        let mut fitness = temporal_t.broadcast_mul(&w0)?;
+        fitness = fitness.add(&pad_t.broadcast_mul(&w1)?)?;
+        fitness = fitness.add(&beta1_t.broadcast_mul(&w2)?)?;
+        fitness = fitness.add(&retrieval_t.broadcast_mul(&w3)?)?;
+        fitness = fitness.add(&consonance_t.broadcast_mul(&w4)?)?;
+        fitness = fitness.sub(&resource_penalty_t.broadcast_mul(&w5)?)?;
+
+        let zero = Tensor::new(&[0.0f32], &device)?;
+        let one = Tensor::new(&[1.0f32], &device)?;
+        fitness = fitness.maximum(&zero)?;
+        fitness = fitness.minimum(&one)?;
+
+        let fitness_cpu = fitness.to_device(&Device::Cpu)?;
+        let scores = fitness_cpu.to_vec1::<f32>()?;
+        Ok(scores)
     }
 
     /// Batch calculate fitness from embeddings and metadata

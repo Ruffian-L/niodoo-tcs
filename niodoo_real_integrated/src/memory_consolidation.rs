@@ -17,7 +17,7 @@
 
 use crate::erag::EragMemory;
 use rand::Rng;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 /// TD (Temporal Difference) learning value estimator
 pub struct MemoryValueEstimator {
@@ -266,6 +266,8 @@ impl MemoryConsolidationManager {
         fitness_score: f32,
         timestamp: u64,
     ) -> f32 {
+        let start = std::time::Instant::now();
+        
         // Get current consolidation level (if exists)
         let current_level = self.value_estimator.get_value(memory_id);
         
@@ -278,6 +280,8 @@ impl MemoryConsolidationManager {
         if timestamp > current_clock {
             self.vector_clock.insert(memory_id.to_string(), timestamp);
             self.merge_counter += 1;
+            // Phase 5.2: Record metrics
+            crate::metrics::crdt_consolidation_metrics().record_vector_clock_update();
         }
         
         // Merge fitness scores: weighted average (CRDT-style)
@@ -287,6 +291,9 @@ impl MemoryConsolidationManager {
         // Update value estimator with merged state
         self.value_estimator.update_value(memory_id, merged_fitness - current_fitness);
         
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        crate::metrics::crdt_consolidation_metrics().record_merge(latency_ms);
+        
         merged_level
     }
 
@@ -295,12 +302,20 @@ impl MemoryConsolidationManager {
         &mut self,
         consolidations: &[(String, f32, f32, u64)], // (memory_id, consolidation_level, fitness_score, timestamp)
     ) -> Vec<f32> {
-        consolidations
+        let start = std::time::Instant::now();
+        let batch_size = consolidations.len();
+        
+        let results = consolidations
             .iter()
             .map(|(mem_id, level, fitness, ts)| {
                 self.crdt_merge_consolidation(mem_id, *level, *fitness, *ts)
             })
-            .collect()
+            .collect();
+        
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        crate::metrics::crdt_consolidation_metrics().record_batch_merge(batch_size, latency_ms);
+        
+        results
     }
 
     /// Determine consolidation level based on prediction error

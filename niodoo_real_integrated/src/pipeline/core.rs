@@ -29,6 +29,7 @@ use crate::metrics::{metrics, weighted_memory_metrics};
 use crate::security::PromptSecurityManager;
 use crate::signals::FailureSignals;
 use crate::tcs_analysis::{TCSAnalyzer, TopologicalSignature};
+use crate::rce::analyzer::RceAnalyzer;
 use crate::token_manager::{DynamicTokenizerManager, TokenizerOutput};
 use crate::topology_memory::TopologyMemoryAnalyzer;
 use crate::torus::{PadGhostState, TorusPadMapper};
@@ -76,6 +77,7 @@ pub struct Pipeline {
     pub(crate) learning: AsyncMutex<LearningLoop>,
     pub(crate) curator: Option<Curator>,
     pub(crate) tcs_analyzer: Option<TCSAnalyzer>,
+    pub(crate) rce_analyzer: Option<RceAnalyzer>,
     pub(crate) embedding_cache: PipelineCache<Vec<f32>>,
     pub(crate) collapse_cache: PipelineCache<CollapseResult>,
     pub(crate) retry_count: Arc<AtomicU32>,
@@ -94,6 +96,8 @@ pub struct Pipeline {
     security: Arc<PromptSecurityManager>,
     // Phase 4.2: Curator feedback controller
     pub(crate) curator_feedback: Option<Arc<AsyncMutex<CuratorFeedbackController>>>,
+    // RCE: spike circuit breaker streak counter
+    pub(crate) rce_spike_streak: Arc<AtomicU32>,
 }
 
 impl Pipeline {
@@ -412,6 +416,7 @@ impl Pipeline {
             learning: AsyncMutex::new(learning),
             curator,
             tcs_analyzer,
+            rce_analyzer: None,
             embedding_cache,
             collapse_cache,
             retry_count: Arc::new(AtomicU32::new(0)),
@@ -428,6 +433,7 @@ impl Pipeline {
             discovery_queue,
             security: security_manager,
             curator_feedback: Some(curator_feedback), // Phase 4.2: Curator feedback controller
+            rce_spike_streak: Arc::new(AtomicU32::new(0)),
         })
     }
 

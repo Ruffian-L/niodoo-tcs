@@ -110,6 +110,84 @@ pub fn metrics() -> &'static PipelineMetrics {
     &METRICS
 }
 
+/// RCE metrics (β_meta, spectral gap, persistence entropy, spike counter)
+#[derive(Clone)]
+pub struct RceMetrics {
+    beta_meta_current: Gauge,
+    beta_meta_peak: Gauge,
+    laplacian_spectral_gap: Gauge,
+    persistence_entropy: Gauge,
+    beta_meta_spikes_total: Counter,
+}
+
+impl RceMetrics {
+    fn new() -> Result<Self> {
+        let beta_meta_current = register_gauge!(
+            "niodoo_rce_beta_meta_current",
+            "Current β_meta value"
+        )
+        .map_err(Error::from)?;
+        let beta_meta_peak = register_gauge!(
+            "niodoo_rce_beta_meta_peak",
+            "Peak β_meta in current session"
+        )
+        .map_err(Error::from)?;
+        let laplacian_spectral_gap = register_gauge!(
+            "niodoo_rce_laplacian_spectral_gap",
+            "Latest Laplacian spectral gap proxy"
+        )
+        .map_err(Error::from)?;
+        let persistence_entropy = register_gauge!(
+            "niodoo_rce_persistence_entropy",
+            "Latest persistence entropy"
+        )
+        .map_err(Error::from)?;
+        let beta_meta_spikes_total = register_counter!(
+            "niodoo_rce_beta_meta_spikes_total",
+            "Total β_meta spikes (threshold crossings)"
+        )
+        .map_err(Error::from)?;
+
+        Ok(Self {
+            beta_meta_current,
+            beta_meta_peak,
+            laplacian_spectral_gap,
+            persistence_entropy,
+            beta_meta_spikes_total,
+        })
+    }
+
+    pub fn record_beta_meta(&self, current: f64, peak: f64) {
+        self.beta_meta_current.set(current);
+        self.beta_meta_peak.set(peak);
+    }
+
+    pub fn record_spectral_gap(&self, gap: f64) {
+        self.laplacian_spectral_gap.set(gap);
+    }
+
+    pub fn record_persistence_entropy(&self, entropy: f64) {
+        self.persistence_entropy.set(entropy);
+    }
+
+    pub fn inc_spike(&self) {
+        self.beta_meta_spikes_total.inc();
+    }
+}
+
+static RCE_METRICS: Lazy<RceMetrics> = Lazy::new(|| {
+    RceMetrics::new().unwrap_or_else(|e| {
+        panic!(
+            "Failed to initialize RCE metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
+    })
+});
+
+pub fn rce_metrics() -> &'static RceMetrics {
+    &RCE_METRICS
+}
+
 #[derive(Clone)]
 pub struct CacheMetrics {
     embedding_hits: Counter,
@@ -742,4 +820,293 @@ static TCS_ANALYZER_METRICS: Lazy<TCSAnalyzerMetrics> = Lazy::new(|| {
 
 pub fn tcs_analyzer_metrics() -> &'static TCSAnalyzerMetrics {
     &TCS_ANALYZER_METRICS
+}
+
+/// Phase 5.2: Curator Feedback Controller metrics
+#[derive(Clone)]
+pub struct CuratorFeedbackMetrics {
+    /// Adaptive threshold value
+    adaptive_threshold_gauge: Gauge,
+    /// Quality trend (positive = improving, negative = degrading)
+    quality_trend_gauge: Gauge,
+    /// Recent quality average
+    recent_quality_avg: Gauge,
+    /// Learned rate (percentage of responses marked as learned)
+    learned_rate_gauge: Gauge,
+    /// Parameter adjustments applied
+    parameter_adjustments_total: Counter,
+    /// Temperature adjustments
+    temperature_adjustments: Counter,
+    /// Top-p adjustments
+    top_p_adjustments: Counter,
+    /// Retrieval top-k adjustments
+    retrieval_top_k_adjustments: Counter,
+}
+
+impl CuratorFeedbackMetrics {
+    fn new() -> Result<Self> {
+        let adaptive_threshold_gauge = register_gauge!(
+            "curator_feedback_adaptive_threshold",
+            "Current adaptive quality threshold"
+        )
+        .map_err(Error::from)?;
+
+        let quality_trend_gauge = register_gauge!(
+            "curator_feedback_quality_trend",
+            "Quality trend (positive = improving, negative = degrading)"
+        )
+        .map_err(Error::from)?;
+
+        let recent_quality_avg = register_gauge!(
+            "curator_feedback_recent_quality_avg",
+            "Recent quality average"
+        )
+        .map_err(Error::from)?;
+
+        let learned_rate_gauge = register_gauge!(
+            "curator_feedback_learned_rate",
+            "Percentage of responses marked as learned"
+        )
+        .map_err(Error::from)?;
+
+        let parameter_adjustments_total = register_counter!(
+            "curator_feedback_parameter_adjustments_total",
+            "Total parameter adjustments applied"
+        )
+        .map_err(Error::from)?;
+
+        let temperature_adjustments = register_counter!(
+            "curator_feedback_temperature_adjustments_total",
+            "Total temperature adjustments"
+        )
+        .map_err(Error::from)?;
+
+        let top_p_adjustments = register_counter!(
+            "curator_feedback_top_p_adjustments_total",
+            "Total top_p adjustments"
+        )
+        .map_err(Error::from)?;
+
+        let retrieval_top_k_adjustments = register_counter!(
+            "curator_feedback_retrieval_top_k_adjustments_total",
+            "Total retrieval_top_k adjustments"
+        )
+        .map_err(Error::from)?;
+
+        Ok(Self {
+            adaptive_threshold_gauge,
+            quality_trend_gauge,
+            recent_quality_avg,
+            learned_rate_gauge,
+            parameter_adjustments_total,
+            temperature_adjustments,
+            top_p_adjustments,
+            retrieval_top_k_adjustments,
+        })
+    }
+
+    pub fn record_feedback(&self, adaptive_threshold: f32, quality_trend: f32, recent_quality: f32, learned_rate: f32) {
+        self.adaptive_threshold_gauge.set(adaptive_threshold as f64);
+        self.quality_trend_gauge.set(quality_trend as f64);
+        self.recent_quality_avg.set(recent_quality as f64);
+        self.learned_rate_gauge.set(learned_rate as f64);
+    }
+
+    pub fn record_parameter_adjustment(&self, param: &str) {
+        self.parameter_adjustments_total.inc();
+        match param {
+            "temperature" => self.temperature_adjustments.inc(),
+            "top_p" => self.top_p_adjustments.inc(),
+            "retrieval_top_k" => self.retrieval_top_k_adjustments.inc(),
+            _ => {}
+        }
+    }
+}
+
+static CURATOR_FEEDBACK_METRICS: Lazy<CuratorFeedbackMetrics> = Lazy::new(|| {
+    CuratorFeedbackMetrics::new().unwrap_or_else(|e| {
+        panic!(
+            "Failed to initialize curator feedback metrics: {}. This is a critical infrastructure failure.",
+            e
+        )
+    })
+});
+
+pub fn curator_feedback_metrics() -> &'static CuratorFeedbackMetrics {
+    &CURATOR_FEEDBACK_METRICS
+}
+
+/// Phase 5.2: CRDT Consolidation metrics
+#[derive(Clone)]
+pub struct CrdtConsolidationMetrics {
+    /// Merge operations counter
+    merge_operations_total: Counter,
+    /// Batch merge operations
+    batch_merge_operations_total: Counter,
+    /// Average batch size
+    batch_size_histogram: Histogram,
+    /// Merge latency
+    merge_latency_ms: Histogram,
+    /// Vector clock updates
+    vector_clock_updates_total: Counter,
+}
+
+impl CrdtConsolidationMetrics {
+    fn new() -> Result<Self> {
+        let merge_operations_total = register_counter!(
+            "crdt_consolidation_merge_operations_total",
+            "Total CRDT merge operations"
+        )
+        .map_err(Error::from)?;
+
+        let batch_merge_operations_total = register_counter!(
+            "crdt_consolidation_batch_merge_operations_total",
+            "Total batch CRDT merge operations"
+        )
+        .map_err(Error::from)?;
+
+        let batch_size_histogram = register_histogram!(HistogramOpts::new(
+            "crdt_consolidation_batch_size",
+            "CRDT consolidation batch size"
+        )
+        .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0]))
+        .map_err(Error::from)?;
+
+        let merge_latency_ms = register_histogram!(HistogramOpts::new(
+            "crdt_consolidation_merge_latency_ms",
+            "CRDT consolidation merge latency in milliseconds"
+        )
+        .buckets(vec![0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0]))
+        .map_err(Error::from)?;
+
+        let vector_clock_updates_total = register_counter!(
+            "crdt_consolidation_vector_clock_updates_total",
+            "Total vector clock updates"
+        )
+        .map_err(Error::from)?;
+
+        Ok(Self {
+            merge_operations_total,
+            batch_merge_operations_total,
+            batch_size_histogram,
+            merge_latency_ms,
+            vector_clock_updates_total,
+        })
+    }
+
+    pub fn record_merge(&self, latency_ms: f64) {
+        self.merge_operations_total.inc();
+        self.merge_latency_ms.observe(latency_ms);
+    }
+
+    pub fn record_batch_merge(&self, batch_size: usize, latency_ms: f64) {
+        self.batch_merge_operations_total.inc();
+        self.batch_size_histogram.observe(batch_size as f64);
+        self.merge_latency_ms.observe(latency_ms);
+    }
+
+    pub fn record_vector_clock_update(&self) {
+        self.vector_clock_updates_total.inc();
+    }
+}
+
+static CRDT_CONSOLIDATION_METRICS: Lazy<CrdtConsolidationMetrics> = Lazy::new(|| {
+    CrdtConsolidationMetrics::new().unwrap_or_else(|e| {
+        panic!(
+            "Failed to initialize CRDT consolidation metrics: {}. This is a critical infrastructure failure.",
+            e
+        )
+    })
+});
+
+pub fn crdt_consolidation_metrics() -> &'static CrdtConsolidationMetrics {
+    &CRDT_CONSOLIDATION_METRICS
+}
+
+/// Phase 5.2: GPU Fitness metrics
+#[derive(Clone)]
+pub struct GPUFitnessMetrics {
+    /// GPU fitness calculations
+    gpu_fitness_calculations_total: Counter,
+    /// CPU fallback calculations
+    cpu_fallback_calculations_total: Counter,
+    /// Batch size histogram
+    batch_size_histogram: Histogram,
+    /// Calculation latency
+    calculation_latency_ms: Histogram,
+    /// GPU availability gauge
+    gpu_available_gauge: Gauge,
+}
+
+impl GPUFitnessMetrics {
+    fn new() -> Result<Self> {
+        let gpu_fitness_calculations_total = register_counter!(
+            "gpu_fitness_calculations_total",
+            "Total GPU fitness calculations"
+        )
+        .map_err(Error::from)?;
+
+        let cpu_fallback_calculations_total = register_counter!(
+            "gpu_fitness_cpu_fallback_calculations_total",
+            "Total CPU fallback calculations (GPU unavailable)"
+        )
+        .map_err(Error::from)?;
+
+        let batch_size_histogram = register_histogram!(HistogramOpts::new(
+            "gpu_fitness_batch_size",
+            "GPU fitness calculation batch size"
+        )
+        .buckets(vec![1.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0]))
+        .map_err(Error::from)?;
+
+        let calculation_latency_ms = register_histogram!(HistogramOpts::new(
+            "gpu_fitness_calculation_latency_ms",
+            "GPU fitness calculation latency in milliseconds"
+        )
+        .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0]))
+        .map_err(Error::from)?;
+
+        let gpu_available_gauge = register_gauge!(
+            "gpu_fitness_gpu_available",
+            "Whether GPU is available for fitness calculations"
+        )
+        .map_err(Error::from)?;
+
+        Ok(Self {
+            gpu_fitness_calculations_total,
+            cpu_fallback_calculations_total,
+            batch_size_histogram,
+            calculation_latency_ms,
+            gpu_available_gauge,
+        })
+    }
+
+    pub fn record_gpu_calculation(&self, batch_size: usize, latency_ms: f64) {
+        self.gpu_fitness_calculations_total.inc();
+        self.batch_size_histogram.observe(batch_size as f64);
+        self.calculation_latency_ms.observe(latency_ms);
+    }
+
+    pub fn record_cpu_fallback(&self, batch_size: usize, latency_ms: f64) {
+        self.cpu_fallback_calculations_total.inc();
+        self.batch_size_histogram.observe(batch_size as f64);
+        self.calculation_latency_ms.observe(latency_ms);
+    }
+
+    pub fn set_gpu_available(&self, available: bool) {
+        self.gpu_available_gauge.set(if available { 1.0 } else { 0.0 });
+    }
+}
+
+static GPU_FITNESS_METRICS: Lazy<GPUFitnessMetrics> = Lazy::new(|| {
+    GPUFitnessMetrics::new().unwrap_or_else(|e| {
+        panic!(
+            "Failed to initialize GPU fitness metrics: {}. This is a critical infrastructure failure.",
+            e
+        )
+    })
+});
+
+pub fn gpu_fitness_metrics() -> &'static GPUFitnessMetrics {
+    &GPU_FITNESS_METRICS
 }

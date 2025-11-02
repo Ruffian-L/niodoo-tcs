@@ -117,6 +117,14 @@ impl CuratorFeedbackController {
         let threshold_adjustment = self.quality_trend * 0.05; // 5% adjustment per trend unit
         self.adaptive_threshold = (self.base_threshold + threshold_adjustment)
             .clamp(0.3, 0.9); // Clamp between reasonable bounds
+        
+        // Phase 5.2: Record metrics
+        crate::metrics::curator_feedback_metrics().record_feedback(
+            self.adaptive_threshold,
+            self.quality_trend,
+            self.recent_quality_avg(),
+            self.learned_rate(),
+        );
     }
 
     /// Phase 4.2: Get adaptive quality threshold
@@ -159,6 +167,7 @@ impl CuratorFeedbackController {
         if self.quality_trend.abs() > 0.05 {
             let temp_adjustment = -self.quality_trend * 0.1; // Inverse relationship
             adjustments.insert("temperature".to_string(), temp_adjustment as f64);
+            crate::metrics::curator_feedback_metrics().record_parameter_adjustment("temperature");
         }
 
         // Adjust top_p based on learned rate
@@ -166,8 +175,10 @@ impl CuratorFeedbackController {
         // Low learned rate = curator is rejecting, increase top_p (more diverse)
         if learned_rate < 0.3 && quality_avg < 0.6 {
             adjustments.insert("top_p".to_string(), 0.05); // Increase diversity
+            crate::metrics::curator_feedback_metrics().record_parameter_adjustment("top_p");
         } else if learned_rate > 0.7 && quality_avg > 0.7 {
             adjustments.insert("top_p".to_string(), -0.02); // Slightly reduce diversity
+            crate::metrics::curator_feedback_metrics().record_parameter_adjustment("top_p");
         }
 
         // Adjust retrieval_top_k based on quality
@@ -175,8 +186,10 @@ impl CuratorFeedbackController {
         // Lower quality = need more context, increase k
         if quality_avg < 0.5 {
             adjustments.insert("retrieval_top_k".to_string(), 1.0); // Increase context
+            crate::metrics::curator_feedback_metrics().record_parameter_adjustment("retrieval_top_k");
         } else if quality_avg > 0.8 && learned_rate > 0.6 {
             adjustments.insert("retrieval_top_k".to_string(), -0.5); // Reduce context (less noise)
+            crate::metrics::curator_feedback_metrics().record_parameter_adjustment("retrieval_top_k");
         }
 
         adjustments

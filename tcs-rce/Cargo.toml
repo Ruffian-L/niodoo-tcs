@@ -1,0 +1,25 @@
+[package]
+name = "tcs-rce"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Recursive Connectome Engine primitives for NIODOO (β_meta, Laplacians, sheaf descriptors, metrics)"
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+nalgebra = { workspace = true }
+rayon = { workspace = true }
+log = { workspace = true }
+uuid = { workspace = true }
+petgraph = { workspace = true }
+
+# Internal crates
+tcs-tda = { path = "../tcs-tda" }
+
+[features]
+default = []
+gpu = []
+

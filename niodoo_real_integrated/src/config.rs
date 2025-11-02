@@ -373,6 +373,32 @@ impl FromStr for TopologyMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct RceBetaMetaWeights {
+    pub alpha_betti: f64,
+    pub alpha_meta: f64,
+    pub alpha_motif: f64,
+    pub alpha_sheaf: f64,
+}
+
+impl Default for RceBetaMetaWeights {
+    fn default() -> Self {
+        Self {
+            alpha_betti: 1.0,
+            alpha_meta: 1.0,
+            alpha_motif: 1.0,
+            alpha_sheaf: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RceConsensusConfig {
+    pub enabled: bool,
+    pub analyzers: usize,
+    pub quorum: usize,
+}
+
 fn default_security_rate_limit_window_secs() -> u64 {
     60
 }
@@ -588,6 +614,16 @@ fn default_consistency_variance_threshold() -> f64 {
     0.15
 }
 
+fn default_rce_enabled() -> bool { true }
+fn default_rce_shadow_mode() -> bool { true }
+fn default_rce_actions_enabled() -> bool { false }
+fn default_rce_window_seconds() -> u64 { 10 }
+fn default_rce_stride_seconds() -> u64 { 2 }
+fn default_rce_beta_meta_weights() -> RceBetaMetaWeights { RceBetaMetaWeights::default() }
+fn default_rce_breakthrough_threshold() -> f64 { 0.5 }
+fn default_rce_erag_lambda() -> f64 { 0.0 }
+fn default_rce_archive_backend() -> String { "Qdrant".to_string() }
+
 fn default_dqn_epsilon() -> f64 {
     0.9
 }
@@ -680,6 +716,28 @@ pub struct RuntimeConfig {
     pub mock_mode: bool,
     #[serde(default)]
     pub topology_mode: TopologyMode,
+
+    // RCE (Recursive Connectome Engine) configuration
+    #[serde(default = "default_rce_enabled")]
+    pub rce_enabled: bool,
+    #[serde(default = "default_rce_shadow_mode")]
+    pub rce_shadow_mode: bool,
+    #[serde(default = "default_rce_actions_enabled")]
+    pub rce_actions_enabled: bool,
+    #[serde(default = "default_rce_window_seconds")]
+    pub rce_window_seconds: u64,
+    #[serde(default = "default_rce_stride_seconds")]
+    pub rce_stride_seconds: u64,
+    #[serde(default = "default_rce_beta_meta_weights")]
+    pub rce_beta_meta_weights: RceBetaMetaWeights,
+    #[serde(default = "default_rce_breakthrough_threshold")]
+    pub rce_breakthrough_threshold: f64,
+    #[serde(default)]
+    pub rce_consensus: RceConsensusConfig,
+    #[serde(default = "default_rce_erag_lambda")]
+    pub rce_erag_lambda: f64,
+    #[serde(default = "default_rce_archive_backend")]
+    pub rce_archive_backend: String,
 
     // Phase 2 retry configuration
     #[serde(default = "default_max_retries")]
@@ -1461,7 +1519,7 @@ impl RuntimeConfig {
             .and_then(|s| serde_yaml::from_str(s).ok())
             .unwrap_or_else(default_dqn_actions);
 
-        let runtime = Self {
+        let mut runtime = Self {
             vllm_endpoint,
             vllm_model,
             qdrant_url,
@@ -1480,6 +1538,16 @@ impl RuntimeConfig {
             enable_consistency_voting,
             mock_mode,
             topology_mode,
+            rce_enabled: default_rce_enabled(),
+            rce_shadow_mode: default_rce_shadow_mode(),
+            rce_actions_enabled: default_rce_actions_enabled(),
+            rce_window_seconds: default_rce_window_seconds(),
+            rce_stride_seconds: default_rce_stride_seconds(),
+            rce_beta_meta_weights: default_rce_beta_meta_weights(),
+            rce_breakthrough_threshold: default_rce_breakthrough_threshold(),
+            rce_consensus: RceConsensusConfig::default(),
+            rce_erag_lambda: default_rce_erag_lambda(),
+            rce_archive_backend: default_rce_archive_backend(),
             phase2_max_retries,
             phase2_retry_base_delay_ms,
             phase2_cot_iterations,
@@ -1571,10 +1639,76 @@ impl RuntimeConfig {
                 .unwrap_or(false),
         };
 
+        runtime.apply_hardware_overrides(args.hardware);
+
         info!(model = %runtime.curator_model_name, "Config loaded: CURATOR_MODEL={}", runtime.curator_model_name);
         info!(mode = ?runtime.topology_mode, "Topology mode configured");
 
         Ok(runtime)
+    }
+
+    fn apply_hardware_overrides(&mut self, hardware: HardwareProfile) {
+        match hardware {
+            HardwareProfile::H200 => {
+                info!("Applying H200 hardware overrides");
+
+                self.use_gpu_fitness = true;
+                self.optimized_erag = true;
+                self.cache_prefetch_enabled = true;
+                self.cache_prefetch_parallelism = self.cache_prefetch_parallelism.max(12);
+                self.cache_prefetch_prompts = self.cache_prefetch_prompts.max(16);
+                self.cache_prefetch_top_hits = self.cache_prefetch_top_hits.max(8);
+                self.erag_batch_size = self.erag_batch_size.max(256);
+                self.erag_batch_flush_ms = self.erag_batch_flush_ms.min(150);
+                self.generation_max_tokens = self.generation_max_tokens.max(4096);
+                self.dynamic_token_max = self.dynamic_token_max.max(1024);
+                self.token_promotion_interval = self.token_promotion_interval.min(30);
+                self.cache_capacity = self.cache_capacity.max(4_096);
+                if !self
+                    .weighted_memory_config
+                    .gpu_device
+                    .eq_ignore_ascii_case("cuda")
+                {
+                    self.weighted_memory_config.gpu_device = "cuda".to_string();
+                }
+
+                if self.parallel_curator_rouge == false {
+                    self.parallel_curator_rouge = true;
+                }
+
+                info!(
+                    use_gpu_fitness = self.use_gpu_fitness,
+                    optimized_erag = self.optimized_erag,
+                    gpu_device = %self.weighted_memory_config.gpu_device,
+                    erag_batch_size = self.erag_batch_size,
+                    generation_max_tokens = self.generation_max_tokens,
+                    token_promotion_interval = self.token_promotion_interval,
+                    "H200 overrides applied"
+                );
+            }
+            HardwareProfile::Laptop5080Q => {
+                if self.weighted_memory_config.gpu_device == "cpu" {
+                    self.weighted_memory_config.gpu_device = "auto".to_string();
+                }
+                self.use_gpu_fitness = true;
+                self.optimized_erag = true;
+                self.cache_prefetch_enabled = true;
+            }
+            HardwareProfile::Beelink => {
+                // No overrides; defaults tuned for Beelink edge boxes.
+            }
+        }
+    }
+
+    /// Serialize the active runtime configuration to a JSON file on disk.
+    /// Intended for baseline freezes and reproducibility logs.
+    pub fn snapshot_to_json<P: AsRef<std::path::Path>>(&self, path: P) -> anyhow::Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        if let Some(parent) = path.as_ref().parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, json)?;
+        Ok(())
     }
 }
 

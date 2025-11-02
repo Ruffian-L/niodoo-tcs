@@ -12,6 +12,8 @@ pub mod embedding;
 pub mod erag;
 pub mod eval;
 pub mod generation;
+#[cfg(feature = "svc")]
+pub mod grpc_inference;
 pub mod health;
 pub mod hyperfocus;
 pub mod learning;
@@ -19,6 +21,7 @@ pub mod lora_trainer;
 pub mod mcts;
 pub mod mcts_config;
 pub mod metrics;
+pub mod rce;
 pub mod mock_qdrant;
 pub mod mock_vllm;
 // Legacy pipeline module - commented out as we're using the new pipeline/ structure

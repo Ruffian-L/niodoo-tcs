@@ -1,12 +1,13 @@
+use std::convert::TryInto;
 use std::hash::Hasher;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ahash::AHasher;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use blake3::hash as blake3_hash;
-use bytemuck::{cast_slice, cast_vec};
+use bytemuck::cast_slice;
 use lru::LruCache;
 use lz4_flex::block::{compress_prepend_size, decompress_size_prepended};
 use parking_lot::RwLock;
@@ -137,13 +138,18 @@ impl CachedEmbedding {
             self.payload.clone()
         };
 
-        let decoded: Vec<f32> = cast_vec(bytes);
-        if decoded.len() != self.len_f32 {
-            warn!(
-                expected = self.len_f32,
-                actual = decoded.len(),
-                "Embedding cache decode length mismatch"
-            );
+        let expected_bytes = self.len_f32 * std::mem::size_of::<f32>();
+        if bytes.len() != expected_bytes {
+            return Err(anyhow!(
+                "Embedding cache decode length mismatch: expected {} bytes, got {}",
+                expected_bytes,
+                bytes.len()
+            ));
+        }
+
+        let mut decoded = Vec::with_capacity(self.len_f32);
+        for chunk in bytes.chunks_exact(4) {
+            decoded.push(f32::from_le_bytes(chunk.try_into().unwrap()));
         }
         Ok(decoded)
     }

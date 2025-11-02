@@ -610,6 +610,74 @@ impl LearningLoop {
         })
     }
 
+    /// RCE-driven curriculum scheduling:
+    /// - If β_meta below threshold (consolidation regime) and curated buffer has enough samples,
+    ///   flush to training to consolidate recent learnings.
+    /// - If β_meta above threshold (exploration regime), prefer accumulating more diverse samples.
+    pub fn rce_schedule(&mut self, beta_meta: f64, beta_threshold: f64, _persistence_entropy: f64) {
+        let consolidating = beta_meta < beta_threshold;
+        if consolidating {
+            // Flush sooner to consolidate when system is stable
+            self.flush_curated_if_ready(5);
+        } else {
+            // Exploration regime: wait for larger batch
+            self.flush_curated_if_ready(12);
+        }
+    }
+
+    fn flush_curated_if_ready(&mut self, min_count: usize) {
+        if self.curated_buffer.len() < min_count {
+            return;
+        }
+
+        // Reuse the same batching logic as add_curator_learned by building samples
+        let embedding_dim = {
+            let guard = self.config.read();
+            guard.qdrant_vector_dim
+        };
+
+        let training_samples: Vec<(Vec<f32>, Vec<f32>)> = self
+            .curated_buffer
+            .iter()
+            .map(|sample| {
+                let mut features = vec![
+                    sample.reward as f32,
+                    sample.knot_complexity as f32,
+                    sample.spectral_gap as f32,
+                ];
+                while features.len() < embedding_dim {
+                    features.push(0.0);
+                }
+                features.truncate(embedding_dim);
+
+                let mut target = sample
+                    .output
+                    .bytes()
+                    .map(|b| b as f32)
+                    .collect::<Vec<_>>();
+                if target.len() < embedding_dim {
+                    target.resize(embedding_dim, 0.0);
+                } else {
+                    target.truncate(embedding_dim);
+                }
+                (features, target)
+            })
+            .collect();
+
+        if training_samples.is_empty() {
+            return;
+        }
+
+        let epochs = self.lora_epochs;
+        self.queue_training_batch(training_samples.clone(), epochs, 1e-3_f32);
+        info!(
+            count = training_samples.len(),
+            "RCE curriculum: QLoRA training queued from curated buffer"
+        );
+        self.curated_buffer.clear();
+        self.maybe_run_executor_distillation();
+    }
+
     pub async fn apply_curator_learned(
         &mut self,
         refined_response: &str,

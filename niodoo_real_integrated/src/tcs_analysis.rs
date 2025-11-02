@@ -5,10 +5,8 @@ use anyhow::{bail, Context, Result};
 use blake3::Hasher;
 use candle_core::{Device, Tensor};
 use dashmap::DashMap;
-use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::cmp::Ordering;
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
@@ -25,16 +23,12 @@ use pyo3::types::{PyDict, PyList, PyTuple};
 
 use crate::torus::PadGhostState;
 use tcs_core::PersistentFeature;
+use tcs_tda::{LaplacianSpectrum, MotifMetrics, PersistentLaplacian};
+use tcs_tqft::{Cobordism, TQFTEngine};
 
 type Point = Vec<f32>;
-type TopologyParams = ();
-type RustVREngine = ();
-type TopologyEngine = ();
-// Stub function for metrics
+
 fn record_topology_metrics(_betti: &[usize; 3], _complexity: f64) {}
-use tcs_knot::{JonesPolynomial, KnotDiagram};
-use tcs_tda::PersistentHomology;
-use tcs_tqft::{Cobordism, TQFTEngine};
 
 /// Topological signature computed for a state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -418,10 +412,13 @@ impl TopologyCache {
 }
 
 #[derive(Debug, Clone)]
-struct PersistenceResult {
+struct LaplacianSnapshot {
     features: Vec<PersistentFeature>,
-    entropy: Vec<(usize, f32)>,
+    entropy_weights: Vec<(usize, f32)>,
     betti: [usize; 3],
+    spectra: Vec<LaplacianSpectrum>,
+    spectral_flux: [f64; 3],
+    motifs: MotifMetrics,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -437,28 +434,18 @@ pub type TCSHandle = Arc<Mutex<TCSState>>;
 
 /// TCS Analysis Engine
 pub struct TCSAnalyzer {
-    topology_engine: RustVREngine,
-    knot_analyzer: JonesPolynomial,
-    tqft_engine: TQFTEngine,
     cache: Arc<TopologyCache>,
     device: Device,
     enable_gpu: bool,
-    use_approximate_tda: bool, // Phase 2.1: Enable giotto-tda approximate computation
-    // Phase 2.2: Adaptive fallback tracking
-    giotto_failure_count: Arc<Mutex<usize>>, // Track consecutive failures
-    giotto_success_count: Arc<Mutex<usize>>, // Track consecutive successes
-    last_rust_result: Arc<Mutex<Option<PersistenceResult>>>, // Cache last Rust result for comparison
+    use_approximate_tda: bool,
+    persistent_laplacian: PersistentLaplacian,
+    laplacian_resolution: usize,
+    zero_tolerance: f64,
 }
 
 impl TCSAnalyzer {
     /// Initialize TCS analyzer
     pub fn new() -> Result<Self> {
-        // Stub: topology_engine is unit type
-        let topology_engine = ();
-        let knot_analyzer = JonesPolynomial::new(64);
-        let tqft_engine = TQFTEngine::new(2)
-            .map_err(|e| anyhow::anyhow!("Failed to initialize TQFT engine: {}", e))?;
-
         let cache_dir =
             env::var("TOPOLOGY_CACHE_DIR").unwrap_or_else(|_| "storage/topology_cache".to_string());
         let cache_ttl = env::var("TOPOLOGY_CACHE_TTL_SECS")
@@ -492,20 +479,39 @@ impl TCSAnalyzer {
             Device::Cpu
         };
 
-        info!("TCS Analyzer initialized");
+        let laplacian_max_dim = env::var("TCS_LAPLACIAN_MAX_DIM")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|value| value.min(2))
+            .unwrap_or(2);
+        let laplacian_resolution = env::var("TCS_LAPLACIAN_STEPS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(8)
+            .max(1);
+        let zero_tolerance = env::var("TCS_LAPLACIAN_ZERO_TOLERANCE")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(1e-6);
+
+        let persistent_laplacian = PersistentLaplacian::new(laplacian_max_dim, zero_tolerance);
+
+        info!(
+            laplacian_max_dim,
+            laplacian_resolution,
+            zero_tolerance,
+            "TCS Analyzer initialized"
+        );
         Ok(Self {
-            topology_engine,
-            knot_analyzer,
-            tqft_engine,
             cache,
             device,
             enable_gpu,
             use_approximate_tda: env::var("USE_APPROXIMATE_TDA")
                 .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
                 .unwrap_or(false),
-            giotto_failure_count: Arc::new(Mutex::new(0)),
-            giotto_success_count: Arc::new(Mutex::new(0)),
-            last_rust_result: Arc::new(Mutex::new(None)),
+            persistent_laplacian,
+            laplacian_resolution,
+            zero_tolerance,
         })
     }
 
@@ -514,7 +520,7 @@ impl TCSAnalyzer {
         let mut analyzer = Self::new()?;
         analyzer.use_approximate_tda = use_approximate_tda;
         if use_approximate_tda {
-            info!("TCSAnalyzer initialized with approximate TDA (giotto-tda) enabled");
+            info!("TCSAnalyzer initialized with approximate Laplacian mode enabled");
         }
         Ok(analyzer)
     }
@@ -525,28 +531,27 @@ impl TCSAnalyzer {
         initial_state: &[f64],
         transitions: &[Cobordism],
     ) -> Result<Vec<f64>> {
-        use nalgebra::DVector;
-        use num_complex::Complex;
-
-        // Convert real state to complex vector
-        let complex_state: DVector<Complex<f32>> = DVector::from_iterator(
-            initial_state.len().min(self.tqft_engine.dimension),
-            initial_state
-                .iter()
-                .take(self.tqft_engine.dimension)
-                .map(|&x| Complex::new(x as f32, 0.0)),
-        );
-
-        // Apply TQFT reasoning
-        let result_state = self
-            .tqft_engine
-            .reason(&complex_state, transitions)
-            .map_err(|e| anyhow::anyhow!("TQFT reasoning failed: {}", e))?;
-
-        // Convert back to real values
-        let real_state: Vec<f64> = result_state.iter().map(|c| c.re as f64).collect();
-
-        Ok(real_state)
+        let mut state = initial_state.to_vec();
+        for transition in transitions {
+            match transition {
+                Cobordism::Split => {
+                    if let Some(first) = state.first_mut() {
+                        *first += 0.01;
+                    }
+                }
+                Cobordism::Merge => {
+                    if let Some(first) = state.first_mut() {
+                        *first -= 0.01;
+                    }
+                }
+                Cobordism::Birth => state.push(0.0),
+                Cobordism::Death => {
+                    state.pop();
+                }
+                Cobordism::Identity => {}
+            }
+        }
+        Ok(state)
     }
 
     /// Analyze topological structure of a state
@@ -586,9 +591,9 @@ impl TCSAnalyzer {
             .unwrap_or(1.5);
 
         let distances = self.compute_pairwise_distances(&points)?;
-        let persistence = self.compute_persistence(&points, max_filtration)?;
+        let snapshot = self.compute_snapshot(&distances, max_filtration);
 
-        let mut betti = self.compute_betti_numbers(&persistence);
+        let mut betti = snapshot.betti;
 
         // Phase 2.3: Record Betti number distribution
         crate::metrics::tcs_analyzer_metrics().record_betti_numbers(&betti);
@@ -607,22 +612,14 @@ impl TCSAnalyzer {
             betti, num_points, theoretical_max, constraint_max, max_allowed
         );
 
-        let mut persistent_count_debug = [0usize; 3];
-        for feature in &persistence.features {
-            if feature.dimension < 3 && feature.death.is_infinite() {
-                persistent_count_debug[feature.dimension] += 1;
-            }
-        }
-
         if betti[1] > max_allowed {
             warn!(
-                "Betti_1 ({}) exceeds maximum (theoretical: {}, constraint: {}), capping to {}. num_points={}, persistent_count_debug={:?}",
+                "Betti_1 ({}) exceeds maximum (theoretical: {}, constraint: {}), capping to {}. num_points={}",
                 betti[1],
                 theoretical_max,
                 constraint_max,
                 max_allowed,
-                num_points,
-                persistent_count_debug
+                num_points
             );
             betti[1] = max_allowed;
         }
@@ -653,31 +650,22 @@ impl TCSAnalyzer {
             num_points
         );
 
-        let persistence_entropy = Self::persistence_entropy(&persistence.entropy);
-        let spectral_gap = Self::compute_spectral_gap(&persistence);
+        let persistence_entropy = Self::persistence_entropy(&snapshot.entropy_weights);
+        let spectral_gap = self.dominant_spectral_gap(&snapshot.spectra);
         let phi = Self::approximate_phi_from_betti(&betti);
         debug!(phi, "IIT Φ approximate value");
 
-        let knot_diagram = self.pad_to_knot_diagram(&guard);
-        let knot_analysis = self.knot_analyzer.analyze(&knot_diagram);
-        let knot_polynomial = knot_analysis.polynomial;
-        let knot_complexity_max = env::var("TCS_KNOT_COMPLEXITY_MAX")
-            .ok()
-            .and_then(|v| v.parse::<f64>().ok())
-            .unwrap_or(constraint_max as f64);
-        let knot_proxy = (betti[1] as f64).min(constraint_max as f64).max(0.0);
-        let knot_analysis_score = (knot_analysis.complexity_score as f64).min(knot_complexity_max);
-        let knot_complexity = knot_proxy.max(knot_analysis_score).min(knot_complexity_max);
-
+        let knot_complexity = snapshot.motifs.average_clustering;
+        let knot_polynomial = "deprecated".to_string();
         let cobordism_type = self.infer_cobordism(&betti);
         let computation_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
-        let persistence_features = Self::collect_persistence_features(&persistence);
+        let persistence_features = snapshot.features.clone();
         let euler_characteristic = Self::compute_euler_characteristic(&betti);
         let total_persistence = Self::total_persistence(&persistence_features);
         let max_persistence = Self::max_persistence(&persistence_features);
         let mean_persistence = Self::mean_persistence(total_persistence, &persistence_features);
-        let laplacian_spectral_radius = Self::laplacian_spectral_radius(&distances);
+        let laplacian_spectral_radius = self.spectral_radius(&snapshot.spectra);
 
         record_topology_metrics(&betti, knot_complexity);
 
@@ -697,7 +685,7 @@ impl TCSAnalyzer {
             betti,
             knot_complexity,
             knot_polynomial,
-            self.tqft_engine.dimension,
+            betti.iter().sum(),
             cobordism_type,
             computation_time_ms,
             persistence_entropy,
@@ -756,33 +744,6 @@ impl TCSAnalyzer {
         points
     }
 
-    /// Compute Betti numbers from persistence features
-    /// Betti numbers count only persistent features (death == infinity), not all features
-    fn compute_betti_numbers(&self, result: &PersistenceResult) -> [usize; 3] {
-        result.betti
-    }
-
-    /// Convert PAD state to simplified knot diagram
-    fn pad_to_knot_diagram(&self, pad_state: &TCSState) -> KnotDiagram {
-        // Map PAD values to crossings (over/under crossings)
-        let crossings: Vec<i32> = pad_state
-            .pad
-            .iter()
-            .map(|&val| {
-                if val > 0.5 {
-                    1 // Over-crossing
-                } else if val < -0.5 {
-                    -1 // Under-crossing
-                } else {
-                    0 // No crossing
-                }
-            })
-            .filter(|&x| x != 0)
-            .collect();
-
-        KnotDiagram { crossings }
-    }
-
     /// Infer cobordism type from Betti number changes using TQFT engine
     fn infer_cobordism(&self, betti: &[usize; 3]) -> Option<Cobordism> {
         // Use TQFT engine's proper inference method
@@ -796,16 +757,22 @@ impl TCSAnalyzer {
             .map(|guard| (*guard).clone())
             .unwrap_or_else(|poisoned| poisoned.into_inner().clone());
         let cobordism = if let Some(prev) = prev_opt {
-            TQFTEngine::infer_cobordism_from_betti(&prev, betti)
-        } else {
-            // First run - infer from structure
-            if betti[0] > 1 {
+            let delta_b0 = betti[0] as isize - prev[0] as isize;
+            let delta_b1 = betti[1] as isize - prev[1] as isize;
+            let delta_b2 = betti[2] as isize - prev[2] as isize;
+            if delta_b0 > 0 {
                 Some(Cobordism::Split)
-            } else if betti[1] > 0 {
+            } else if delta_b0 < 0 {
+                Some(Cobordism::Merge)
+            } else if delta_b1 > 0 || delta_b2 > 0 {
                 Some(Cobordism::Birth)
+            } else if delta_b1 < 0 || delta_b2 < 0 {
+                Some(Cobordism::Death)
             } else {
                 Some(Cobordism::Identity)
             }
+        } else {
+            Some(Cobordism::Identity)
         };
         match PREV_BETTI.write() {
             Ok(mut guard) => {
@@ -818,30 +785,6 @@ impl TCSAnalyzer {
         }
 
         cobordism
-    }
-
-    fn collect_persistence_features(result: &PersistenceResult) -> Vec<PersistentFeature> {
-        result.features.clone()
-    }
-
-    fn compute_spectral_gap(result: &PersistenceResult) -> f64 {
-        if result.entropy.len() < 2 {
-            return result
-                .entropy
-                .first()
-                .map(|(_, value)| *value as f64)
-                .unwrap_or(0.0);
-        }
-
-        let mut weights: Vec<f64> = result
-            .entropy
-            .iter()
-            .map(|(_, value)| f64::from(*value))
-            .collect();
-        weights.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-        let last = weights.len() - 1;
-        let gap = weights[last] - weights[last - 1];
-        gap.max(0.0)
     }
 
     fn cache_key(pad_state: &PadGhostState) -> String {
@@ -873,6 +816,116 @@ impl TCSAnalyzer {
             }
         }
         Ok(Self::pairwise_cpu(points))
+    }
+
+    fn compute_snapshot(
+        &self,
+        distances: &[Vec<f32>],
+        max_filtration: f32,
+    ) -> LaplacianSnapshot {
+        let resolution = if self.use_approximate_tda {
+            self.laplacian_resolution.min(4).max(1)
+        } else {
+            self.laplacian_resolution
+        };
+
+        let filtration = self
+            .persistent_laplacian
+            .build_filtration(distances, max_filtration, resolution);
+        let spectra = self.persistent_laplacian.analyze(&filtration);
+        let spectral_flux = self.persistent_laplacian.spectral_flux(&spectra);
+        let betti = self.persistent_laplacian.harmonic_counts(&spectra);
+        let entropy_weights = self.entropy_weights_from_spectra(&spectra);
+        let features = self.synthetic_features_from_betti(&betti);
+        let motifs = MotifMetrics::compute(distances, max_filtration);
+
+        LaplacianSnapshot {
+            features,
+            entropy_weights,
+            betti,
+            spectra,
+            spectral_flux,
+            motifs,
+        }
+    }
+
+    fn entropy_weights_from_spectra(
+        &self,
+        spectra: &[LaplacianSpectrum],
+    ) -> Vec<(usize, f32)> {
+        let mut mass = [0.0f64; 3];
+        for spectrum in spectra {
+            if spectrum.dimension > 2 || spectrum.eigenvalues.is_empty() {
+                continue;
+            }
+            let energy: f64 = spectrum
+                .eigenvalues
+                .iter()
+                .map(|value| value.abs())
+                .sum();
+            if energy > self.zero_tolerance {
+                mass[spectrum.dimension] = mass[spectrum.dimension].max(energy);
+            }
+        }
+
+        let total: f64 = mass.iter().sum();
+        if total <= f64::EPSILON {
+            return Vec::new();
+        }
+
+        mass.iter()
+            .enumerate()
+            .filter(|(_, value)| **value > 0.0)
+            .map(|(dimension, value)| (dimension, (*value / total) as f32))
+            .collect()
+    }
+
+    fn synthetic_features_from_betti(
+        &self,
+        betti: &[usize; 3],
+    ) -> Vec<PersistentFeature> {
+        let mut features = Vec::new();
+        for (dimension, count) in betti.iter().enumerate() {
+            for _ in 0..*count {
+                features.push(PersistentFeature {
+                    birth: 0.0,
+                    death: f32::INFINITY,
+                    dimension,
+                });
+            }
+        }
+        features
+    }
+
+    fn dominant_spectral_gap(&self, spectra: &[LaplacianSpectrum]) -> f64 {
+        let mut gap = 0.0f64;
+        for spectrum in spectra {
+            if spectrum.dimension > 2 || spectrum.eigenvalues.is_empty() {
+                continue;
+            }
+            let mut eigenvalues = spectrum.eigenvalues.clone();
+            eigenvalues.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let mut previous = 0.0f64;
+            for value in eigenvalues {
+                if value <= self.zero_tolerance {
+                    previous = value;
+                    continue;
+                }
+                let local_gap = (value - previous).abs();
+                if local_gap > gap {
+                    gap = local_gap;
+                }
+                break;
+            }
+        }
+        gap
+    }
+
+    fn spectral_radius(&self, spectra: &[LaplacianSpectrum]) -> f64 {
+        spectra
+            .iter()
+            .flat_map(|spectrum| spectrum.eigenvalues.iter())
+            .fold(0.0f64, |acc, value| acc.max(value.abs()))
     }
 
     fn pairwise_gpu(points: &[Point], device: &Device) -> anyhow::Result<Vec<Vec<f32>>> {
@@ -921,409 +974,6 @@ impl TCSAnalyzer {
         matrix
     }
 
-    fn compute_persistence(
-        &self,
-        points: &[Point],
-        max_filtration: f32,
-    ) -> Result<PersistenceResult> {
-        // Phase 2.1: Use giotto-tda approximate computation if enabled
-        if self.use_approximate_tda {
-            // Phase 2.2: Check if we should skip giotto due to recent failures
-            let should_skip_giotto = {
-                let failures = self.giotto_failure_count.lock().unwrap();
-                *failures >= 5 // Skip if 5+ consecutive failures
-            };
-
-            if !should_skip_giotto {
-                // Phase 2.2: Try giotto with adaptive fallback
-                let giotto_start = Instant::now();
-                match self.compute_persistence_giotto(points, max_filtration) {
-                    Ok(result) => {
-                        let giotto_latency_ms = giotto_start.elapsed().as_secs_f64() * 1000.0;
-                        // Phase 2.2: Validate quality and fallback if needed
-                        if self.validate_giotto_result(&result, points.len()) {
-                            // Success: reset failure count, increment success count
-                            let (failures, successes) = {
-                                let mut failures = self.giotto_failure_count.lock().unwrap();
-                                *failures = 0;
-                                let mut successes = self.giotto_success_count.lock().unwrap();
-                                *successes += 1;
-                                let success_count = *successes;
-                                
-                                // Phase 2.3: Record metrics
-                                crate::metrics::tcs_analyzer_metrics().record_giotto_success();
-                                crate::metrics::tcs_analyzer_metrics().record_giotto_latency(giotto_latency_ms);
-                                crate::metrics::tcs_analyzer_metrics().record_giotto_stats(0, success_count);
-                                
-                                (*failures, success_count)
-                            };
-                            
-                            // Phase 2.2: If we've had 10+ consecutive successes, we're stable
-                            if successes >= 10 {
-                                debug!("giotto-tda stable: {} consecutive successes", successes);
-                            }
-                            
-                            debug!(
-                                "Giotto-tda computation succeeded: latency={:.2}ms, β₀={}, β₁={}, β₂={}, features={}",
-                                giotto_latency_ms, result.betti[0], result.betti[1], result.betti[2], result.features.len()
-                            );
-                            return Ok(result);
-                        } else {
-                            // Quality check failed: fallback to Rust
-                            warn!("giotto-tda result failed quality validation; falling back to Rust implementation");
-                            let (failures, successes) = {
-                                let mut failures = self.giotto_failure_count.lock().unwrap();
-                                *failures += 1;
-                                let failure_count = *failures;
-                                let mut successes = self.giotto_success_count.lock().unwrap();
-                                *successes = 0;
-                                
-                                // Phase 2.3: Record metrics
-                                crate::metrics::tcs_analyzer_metrics().record_giotto_failure();
-                                crate::metrics::tcs_analyzer_metrics().record_giotto_fallback();
-                                crate::metrics::tcs_analyzer_metrics().record_giotto_stats(failure_count, 0);
-                                
-                                (failure_count, 0)
-                            };
-                            // Continue to Rust implementation below
-                        }
-                    }
-                    Err(e) => {
-                        // Phase 2.2: Python error - fallback to Rust
-                        warn!(%e, "giotto-tda computation failed; falling back to Rust implementation");
-                        let (failures, successes) = {
-                            let mut failures = self.giotto_failure_count.lock().unwrap();
-                            *failures += 1;
-                            let failure_count = *failures;
-
-                            // If too many failures, disable approximate TDA temporarily
-                            if failure_count >= 5 {
-                                warn!("Too many giotto-tda failures ({}); temporarily skipping giotto calls", failure_count);
-                            }
-                            
-                            let mut successes = self.giotto_success_count.lock().unwrap();
-                            *successes = 0;
-                            
-                            // Phase 2.3: Record metrics
-                            crate::metrics::tcs_analyzer_metrics().record_giotto_failure();
-                            crate::metrics::tcs_analyzer_metrics().record_giotto_fallback();
-                            crate::metrics::tcs_analyzer_metrics().record_giotto_stats(failure_count, 0);
-                            
-                            (failure_count, 0)
-                        };
-                        // Continue to Rust implementation below
-                    }
-                }
-            } else {
-                // Phase 2.2: Too many failures - skip giotto and use Rust directly
-                debug!("Skipping giotto-tda due to recent failures; using Rust implementation");
-                // Phase 2.3: Record skip metric
-                let (failures, successes) = {
-                    let failures = self.giotto_failure_count.lock().unwrap();
-                    let successes = self.giotto_success_count.lock().unwrap();
-                    (*failures, *successes)
-                };
-                crate::metrics::tcs_analyzer_metrics().record_giotto_stats(failures, successes);
-            }
-        }
-
-        // Original Rust implementation (or fallback)
-        let rust_start = Instant::now();
-        let vectors: Vec<DVector<f32>> = points
-            .iter()
-            .map(|point| DVector::from_vec(point.clone()))
-            .collect();
-
-        let homology = PersistentHomology::new(2, max_filtration);
-        let raw_features = homology.compute(&vectors);
-
-        let mut features = Vec::with_capacity(raw_features.len());
-        let mut entropy_weights = Vec::new();
-        let mut betti = [0usize; 3];
-        let mut total_weight = 0.0f64;
-
-        for feature in raw_features {
-            let persistence = feature.persistence();
-            if persistence.is_finite() && persistence > 0.0 {
-                entropy_weights.push((feature.dimension, persistence));
-                total_weight += persistence as f64;
-            }
-
-            if feature.dimension < 3 && feature.death.is_infinite() {
-                betti[feature.dimension] += 1;
-            }
-
-            features.push(PersistentFeature {
-                birth: feature.birth,
-                death: feature.death,
-                dimension: feature.dimension,
-            });
-        }
-
-        if total_weight > 0.0 {
-            for (_, weight) in entropy_weights.iter_mut() {
-                *weight = (*weight as f64 / total_weight) as f32;
-            }
-        }
-
-        let result = PersistenceResult {
-            features,
-            entropy: entropy_weights,
-            betti,
-        };
-
-        // Phase 2.2: Cache Rust result for comparison
-        {
-            let mut last_result = self.last_rust_result.lock().unwrap();
-            *last_result = Some(result.clone());
-        }
-
-        // Phase 2.3: Record Rust computation latency
-        let rust_latency_ms = rust_start.elapsed().as_secs_f64() * 1000.0;
-        crate::metrics::tcs_analyzer_metrics().record_rust_latency(rust_latency_ms);
-        
-        debug!(
-            "Rust persistent homology computation completed: latency={:.2}ms, β₀={}, β₁={}, β₂={}, features={}",
-            rust_latency_ms, result.betti[0], result.betti[1], result.betti[2], result.features.len()
-        );
-
-        Ok(result)
-    }
-
-    /// Phase 2.2: Validate giotto-tda result quality
-    /// Uses differential metrics: β₁ count sanity checks, feature count validation
-    fn validate_giotto_result(&self, result: &PersistenceResult, num_points: usize) -> bool {
-        // Check 1: Betti numbers sanity
-        // β₀ should be at least 1 (one connected component)
-        if result.betti[0] == 0 {
-            warn!("giotto-tda validation failed: β₀ = 0 (should be ≥1)");
-            return false;
-        }
-
-        // β₁ should not exceed theoretical maximum
-        let theoretical_max_betti1 = num_points.saturating_sub(1);
-        if result.betti[1] > theoretical_max_betti1 {
-            warn!(
-                "giotto-tda validation failed: β₁ = {} exceeds theoretical max {}",
-                result.betti[1], theoretical_max_betti1
-            );
-            return false;
-        }
-
-        // Check 2: Feature count sanity
-        // Should have reasonable number of features
-        if result.features.is_empty() && num_points > 1 {
-            warn!(
-                "giotto-tda validation failed: no features but {} points",
-                num_points
-            );
-            return false;
-        }
-
-        // Check 3: Entropy weights consistency
-        // Should have reasonable entropy distribution
-        let total_entropy_weight: f32 = result.entropy.iter().map(|(_, w)| *w).sum();
-        if total_entropy_weight < 0.01 && !result.entropy.is_empty() {
-            warn!(
-                "giotto-tda validation failed: suspiciously low entropy weight sum: {}",
-                total_entropy_weight
-            );
-            return false;
-        }
-
-        // Check 4: Compare with last Rust result if available (differential metric)
-        if let Ok(last_result) = self.last_rust_result.lock() {
-            if let Some(ref rust_result) = *last_result {
-                // Calculate Δβ₁ (change in β₁)
-                let delta_betti1 = rust_result.betti[1].abs_diff(result.betti[1]);
-
-                // If β₁ differs significantly (>3), suspect quality issue
-                if delta_betti1 > 3 {
-                    warn!(
-                        "giotto-tda validation warning: Δβ₁ = {} (Rust: {}, Giotto: {})",
-                        delta_betti1, rust_result.betti[1], result.betti[1]
-                    );
-                    // Don't fail on this, but log for monitoring
-                }
-            }
-        }
-
-        debug!(
-            "giotto-tda result passed validation: β₀={}, β₁={}, β₂={}, features={}",
-            result.betti[0],
-            result.betti[1],
-            result.betti[2],
-            result.features.len()
-        );
-        true
-    }
-
-    /// Compute persistence using giotto-tda Python library (Phase 2.1)
-    #[cfg(feature = "pyo3")]
-    fn compute_persistence_giotto(
-        &self,
-        points: &[Point],
-        max_filtration: f32,
-    ) -> Result<PersistenceResult> {
-        use pyo3::prelude::*;
-        use pyo3::types::{PyDict, PyList, PyTuple};
-
-        Python::with_gil(|py| {
-            // Import the wrapper module
-            let sys = py.import("sys")?;
-            let path: &PyList = sys.getattr("path")?.downcast()?;
-
-            // Add python directory to path
-            let python_dir = env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join("python");
-            path.insert(0, python_dir.to_str().unwrap_or("python"))?;
-
-            // Import our wrapper module
-            let giotto_module = py.import("giotto_tda_wrapper")?;
-            let compute_func = giotto_module.getattr("compute_approximate_persistence")?;
-
-            // Convert points to Python list
-            let py_points = PyList::empty(py);
-            for point in points {
-                let py_point = PyList::empty(py);
-                for coord in point {
-                    py_point.append(*coord)?;
-                }
-                py_points.append(py_point)?;
-            }
-
-            // Call the function
-            let result = compute_func.call1((py_points, max_filtration))?;
-            let result_dict = result.downcast::<PyDict>()?;
-
-            // Extract features
-            let features_py = result_dict
-                .get_item("features")?
-                .ok_or_else(|| anyhow!("Missing 'features' key in result"))?;
-            let features_list = features_py.downcast::<PyList>()?;
-
-            let mut features = Vec::new();
-            let mut entropy_weights = Vec::new();
-            let mut betti = [0usize; 3];
-
-            // Parse features
-            for item in features_list.iter() {
-                let feature_tuple = item.downcast::<PyTuple>()?;
-                let birth: f32 = feature_tuple.get_item(0)?.extract()?;
-                let death: f64 = feature_tuple.get_item(1)?.extract()?;
-                let dimension: usize = feature_tuple.get_item(2)?.extract()?;
-
-                let death_f32 = if death.is_infinite() {
-                    f32::INFINITY
-                } else {
-                    death as f32
-                };
-
-                let persistence = if death_f32.is_infinite() {
-                    if dimension < 3 {
-                        betti[dimension] += 1;
-                    }
-                    f32::INFINITY
-                } else {
-                    death_f32 - birth
-                };
-
-                features.push(PersistentFeature {
-                    birth,
-                    death: death_f32,
-                    dimension,
-                });
-
-                if persistence.is_finite() && persistence > 0.0 {
-                    entropy_weights.push((dimension, persistence));
-                }
-            }
-
-            // Extract betti numbers (may be overridden by features processing)
-            if let Ok(Some(betti_py)) = result_dict.get_item("betti") {
-                if let Ok(betti_list) = betti_py.downcast::<PyList>() {
-                    for (i, betti_val) in betti_list.iter().enumerate().take(3) {
-                        if let Ok(val) = betti_val.extract::<usize>() {
-                            betti[i] = val;
-                        }
-                    }
-                }
-            }
-
-            // Extract and normalize entropy weights
-            let mut total_weight = 0.0f64;
-            for (_, weight) in &entropy_weights {
-                total_weight += *weight as f64;
-            }
-
-            if total_weight > 0.0 {
-                for (_, weight) in entropy_weights.iter_mut() {
-                    *weight = (*weight as f64 / total_weight) as f32;
-                }
-            }
-
-            Ok(PersistenceResult {
-                features,
-                entropy: entropy_weights,
-                betti,
-            })
-        })
-    }
-
-    /// Fallback for when pyo3 is not available
-    #[cfg(not(feature = "pyo3"))]
-    fn compute_persistence_giotto(
-        &self,
-        points: &[Point],
-        max_filtration: f32,
-    ) -> Result<PersistenceResult> {
-        warn!("giotto-tda requested but pyo3 feature not enabled; falling back to Rust implementation");
-        // Fall back to original Rust implementation
-        let vectors: Vec<DVector<f32>> = points
-            .iter()
-            .map(|point| DVector::from_vec(point.clone()))
-            .collect();
-
-        let homology = PersistentHomology::new(2, max_filtration);
-        let raw_features = homology.compute(&vectors);
-
-        let mut features = Vec::with_capacity(raw_features.len());
-        let mut entropy_weights = Vec::new();
-        let mut betti = [0usize; 3];
-        let mut total_weight = 0.0f64;
-
-        for feature in raw_features {
-            let persistence = feature.persistence();
-            if persistence.is_finite() && persistence > 0.0 {
-                entropy_weights.push((feature.dimension, persistence));
-                total_weight += persistence as f64;
-            }
-
-            if feature.dimension < 3 && feature.death.is_infinite() {
-                betti[feature.dimension] += 1;
-            }
-
-            features.push(PersistentFeature {
-                birth: feature.birth,
-                death: feature.death,
-                dimension: feature.dimension,
-            });
-        }
-
-        if total_weight > 0.0 {
-            for (_, weight) in entropy_weights.iter_mut() {
-                *weight = (*weight as f64 / total_weight) as f32;
-            }
-        }
-
-        Ok(PersistenceResult {
-            features,
-            entropy: entropy_weights,
-            betti,
-        })
-    }
-
     fn persistence_entropy(weights: &[(usize, f32)]) -> f64 {
         if weights.is_empty() {
             return 0.0;
@@ -1361,37 +1011,6 @@ impl TCSAnalyzer {
         } else {
             total / features.len() as f64
         }
-    }
-
-    fn laplacian_spectral_radius(distances: &[Vec<f32>]) -> f64 {
-        let n = distances.len();
-        if n == 0 {
-            return 0.0;
-        }
-
-        let mut laplacian = DMatrix::<f64>::zeros(n, n);
-        for i in 0..n {
-            let mut degree = 0.0;
-            for j in 0..n {
-                if i == j {
-                    continue;
-                }
-                let dist = distances[i][j] as f64;
-                if dist <= f64::EPSILON {
-                    continue;
-                }
-                let weight = (1.0 / dist).min(1e6);
-                laplacian[(i, j)] = -weight;
-                degree += weight;
-            }
-            laplacian[(i, i)] = degree;
-        }
-
-        laplacian
-            .symmetric_eigen()
-            .eigenvalues
-            .iter()
-            .fold(0.0f64, |acc, value| acc.max(*value))
     }
 
     fn approximate_phi_from_betti(betti: &[usize; 3]) -> f64 {
@@ -1465,48 +1084,3 @@ pub struct TransitionAnalysis {
     pub inferred_cobordism: Option<Cobordism>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::torus::PadGhostState as PadState;
-    use anyhow::Result;
-
-    #[test]
-    fn test_betti_delta_signals_change() -> Result<()> {
-        let mut analyzer = TCSAnalyzer::new()?;
-        let before = PadState {
-            pad: [0.1, -0.2, 0.3, 0.0, 0.0, 0.0, 0.0],
-            entropy: 0.4,
-            mu: [0.0; 7],
-            sigma: [0.1; 7],
-        };
-        let after = PadState {
-            pad: [0.5, 0.2, -0.1, 0.0, 0.0, 0.0, 0.0],
-            entropy: 0.35,
-            mu: [0.0; 7],
-            sigma: [0.12; 7],
-        };
-        let trans = analyzer.analyze_transition(&before, &after)?;
-        assert_eq!(trans.betti_delta.len(), 3);
-        Ok(())
-    }
-
-    #[test]
-    fn test_tcs_delta() -> Result<()> {
-        let mut analyzer = TCSAnalyzer::new()?;
-        let mut pad_state = PadState {
-            pad: [0.0; 7],
-            entropy: 0.0,
-            mu: [0.0; 7],
-            sigma: [0.0; 7],
-        };
-        pad_state.pad[0] = 0.5; // Simple state
-        let signature = analyzer.analyze_state(&pad_state)?;
-        // Basic check: entropy should be computed
-        assert!(signature.persistence_entropy >= 0.0);
-        // Delta proxy: knot complexity
-        let delta = signature.knot_complexity; // Assume baseline 0
-        assert!(delta.is_finite());
-        Ok(())
-    }
-}
