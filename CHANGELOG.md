@@ -1,5 +1,232 @@
 ## [Unreleased]
 
+### 2025-01-XX – Git Submodules Configuration
+- Converted Niodoo-TCT directory to git submodule
+  - Registered Niodoo-TCT as submodule pointing to https://github.com/Ruffian-L/Niodoo-TCT.git
+  - Submodule initialized at commit c6d0910b3be7f746f5b449cd3a7ab28261c749a9
+  - Updated .gitmodules to include Niodoo-TCT configuration
+- Added niodoo-ai as second parallel submodule
+  - Created new repository https://github.com/Ruffian-L/niodoo-ai.git
+  - Initialized with README.md and initial commit
+  - Submodule initialized at commit 035c59ac0e181dcbc0e7fd88c5136b2b71800e30
+  - Added niodoo-ai entry to .gitmodules pointing to https://github.com/Ruffian-L/niodoo-ai.git
+- Both submodules configured in .gitmodules for parallel management
+- Used GitHub CLI (gh) for authentication and repository creation
+
+### 2025-01-XX – Topology-Aware MCTS Branch Generation
+- Implemented topology-aware branch generation in compass MCTS expansion
+- Problem structure now directly informs solution strategies:
+  - High H₁ persistence (>2) or total persistence (>2.0) → "unwind_loops" branches (resolve cyclical patterns)
+  - High knot complexity (>0.4) → "simplify_structure" branches (reduce tangling)
+  - Low spectral gap (<0.3) → "stabilize" branches (increase structural stability)
+  - High persistence entropy (>0.6) → "structure" branches (organize information)
+  - High H₀ (>3) → "connect" branches (link disconnected components)
+- Modified `expand_mcts()` to accept topology parameter and compute strategy-specific bonuses
+- Added `compute_topology_strategies()` to map topology features to solution approaches
+- Added `compute_topology_bonus()` to adjust UCB1 scores based on problem structure
+- Updated `evaluate_with_rng()` and `evaluate_with_ntoken()` to pass topology to branch expansion
+- Fallback to PAD-based strategies when topology unavailable (backward compatible)
+- Branch labels now include strategy names (e.g., "unwind_loops_0", "simplify_structure_1")
+- Impact: Ideas for new "Lego pieces" now come from problem shape, not just random exploration
+
+### 2025-01-XX – nToken Metrics Integration into PAD-Driven Compass
+- Integrated H₁ persistence and sheaf energy metrics from nToken service directly into compass PAD state updates
+- Modified `CompassEngine::evaluate_with_rng()` to accept optional `NTokenFeatures` parameter
+- Implemented PAD state adjustment logic:
+  - High H₁ persistence (unresolved loops, tension building) → reduces pleasure/dominance (PAD low/"frustrated")
+  - Low sheaf energy (system found consistent story) → increases pleasure/dominance (PAD high/"relieved")
+  - Arousal increases with unresolved loops (tension building)
+- Updated pipeline stage to fetch nToken features early (with prompt only) before compass evaluation
+- nToken features now automatically update PAD state rather than being treated as separate logs
+- Compass cascade logic ("I'm stuck" / "breakthrough" responses) now fires based on nToken-informed PAD state
+- Fallback strategy: if context-aware nToken fetch fails, uses prompt-only features from compass phase
+- Mapping: H₁ persistence normalized via tanh (typical range 0.0-5.0), sheaf energy threshold at 0.3 for relief detection
+- Impact: Persistent H₁ / sheaf spikes map cleanly onto PAD-driven compass, enabling automatic state transitions
+
+### 2025-11-03 – RunPod RTX 6000 PRO Environment Bring-Up
+- Refreshed the new RTX 6000 PRO pod with `apt-get update && apt-get upgrade` (held back `libcudnn9*`/`libnccl*`) and re-ran `install_runpod_deps.sh`; installer detected `NVIDIA RTX PRO 6000 Blackwell Server Edition` on driver `570.195.03`, warned about the missing CUDA 13.0 runfile / H200 FP8 toolchain, fell back to ONNX Runtime 1.23.2 (GitHub 404 on 1.24.0) and re-pinned Python wheels (`protobuf 6.33.0`, `onnxruntime-gpu 1.23.2`, `grpcio 1.76.0`). Documented that flash-attn 3, FlashInfer, gudhi-gpu, multipers, networkx-gpu, and rdkit-gpu remain unavailable on this image.
+- Sourced the Rust toolchain (`rustc 1.91.0`), exported repo-local build dirs (`CARGO_TARGET_DIR`, `TMPDIR`, `CCACHE_DIR`) and rebuilt `cargo build -p niodoo_real_integrated --lib --features gpu` to validate CUDA compilation against the Ada/Blackwell card.
+- Reinstalled `vllm==0.11.0` (after the bootstrap script failed the 1.0.0a preview) pulling in the aligned dependency stack (`ray 2.51.1`, `cupy-cuda12x 13.6.0`, `transformers 4.57.1`, `xformers 0.0.32.post1`, etc.) and updated `LD_LIBRARY_PATH` to point at `third_party/onnxruntime-linux-x64-gpu-1.23.2/lib`.
+- Restarted data services: launched Qdrant 1.15.5 (`third_party/qdrant/qdrant`) on ports 6333/6334 using `/workspace/Niodoo-Final/qdrant_data`, verified start-up in `logs/services/qdrant.log` (FUSE warning + collection reload) and confirmed REST health via `curl http://127.0.0.1:6333/collections`.
+- Brought Ollama 0.12.9 back online with `OLLAMA_MODELS=/workspace/models/ollama`, captured GPU detection of the RTX 6000 (95.6 GiB) in `logs/services/ollama.log`, and validated the host API with `curl http://127.0.0.1:11434/api/tags`.
+- Launched vLLM 0.11.0 against `/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ` with RTX-friendly settings (`--quantization awq`, `--max-model-len 32768`, `--max-num-batched-tokens 8192`, `--gpu-memory-utilization 0.92`, AWQ chunked prefill); initialization logged 67 s warmup, 1.5 M token KV cache, and concurrency ~46×, and the endpoints responded on `http://127.0.0.1:5001/v1/models` and `/health` (HTTP 200).
+- Captured `nvidia-smi` snapshot (driver 570.195.03, CUDA 12.8) showing vLLM occupying ~90 GB on the RTX 6000 PRO for post-mortem documentation.
+- Rewrote `.runpod_env.sh` to remove the truncated here-doc output from the bootstrap script, point `LD_LIBRARY_PATH` at `third_party/onnxruntime-linux-x64-gpu-1.23.2/lib`, and consistently export `CUDA_HOME`, Cargo dirs, and protobuf metadata without executing verification steps on every source.
+
+### 2025-01-XX – Topological Awareness Implementation (Option A: Quick Win)
+- Implemented `generate_with_topology()` in `generation.rs` to inject topological information into model prompts:
+  - Topology metrics are injected into SYSTEM messages only (not user-facing prompts)
+  - Includes comprehensive topology context with knot complexity, Betti numbers, persistence entropy, spectral gap, Euler characteristic, and persistence metrics
+  - Includes interpretation guidance for how to use each metric internally (e.g., high knot complexity → use structured reasoning, high H1 → cyclical patterns detected)
+  - Explicit instruction: "Use these metrics internally to adjust reasoning style, but DO NOT mention them in your response to the user"
+- Updated system prompts to be topology-aware:
+  - `request_text_with_topology()` uses topology-aware system prompt when topology is provided: "You are a topologically-aware consciousness engine..."
+  - `request_lens_response_with_topology()` updates lens system prompts to mention topological awareness
+  - Both methods maintain backward compatibility with original methods via delegation
+- Topology now guides generation internally (like how the pipeline uses it for curator quality scores) without exposing metrics to end users
+- Added topology-aware mock mode handling in `generate_with_topology()` to include topology info in mock responses
+- This enables models to see and use topological properties internally to guide reasoning quality, structure, and coherence, setting the foundation for instruction-tuning (Option B) to teach explicit topology usage
+
+### 2025-XX-XX – Validation Framework Phase 1: Foundational Observability (VAL-01) + Phase 2: Metrics Runner (VAL-02)
+- Updated `prometheus.yml` with comprehensive scrape configurations for all service dependencies:
+  - Added vLLM metrics endpoint (`/metrics` on port 5001) with 10s scrape interval
+  - Added Qdrant metrics endpoint (`/metrics` on port 6333) with 10s scrape interval and node labels
+  - Added NVIDIA GPU metrics via nvidia-ml-py exporter (port 9400) with 15s scrape interval
+  - Documented ONNX Runtime profiling approach (JSON traces, not Prometheus metrics)
+  - Added inline comments explaining health check queries and expected metrics
+- Created `docs/validation/PROMETHEUS_METRICS.md` documenting all service dependencies, metrics endpoints, health check strategies, and validation procedures
+- Extended `niodoo_real_integrated/src/metrics.rs` with Quality SLI metrics infrastructure:
+  - Added `QualitySLIMetrics` struct tracking TCS stability (coefficient of variation of persistence_entropy) and RCE β_meta range compliance ([0.8, 1.2])
+  - Added `compute_coefficient_variation()` helper function for statistical analysis
+  - Updated `RceMetrics::record_beta_meta()` to automatically update quality SLI compliance
+  - Added `TCSAnalyzerMetrics::update_stability_sli_from_samples()` method to compute and update TCS stability CV from entropy samples
+  - Quality SLIs expose Prometheus gauges: `niodoo_quality_sli_tcs_stability_cv` and `niodoo_quality_sli_rce_beta_meta_compliance`
+- Quality SLIs measure functional correctness beyond latency/availability: TCS stability ensures consistent topological analysis outputs, RCE governance ensures cognitive equilibrium is maintained
+- Created `prometheus-alerts.yml` with comprehensive alerting rules for all Table 1 SLOs:
+  - Latency alerts for all pipeline layers (p99 threshold breaches)
+  - Availability alerts (success rate thresholds)
+  - Quality SLI alerts (TCS stability CV > 0.1, RCE β_meta out of range)
+  - Service dependency health checks (vLLM, Qdrant, GPU)
+  - Resource exhaustion alerts (GPU memory, temperature)
+- Created three Grafana dashboards in `grafana-dashboards/`:
+  - `system-health.json`: Comprehensive SLO monitoring with latency, availability, throughput panels for all Table 1 layers
+  - `cognitive-performance.json`: Longitudinal tracking of cognitive benchmark scores (LoCoMo, AQA-Bench, DocPuzzle, CounterBench, CriticBench)
+  - `topological-state.json`: Real-time visualization of internal cognitive state (β_meta, persistence_entropy, Betti numbers, spectral gap)
+- Implemented `metrics_runner.rs` CLI tool (`niodoo_real_integrated/src/bin/metrics_runner.rs`):
+  - Supports multiple scenarios: LoadTest, Baseline, Cognitive
+  - Load test: Simulates concurrent users (default 16) with target token generation (default 2048 tokens)
+  - Baseline capture: Runs standardized test suite and saves golden metrics JSON
+  - Metrics collection: Captures latency distributions, throughput, quality SLIs, topological metrics
+  - Outputs structured JSON reports compatible with comparison tooling
+  - Integrated with Pipeline via Arc<AsyncMutex> for thread-safe concurrent access
+- Created baseline storage infrastructure:
+  - `baselines/` directory structure with README
+  - `scripts/capture_baseline.sh`: Automated baseline capture script
+  - `scripts/compare_baseline.sh`: Statistical comparison tool with bootstrap CI and Cohen's d effect size
+  - Timestamped baseline files with `baseline-latest.json` symlink
+- Implemented statistical analysis library (`niodoo_real_integrated/src/validation/stats.rs`):
+  - Bootstrap percentile confidence intervals for latency SLOs
+  - Cohen's d effect size calculation for comparing distributions
+  - Mann-Whitney U test for non-parametric hypothesis testing
+  - SLO breach detection using bootstrap CI
+  - Regression action criteria (statistical significance + effect size threshold)
+- Created validation documentation:
+  - `docs/validation/README.md`: Overview and quick start
+  - `docs/validation/VALIDATION_PLAN.md`: Complete validation methodology
+  - `docs/validation/RUNNING_TESTS.md`: Practical runbooks for test execution
+- Created PR template (`.github/pull_request_template.md`) with Validation Impact section requiring quantitative metrics
+- Added ablation testing flags to `RuntimeConfig`:
+  - `erag_bypass`: Bypass ERAG retrieval (zero-shot mode) - controlled via `ERAG_BYPASS` env var
+  - `n_tokens_bypass`: Bypass nTokens layer - controlled via `N_TOKENS_BYPASS` env var
+  - `rce_enabled`: Now reads from `RCE_ENABLED` env var (was hardcoded default)
+  - `enable_curator`: Already existed, controlled via `ENABLE_CURATOR` env var
+  - `use_gpu_fitness`: Already existed, controlled via `USE_GPU_FITNESS` env var
+- Integrated bypass flags into pipeline stages:
+  - ERAG bypass returns empty collapse result (zero-shot mode)
+  - nTokens bypass skips feature extraction when flag is set
+- Created golden probes dataset (`data/golden_probes.json`):
+  - 20 curated questions covering single-hop, multi-hop, temporal, adversarial, arithmetic, reasoning, and process-aware capabilities
+  - Validation criteria with pass thresholds and token limits
+- Implemented CI validation gate workflow (`.github/workflows/validation-gate.yml`):
+  - Lightweight regression suite (60-second latency barrage with 8 concurrent users)
+  - Golden probes execution (20 questions with semantic/exact match validation)
+  - Topological stability checks
+  - Statistical regression detection (p99 latency >100ms or >20% increase)
+  - Quality SLI compliance checking (TCS stability CV, RCE β_meta)
+  - Uploads metrics artifacts for review
+- Implemented LoCoMo benchmark integration (`niodoo_real_integrated/src/validation/locomo.rs`):
+  - Long-context conversational memory test framework
+  - Support for single-hop, multi-hop, temporal, and adversarial QA categories
+  - F1 score calculation with keyword matching and exact match detection
+  - Test case loader from JSON format
+  - Created sample test cases (`data/locomo_tests.json`)
+- Implemented ablation runner CLI tool (`niodoo_real_integrated/src/bin/ablation_runner.rs`):
+  - Systematic component testing framework
+  - Six predefined experiments (DisableRce, BypassNTokens, DisableTcsGpu, DisableGpuFitness, DisableCurator, BypassErag)
+  - Automatic environment variable configuration
+  - Baseline comparison with Cohen's d effect size
+  - Regression detection (>100ms latency increase or >20% increase)
+- Implemented remaining cognitive benchmark integrations:
+  - AQA-Bench (`niodoo_real_integrated/src/validation/aqa_bench.rs`): Interactive sequential reasoning (DFS/BFS tasks) with success rate tracking
+  - DocPuzzle (`niodoo_real_integrated/src/validation/docpuzzle.rs`): Multi-step reasoning with checklist-guided process analysis and compliance scoring
+  - CounterBench (`niodoo_real_integrated/src/validation/counterbench.rs`): Counterfactual reasoning validation with accuracy and keyword matching
+  - CriticBench (`niodoo_real_integrated/src/validation/criticbench.rs`): Generation, Critique, Correction (GQC) protocol for self-correction validation
+- Created comprehensive test validation suite:
+  - `scripts/validate_framework_structure.sh`: Structure and syntax validation script
+  - `scripts/run_all_validation_tests.sh`: Full test runner for runtime validation
+  - All JSON, YAML, and shell script syntax validated
+  - All 7 validation modules, 2 binaries, 3 dashboards, 4 scripts, 4 docs verified
+  - Test results documented in `VALIDATION_TEST_RESULTS.md`
+
+### 2025-11-02 – RunPod A100 Bring-Up & Service Verification
+- Ran `apt-get update && apt-get upgrade` on the fresh A100-SXM pod (held back `libcudnn9*` and `libnccl*` per upstream repo) before executing `install_runpod_deps.sh`; confirmed the script installs Rust 1.91.0 and CUDA 12.8 toolchain while warning about driver `570.195.03 < 580`. Noted GitHub 404s for the scripted CUDA 13.0 runfile, ONNX Runtime 1.24.0 tarball, FlashAttention 3, FlashInfer, and Gudhi/multipers/rdkit GPU wheels—documented fallbacks to ONNX Runtime 1.23.2 and Python `protobuf==6.33.0`.
+- Re-sourced the cargo environment and rebuilt `niodoo_real_integrated` with `cargo build -p niodoo_real_integrated --lib --features gpu` to validate the CUDA-enabled workspace on the A100.
+- Installed `vllm==0.11.0` (fresh wheel on this node) and relaunched the server with AWQ settings tuned for A100 (`OMP_NUM_THREADS=8 VLLM_WORKER_MULTIPROCESSING_METHOD=spawn vllm serve /workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ --quantization awq --max-model-len 32768 --max-num-batched-tokens 8192 --gpu-memory-utilization 0.9 --host 0.0.0.0 --port 5001`). Verified the API via `curl http://127.0.0.1:5001/v1/models` and `/health` (HTTP `200`).
+- Restarted Qdrant v1.15.5 from `third_party/qdrant/qdrant` with storage rooted under `/workspace/Niodoo-Final/qdrant_data`, tailed `logs/services/qdrant.log` to ensure clean recovery of the `experiences` collection, and confirmed REST health with `curl http://127.0.0.1:6333/collections | jq .`.
+- Relaunched Ollama 0.12.9 (`OLLAMA_MODELS=/workspace/models/ollama OLLAMA_HOST=0.0.0.0:11434 third_party/ollama/bin/ollama serve`) and validated availability through `curl http://127.0.0.1:11434/api/tags`; captured the autogenerated SSH key banner in `logs/services/ollama.log` for future SSH-based model syncs.
+- Captured `nvidia-smi` after service startup to confirm the pod exposes `NVIDIA A100-SXM4-80GB` with ~73 GiB allocated to `VLLM::EngineCore`, signaling the AWQ model fully resides on the GPU.
+
+### 2025-11-02 – nToken Attention Bias Integration
+- Added `ntoken_client.rs` to call the FastAPI nToken service (via `NTOKEN_ENDPOINT`) and return H₁ persistence, entropy, and sheaf statistics for the current prompt plus ERAG context.
+- Updated `pipeline/stages.rs` to fetch nToken features immediately after ERAG retrieval and prepend a `[nToken cues]` header to the tokenizer's augmented prompt, biasing downstream attention with structural signals.
+- Logged extracted topology metrics (H₁ count, persistence, entropy norm, sheaf energy) for observability and built a graceful fallback path when the service is unreachable.
+- Launched `scripts/stsb_ntoken_benchmark.py` in the background on the H200 so semantic-similarity results accumulate while attention wiring proceeds.
+
+### 2025-11-02 – Metrics Harness GPU Shadow Mode
+- Rebuilt the ad-hoc `niodoo_metrics_runner` utility with the workspace `gpu` feature enabled so Candle uses the CUDA backend and ONNX Runtime picks up the GPU execution provider (H200 target).
+- Reconfigured the harness environment to keep curator/vLLM disabled while still exercising RCE/TCS metrics in hybrid topology mode with `USE_GPU_FITNESS=1` and `TCS_ENABLE_GPU=1`.
+- Refactored the harness to initialise the NIODOO pipeline once and reuse it across all prompts, eliminating multi-minute reinitialisation pauses and reducing the stress test to three prompts to avoid GPU watchdog resets with services offline.
+- Captured the resulting JSON metrics snapshot without vLLM/Qdrant at `/tmp/metrics_report.json` for downstream analysis.
+
+### 2025-11-02 – vLLM Startup Playbook Refresh Research
+- Surveyed November 2025 guidance for launching vLLM on NVIDIA CUDA 12.1+ GPUs, AMD ROCm 6.0 cards, Intel OpenVINO CPUs, and Google Cloud TPUs via the latest `docs.vllm.ai` and `nm-vllm.readthedocs.io` resources.
+- Captured current install prerequisites, environment preparation, and `vllm serve` startup arguments (local model mounts, tensor parallel sizing, logging flags, HTTP smoke tests) for Llama 3.1-class models to inform Ops documentation updates.
+- No code changes applied; research notes delivered to operators for follow-up documentation sync.
+
+### 2025-11-02 – vLLM Startup Playbook Implementation
+- Repointed every runtime script (`start_all_services.sh`, `scripts/start_h200_bootstrap.sh`, `config/h200.env`, quick-fix guides) to use the checked-in `/workspace/models/Qwen2.5-7B-Instruct-AWQ` tree so operators never hit the Hugging Face Hub during bring-up.
+- Simplified manual rescue instructions (`START_VLLM_COMMANDS.txt`, `FIX_VLLM_NOW.txt`, `docs/H200_PRIMING_GUIDE.md`) around the new `VLLM_MODEL_PATH` export and removed dead `HF_HUB_ENABLE_HF_TRANSFER` toggles.
+- Authored `docs/VLLM_STARTUP_GUIDE.md` covering November 2025 install+serve flows for NVIDIA CUDA, AMD ROCm, Intel OpenVINO/XPU, and Google TPU targets with local model mounts plus post-launch curl smoke tests.
+
+### 2025-11-02 – Test Harness Service Guardrails
+- Updated `niodoo_real_integrated/run_tests.sh` to reuse the incremental build cache by default and only run `cargo clean` when invoked with `--clean`, keeping iteration tight after service restarts.
+- Added a mandatory pre-test service verification step that calls `test_services.sh` to confirm Qdrant, Ollama, and vLLM are online unless `--skip-services` (or `SKIP_SERVICE_CHECKS=1`) is requested.
+- Documented the new CLI switches via `--help`, ensuring operators can deliberately opt into full cleans or skip checks when running targeted diagnostics.
+
+### 2025-11-02 – Prometheus Service Endpoint Baseline
+- Enabled the `svc` build of `niodoo_real_integrated` to launch the Axum `HealthServer` during startup (configurable via `NIODOO_HEALTH_PORT` / `HEALTH_PORT` / `PROMETHEUS_PORT`) and register the pipeline component as healthy/unhealthy across the lifecycle.
+- Rebuilt the release binary with `--features svc`, restarted the runtime with the real model stack, and confirmed the `/metrics` endpoint on `0.0.0.0:9090` serves Prometheus text after initialization.
+- Captured `/tmp/niodoo_metrics_snapshot.prom` from `curl http://0.0.0.0:9090/metrics` for the baseline prompt run; notable `niodoo_rce_*` gauge values:
+  - `niodoo_rce_beta_meta_current`: `0`
+  - `niodoo_rce_beta_meta_peak`: `0`
+  - `niodoo_rce_beta_meta_spikes_total`: `0`
+  - `niodoo_rce_laplacian_spectral_gap`: `5.0000000000000036`
+  - `niodoo_rce_persistence_entropy`: `1.468090768063297`
+  - `niodoo_rce_beta_meta_latency_seconds_count`: `1` with `sum=1`
+  - `niodoo_rce_prompt_to_spike_latency_seconds_count`: `0`
+
+### 2025-11-02 – RunPod Environment Refresh & Service Bootstrap
+- Ran full system package refresh (`apt-get update && apt-get upgrade`) and executed `install_runpod_deps.sh` to reinstall CUDA 13.0, ONNX Runtime 1.24.0 libraries, Rust toolchain components, and pinned Python GPU dependencies (FlashAttention, DeepSpeed, Transformer Engine, etc.).
+- Re-ran `scripts/start_h200_bootstrap.sh` after re-sourcing the Rust toolchain, rebuilding the workspace with `--features gpu` to confirm CUDA-capable binaries still compile (`cargo build -p niodoo_real_integrated --lib --features gpu`).
+- Installed `vllm==0.11.0` via pip (newer alpha wheel unavailable) and launched the service with H200 settings (bfloat16 weights, fp8 KV cache, 32k context, chunked prefill). Logs: `logs/services/vllm.log`; health verified via `curl http://127.0.0.1:5001/v1/models` and `/health`.
+- Downloaded Qdrant 1.11.0 Linux binary into `third_party/qdrant/`, started it against existing storage/snapshot directories (gRPC 6334, REST 6333), and validated connectivity with `curl http://127.0.0.1:6333/collections`. Logs: `logs/services/qdrant.log`.
+- Pulled Ollama 0.12.9 tarball into `third_party/ollama/`, launched the server with `OLLAMA_MODELS=/workspace/models/ollama`, and confirmed `/api/tags` lists the resident Qwen models. Logs: `logs/services/ollama.log`.
+- Noted that `start_all_services.sh` still exits during its post-start `cargo test` invocation because of pre-existing `niodoo-consciousness` test harness compilation errors (missing `soak_prompts_v2` module); services are started manually via the commands above.
+- Queried upstream release feeds (`https://api.github.com/repos/vllm-project/vllm/releases/latest`, `https://api.github.com/repos/ollama/ollama/releases/latest`, `https://api.github.com/repos/qdrant/qdrant/releases/latest`) to confirm vLLM v0.11.0 and Ollama v0.12.9 match current heads, then upgraded Qdrant to v1.15.5 (`wget …/qdrant-x86_64-unknown-linux-musl.tar.gz`, extracted to `third_party/qdrant/`) and restarted the service; verified via startup banner and `curl http://127.0.0.1:6333/collections`.
+
+### 2025-01-XX – RCE Metric Validation: Latency Tracking and Enhanced Observability
+- Added latency histograms to `RceMetrics`:
+  - `niodoo_rce_beta_meta_latency_seconds`: Time between consecutive β_meta updates
+  - `niodoo_rce_prompt_to_spike_latency_seconds`: Time from prompt entry to β_meta spike threshold crossing
+- Enhanced `RceAnalyzer::update()` with structured logging:
+  - `info!` logs for β_meta spikes with full context (beta, threshold, persistence entropy, spectral gap, latency)
+  - `debug!` logs for regular β_meta updates (reduces noise while maintaining observability)
+  - Prompts-to-spike latency tracked when prompt timestamp is available
+- Updated pipeline to pass prompt timestamp (`overall_start`) to RCE analyzer for prompt-to-spike latency calculation
+- Added initialization log message when RCE analyzer is first created in shadow mode
+- Configuration verified: defaults ensure safe shadow mode operation (`rce_enabled=true`, `rce_shadow_mode=true`, `rce_actions_enabled=false`)
+- **Fixed matrix dimension bug in `tcs-tda/src/laplacian.rs`**: Corrected Laplacian matrix computation for dimension 0 case where `right_boundary^T * right_boundary` should be used instead of `right_boundary * right_boundary^T` to ensure (size, size) output dimensions. Added safety checks to prevent dimension mismatches during matrix addition.
+
 ### 2025-11-02 – nToken Architecture Specification
 - Added `docs/ntokens/ARCHITECTURE.md` detailing the Topological Connection Token (nToken) data model, mathematical foundations, pipeline integration points, GPU runtime strategy, memory/value alignment plan, and validation roadmap.
 - Established module layout, external dependency expectations, and observability/test requirements ahead of implementation across `niodoo_real_integrated`.
@@ -113,7 +340,6 @@
   - Better error detection for Protobuf version conflicts
   - Documentation supports future federated learning implementations
   - Enhanced installation script reliability for fresh RunPod deployments
-
 ### 2025-11-01 – H200 Priming and GPU Fitness Acceleration
 - Added hardware-profile aware overrides in `RuntimeConfig::load()` so selecting `--hardware h200` now forces CUDA fitness (`USE_GPU_FITNESS=1`), batched ERAG writes, larger cache prefetch windows, expanded token budgets, and an explicit `cuda` device for weighted episodic memory.
 - Replaced the GPU fitness stub with a Candle-backed implementation: runtime now detects CUDA via `Device::cuda_if_available`, ships the scoring vectors to the GPU, and only falls back to CPU if Tensor operations fail (metrics continue to report GPU availability).
@@ -122,6 +348,24 @@
 - Documented the end-to-end playbook in `docs/H200_PRIMING_GUIDE.md`, covering bootstrap, service startup, soak tests, and post-run verification on the H200.
 
 ## [Unreleased]
+
+### Added
+- Debug logging for model ID normalization and configuration loading.
+
+### Changed
+- Embedding model now uses local ONNX path `/workspace/models/Qwen2.5-0.5B-Instruct/onnx/model_fp16.onnx` instead of Ollama name.
+- Curator backend default changed to Ollama to use mini Qwen `qwen2:0.5b` for memory curation/quality assessment.
+- Main generation uses large Qwen2.5-7B-Instruct-AWQ via vLLM.
+
+### Fixed
+- Compilation error in generation.rs due to scope issue in logging.
+- Model ID mismatch by separating embedding, generation, and curator configurations.
+
+### 2025-11-02 – Metrics Harness GPU Shadow Mode
+- Rebuilt the ad-hoc `niodoo_metrics_runner` utility with the workspace `gpu` feature enabled so Candle uses the CUDA backend and ONNX Runtime picks up the GPU execution provider (H200 target).
+- Reconfigured the harness environment to keep curator/vLLM disabled while still exercising RCE/TCS metrics in hybrid topology mode with `USE_GPU_FITNESS=1` and `TCS_ENABLE_GPU=1`.
+- Refactored the harness to initialise the NIODOO pipeline once and reuse it across all prompts, eliminating multi-minute reinitialisation pauses and reducing the stress test to three prompts to avoid GPU watchdog resets with services offline.
+- Captured the resulting JSON metrics snapshot without vLLM/Qdrant at `/tmp/metrics_report.json` for downstream analysis.
 
 ### 2025-11-01 – ONNX Runtime 1.24.0 + gRPC Integration for RCE Stack ✅ COMPLETE
 - **ONNX Runtime Update**: Upgraded from v1.18.1 to v1.24.0 (latest, October 2025) with full NVIDIA H200 GPU support
@@ -387,20 +631,6 @@
   - `test_backward_compatibility()`: Ensures optimizations don't break backward compatibility
   - `test_performance_bounds()`: Validates performance bounds are maintained
   - Expected impact: Automated regression detection, confidence in optimization correctness
-
-### Phase 5 – Telemetry, Testing, and Docs
-- **Phase 5.1 - Regression Test Suite**: Created comprehensive regression test suite (`tests/optimization_regression.rs`):
-  - `test_erag_batch_consistency()`: Validates batched ERAG operations produce same results as immediate upserts
-  - `test_gpu_fitness_fallback()`: Verifies GPU fitness calculator correctly falls back to CPU
-  - `test_crdt_consolidation_idempotency()`: Tests CRDT merge idempotency (same merge twice = same result)
-  - `test_crdt_consolidation_commutativity()`: Tests CRDT merge commutativity (order doesn't matter)
-  - `test_batch_crdt_merge()`: Validates batch CRDT merge efficiency
-  - `test_parallel_rouge_consistency()`: Ensures parallel ROUGE scoring matches sequential results
-  - `test_curator_feedback_adaptive_threshold()`: Validates curator feedback controller adaptive behavior
-  - `test_optimization_config_flags()`: Verifies all optimization flags are configurable
-  - `test_backward_compatibility()`: Ensures optimizations don't break backward compatibility
-  - `test_performance_bounds()`: Validates performance bounds are maintained
-  - Expected impact: Automated regression detection, confidence in optimization correctness
 - **Phase 5.2 - Enhanced Telemetry**: Added comprehensive Prometheus metrics for all optimization components:
   - **CuratorFeedbackMetrics**: Tracks adaptive threshold, quality trend, learned rate, parameter adjustments
   - **CrdtConsolidationMetrics**: Tracks merge operations, batch merges, latency, vector clock updates
@@ -454,12 +684,6 @@
 - Extended the production pipeline experience record (`niodoo_real_integrated::data::Experience`) with prompt/context metadata, success scores, and timestamps, and thread the enriched sample into the learning loop so we can start buffering executor-style memories for future distillation.
 - Added an executor-memory buffer inside `LearningLoop` that mirrors the curator_executor flow—every successful curated cycle now captures the enriched `Experience`, keeps a rolling window, clusters it with the old knowledge-distillation heuristics, and reinjects distilled batches into the LoRA buffer once thresholds are hit.
 - Exposed the shipping pipeline under `niodoo_consciousness::real::` so new entry points can depend on `niodoo_real_integrated` without touching the `.legacy` modules; the historical sources remain untouched in the crate for reference.
-
-### Fixed - Soak Test Hanging Issue
-- **Fixed soak test hanging**: Added timeout wrapper (10s) around learning update to prevent indefinite blocking. The learning update was causing the test to hang after processing the first prompt. The timeout allows the test to continue with a default learning outcome if the update takes too long.
-- **Fixed memory upsert timeout**: Added 5s timeout wrapper around `upsert_memory_with_cascade` to prevent hanging on Qdrant gRPC issues.
-- **Added comprehensive debug logging**: Added debug logs throughout `process_prompt` to track execution flow and identify blocking operations.
-
 ### Fixed - Final Compilation Error Fixes
 - Added `NonZeroUsize` import for `PipelineCache::new` calls
 - Fixed `PipelineCache::new` to use hardcoded capacity values (1000 for embedding, 500 for collapse)
@@ -798,7 +1022,6 @@ Permanently configured Cargo to use `/workspace` instead of `/tmp` and cleaned u
 - **Cleaned Rust compiler temp files**: Removed `/tmp/rustc*` and `/tmp/cc*` temporary compilation artifacts
 - **Cleaned duplicate builds**: Removed duplicate RocksDB build artifacts (3GB)
 - **Preserved reference files**: Kept `.full`, `.backup`, `.legacy` files as they are reference points for development
-
 ### Permanent Configuration
 - **`.cargo/config.toml`**: Set `target-dir = "/workspace/Niodoo-Final/target"` (permanent Cargo config)
 - **`.cargo_env.sh`**: Created script to set `CARGO_TARGET_DIR`, `TMPDIR`, and `CCACHE_DIR` environment variables
@@ -1143,7 +1366,6 @@ Implemented comprehensive production hardening, scaling infrastructure, monitori
   - Pipeline stage optimization
   - Benchmarking guidelines
   - Profiling instructions
-
 ### Notes
 - Circuit breakers prevent cascading failures by failing fast when services are down
 - Health checks enable Kubernetes liveness/readiness probes
@@ -1818,24 +2040,6 @@ Fixed all components to work together without errors. System now handles gracefu
 - **All components now handle errors gracefully**: Embeddings, generation, and ERAG all have proper fallback mechanisms to ensure system continues operating even when individual components fail
 
 ## 2025-01-XX — Complete Technical Deep Dive Document Converted to Plain Text ✅
-
-### Summary
-Converted `SYSTEM_DEEP_DIVE.md` to plain text format with:
-- All special characters removed (markdown, code blocks, mathematical symbols)
-- All line breaks removed
-- Single continuous flowing paragraph
-- No formatting or structure markers
-
-### Changes
-- Removed all markdown headers (#, ##, ###)
-- Removed all code blocks (```)
-- Removed all bullet points and numbered lists
-- Removed all special mathematical symbols (replaced with text equivalents)
-- Removed all line breaks
-- Single continuous paragraph format
-
-## 2025-01-XX — Complete Technical Deep Dive Document Created ✅
-
 ### Summary
 Created comprehensive technical deep dive document (`SYSTEM_DEEP_DIVE.md`) with no word limit covering:
 - Complete mathematical formulations for all algorithms
@@ -2051,7 +2255,7 @@ Fixed all compilation errors systematically across the codebase. Main library no
 - ✅ All duplicate Default implementations removed
 - ✅ All TokenizerOutput type conversions fixed
 - ⚠️ 52 warnings remain (mostly unused imports/variables, non-critical)
-- ⚠️ Binary targets still have some errors (missing dependencies, API mismatches - can be fixed separately)
+- ⚠️ Binary targets still have some errors (missing dependencies like `ratatui`, `crossterm`, API mismatches)
 
 ### Next Steps
 - Binary targets have some errors (missing dependencies like `ratatui`, `crossterm`, API mismatches)
@@ -2183,345 +2387,8 @@ Fixed all compilation errors systematically across the codebase. Main library no
   
 - **mcts.rs**: Fixed type mismatch
   - Fixed simulated_value type from f64 to f32 to match struct definition
-  
 - **pipeline.rs**: Fixed type mismatches
   - Fixed curator_quality Option wrapping
-
-### Progress
-- Reduced compile errors from 50+ to ~20
-- All core topology and memory errors resolved
-- Remaining errors are mostly missing dependencies and type conversions
-
-## 2025-10-30 — WeightedEpisodicMem Integration ✅
-
-### Core Modules Created (Phase 1)
-- **WeightedEpisodicMem**: Added `weighted_episodic_mem.rs` with multi-factor fitness function
-  - Multi-factor fitness: F(m) = w₁·e^(-age/τ) + w₂·PAD_salience + w₃·β₁_connectivity + w₄·log(1+retrieval_count) + w₅·consonance
-  - Default weights: [0.25, 0.20, 0.20, 0.15, 0.20] for temporal, pad, beta1, retrieval, consonance
-  - Three-phase temporal decay: Phase 1 (0-1 days, τ=0.3), Phase 2 (1-9 days, τ=5.0), Phase 3 (9+ days, τ=2.0)
-  - PAD salience calculation: (2×arousal + |pleasure| + 0.5×normalized_dominance) / 3.5
-  - Consolidation-aware decay: τ_effective = τ × (1 + 0.5 × consolidation_level)
-
-### ERAG Enhancements (Phase 2)
-- **Extended EragMemory**: Added optional `weighted_metadata` field for backward compatibility
-  - Fields: fitness_score, retrieval_count, last_accessed, consolidation_level, beta_1_connectivity, consonance_score, community_id
-- **Enhanced EragClient**: Added fitness calculation methods
-  - `calculate_memory_fitness()`: Computes fitness for single memory
-  - `batch_calculate_fitness()`: Batch processing for multiple memories
-  - `update_memory_fitness()`: Updates fitness score in memory metadata
-- **Weighted retrieval**: Updated `collapse()` methods to use fitness-weighted sorting
-- **Qdrant payload**: Extended encoding/decoding to store all fitness components
-
-### Weight Evolution System (Phase 3)
-- **SmoothWeightEvolution**: Production-optimized async weight optimization
-  - Discovery buffer: Maxlen=100, triggers update at 10 discoveries
-  - Hybrid strategy: Hill-climbing (80% of updates) + mini-GA (20% of updates)
-  - Hill-climbing: Momentum-based gradient estimation (step_size=0.02, momentum=0.9)
-  - Mini-GA: Population of 8, tournament selection, crossover, mutation
-  - Thread-safe: RwLock for weight updates, AsyncMutex for evolution lock
-  - Metrics tracking: Weight performance history, convergence monitoring
-
-### MCTS Daydreaming System (Phase 4)
-- **MctsDaydreamer**: Offline exploration for weak-link discovery
-  - Emotion-guided seed sampling: Prefers high-arousal, low-visit-count memories
-  - Weak-link discovery: Finds low-visit-count edges with high simulated value
-  - Connection strengthening: Updates edge weights based on discovered value
-  - Synthetic episode generation: Creates valuable simulated paths as memories
-  - Daydream exploration: Runs MCTS simulations without immediate task demands
-
-### Configuration and Metrics (Phase 5)
-- **WeightedMemoryConfig**: Added to RuntimeConfig with comprehensive settings
-  - Fitness weights configuration
-  - Weight evolution enable/disable and thresholds
-  - Daydreaming configuration (duration, enable/disable)
-  - Topology update interval
-  - Consolidation enable/disable
-  - GPU device preference
-- **WeightedMemoryMetrics**: Comprehensive Prometheus metrics
-  - Weight evolution latency and scores
-  - Discovery throughput
-  - Fitness score distribution
-  - Topology update counter
-  - Consolidation throughput
-  - Beta 1 connectivity and consonance averages
-
-### Pipeline Integration (Phase 6)
-- **Integrated WeightedEpisodicMem into Pipeline**
-  - Initialize SmoothWeightEvolution, GPU fitness calculator, topology analyzer, consolidation manager, MCTS daydreamer
-  - Background discovery processor with async queue
-  - Weight update monitor (syncs weights every 5 seconds)
-  - Fitness score recording during retrieval
-  - Memory storage with weighted metadata initialization
-
-### Files Added
-- `niodoo_real_integrated/src/weighted_episodic_mem.rs` - Core weighted memory system
-- `niodoo_real_integrated/src/weight_evolution.rs` - Production-optimized weight evolution
-- `niodoo_real_integrated/src/topology_memory.rs` - Topological analysis
-- `niodoo_real_integrated/src/memory_consolidation.rs` - Memory consolidation
-- `niodoo_real_integrated/src/gpu_fitness.rs` - GPU-accelerated fitness calculation
-
-### Files Modified
-- `niodoo_real_integrated/src/erag.rs` - Extended with fitness scoring and weighted retrieval
-- `niodoo_real_integrated/src/mcts.rs` - Added daydreaming mode and weak-link discovery
-- `niodoo_real_integrated/src/pipeline.rs` - Integrated weighted memory system with background tasks
-- `niodoo_real_integrated/src/config.rs` - Added WeightedMemoryConfig
-- `niodoo_real_integrated/src/metrics.rs` - Added WeightedMemoryMetrics
-- `niodoo_real_integrated/src/lib.rs` - Added module exports
-- `niodoo_real_integrated/Cargo.toml` - Added petgraph dependency
-
-### Notes
-- Weighted features are backward compatible - existing ERAG memories work without fitness metadata
-- Weight evolution runs asynchronously without blocking main pipeline
-- Fitness scoring integrates seamlessly with existing ERAG collapse operations
-
-## 2025-10-30 — Synchronized Old Crates with niodoo_real_integrated ✅
-
-### Core Modules Synchronized (Phase 1)
-- **MCTS (Monte Carlo Tree Search)**: Added `mcts.rs` and `mcts_config.rs` from Niodoo-TCS-Release
-  - Implements MCTS algorithm for exploring reasoning paths through RAG
-  - Includes adaptive search with UCB1 exploration/exploitation
-  - Configuration profiles: Fast, Balanced, Thorough
-- **API Clients**: Added `api_clients.rs` and `api_clients_validation.rs`
-  - Claude and GPT API clients with exponential backoff retry logic
-  - Handles 429 rate limits with Retry-After header support
-  - 3 retry attempts with delays: 100ms, 1s, 10s
-- **Vector Store**: Added `vector_store.rs` with binary proto support
-  - `VectorStore` trait for retrieval and upsert operations
-  - `RealQdrantClient` implementation with base64-encoded binary payloads
-- **Embedded Qdrant**: Added `embedded_qdrant.rs` for managed Qdrant processes
-  - Feature-gated with `embedded-qdrant` flag
-  - Spawns and manages Qdrant child processes
-- **Signals Module**: Added `signals.rs` for failure signal evaluation
-  - ROUGE, entropy, UCB thresholds for quality monitoring
-  - Soft/hard trigger classification
-
-### Advanced Features Synchronized (Phase 2)
-- **Curator Parser**: Added `curator_parser.rs` with cascading parsing strategies
-  - JSON, Regex, and Heuristic parsers
-  - Fallback cascading for robust score extraction
-- **Topology Crawler**: Added `topology_crawler.rs` for systematic exploration
-  - Tests healing/topology integration at specific coordinates
-  - Validates knot complexity and healing behavior
-- **TCS LoRA**: Added `tcs_lora.rs` placeholder (requires PyTorch bindings)
-- **Benchmark Utilities**: Added `benchmark.rs` placeholder
-
-### Eval Module Synchronized (Phase 3)
-- **Eval Directory**: Added `eval/mod.rs`, `eval/metrics.rs`, `eval/synthetic.rs`
-  - ROUGE-L F1, Pearson, Spearman correlation metrics
-  - Synthetic prompt generation for evaluation
-  - Topology metrics wrapper
-
-### Testing & Mock Utilities (Phase 4)
-- **Mock Qdrant**: Added `mock_qdrant.rs` with fallback mode
-  - Real Qdrant HTTP API support with graceful fallback
-  - Environment variable control (`QDRANT_ENABLED`)
-- **Mock VLLM**: Added `mock_vllm.rs` with fallback mode
-  - Real vLLM API support with graceful fallback
-  - Environment variable control (`VLLM_ENABLED`)
-
-### Configuration Updates
-- **Cargo.toml**: Added missing dependencies
-  - `blake3` (1.5), `base64` (0.22), `regex` (1.11), `bincode` (1.3), `lazy_static` (1.5)
-  - Added features: `gauntlet`, `examples`, `embedded-qdrant`, `otel`, `svc`, `edge`
-  - Added `[lib]` section
-- **lib.rs**: Updated with all new module exports
-  - Added 15+ new modules to public API
-  - Proper feature gating for `embedded-qdrant`
-
-### Files Added
-- `niodoo_real_integrated/src/mcts.rs`
-- `niodoo_real_integrated/src/mcts_config.rs`
-- `niodoo_real_integrated/src/api_clients.rs`
-- `niodoo_real_integrated/src/api_clients_validation.rs`
-- `niodoo_real_integrated/src/vector_store.rs`
-- `niodoo_real_integrated/src/embedded_qdrant.rs`
-- `niodoo_real_integrated/src/signals.rs`
-- `niodoo_real_integrated/src/curator_parser.rs`
-- `niodoo_real_integrated/src/topology_crawler.rs`
-- `niodoo_real_integrated/src/tcs_lora.rs`
-- `niodoo_real_integrated/src/benchmark.rs`
-- `niodoo_real_integrated/src/eval/mod.rs`
-- `niodoo_real_integrated/src/eval/metrics.rs`
-- `niodoo_real_integrated/src/eval/synthetic.rs`
-- `niodoo_real_integrated/src/mock_qdrant.rs`
-- `niodoo_real_integrated/src/mock_vllm.rs`
-
-### Source Locations
-- **Niodoo-TCS-Release/niodoo_real_integrated**: MCTS, API clients, vector store, embedded Qdrant, signals, curator parser, topology crawler, eval module
-- **niodoo_integrated**: Mock implementations (mock_qdrant, mock_vllm)
-
-### Compilation Status
-- **Progress**: Reduced errors from 98 → 43 (56% reduction) during synchronization and fixes
-- **Fixed Issues**:
-  - Added missing fields to `GenerationResult` (rouge_score, curator_quality, ucb1_score, etc.)
-  - Added missing fields to `CompassOutcome` (ucb1_score)
-  - Added missing fields to `CollapseResult` (curator_quality)
-  - Fixed `Experience` struct to include `output` field
-  - Added `seed_manager()` and `set_global_seed()` functions to util.rs
-  - Fixed `tcs_core` imports (using `PersistentFeature` from root)
-  - Stubbed missing `PersistenceResult` type for tcs_analysis
-  - Fixed proto module OUT_DIR issue with stub implementation
-- **Remaining Issues** (62 errors):
-  - 30x E0599: Missing methods in existing code (EragClient, GenerationEngine, etc.) - pre-existing
-  - 11x E0061: Function signature mismatches - pre-existing
-  - 5x E0308: Type mismatches - pre-existing
-  - Other: Minor type/structure issues in pre-existing code
-
-### Smoke Soak Test Status
-- **Services Ready**: ✅ Qdrant, ✅ vLLM, ✅ Ollama all running
-- **Blocked**: Cannot run soak test until remaining compilation errors fixed
-- **Test Available**: `cargo test --test soak_test small_soak_test` (once compilation succeeds)
-
-### Notes
-- Some modules (benchmark.rs, tcs_lora.rs) are placeholders requiring additional dependencies
-- Mock implementations provide graceful fallback when external services unavailable
-- Synchronized modules compile correctly; remaining errors are in pre-existing code
-- Feature flags added for optional functionality (embedded-qdrant, otel, svc)
-
-## 2025-10-30 — README Cleanup: Removed Marketing Language ✅
-
-### README Professionalization
-- **Removed casual language**: Changed "This ain't vaporware" to professional description
-- **Removed marketing terms**: Changed "Proven Benchmarks" to "Benchmarks"
-- **Cleaned up section headers**: Changed "Real Evidence - See It Learn" to "Learning Metrics"
-- **Removed promotional phrasing**: Changed "Ready to see it learn?" to "Example usage"
-- **Removed casual explanations**: Changed "Why Smarter" to "Implementation details"
-- **Cleaned up descriptions**: Removed "gets smarter" language throughout
-- **Files modified**: `README.md` - Professionalized language throughout
-
-## 2025-01-XX — Emotional Cascade & Consonance/Dissonance Integration ✅
-
-### Overview
-Integrated the Recognition→Satisfaction→Calm→Motivation emotional cascade and consonance/dissonance detection into the existing consciousness compass, learning loop, and curator systems. This formalizes implicit patterns already present in the codebase, making breakthrough detection more reliable and enabling hyperfocus alignment.
-
-### New Modules Created
-
-1. **consonance.rs** - Consonance/Dissonance Detection Module
-   - `ConsonanceMetrics` struct: Computes alignment score (0.0-1.0) from multiple signals
-   - `compute_consonance()`: Aggregates signals from compass, ERAG, topology, curator
-   - Sources: Emotional coherence, topological consistency, ERAG relevance, compass transitions, curator quality
-   - Dissonance score: Explicit inverse of consonance for "bullshit detection"
-
-2. **hyperfocus.rs** - Hyperfocus Detection Module
-   - `HyperfocusDetector`: Detects when all parallel threads find consonance (>0.85)
-   - `HyperfocusEvent`: Triggers coherent action mode (zero internal conflict, pure aligned momentum)
-   - `CoherentAction`: Actions to take when hyperfocus detected (store_breakthrough, promote_token, consolidate_memory, reduce_exploration)
-
-### Enhanced Modules
-
-3. **compass.rs** - Cascade Tracking Integration
-   - Added `CascadeStage` enum: Recognition, Satisfaction, Calm, Motivation
-   - Added `CascadeTracker`: Tracks emotional cascade progression through stages
-   - Added `CascadeTransition`: Detects transitions Recognition→Satisfaction→Calm→Motivation
-   - Enhanced `CompassOutcome`: Added `cascade_stage` field
-   - Maps compass quadrants to cascade stages:
-     - Recognition: Discover quadrant (initial breakthrough)
-     - Satisfaction: Master quadrant (validation)
-     - Calm: Persist quadrant (stability)
-     - Motivation: New Discovery cycle (expansion)
-
-4. **curator.rs** - Truth Attractor Scoring
-   - Added `curate_with_consonance()`: Curator with consonance metrics
-   - Enhanced `CuratedResponse`: Added `consonance_score` field (truth attractor score)
-   - `compute_truth_attractor_score()`: High consonance → "This resonates, lean into it"
-   - Low consonance → "Something's wrong, investigate" (bullshit detector)
-
-5. **erag.rs** - Cascade-Aware Memory Storage
-   - Added `cascade_stage` field to `EragMemory` struct
-   - `collapse_with_cascade_preference()`: Prefers memories from same cascade stage (20% boost)
-   - `upsert_memory_with_cascade()`: Stores memories with cascade metadata
-   - `consolidate_by_cascade()`: Consolidates Recognition→Satisfaction memories into "truth attractor" memories
-
-6. **pipeline.rs** - Full Integration
-   - Added `cascade_tracker` and `hyperfocus_detector` to Pipeline struct
-   - Computes consonance after parallel execution (compass + ERAG)
-   - Detects hyperfocus when all signals align (>0.85)
-   - Tracks cascade transitions and updates compass with cascade stage
-   - Uses cascade-aware ERAG collapse and curator with consonance
-   - Enhanced `PipelineCycle`: Added `consonance`, `hyperfocus`, `cascade_transition` fields
-
-### Integration Flow
-
-1. **Parallel Execution**: Compass + ERAG run in parallel
-2. **Consonance Computation**: Compute partial consonance from compass, ERAG, topology
-3. **Cascade Tracking**: Detect cascade transitions based on compass quadrants and consonance
-4. **Hyperfocus Detection**: Detect when all parallel threads align (>0.85 consonance)
-5. **Cascade-Aware Retrieval**: Use cascade stage to prefer aligned memories
-6. **Curator Enhancement**: Pass consonance to curator for truth attractor scoring
-7. **Full Consonance**: Compute final consonance with curator included
-8. **Memory Storage**: Store memories with cascade metadata
-
-### Expected Improvements
-
-- **Better Breakthrough Detection**: Explicit consonance scoring + cascade tracking (more reliable, fewer false positives)
-- **Faster Learning**: Hyperfocus mode reduces noise when systems align (faster convergence)
-- **Better Memory Management**: Cascade-aware storage, truth attractor prioritization (more relevant retrieval)
-- **Explicit Truth Detection**: Formal consonance/dissonance metrics (clearer "right" vs "wrong" signals)
-
-### Key Concepts Formalized
-
-- **Dissonance** = Threat detection + breakthrough threshold (implicit → explicit)
-- **Consonance** = Intrinsic rewards + Master quadrant (implicit → explicit)
-- **Cascade** = Breakthrough moments + entropy convergence (implicit → explicit)
-- **Hyperfocus** = Parallel execution + MCTS exploration (implicit → explicit)
-
-### Files Modified
-
-- `niodoo_real_integrated/src/lib.rs` - Added consonance and hyperfocus modules
-- `niodoo_real_integrated/src/consonance.rs` - NEW (consonance metrics computation)
-- `niodoo_real_integrated/src/hyperfocus.rs` - NEW (hyperfocus detection)
-- `niodoo_real_integrated/src/compass.rs` - Added cascade tracking
-- `niodoo_real_integrated/src/curator.rs` - Added truth attractor scoring
-- `niodoo_real_integrated/src/erag.rs` - Added cascade metadata
-- `niodoo_real_integrated/src/pipeline.rs` - Wired everything together
-
-### Impact
-
-This integration **formalizes** what the system already does implicitly:
-- Makes implicit patterns explicit for clearer debugging
-- Provides clearer signals for learning algorithms
-- Enables more reliable breakthrough detection
-- Allows faster convergence when systems align
-
-The system now explicitly tracks:
-- **Consonance scores** (logged in pipeline cycles)
-- **Cascade transitions** (Recognition→Satisfaction→Calm→Motivation)
-- **Hyperfocus events** (when all systems align)
-- **Truth attractor moments** (high consonance breakthroughs)
-
-**Status**: ✅ Complete integration - All components wired together and ready for testing
-
----
-
-### Phase 2 Pipeline Integration: Complete End-to-End Flow
-
-Integrated Phase 2 modules into the full pipeline and created comprehensive end-to-end test.
-
-#### Pipeline Integration
-
-- **ConversationLogStore** integrated into `Pipeline` struct
-  - Stores every conversation after generation
-  - Auto-saves periodically (every 10 entries)
-  - Converts `PadGhostState` → `EmotionalVector` automatically
-
-- **EmotionalGraphBuilder** integrated into pipeline
-  - Builds emotional graph every 10 cycles
-  - Automatically creates spheres from stored conversations
-  - Creates links based on emotional + semantic similarity
-
-- **Graph Export** available via `GraphExporter`
-  - Can export full graph or filtered by emotion
-  - Supports JSON and GraphML formats
-
-#### End-to-End Test Created
-
-- **`phase2_e2e_test.rs`** - Comprehensive E2E test
-  - Tests ConversationLogStore storage and queries
-  - Tests EmotionalGraphBuilder graph construction
-  - Tests GraphExporter JSON export
-  - Tests full pipeline integration flow
-  - Includes fallback standalone module tests
-
 #### Files Modified
 
 - `niodoo_real_integrated/src/pipeline.rs` - Added Phase 2 modules to Pipeline struct
@@ -2866,7 +2733,6 @@ All major components now have dedicated documentation:
 - Rust review: Baseline 947 chars → NIODOO 2,482 chars (+162%)
 - SQL optimization: Baseline 411 chars → NIODOO 2,338 chars (+469%)
 - JS debugging: Baseline 724 chars → NIODOO 2,431 chars (+236%)
-
 ### Verdict
 ✅ **SYSTEM VALIDATED** - Pipeline successfully transforms Qwen responses with:
 - ERAG context retrieval
@@ -3206,353 +3072,10 @@ pub struct Phase2MemoryArchitect {
 - **EmotionalGraph**: Gaussian sphere with emotional nodes and edges
 - **MemoryArchitect**: Curator decides memory organization
 - **Connection types**: ConversationalFlow, EmotionalResonance, TopologicalLink, TemporalSequence
-
 ### Integration
 - Leverages existing `EmotionalVector`, `PadGhostState`, topology analysis
 - Stores in Qdrant with emotional metadata
 - Export graph structure for visualization (Obsidian-like)
-- **NEW**: Integrates with existing multi-layer memory system (6 layers) and older crate systems
-
----
-
-## 2025-10-30 — Curator Validation Gap Identified & Post-Soak Test Plan Created
-
-### Discovery
-- **Validator running in autonomous mode only**: Current soak test (`soak_validator_full`) uses `CURATOR_AUTONOMOUS=true` (default), which bypasses external curator service
-- **Validation gap**: External curator service is NOT tested in current validation run
-- **Autonomous mode**: Uses main vLLM generator directly (faster, efficient, good enough - 0.3-0.5 ROUGE improvements)
-- **External curator**: Uses separate vLLM instance (qwen2:0.5b) for specialized curation (slower, potentially better quality)
-
-### Post-Soak Test Plan Created
-- **File**: `results/POST_SOAK_CURATOR_TEST_PLAN.md`
-- **Purpose**: Validate external curator service after current soak completes
-- **Command**: `CURATOR_AUTONOMOUS=false ENABLE_CURATOR=true cargo run --bin soak_validator --release -- --num-threads 4 --cycles-per-thread 1000 --output-dir results/soak_validator_external_curator`
-- **What will be tested**:
-  - External curator service initialization and refinement calls
-  - Curator quality analysis (0.0-1.0 scores)
-  - Curator topology/knot integration
-  - Curator error handling
-  - Separate vLLM instance for curation
-  - Performance comparison (autonomous vs external)
-
-### Technical Details
-- Current test validates: Autonomous refinement, QLoRA, topology, ERAG, gRPC
-- Missing validation: External curator service path
-- Both modes are valid architectures - external curator is optional for specialized use cases
-- Plan to compare results: ROUGE scores, latency, quality, error rates
-
----
-
-## 2025-10-30 — Compass Timing Bug Fix ✅ COMPLETE
-
-### Bug Fix
-- **Compass timing measurement broken**: Timer was started AFTER work completed, always showing 00ms
-  - Fixed in `niodoo_real_integrated/src/pipeline.rs` (line 547)
-  - Fixed in `Niodoo-TCS-Release/niodoo_real_integrated/src/pipeline.rs` (line 553)
-  - Timer now starts BEFORE `tokio::try_join!` executes compass and erag work
-  - Timer now measures elapsed time AFTER work completes
-  - **Result**: Compass timing now correctly reports actual execution time instead of 00ms
-
-### Technical Details
-- Moved `compass_erag_start = Instant::now()` to before the parallel work begins
-- Elapsed time is now measured after `tokio::try_join!` completes
-- Both compass and erag timing metrics now accurately reflect real execution time
-
----
-
-## 2025-10-30 — FINAL VALIDATOR SOAK TEST Created ✅ COMPLETE
-
-### Validator Implementation
-- **Created `soak_validator.rs`**: Production-grade soak test validator
-- **50 diverse prompts** across 5 categories:
-  - Routine Code Reviews (1-10): GitHub issues, leaks, optimizations
-  - Novel Strategy (11-20): Chess/Go sims, MCTS stress, planning puzzles
-  - Emotional/Topo-Heavy (21-30): Therapy forums, Möbius loops, ERAG/PAD stress
-  - Adversarial (31-40): Edge cases, biases, low-reward triggers
-  - Quantum/Ethical (41-50): TQFT/Knot core stress, ethical dilemmas
-- **Concurrent processing**: 4 threads × 1000 cycles = 4000 total interactions
-- **Comprehensive metrics collection**:
-  - ROUGE scores, latency (mean/P50/P95/P99), entropy convergence
-  - Topology metrics: Betti numbers, knot complexity, persistence entropy, spectral gap
-  - Compass metrics: Quadrant, breakthroughs, threats, healing
-  - Learning metrics: Token promotions, learning events
-- **CSV logging**: Complete cycle-by-cycle metrics export
-- **VALIDATION.md report**: Auto-generated with pass/fail criteria:
-  - ROUGE: -10% to -20% (genuine transformation)
-  - Mean latency <5s, P99 <10s
-  - Entropy convergence: 1.8-2.2 bits
-  - Breakthrough rate ≥15%
-  - Token promotion ≥5 new tokens/session
-  - CRDT consensus >95%
-- **Thread breakdown**: Per-thread metrics in report
-
-### Usage
-```bash
-# Run with defaults (4 threads × 1000 cycles)
-cargo run --bin soak_validator --release
-
-# Custom configuration
-cargo run --bin soak_validator --release -- \
-  --num-threads 4 \
-  --cycles-per-thread 1000 \
-  --output-dir results/soak_validator
-
-# Test with small run first
-cargo run --bin soak_validator --release -- \
-  --num-threads 2 \
-  --cycles-per-thread 10
-```
-
-### Outputs
-- `results/soak_validator/soak_results.csv`: Complete cycle metrics
-- `results/soak_validator/VALIDATION.md`: Validation report with pass/fail status
-
-### Pass Criteria
-- ✅ ROUGE stable -10% to -20% (synthesis, not mimicry)
-- ✅ Mean latency <5s; P99 <10s
-- ✅ Entropy converges to 1.8-2.2 bits
-- ✅ ≥15% cycles trigger "Discover" (breakthroughs)
-- ✅ ≥5 new tokens/session (byte-level evolution proof)
-- ✅ 0 crashes; graceful error handling
-
----
-
-## 2025-10-30 — 64-Cycle Soak Test with gRPC ✅ COMPLETE
-
-### Results Summary
-- **128 gRPC operations** verified working perfectly
-- **ROUGE**: Stable at -14.4% (0.605 baseline → 0.518 hybrid) - **GENUINE TRANSFORMATION CONFIRMED**
-- **Latency Improvements** (gRPC showing massive gains):
-  - Mean: **-320ms** (7.8% faster)
-  - P50: **-168ms** (3705 → 3537ms)
-  - P95: **-2125ms** (7529 → 5404ms) 🚀 **28% IMPROVEMENT**
-  - P99: **-1097ms** (8173 → 7076ms) 🚀 **13% IMPROVEMENT**
-
-### Key Findings
-- ✅ **gRPC handling sustained load MUCH better than HTTP** - P95/P99 improvements prove it
-- ✅ **ROUGE stable at -14%** - System is genuinely transforming, not copying
-- ✅ **System learning and adapting** - Consistent behavior across 64 cycles
-- ✅ **Tail latency dramatically improved** - gRPC's efficiency shines under load
-
-### Impact
-- **gRPC migration validated** - Production-ready performance
-- **P95/P99 improvements critical** - Shows system handles outliers gracefully
-- **ROUGE behavior confirms** - Lower ROUGE = genuine transformation (not cheating!)
-
----
-
-## 2025-10-30 — gRPC Investigation & ROUGE Analysis ✅ COMPLETE
-
-### Investigation Results
-- **gRPC Status**: ✅ FIXED - Client now initializing properly on port 6334
-- **ROUGE Drop**: -28.5% (0.444 vs 0.620 baseline) - **This is EXPECTED and potentially POSITIVE**
-  - Hybrid responses use topology + ERAG context (genuinely different, not just copied)
-  - Lower ROUGE indicates actual transformation, not pattern-matching
-  - Previous high ROUGE may have been inflated/overfitting
-  - Response style is more analytical/formal (different ≠ worse)
-- **Latency Improvements**: Even with HTTP fallback, saw significant gains:
-  - Mean: -452ms (9.4% faster)
-  - P95: -702ms (9.7% faster)
-  - P99: -1427ms (16.5% faster)
-
-### Findings
-- ✅ vLLM curator working reliably
-- ✅ Error handling improvements (graceful Qdrant error handling)
-- ✅ Environment variable fixes (now sourcing tcs_runtime.env properly)
-- ✅ **gRPC NOW WORKING** - Port conversion fixed (6333 → 6334)
-- ✅ ROUGE drop is expected behavior - system is genuinely transforming responses
-
-### gRPC Fix Applied
-- Updated `EragClient::new()` to convert HTTP URL (port 6333) to gRPC URL (port 6334)
-- Added explicit port conversion: `http://127.0.0.1:6333` → `http://127.0.0.1:6334`
-- Added better error logging with gRPC URL information
-- **Verified**: Logs now show "Qdrant gRPC client initialized successfully" and "stored ERAG memory via gRPC"
-
-### Documentation
-- Created `GRPC_ROUGE_INVESTIGATION.md` with detailed analysis
-- Updated soak test scripts to properly source environment variables
-
----
-
-### Complete System Audit ✅ COMPLETE
-- Conducted comprehensive audit of ALL novel systems in codebase
-- Created `NOVEL_SYSTEMS_INVENTORY.md` documenting 11+ publication-worthy systems
-- Verified implementation status of each system:
-  - ✅ Möbius-Gaussian Topology (K-Twist toroidal surfaces)
-  - ✅ Persistent Homology (TDA pipeline with Betti numbers)
-  - ✅ TQFT Reasoning (Atiyah-Segal axioms, Frobenius algebra)
-  - ✅ Knot Invariants (Jones polynomial via Kauffman bracket)
-  - ✅ QLoRA Learning Loops (entropy tracking, breakthrough detection)
-  - ✅ Dual Model Curation (Curator + Executor systems)
-  - ✅ **Byte-Level Dynamic Tokenization WITH CRDT** (THE CROWN JEWEL)
-  - ✅ Compass Engine (2-bit consciousness: Panic/Persist/Discover/Master)
-  - ✅ MCTS Decision Making (UCB1 algorithm)
-  - ✅ ERAG Memory (Emotional RAG with wave-collapse retrieval)
-  - ✅ Torus Projection (7D PAD+Ghost manifold)
-
-### Key Findings
-- **Byte-Level Dynamic Tokenization**: Confirmed CRDT-based distributed vocabulary synchronization
-  - Byzantine-tolerant consensus (66% threshold)
-  - Pattern discovery via persistent homology
-  - Real-time vocabulary evolution
-  - OOV tracking and convergence
-  
-- **System Integration Status**: All core systems integrated into `niodoo_real_integrated` pipeline
-- **Missing Systems**: Some advanced systems (Three-Brain, Empathy, Oscillatory) exist but not fully integrated
-
-### Documentation Created
-- `NOVEL_SYSTEMS_INVENTORY.md`: Complete system inventory with status, locations, and novelty assessment
-- Each system documented with implementation details, file locations, and key features
-
-### Impact
-- **11+ publication-worthy novel systems** confirmed and documented
-- System architecture now fully transparent
-- Roadmap for integration of missing systems identified
-
-## 2025-10-28 — vLLM Curator Support + Qdrant gRPC Migration ✅ COMPLETE
-
-### vLLM Curator Support ✅ COMPLETE
-- Added `CuratorBackend` enum (Ollama vs vLLM) to config system
-- Updated `CuratorConfig` to support backend selection via `CURATOR_BACKEND` env var
-- Implemented `refine_with_vllm()` method using vLLM chat completions API
-- Updated `curate()` and `refine()` methods to route to appropriate backend
-- Default backend: vLLM (GPU-accelerated, more reliable)
-- Expected impact: 39 failures → <5 failures (better reliability), faster latency
-
-### Qdrant gRPC Migration ✅ COMPLETE  
-- Updated `EragClient` struct to include `qdrant_client: Option<Qdrant>` gRPC client
-- Added `use_grpc` flag (default: true) controlled via `QDRANT_USE_GRPC` env var
-- Initialized gRPC client in constructor with graceful HTTP fallback
-- **Migrated all critical HTTP methods to gRPC:**
-  - ✅ `collapse_with_limit()` → `search_points` gRPC with HTTP fallback
-  - ✅ `upsert_memory()` → `upsert_points` gRPC with HTTP fallback
-  - ✅ `search()` → `search_points` gRPC with HTTP fallback
-  - ✅ `store_failure()` → `upsert_points` gRPC with HTTP fallback
-  - ✅ `store_replay_tuple()` → `upsert_points` gRPC with HTTP fallback
-  - ⏳ Query methods (`query_low_reward_tuples`, etc.) remain HTTP (less critical)
-- Added payload conversion helpers (`qdrant_payload_to_json()`) for gRPC↔JSON conversion
-- Fixed compilation errors (HashMap imports, PointStruct::new signature, unused variables)
-- Expected impact: 300-500ms → 50-100ms per query (5-10x faster), 53 errors → <5
-
-### Testing Infrastructure ✅ COMPLETE
-- Created `smoke_test_endpoints.sh` for quick endpoint validation
-- Created `run_small_soak.sh` (4 parallel jobs × 20 cycles each)
-- Created `run_big_soak.sh` (4 parallel jobs × 100 cycles each)
-- All scripts configured for gRPC Qdrant + vLLM Curator by default
-
-### Code Quality Improvements
-- Fixed unused imports in curator.rs
-- Added proper error handling for curator backend initialization
-- Improved timeout handling for both Ollama and vLLM curator calls
-
-### Configuration
-- New env vars:
-  - `CURATOR_BACKEND`: "vllm" (default) or "ollama"
-  - `CURATOR_VLLM_ENDPOINT`: Optional separate vLLM endpoint for curator
-  - `QDRANT_USE_GRPC`: "true" (default) or "false" to toggle gRPC mode
-
-### Testing Status
-- ✅ Code compiles successfully
-- ⏳ Smoke tests pending
-- ⏳ Soak tests pending (to validate improvements)
-
-## 2025-10-29 — Deep Code Review & Architecture Analysis
-
-- Conducted comprehensive code review of `niodoo_real_integrated` Rust infrastructure
-- Created `NIODOO_CODE_REVIEW.md` with detailed analysis:
-  - Architecture assessment (strong pipeline design, TCS integration, learning loop)
-  - Code quality review (65 unwrap/expect instances identified, error handling recommendations)
-  - Performance analysis (caching strategy, parallelization, optimization opportunities)
-  - Reliability assessment (retry logic, circuit breakers, graceful degradation)
-  - Security considerations (input sanitization, timeout protection)
-  - Component-by-component ratings and recommendations
-- Key findings:
-  - Overall rating: ⭐⭐⭐⭐ (4/5) - Production-ready with recommended improvements
-  - 45% faster latency in soak tests vs benchmarks (2.9s vs 5.4s mean)
-  - Sophisticated topological cognitive system integration working well
-  - High-priority: Replace unwrap() calls, add error context, refactor complex functions
-- Reviewed: Pipeline, TCS Analysis, Generation Engine, Learning Loop, ERAG Client, Compass Engine
-- Assessment: Solid production-quality code with innovative architecture, ready for production with high-priority fixes
-
-## 2025-10-29 — NIODOO-TCS Release Carve-Out
-
-- Created `Niodoo-TCS-Release/` directory containing production-ready slice of NIODOO pipeline
-- Includes two binaries:
-  - `rut_gauntlet`: Full NIODOO pipeline with all layers (embedding, TCS analysis, ERAG, learning loop)
-  - `rut_gauntlet_baseline`: Raw vLLM baseline for comparison
-- Copied required workspace dependencies: `niodoo-core`, `tcs-core`, `tcs-ml`, `tcs-knot`, `tcs-tqft`, `tcs-tda`, `tcs-pipeline`, `tcs-consensus`, `constants_core`
-- Cleaned `niodoo_real_integrated` crate: removed experimental binaries (topology_spider, million_cycle_test, etc.)
-- Preserved determinism: seed manager (`util::seed_manager`, `util::set_global_seed`) included
-- Updated attributions:
-  - Changed all author emails to `jasonvanpham@niodoo.com`
-  - Added collaboration credits to all crate descriptions: "Developed in collaboration with ChatGPT, Grok, Gemini, Claude, Deepseek, and Qwen"
-  - Created `ATTRIBUTIONS.md` with complete credits and citation information
-  - Updated all Cargo.toml files with proper author attribution
-- Implemented dual licensing (AGPL 3.0 + Commercial):
-  - Created LICENSE file with full AGPL 3.0 text
-  - Created LICENSE-COMMERCIAL.md with commercial licensing information
-  - Updated all Cargo.toml files with "AGPL-3.0 OR Commercial" license
-  - Added SPDX license headers to all 182 Rust source files
-  - Updated README.md with dual license section
-- Clarified Beelink reference: Updated `HardwareProfile::Beelink` documentation to clarify it's a hardware configuration profile (not a hardcoded server reference)
-- Removed unnecessary `beelink` feature flag (was just a default feature, not required by binaries)
-- Added documentation:
-  - `README.md`: Architecture explanation (layered cake metaphor), build/run instructions, determinism notes
-  - `release_artifacts/README.md`: CSV file descriptions and metric explanations
-  - `ATTRIBUTIONS.md`: Complete attribution and citation information
-- Copied sample artifacts from latest production runs:
-  - `rut_gauntlet_baseline_results.csv` from `logs/rut_gauntlet_baseline_real/`
-  - `rut_gauntlet_results.csv` from `logs/rut_gauntlet_real_autonomy_tuned/`
-- Release directory is standalone workspace with minimal dependencies for production use
-- Cleaned release docs: README now references the Prosperity license explicitly and
-  `release_artifacts/README.md` lists the actual latency and ROUGE metrics drawn
-  from the shipped CSV summaries.
-- Removed the `target/` build directory from `Niodoo-TCS-Release/` so the release
-  tree only contains source, docs, and sample artifacts.
-- Added `GETTING_STARTED.md` walkthrough with service prerequisites, quick-start commands,
-  determinism notes, and architecture mermaid diagram for new operators.
-- Added `RESEARCH_OUTLINE.md` capturing abstract, architecture sections, experiment
-  tables, and figure plan for the companion paper.
-- Generated release-ready figures and metrics summary in
-  `release_artifacts/figures/` (latency comparison, entropy trend, curator histogram,
-  JSON stats) and updated artifact docs accordingly.
-- Authored draft research paper at `docs/NIODOO-TCS-Whitepaper.md`; README now
-  links to the draft for reviewers.
-- Restored `axum`/`tonic`/`prometheus` dependencies and stubbed the
-  `embedded-qdrant` feature in the release manifest so the trimmed workspace
-  compiles cleanly; autonomous curator refinement code now scopes improvement
-  tracking without warnings.
-- Verified `cargo build --release` succeeds from `Niodoo-TCS-Release/`.
-- Added `docs/RELEASE_VALIDATION_PROMPT.md` with the release validation setup
-  prompt for anyone reproducing baseline vs. hybrid checks on real services.
-
-## 2025-10-29 — Gauntlet guardrail overrides and live rerun
-
-## 2025-10-29 — Topology tuning: ERAG k=20, curator on, re-run 64
-
-- TCS predictor weights updated in `niodoo_real_integrated/src/tcs_predictor.rs` to bias more strongly:
-  - `knot_complexity: -0.8`, `spectral_gap: +0.8`, `betti1: -0.3`, `persistence_entropy: -0.2`, `betti0: +0.1`.
-- Increased ERAG retrieval depth (top-k) by default in
-  `niodoo_real_integrated/src/erag.rs`:
-  - `collapse()` now calls `collapse_with_limit(..., 20)` (was 3 → 10 → 20) to improve context quality.
-- Ran curated 64-cycle topology benchmark with real stack and external curator enabled:
-  - Env: `ENABLE_CURATOR=true`, `CURATOR_AUTONOMOUS=false`, `CURATOR_QUALITY_THRESHOLD=0.85`,
-    `VLLM_ENDPOINT=http://127.0.0.1:5001`, `QDRANT_URL=http://127.0.0.1:6333`,
-    `OLLAMA_ENDPOINT=http://127.0.0.1:11434`.
-  - Artifacts: `results/benchmarks/topology/topology_benchmark_20251029_193239.{json,csv}`
-  - Summary (N=64):
-    - ROUGE mean: baseline 0.633 vs hybrid 0.551 (Δ −0.082)
-    - Latency mean (ms): baseline 4403 vs hybrid 3645 (Δ −757)
-- Notes:
-  - Enabling the external curator (with autonomy off) executed real Ollama refinement calls.
-  - Raising ERAG k and topology weights reduced hybrid latency materially; ROUGE gap narrowed but did not surpass baseline on this dataset. Next knobs: try `k=20→32` and curated prompts emphasizing topology advantages.
-
-- `rut_gauntlet.rs` now reads guardrail thresholds from environment variables:
-  `GAUNTLET_LATENCY_MAX_MS`, `GAUNTLET_BREAKTHROUGH_MIN_PERCENT`,
-  `GAUNTLET_ENTROPY_HIGH`, `GAUNTLET_ENTROPY_STD_MAX`, and
-  `GAUNTLET_EMOTIONAL_MIN_PERCENT`. This lets us raise latency guardrails or
-  relax breakthrough expectations without touching code when running the real
-  stack.
 - Introduced autonomous curator mode: new config flag `CURATOR_AUTONOMOUS` (on
   by default) lets the pipeline self-refine using the primary generation model
   when the external curator is disabled or unavailable. `ENABLE_CURATOR`
@@ -3571,8 +3094,7 @@ cargo run --bin soak_validator --release -- \
   `logs/rut_gauntlet_real_tuned_overrides/`.
 - Tuned the autonomous curator prompt and added a second-pass refinement path
   when the initial improvement comes in below 0.25. Verified with two fresh
-  real-mode gauntlets: `logs/rut_gauntlet_real_autonomy_fast/` (avg latency
-  ≈ 2.17 s) and `logs/rut_gauntlet_real_autonomy_tuned/` (avg latency ≈ 1.66 s),
+  real-mode gauntlets: `logs/rut_gauntlet_real_autonomy_fast/` (avg latency ≈ 2.17 s) and `logs/rut_gauntlet_real_autonomy_tuned/` (avg latency ≈ 1.66 s),
   both maintaining 100 % breakthroughs with no low-improvement telemetry.
 - Added `run_real_tests.sh` to orchestrate live-stack checks: it verifies
   vLLM/Ollama/Qdrant health, then runs short topology/emotion benchmarks plus
@@ -3902,7 +3424,6 @@ CURATOR_QUALITY_THRESHOLD=0.75 ./target/release/topology_bench --cycles 64 --dat
 - `PLAN_COMPLETION_SUMMARY.md` - Complete plan implementation summary
 
 ---
-
 ## 2025-01-31 — AI Setup Guide Created ✅
 
 ### Created AI Assistant Documentation
@@ -4042,3 +3563,26 @@ No changes applied; review complete.
 - Build completed in 1m 05s.
 
 - Relocated all `*.legacy` sources into `archive/legacy/` (subfolders for `src/` and `tests/`) so the AI can browse them without cluttering the active tree; updated the shim modules to `include!` from the new location.
+
+## [2025-01-XX] - Fixed ONNX CUDA Initialization Hang
+
+### Fixed
+- **ONNX Runtime CUDA initialization hang**: Added timeout protection to prevent indefinite hangs during embedder initialization
+  - `QwenStatefulEmbedder::new()` now wraps initialization in a thread with configurable timeout (default 30s)
+  - Environment variable `QWEN_INIT_TIMEOUT_SECS` can override timeout duration
+  - Clear error messages with suggestions when timeout occurs
+  - Added `QWEN_FORCE_CPU=true` support in `tcs-ml/src/qwen_embedder.rs` to bypass CUDA initialization
+  - Environment variable `QWEN_CUDA_INIT_TIMEOUT_SECS` controls CUDA provider initialization timeout (default 10s)
+
+### Embedding System Architecture
+- **Embedding requirements**: System requires **896-dimensional embeddings** (Qwen2.5's native dimension)
+  - Hardcoded throughout: Qdrant storage, topological analysis, learning loops, torus projection
+  - Can theoretically use alternative embedders, but must produce 896D vectors or modify codebase
+  - Qwen embeddings are optimized for the specific topological cognitive use case
+- Added `Embedder` trait for potential future embedder swapping (backward compatible)
+- Improved error messages during embedder initialization failures
+
+### Technical Details
+- The hang was caused by ONNX Runtime's CUDA execution provider initialization blocking indefinitely
+- Fix: Timeout protection + graceful fallback to CPU mode with clear diagnostics
+- Maintains backward compatibility - existing code continues to work

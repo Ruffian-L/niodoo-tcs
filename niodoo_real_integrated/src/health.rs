@@ -7,6 +7,8 @@
 
 #[cfg(feature = "svc")]
 use anyhow::{Context, Result};
+#[cfg(feature = "svc")]
+use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
@@ -148,8 +150,6 @@ impl HealthServer {
 
     /// Start the health check HTTP server
     pub async fn start(&self) -> Result<()> {
-        use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
-
         let app = Router::new()
             .route("/health", get(health_handler))
             .route("/ready", get(ready_handler))
@@ -174,49 +174,40 @@ impl HealthServer {
 #[cfg(feature = "svc")]
 async fn health_handler(
     State(registry): axum::extract::State<Arc<HealthRegistry>>,
-) -> (axum::http::StatusCode, axum::response::Json<SystemHealth>) {
+) -> (StatusCode, Json<SystemHealth>) {
     let health = registry.get_health().await;
     let status = match health.status {
-        HealthStatus::Healthy => axum::http::StatusCode::OK,
-        HealthStatus::Degraded => axum::http::StatusCode::OK, // Still accept requests
-        HealthStatus::Unhealthy => axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        HealthStatus::Healthy => StatusCode::OK,
+        HealthStatus::Degraded => StatusCode::OK, // Still accept requests
+        HealthStatus::Unhealthy => StatusCode::SERVICE_UNAVAILABLE,
     };
-    (status, axum::response::Json(health))
+    (status, Json(health))
 }
 
 #[cfg(feature = "svc")]
 async fn ready_handler(
     State(registry): axum::extract::State<Arc<HealthRegistry>>,
-) -> (
-    axum::http::StatusCode,
-    axum::response::Json<serde_json::Value>,
-) {
+) -> (StatusCode, Json<serde_json::Value>) {
     let ready = registry.is_ready().await;
     let status = if ready {
-        axum::http::StatusCode::OK
+        StatusCode::OK
     } else {
-        axum::http::StatusCode::SERVICE_UNAVAILABLE
+        StatusCode::SERVICE_UNAVAILABLE
     };
-    (
-        status,
-        axum::response::Json(serde_json::json!({
-            "ready": ready,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        })),
-    )
+    (status, Json(serde_json::json!({
+        "ready": ready,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    })))
 }
 
 #[cfg(feature = "svc")]
-async fn metrics_handler() -> (axum::http::StatusCode, String) {
+async fn metrics_handler() -> (StatusCode, String) {
     use crate::metrics::metrics;
     match metrics().gather() {
-        Ok(metrics_text) => (axum::http::StatusCode::OK, metrics_text),
+        Ok(metrics_text) => (StatusCode::OK, metrics_text),
         Err(e) => {
             warn!(error = %e, "Failed to gather metrics");
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to gather metrics: {}", e),
-            )
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to gather metrics: {}", e))
         }
     }
 }

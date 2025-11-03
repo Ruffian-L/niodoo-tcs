@@ -262,6 +262,7 @@ impl Pipeline {
             config.generation_max_tokens,
             config.consistency_variance_threshold,
         )?;
+        info!(model = %config.vllm_model, endpoint = %config.vllm_endpoint, "Initialized GenerationEngine with vLLM model");
         generator.set_mock_mode(config.mock_mode);
         generator.set_system_prompt(config.system_prompt.clone());
         let config_arc = Arc::new(parking_lot::RwLock::new(config.clone()));

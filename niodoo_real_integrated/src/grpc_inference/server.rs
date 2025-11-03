@@ -8,11 +8,14 @@
 //! - Integration with Persistent Laplacians and topological analysis
 
 use anyhow::{Context, Result};
+#[cfg(feature = "onnx")]
 use dashmap::DashMap;
-use prost::Message;
+#[cfg(feature = "onnx")]
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
-use tracing::{error, info, warn};
+#[cfg(feature = "onnx")]
+use tracing::error;
+use tracing::{info, warn};
 
 #[cfg(feature = "onnx")]
 use ort::{
@@ -30,12 +33,13 @@ pub mod proto {
     tonic::include_proto!("niodoo.rce");
 }
 
+use proto::health_check_response::ServingStatus;
 use proto::{
     onnx_inference_service_server::{OnnxInferenceService, OnnxInferenceServiceServer},
     BatchInferenceRequest, BatchInferenceResponse, BatchMetadata, HealthCheckRequest,
     HealthCheckResponse, InferenceMetadata, InferenceRequest, InferenceResponse,
-    InferenceOptions, LoadModelRequest, LoadModelResponse, ModelInfo, ServingStatus,
-    Tensor, TensorDataType, TensorShape,
+    InferenceOptions, LoadModelRequest, LoadModelResponse, ModelInfo, Tensor,
+    TensorDataType, TensorShape,
 };
 
 /// ONNX model session wrapper with metadata

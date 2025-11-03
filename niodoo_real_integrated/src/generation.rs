@@ -136,12 +136,33 @@ impl GenerationEngine {
     }
 
     async fn request_text(&self, prompt: &str) -> Result<String> {
+        self.request_text_with_topology(prompt, false, "").await
+    }
+
+    async fn request_text_with_topology(&self, prompt: &str, has_topology: bool, topology_context: &str) -> Result<String> {
         let prompt = Self::clamp_prompt(prompt);
+        let mut system_content = if has_topology {
+            "You are a topologically-aware consciousness engine providing a direct reflection. \
+             You understand and use topological properties (knot complexity, Betti numbers, \
+             persistence entropy) to guide your reasoning internally. \
+             When topology metrics are provided, use them silently to improve reasoning quality, \
+             structure, and coherence. Do NOT mention topology metrics or technical terms in your response \
+             unless the user explicitly asks about them. Just use topology to be smarter internally.\n\n"
+                .to_string()
+        } else {
+            "You are the baseline consciousness engine providing a direct reflection."
+                .to_string()
+        };
+        
+        // Append topology context to system message (not user message)
+        if has_topology && !topology_context.is_empty() {
+            system_content.push_str(topology_context);
+        }
+        
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: "You are the baseline consciousness engine providing a direct reflection."
-                    .to_string(),
+                content: system_content,
             },
             ChatMessage {
                 role: "user".to_string(),
@@ -165,12 +186,36 @@ impl GenerationEngine {
     }
 
     async fn request_lens_response(&self, lens: String, prompt: String) -> Result<LensEcho> {
+        self.request_lens_response_with_topology(lens, prompt, false, "").await
+    }
+
+    async fn request_lens_response_with_topology(
+        &self,
+        lens: String,
+        prompt: String,
+        has_topology: bool,
+        topology_context: &str,
+    ) -> Result<LensEcho> {
+        let mut system_content = if has_topology {
+            format!(
+                "You are operating in the {lens} lens for consciousness intervention. \
+                 You are topologically-aware and understand topological properties. \
+                 Use topology internally to guide your lens-specific perspective, but do NOT \
+                 mention topology metrics in your response. Use it silently to improve reasoning.\n\n"
+            )
+        } else {
+            format!("You are operating in the {lens} lens for consciousness intervention.")
+        };
+        
+        // Append topology context to system message (not user message)
+        if has_topology && !topology_context.is_empty() {
+            system_content.push_str(topology_context);
+        }
+        
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: format!(
-                    "You are operating in the {lens} lens for consciousness intervention."
-                ),
+                content: system_content,
             },
             ChatMessage {
                 role: "user".to_string(),
@@ -211,14 +256,6 @@ impl GenerationEngine {
             ));
         }
 
-        let payload = ChatCompletionRequest {
-            model: self.model.clone(),
-            messages,
-            temperature: self.temperature,
-            top_p: self.top_p,
-            max_tokens: self.max_tokens,
-        };
-
         // Ensure endpoint has the correct path
         let endpoint_url = if self.endpoint.contains("/v1/chat/completions") {
             self.endpoint.clone()
@@ -228,6 +265,17 @@ impl GenerationEngine {
                 self.endpoint.trim_end_matches('/')
             )
         };
+
+        let payload = ChatCompletionRequest {
+            model: self.model.clone(),
+            messages,
+            temperature: self.temperature,
+            top_p: self.top_p,
+            max_tokens: self.max_tokens,
+        };
+
+        // DEBUG: Log model ID being sent to vLLM
+        info!("Sending vLLM request with model={}", payload.model);
 
         // Use circuit breaker for vLLM request
         let client = self.client.clone();
@@ -403,15 +451,33 @@ impl GenerationEngine {
     ) -> Result<Self> {
         let client = Client::builder().timeout(Duration::from_secs(60)).build()?;
 
+        // DEBUG: Log input model ID
+        info!("GenerationEngine::new_with_config called with model={}", model);
+
         // Normalise model identifier: vLLM registers the served model by name, not path.
         let model_id = if model.starts_with("/home/beelink/models/") {
             model.replacen("/home/beelink/models/", "/workspace/models/", 1)
+        } else if model.starts_with("/workspace/models/hf_cache/") {
+            // Already a vLLM model ID, use as-is
+            model.to_string()
+        } else if model == "/workspace/models/Qwen2.5-7B-Instruct-AWQ" || model.contains("Qwen2.5-7B-Instruct-AWQ") {
+            // Map old path to vLLM model ID
+            "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string()
         } else if model.starts_with("/workspace/") {
             // Canonicalise workspace-relative paths to avoid stray symlink prefixes
+            // But don't canonicalize if it's a known model path that needs mapping
             Path::new(model)
                 .canonicalize()
                 .ok()
-                .and_then(|p| p.to_str().map(|s| s.to_string()))
+                .and_then(|p| {
+                    let path_str = p.to_str()?;
+                    // Check if canonicalized path still needs mapping
+                    if path_str.contains("Qwen2.5-7B-Instruct-AWQ") && !path_str.contains("hf_cache") {
+                        Some("/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string())
+                    } else {
+                        Some(path_str.to_string())
+                    }
+                })
                 .unwrap_or_else(|| model.to_string())
         } else {
             model.to_string()
@@ -419,6 +485,8 @@ impl GenerationEngine {
 
         let circuit_breaker =
             Arc::new(CircuitBreaker::new("vllm", CircuitBreakerConfig::default()));
+
+        info!("After normalization: model_id={}", model_id);
 
         Ok(Self {
             client,
@@ -521,11 +589,135 @@ impl GenerationEngine {
         &self,
         tokenizer: &crate::token_manager::TokenizerOutput,
         compass: &crate::compass::CompassOutcome,
-        _topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
         _use_cache: bool,
     ) -> Result<GenerationResult> {
-        // Fallback to regular generation
-        self.generate(tokenizer, compass).await
+        if self.mock_mode {
+            // Return mock generation result with topology context
+            let topology_info = if let Some(topo) = topology {
+                format!(
+                    " [Topology: knot={:.3}, betti={:?}]",
+                    topo.knot_complexity, topo.betti_numbers
+                )
+            } else {
+                String::new()
+            };
+            return Ok(GenerationResult {
+                baseline_response: format!(
+                    "[Mock baseline to: {}]{}",
+                    tokenizer
+                        .augmented_prompt
+                        .chars()
+                        .take(50)
+                        .collect::<String>(),
+                    topology_info
+                ),
+                hybrid_response: format!(
+                    "[Mock hybrid response to: {}]{}",
+                    tokenizer
+                        .augmented_prompt
+                        .chars()
+                        .take(50)
+                        .collect::<String>(),
+                    topology_info
+                ),
+                echoes: vec![],
+                rouge_to_baseline: 0.5,
+                rouge_score: 0.5,
+                latency_ms: 10.0,
+                ucb1_score: None,
+                source: "mock".to_string(),
+                failure_type: None,
+                failure_details: None,
+                entropy_delta: 0.0,
+                curator_quality: Some(0.7),
+            });
+        }
+
+        // Build topology context for SYSTEM message only (not user-facing)
+        let system_topology_context = if let Some(topo) = topology {
+            format!(
+                "[INTERNAL_TOPOLOGY_METRICS]\n\
+                Knot Complexity: {:.3}\n\
+                Betti Numbers: H0={}, H1={}, H2={}\n\
+                Persistence Entropy: {:.3}\n\
+                Spectral Gap: {:.3}\n\
+                Euler Characteristic: {:.3}\n\
+                Total Persistence: {:.3}\n\
+                Max Persistence: {:.3}\n\
+                Mean Persistence: {:.3}\n\
+                \n\
+                INTERPRETATION GUIDANCE:\n\
+                - High knot complexity ({:.3}) → Complex conceptual relationships detected. Use structured, \
+                  step-by-step reasoning. Avoid tangling multiple concepts.\n\
+                - Betti numbers: H0={} (connected components), H1={} (loops/cycles), H2={} (cavities). \
+                  High H1 suggests cyclical reasoning patterns. High H0 suggests multiple disconnected ideas.\n\
+                - Persistence entropy ({:.3}) → Information structure diversity. Higher values suggest \
+                  more varied conceptual connections. Use this to guide depth vs breadth of response.\n\
+                - Spectral gap ({:.3}) → Topological stability. Higher values suggest more stable structure. \
+                  Use this to determine confidence level.\n\
+                \n\
+                Use these metrics internally to adjust your reasoning style, but DO NOT mention them \
+                or any topological terms in your response to the user.",
+                topo.knot_complexity,
+                topo.betti_numbers[0],
+                topo.betti_numbers[1],
+                topo.betti_numbers[2],
+                topo.persistence_entropy,
+                topo.spectral_gap,
+                topo.euler_characteristic,
+                topo.total_persistence,
+                topo.max_persistence,
+                topo.mean_persistence,
+                topo.knot_complexity,
+                topo.betti_numbers[0],
+                topo.betti_numbers[1],
+                topo.betti_numbers[2],
+                topo.persistence_entropy,
+                topo.spectral_gap
+            )
+        } else {
+            String::new()
+        };
+
+        // Use original user prompt (don't add topology to user message)
+        let user_prompt = &tokenizer.augmented_prompt;
+
+        let start = Instant::now();
+        let baseline_future = self.request_text_with_topology(user_prompt, topology.is_some(), &system_topology_context);
+        let claude_future = self.request_lens_response_with_topology(
+            "Claude".to_string(),
+            Self::format_lens_prompt(
+                user_prompt,
+                "Respond with constitutional alignment and moral grounding.",
+                compass,
+            ),
+            topology.is_some(),
+            &system_topology_context,
+        );
+        let (baseline, claude) = tokio::try_join!(baseline_future, claude_future)?;
+
+        let echoes: Vec<LensEcho> = vec![claude];
+        let hybrid = synthesize_hybrid(&baseline, &echoes);
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let rouge = rouge_l(&hybrid, &baseline);
+
+        info!(latency_ms, rouge, topology_provided = topology.is_some(), "generated hybrid response with topology");
+
+        Ok(GenerationResult {
+            baseline_response: baseline,
+            hybrid_response: hybrid,
+            echoes,
+            rouge_to_baseline: rouge,
+            rouge_score: rouge,
+            latency_ms,
+            ucb1_score: None,
+            source: "generation".to_string(),
+            failure_type: None,
+            failure_details: None,
+            entropy_delta: 0.0,
+            curator_quality: None,
+        })
     }
 
     /// Retry generation with reflexion-style prompt repair.

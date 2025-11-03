@@ -128,7 +128,20 @@ pub fn init() {
         "VLLM_MODEL",
         "VLLM_MODEL_PATH",
     ])
-    .unwrap_or_else(|| "/workspace/models/Qwen2.5-7B-Instruct-AWQ".to_string());
+    .unwrap_or_else(|| "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string());
+    
+    info!("Config: main_model={}", main_model);  // ADD THIS
+
+    // DEBUG: Log model ID source
+    if std::env::var("VLLM_MODEL_ID").is_ok() {
+        tracing::info!("Model ID from VLLM_MODEL_ID env var: {}", main_model);
+    } else if std::env::var("VLLM_MODEL").is_ok() {
+        tracing::info!("Model ID from VLLM_MODEL env var: {}", main_model);
+    } else if std::env::var("MAIN_MODEL").is_ok() {
+        tracing::info!("Model ID from MAIN_MODEL env var: {}", main_model);
+    } else {
+        tracing::info!("Model ID using default: {}", main_model);
+    }
 
     let qdrant_dim: usize = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
         .and_then(|v| v.parse().ok())
@@ -323,11 +336,11 @@ impl CuratorBackend {
                 "vllm" | "vllm_gpu" => CuratorBackend::Vllm,
                 "ollama" | "ollama_cpu" => CuratorBackend::Ollama,
                 _ => {
-                    warn!(%value, "Invalid curator backend; defaulting to vLLM");
-                    CuratorBackend::Vllm
+                    warn!(%value, "Invalid curator backend; defaulting to Ollama for mini Qwen");
+                    CuratorBackend::Ollama  // Change default to Ollama
                 }
             },
-            None => CuratorBackend::Vllm, // Default to vLLM
+            None => CuratorBackend::Ollama, // Default to Ollama for mini model
         }
     }
 }
@@ -902,6 +915,14 @@ pub struct RuntimeConfig {
     pub parallel_curator_rouge: bool,
     #[serde(default)]
     pub use_gpu_fitness: bool,
+
+    // Ablation testing flags (for validation framework)
+    /// Bypass ERAG retrieval (zero-shot mode) for ablation testing
+    #[serde(default)]
+    pub erag_bypass: bool,
+    /// Bypass nTokens layer for ablation testing
+    #[serde(default)]
+    pub n_tokens_bypass: bool,
 }
 
 /// Weighted Episodic Memory configuration
@@ -1195,7 +1216,9 @@ impl RuntimeConfig {
             "VLLM_MODEL",
             "VLLM_MODEL_PATH",
         ])
-        .unwrap_or_else(|| "/workspace/models/Qwen2.5-7B-Instruct-AWQ".to_string());
+        .unwrap_or_else(|| "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string());
+
+        info!("RuntimeConfig: vllm_model={}", vllm_model);  // ADD THIS
 
         let mut qdrant_keys: Vec<&str> = vec!["QDRANT_URL"];
         if matches!(args.hardware, HardwareProfile::Laptop5080Q) {
@@ -1239,12 +1262,11 @@ impl RuntimeConfig {
                 .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
 
         let embedding_model_name = env_with_fallback(&[
-            "CURATOR_MODEL",
             "EMBEDDING_MODEL_NAME",
-            "OLLAMA_EMBED_MODEL",
             "EMBEDDING_MODEL",
-        ])
-        .unwrap_or_else(|| "qwen2:0.5b".to_string());
+            "ONNX_EMBED_MODEL_PATH",
+        ]) // Prioritize embedding-specific vars, exclude CURATOR_MODEL
+        .unwrap_or_else(|| "/workspace/models/Qwen2.5-0.5B-Instruct/onnx/model_fp16.onnx".to_string());
 
         let embed_with_candle = env_with_fallback(&["EMBED_WITH_CANDLE"])
             .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
@@ -1309,7 +1331,7 @@ impl RuntimeConfig {
             .unwrap_or(false); // Default to autonomous mode unless explicitly enabled
 
         let curator_model_name = env_with_fallback(&["CURATOR_MODEL", "CURATOR_MODEL_NAME"])
-            .unwrap_or_else(|| "qwen2:0.5b".to_string());
+            .unwrap_or_else(|| "qwen2:0.5b".to_string()); // Keep for Ollama curator
 
         let curator_quality_threshold = env_with_fallback(&["CURATOR_QUALITY_THRESHOLD"])
             .and_then(|v| v.parse().ok())
@@ -1538,7 +1560,9 @@ impl RuntimeConfig {
             enable_consistency_voting,
             mock_mode,
             topology_mode,
-            rce_enabled: default_rce_enabled(),
+            rce_enabled: env_with_fallback(&["RCE_ENABLED"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or_else(default_rce_enabled),
             rce_shadow_mode: default_rce_shadow_mode(),
             rce_actions_enabled: default_rce_actions_enabled(),
             rce_window_seconds: default_rce_window_seconds(),
@@ -1635,6 +1659,13 @@ impl RuntimeConfig {
             fp16_qlora_adapters: default_fp16_qlora_adapters(),
             parallel_curator_rouge: default_parallel_curator_rouge(),
             use_gpu_fitness: env_with_fallback(&["USE_GPU_FITNESS"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            // Ablation testing flags
+            erag_bypass: env_with_fallback(&["ERAG_BYPASS"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            n_tokens_bypass: env_with_fallback(&["N_TOKENS_BYPASS"])
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
         };

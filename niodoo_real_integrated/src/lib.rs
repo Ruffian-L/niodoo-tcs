@@ -49,6 +49,8 @@ pub mod topology_memory;
 pub mod torus;
 pub mod tracing_integration;
 pub mod util;
+pub mod validation;
 pub mod vector_store;
 pub mod weight_evolution;
 pub mod weighted_episodic_mem;
+pub mod ntoken_client;

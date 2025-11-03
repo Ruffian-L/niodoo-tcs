@@ -5,6 +5,7 @@ use std::time::Instant;
 use tracing::instrument;
 
 use crate::torus::PadGhostState;
+use crate::ntoken_client::NTokenFeatures;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CompassQuadrant {
@@ -118,9 +119,43 @@ impl CompassEngine {
 
     #[instrument(skip_all)]
     pub fn evaluate(&mut self, state: &PadGhostState) -> Result<CompassOutcome> {
+        self.evaluate_with_ntoken(state, None, None)
+    }
+
+    /// Evaluate with optional nToken features
+    pub fn evaluate_with_ntoken(
+        &mut self,
+        state: &PadGhostState,
+        ntoken_features: Option<&NTokenFeatures>,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Result<CompassOutcome> {
         let mut pleasure = state.pad[0];
         let mut arousal = state.pad[1];
         let mut dominance = state.pad[2];
+
+        // Adjust PAD state based on nToken metrics:
+        // - High H₁ persistence → low PAD (frustrated): unresolved loops, tension building
+        // - Low sheaf energy → high PAD (relieved): system found consistent story
+        if let Some(ntoken) = ntoken_features {
+            // Normalize H₁ persistence (typical range: 0.0-5.0, use sigmoid to map to [-1, 1])
+            // High persistence (e.g., >2.0) → reduce pleasure/dominance (frustrated)
+            let h1_persistence_norm = (ntoken.h1_total_persistence / 2.5).tanh(); // Maps to [-1, 1]
+            let h1_penalty = h1_persistence_norm * 0.3; // Scale impact
+            
+            // Normalize sheaf energy (typical range: 0.0-1.0, already normalized)
+            // Low energy (<0.3) → increase pleasure/dominance (relieved)
+            let sheaf_boost = if ntoken.sheaf_energy < 0.3 {
+                (0.3 - ntoken.sheaf_energy) * 0.5 // Stronger boost for lower energy
+            } else {
+                0.0
+            };
+            
+            // Apply adjustments: high persistence reduces PAD, low sheaf energy increases it
+            pleasure = (pleasure - h1_penalty + sheaf_boost).clamp(-1.0, 1.0);
+            dominance = (dominance - h1_penalty * 0.7 + sheaf_boost * 0.8).clamp(-1.0, 1.0);
+            // Arousal increases with unresolved loops (tension building)
+            arousal = (arousal + h1_penalty * 0.5).clamp(-1.0, 1.0);
+        }
 
         pleasure = (pleasure + self._rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
         arousal = (arousal + self._rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
@@ -173,7 +208,7 @@ impl CompassEngine {
             is_threat = true;
         }
 
-        let mcts_branches = self.expand_mcts(state);
+        let mcts_branches = self.expand_mcts(state, topology);
 
         let intrinsic_reward = self.compute_intrinsic_reward(quadrant, state.entropy);
         self.last_quadrant = Some(quadrant);
@@ -209,21 +244,53 @@ impl CompassEngine {
         }
     }
 
-    fn expand_mcts(&mut self, state: &PadGhostState) -> Vec<MctsBranch> {
+    /// Expand MCTS branches using topology-aware strategies
+    /// Problem structure informs solution shape:
+    /// - High H₁ persistence → "unwind loops" branches
+    /// - High knot complexity → "simplify structure" branches
+    /// - Low spectral gap → "stabilize" branches
+    /// - High persistence entropy → "structure" branches
+    fn expand_mcts(
+        &mut self,
+        state: &PadGhostState,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+    ) -> Vec<MctsBranch> {
         let mut branches = Vec::with_capacity(3);
         let priors = [0.5 + state.pad[0], 0.5 + state.pad[1], 0.5 + state.pad[2]];
         let mut visit_counts = [1usize; 3];
         let mut total_visits = 3usize;
 
-        for idx in 0..3 {
-            let reward_estimate = priors[idx].tanh() as f64;
+        // Determine branch strategies based on topology
+        let branch_strategies = if let Some(topology) = topology {
+            self.compute_topology_strategies(topology, state)
+        } else {
+            // Fallback to PAD-based strategies when topology unavailable
+            vec![
+                (0, "emotional_prior".to_string()),
+                (1, "emotional_prior".to_string()),
+                (2, "emotional_prior".to_string()),
+            ]
+        };
+
+        for (idx, (pad_idx, strategy)) in branch_strategies.iter().enumerate() {
+            let pad_prior = priors[*pad_idx];
+            let reward_estimate = pad_prior.tanh() as f64;
+
+            // Apply topology-based adjustments to reward
+            let topology_bonus = if let Some(topology) = topology {
+                self.compute_topology_bonus(topology, strategy, idx)
+            } else {
+                0.0
+            };
+
             let exploration =
                 self.exploration_c * ((total_visits as f64).ln() / visit_counts[idx] as f64).sqrt();
-            let score = reward_estimate + exploration;
+            let score = reward_estimate + exploration + topology_bonus;
+            
             branches.push(MctsBranch {
-                label: format!("branch_{idx}"),
+                label: format!("{}_{}", strategy, idx),
                 ucb_score: score,
-                entropy_projection: state.entropy + reward_estimate,
+                entropy_projection: state.entropy + reward_estimate + topology_bonus,
             });
             visit_counts[idx] += 1;
             total_visits += 1;
@@ -237,17 +304,122 @@ impl CompassEngine {
         branches
     }
 
-    /// Evaluate with custom RNG
+    /// Compute branch strategies based on topology
+    /// Maps problem structure to solution approaches
+    fn compute_topology_strategies(
+        &self,
+        topology: &crate::tcs_analysis::TopologicalSignature,
+        state: &PadGhostState,
+    ) -> Vec<(usize, String)> {
+        let mut strategies = Vec::new();
+
+        // Strategy 1: High H₁ persistence → "unwind loops" (resolve cyclical patterns)
+        if topology.betti_numbers[1] > 2 || topology.total_persistence > 2.0 {
+            strategies.push((0, "unwind_loops".to_string()));
+        } else {
+            strategies.push((0, "explore".to_string()));
+        }
+
+        // Strategy 2: High knot complexity → "simplify structure" (reduce tangling)
+        if topology.knot_complexity > 0.4 {
+            strategies.push((1, "simplify_structure".to_string()));
+        } else if topology.spectral_gap < 0.3 {
+            // Low spectral gap → "stabilize" (increase structural stability)
+            strategies.push((1, "stabilize".to_string()));
+        } else {
+            strategies.push((1, "exploit".to_string()));
+        }
+
+        // Strategy 3: High persistence entropy → "structure" (organize information)
+        if topology.persistence_entropy > 0.6 {
+            strategies.push((2, "structure".to_string()));
+        } else if topology.betti_numbers[0] > 3 {
+            // High H₀ → "connect" (link disconnected components)
+            strategies.push((2, "connect".to_string()));
+        } else {
+            strategies.push((2, "refine".to_string()));
+        }
+
+        strategies
+    }
+
+    /// Compute topology-based bonus for branch selection
+    fn compute_topology_bonus(
+        &self,
+        topology: &crate::tcs_analysis::TopologicalSignature,
+        strategy: &str,
+        branch_idx: usize,
+    ) -> f64 {
+        match strategy {
+            "unwind_loops" => {
+                // Stronger bonus for high H₁ persistence
+                let h1_bonus = (topology.betti_numbers[1] as f64).min(5.0) * 0.1;
+                let persistence_bonus = (topology.total_persistence / 3.0).min(1.0) * 0.15;
+                h1_bonus + persistence_bonus
+            }
+            "simplify_structure" => {
+                // Bonus for high knot complexity
+                let knot_bonus = (topology.knot_complexity * 2.0).min(1.0) * 0.2;
+                knot_bonus
+            }
+            "stabilize" => {
+                // Bonus when spectral gap is low (needs stabilization)
+                let gap_bonus = (1.0 - topology.spectral_gap).max(0.0) * 0.15;
+                gap_bonus
+            }
+            "structure" => {
+                // Bonus for high persistence entropy (needs organization)
+                let entropy_bonus = (topology.persistence_entropy * 1.5).min(1.0) * 0.12;
+                entropy_bonus
+            }
+            "connect" => {
+                // Bonus for high H₀ (many disconnected components)
+                let h0_bonus = (topology.betti_numbers[0] as f64).min(5.0) * 0.1;
+                h0_bonus
+            }
+            _ => {
+                // Default: small exploration bonus
+                0.05 * (branch_idx as f64 + 1.0) / 3.0
+            }
+        }
+    }
+
+    /// Evaluate with custom RNG and optional nToken features
     pub fn evaluate_with_rng(
         &mut self,
         state: &PadGhostState,
-        _topology: Option<&crate::tcs_analysis::TopologicalSignature>,
+        topology: Option<&crate::tcs_analysis::TopologicalSignature>,
         rng: &mut rand::rngs::StdRng,
+        ntoken_features: Option<&NTokenFeatures>,
     ) -> Result<CompassOutcome> {
         // Use provided RNG for evaluation
         let mut pleasure = state.pad[0];
         let mut arousal = state.pad[1];
         let mut dominance = state.pad[2];
+
+        // Adjust PAD state based on nToken metrics:
+        // - High H₁ persistence → low PAD (frustrated): unresolved loops, tension building
+        // - Low sheaf energy → high PAD (relieved): system found consistent story
+        if let Some(ntoken) = ntoken_features {
+            // Normalize H₁ persistence (typical range: 0.0-5.0, use sigmoid to map to [-1, 1])
+            // High persistence (e.g., >2.0) → reduce pleasure/dominance (frustrated)
+            let h1_persistence_norm = (ntoken.h1_total_persistence / 2.5).tanh(); // Maps to [-1, 1]
+            let h1_penalty = h1_persistence_norm * 0.3; // Scale impact
+            
+            // Normalize sheaf energy (typical range: 0.0-1.0, already normalized)
+            // Low energy (<0.3) → increase pleasure/dominance (relieved)
+            let sheaf_boost = if ntoken.sheaf_energy < 0.3 {
+                (0.3 - ntoken.sheaf_energy) * 0.5 // Stronger boost for lower energy
+            } else {
+                0.0
+            };
+            
+            // Apply adjustments: high persistence reduces PAD, low sheaf energy increases it
+            pleasure = (pleasure - h1_penalty + sheaf_boost).clamp(-1.0, 1.0);
+            dominance = (dominance - h1_penalty * 0.7 + sheaf_boost * 0.8).clamp(-1.0, 1.0);
+            // Arousal increases with unresolved loops (tension building)
+            arousal = (arousal + h1_penalty * 0.5).clamp(-1.0, 1.0);
+        }
 
         pleasure = (pleasure + rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
         arousal = (arousal + rng.gen_range(-0.4..0.4)).clamp(-1.0, 1.0);
@@ -270,7 +442,7 @@ impl CompassEngine {
             _ => CompassQuadrant::Master,
         };
 
-        let mcts_branches = self.expand_mcts(state);
+        let mcts_branches = self.expand_mcts(state, topology);
         let intrinsic_reward = self.compute_intrinsic_reward(quadrant, state.entropy);
 
         Ok(CompassOutcome {

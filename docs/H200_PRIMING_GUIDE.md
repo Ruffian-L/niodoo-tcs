@@ -51,7 +51,8 @@ export VLLM_ALL2ALL_BACKEND=pplx
 export VLLM_USE_DEEP_GEMM=1
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export VLLM_KV_CACHE_DTYPE=fp8
-vllm serve /workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ \
+export VLLM_MODEL_PATH=/workspace/models/Qwen2.5-7B-Instruct-AWQ
+vllm serve "$VLLM_MODEL_PATH" \
   --host "$VLLM_HOST" --port "$VLLM_PORT" \
   --dtype bfloat16 \
   --max-model-len 32768 \

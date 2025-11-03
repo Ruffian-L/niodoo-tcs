@@ -125,3 +125,11 @@ path = "src/bin/rut_gauntlet.rs"
 [[bin]]
 name = "soak_test"
 path = "src/bin/soak_test.rs"
+
+[[bin]]
+name = "metrics_runner"
+path = "src/bin/metrics_runner.rs"
+
+[[bin]]
+name = "ablation_runner"
+path = "src/bin/ablation_runner.rs"

@@ -40,41 +40,60 @@ impl QwenEmbedder {
 
         let env = Arc::new(Environment::builder().with_name("qwen_embedder").build()?);
 
-        // Build session with CUDA execution provider explicitly enabled
+        // Check if CPU mode is forced via environment variable
+        let force_cpu = std::env::var("QWEN_FORCE_CPU")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false)
+            || std::env::var("ONNX_FORCE_CPU")
+                .ok()
+                .and_then(|v| v.parse::<bool>().ok())
+                .unwrap_or(false);
+
+        // Build session with CUDA execution provider explicitly enabled (unless forced to CPU)
         let session_builder = SessionBuilder::new(&env)?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(4)?;
 
-        // Explicitly enable CUDA execution provider if available
-        let mut cuda_options = CUDAExecutionProviderOptions::default();
-        let gpu_mem_limit_mb = std::env::var("QWEN_CUDA_MEM_LIMIT_MB")
-            .ok()
-            .and_then(|raw| raw.parse::<usize>().ok())
-            .filter(|&mb| mb > 0)
-            .unwrap_or(512);
-        cuda_options.gpu_mem_limit = gpu_mem_limit_mb * 1024 * 1024;
+        let session_builder = if force_cpu {
+            info!(
+                target: "tcs-ml::qwen_embedder",
+                "CPU mode forced via environment variable"
+            );
+            session_builder
+        } else {
+            // Try CUDA execution provider - if it fails or hangs, fallback to CPU
+            // The timeout wrapper in QwenStatefulEmbedder will catch hangs
+            let mut cuda_options = CUDAExecutionProviderOptions::default();
+            let gpu_mem_limit_mb = std::env::var("QWEN_CUDA_MEM_LIMIT_MB")
+                .ok()
+                .and_then(|raw| raw.parse::<usize>().ok())
+                .filter(|&mb| mb > 0)
+                .unwrap_or(512);
+            cuda_options.gpu_mem_limit = gpu_mem_limit_mb * 1024 * 1024;
 
-        let session_builder = match session_builder
-            .with_execution_providers([ExecutionProvider::CUDA(cuda_options.clone())])
-        {
-            Ok(builder) => {
-                info!(
-                    target: "tcs-ml::qwen_embedder",
-                    gpu_mem_limit_mb,
-                    "CUDA execution provider enabled successfully"
-                );
-                builder
-            }
-            Err(e) => {
-                warn!(
-                    target: "tcs-ml::qwen_embedder",
-                    error = %e,
-                    "Failed to enable CUDA execution provider, falling back to CPU"
-                );
-                // Retry without CUDA
-                SessionBuilder::new(&env)?
-                    .with_optimization_level(GraphOptimizationLevel::Level1)?
-                    .with_intra_threads(4)?
+            match session_builder
+                .with_execution_providers([ExecutionProvider::CUDA(cuda_options.clone())])
+            {
+                Ok(builder) => {
+                    info!(
+                        target: "tcs-ml::qwen_embedder",
+                        gpu_mem_limit_mb,
+                        "CUDA execution provider enabled successfully"
+                    );
+                    builder
+                }
+                Err(e) => {
+                    warn!(
+                        target: "tcs-ml::qwen_embedder",
+                        error = %e,
+                        "Failed to enable CUDA execution provider, falling back to CPU"
+                    );
+                    // Retry without CUDA
+                    SessionBuilder::new(&env)?
+                        .with_optimization_level(GraphOptimizationLevel::Level1)?
+                        .with_intra_threads(4)?
+                }
             }
         };
 

@@ -18,6 +18,7 @@ use crate::tcs_analysis::{baseline_topological_signature, TopologicalSignature};
 use crate::token_manager::TokenizerOutput;
 use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::rouge_l;
+use crate::ntoken_client;
 
 use super::cache::cache_key;
 use super::core::Pipeline;
@@ -106,9 +107,35 @@ impl Pipeline {
             topology.spectral_gap
         );
 
+        // Fetch nToken features early (with prompt only) for compass integration
+        // This allows PAD state to update automatically based on H₁ persistence and sheaf energy
+        let ntoken_features_for_compass = if self.config.n_tokens_bypass {
+            None
+        } else if let Ok(endpoint) = std::env::var("NTOKEN_ENDPOINT") {
+            // Fetch with prompt only (context not available yet)
+            match ntoken_client::fetch_features(&endpoint, prompt, None).await {
+                Ok(Some(features)) => {
+                    info!(
+                        "nToken features (compass): h1_persistence={:.4}, sheaf_energy={:.4}",
+                        features.h1_total_persistence,
+                        features.sheaf_energy
+                    );
+                    Some(features)
+                }
+                Ok(None) => None,
+                Err(error) => {
+                    warn!(%error, "nToken service call failed for compass; continuing without nToken integration");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         // Evaluate compass on blocking thread without locking inside closure
         let pad_state_for_compass = pad_state.clone();
         let topology_for_compass = topology.clone();
+        let ntoken_for_compass = ntoken_features_for_compass.clone();
         let compass_guard = self.compass.clone().lock_owned().await;
         let compass_scope = format!("compass/{}", cache_key);
         let compass_task = tokio::task::spawn_blocking(move || {
@@ -118,6 +145,7 @@ impl Pipeline {
                 &pad_state_for_compass,
                 Some(&topology_for_compass),
                 &mut rng,
+                ntoken_for_compass.as_ref(),
             )
         });
 
@@ -125,6 +153,7 @@ impl Pipeline {
         let collapse_cache = self.collapse_cache.clone();
         let erag_client = self.erag.clone();
         let retrieval_top_k_increment = self.config.phase2_retrieval_top_k_increment;
+        let erag_bypass = self.config.erag_bypass;
 
         // Start timing BEFORE the parallel work begins
         let compass_erag_start = Instant::now();
@@ -139,6 +168,17 @@ impl Pipeline {
                 }
             },
             async move {
+                // Ablation testing: ERAG bypass (zero-shot mode)
+                if erag_bypass {
+                    info!("ERAG bypass enabled (zero-shot mode); returning empty collapse");
+                    return Ok(crate::erag::CollapseResult {
+                        top_hits: Vec::new(),
+                        aggregated_context: String::new(),
+                        average_similarity: 0.0,
+                        curator_quality: None,
+                    });
+                }
+
                 if let Some(hit) = collapse_cache.get(&cache_key, now).await {
                     Ok(hit)
                 } else {
@@ -163,6 +203,33 @@ impl Pipeline {
             timings.compass_ms
         );
         info!("Pipeline stage: erag completed in {:.2}ms", timings.erag_ms);
+
+        // Refetch nToken features with full context for tokenizer refinement
+        // (we already have initial features for compass, but context-aware version is better for tokenizer)
+        let ntoken_features = if self.config.n_tokens_bypass {
+            info!("nTokens bypass enabled; skipping nToken feature extraction");
+            None
+        } else if let Ok(endpoint) = std::env::var("NTOKEN_ENDPOINT") {
+            match ntoken_client::fetch_features(&endpoint, prompt, Some(&collapse.aggregated_context)).await {
+                Ok(Some(features)) => {
+                    info!(
+                        "nToken cues (tokenizer): h1_count={:.0}, persistence={:.4}, entropy_norm={:.4}, sheaf_energy={:.4}",
+                        features.h1_count,
+                        features.h1_total_persistence,
+                        features.entropy_norm,
+                        features.sheaf_energy
+                    );
+                    Some(features)
+                }
+                Ok(None) => ntoken_features_for_compass, // Fall back to compass features if available
+                Err(error) => {
+                    warn!(%error, "nToken service call failed; using compass features if available");
+                    ntoken_features_for_compass // Fall back to compass features
+                }
+            }
+        } else {
+            ntoken_features_for_compass // Use compass features if no endpoint
+        };
 
         // EMOTIONAL CASCADE INTEGRATION: Compute consonance and detect hyperfocus
         let last_compass = self.last_compass_outcome.lock().await.clone();
@@ -270,6 +337,17 @@ impl Pipeline {
             .await?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
+        if let Some(features) = &ntoken_features {
+            let cues = format!(
+                "[nToken cues] h1_count={:.0} h1_persistence={:.4} entropy_norm={:.4} sheaf_energy={:.4}",
+                features.h1_count,
+                features.h1_total_persistence,
+                features.entropy_norm,
+                features.sheaf_energy
+            );
+            tokenizer_output.augmented_prompt = format!("{cues}\n{}", tokenizer_output.augmented_prompt);
+        }
+
         // Update generation engine with latest config params (before generation)
         let current_config = self.config_arc.read().clone();
         // Note: apply_runtime_from_config takes CliArgs, not RuntimeConfig
@@ -366,9 +444,11 @@ impl Pipeline {
                 let window = self.config.rce_window_seconds as usize;
                 let threshold = self.config.rce_breakthrough_threshold;
                 self.rce_analyzer = Some(crate::rce::analyzer::RceAnalyzer::new(window.max(2), weights, threshold));
+                tracing::info!("RCE initialized in shadow mode (read-only metrics)");
             }
             if let Some(analyzer) = self.rce_analyzer.as_mut() {
-                let beta = analyzer.update(&pad_state, &topology);
+                // Pass prompt timestamp for prompt-to-spike latency tracking
+                let beta = analyzer.update_with_prompt_timestamp(&pad_state, &topology, Some(overall_start));
                 // Consensus gate (read-only): combine diverse simple votes
                 let mut approved = true;
                 if self.config.rce_consensus.enabled {

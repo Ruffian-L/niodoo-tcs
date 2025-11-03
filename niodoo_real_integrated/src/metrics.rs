@@ -118,6 +118,8 @@ pub struct RceMetrics {
     laplacian_spectral_gap: Gauge,
     persistence_entropy: Gauge,
     beta_meta_spikes_total: Counter,
+    beta_meta_update_latency_seconds: Histogram,
+    prompt_to_spike_latency_seconds: Histogram,
 }
 
 impl RceMetrics {
@@ -148,18 +150,37 @@ impl RceMetrics {
         )
         .map_err(Error::from)?;
 
+        let beta_meta_update_latency_seconds = register_histogram!(HistogramOpts::new(
+            "niodoo_rce_beta_meta_latency_seconds",
+            "Time between consecutive β_meta updates in seconds"
+        )
+        .buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]))
+        .map_err(Error::from)?;
+
+        let prompt_to_spike_latency_seconds = register_histogram!(HistogramOpts::new(
+            "niodoo_rce_prompt_to_spike_latency_seconds",
+            "Time from prompt entry to β_meta spike in seconds"
+        )
+        .buckets(vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0]))
+        .map_err(Error::from)?;
+
         Ok(Self {
             beta_meta_current,
             beta_meta_peak,
             laplacian_spectral_gap,
             persistence_entropy,
             beta_meta_spikes_total,
+            beta_meta_update_latency_seconds,
+            prompt_to_spike_latency_seconds,
         })
     }
 
     pub fn record_beta_meta(&self, current: f64, peak: f64) {
         self.beta_meta_current.set(current);
         self.beta_meta_peak.set(peak);
+        
+        // Update quality SLI compliance
+        quality_sli_metrics().update_rce_beta_meta_compliance(current);
     }
 
     pub fn record_spectral_gap(&self, gap: f64) {
@@ -172,6 +193,14 @@ impl RceMetrics {
 
     pub fn inc_spike(&self) {
         self.beta_meta_spikes_total.inc();
+    }
+
+    pub fn record_update_latency(&self, latency_seconds: f64) {
+        self.beta_meta_update_latency_seconds.observe(latency_seconds);
+    }
+
+    pub fn record_prompt_to_spike_latency(&self, latency_seconds: f64) {
+        self.prompt_to_spike_latency_seconds.observe(latency_seconds);
     }
 }
 
@@ -807,6 +836,15 @@ impl TCSAnalyzerMetrics {
         self.betti_1_distribution.observe(betti[1] as f64);
         self.betti_2_distribution.observe(betti[2] as f64);
     }
+
+    /// Update TCS stability SLI from a sample of persistence entropy values
+    /// Call this periodically (e.g., every N requests) with recent entropy samples
+    /// to compute coefficient of variation and update quality SLI
+    pub fn update_stability_sli_from_samples(&self, entropy_samples: &[f64]) {
+        if let Some(cv) = compute_coefficient_variation(entropy_samples) {
+            quality_sli_metrics().update_tcs_stability_cv(cv);
+        }
+    }
 }
 
 static TCS_ANALYZER_METRICS: Lazy<TCSAnalyzerMetrics> = Lazy::new(|| {
@@ -1109,4 +1147,97 @@ static GPU_FITNESS_METRICS: Lazy<GPUFitnessMetrics> = Lazy::new(|| {
 
 pub fn gpu_fitness_metrics() -> &'static GPUFitnessMetrics {
     &GPU_FITNESS_METRICS
+}
+
+/// Quality Service Level Indicators (SLIs) for cognitive components
+/// 
+/// These metrics measure functional correctness and stability beyond traditional latency/availability:
+/// - TCS Stability SLI: Coefficient of variation of persistence_entropy (measures output stability)
+/// - RCE Governance SLI: β_meta range compliance (measures cognitive equilibrium)
+#[derive(Clone)]
+pub struct QualitySLIMetrics {
+    /// TCS stability coefficient of variation
+    /// Lower values indicate more stable topological analysis
+    tcs_stability_coefficient_variation: Gauge,
+    /// RCE β_meta range compliance (1.0 if in [0.8, 1.2], else 0.0)
+    /// Measures whether the system maintains intended cognitive equilibrium
+    rce_beta_meta_range_compliance: Gauge,
+}
+
+impl QualitySLIMetrics {
+    fn new() -> Result<Self> {
+        let tcs_stability_coefficient_variation = register_gauge!(
+            "niodoo_quality_sli_tcs_stability_cv",
+            "TCS stability SLI: coefficient of variation of persistence_entropy (lower is better, SLO < 0.1)"
+        )
+        .map_err(Error::from)?;
+
+        let rce_beta_meta_range_compliance = register_gauge!(
+            "niodoo_quality_sli_rce_beta_meta_compliance",
+            "RCE governance SLI: β_meta range compliance (1.0 if in [0.8, 1.2], else 0.0)"
+        )
+        .map_err(Error::from)?;
+
+        Ok(Self {
+            tcs_stability_coefficient_variation,
+            rce_beta_meta_range_compliance,
+        })
+    }
+
+    /// Update TCS stability SLI from coefficient of variation
+    /// CV = standard_deviation / mean
+    /// Lower CV indicates more stable outputs
+    pub fn update_tcs_stability_cv(&self, coefficient_variation: f64) {
+        self.tcs_stability_coefficient_variation.set(coefficient_variation.max(0.0));
+    }
+
+    /// Update RCE β_meta range compliance
+    /// Returns true if β_meta is within [0.8, 1.2] range, false otherwise
+    pub fn update_rce_beta_meta_compliance(&self, beta_meta: f64) {
+        let compliant = if beta_meta >= 0.8 && beta_meta <= 1.2 {
+            1.0
+        } else {
+            0.0
+        };
+        self.rce_beta_meta_range_compliance.set(compliant);
+    }
+}
+
+static QUALITY_SLI_METRICS: Lazy<QualitySLIMetrics> = Lazy::new(|| {
+    QualitySLIMetrics::new().unwrap_or_else(|e| {
+        panic!(
+            "Failed to initialize Quality SLI metrics: {}. This is a critical infrastructure failure.",
+            e
+        )
+    })
+});
+
+pub fn quality_sli_metrics() -> &'static QualitySLIMetrics {
+    &QUALITY_SLI_METRICS
+}
+
+/// Helper function to compute coefficient of variation from a sample
+/// CV = standard_deviation / mean
+/// Returns None if the sample is empty or mean is zero
+pub fn compute_coefficient_variation(samples: &[f64]) -> Option<f64> {
+    if samples.is_empty() {
+        return None;
+    }
+
+    let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+    if mean == 0.0 {
+        return None;
+    }
+
+    let variance = samples
+        .iter()
+        .map(|x| {
+            let diff = x - mean;
+            diff * diff
+        })
+        .sum::<f64>()
+        / samples.len() as f64;
+
+    let std_dev = variance.sqrt();
+    Some(std_dev / mean)
 }

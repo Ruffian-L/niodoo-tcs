@@ -377,12 +377,39 @@ fn laplacian_matrix(complex: &SimplicialComplex, dimension: usize) -> DMatrix<f6
     };
 
     let right_boundary = boundary_matrix(complex, dimension + 1);
-    let right = if right_boundary.nrows() == 0 {
+    let right = if right_boundary.nrows() == 0 || right_boundary.ncols() == 0 {
         DMatrix::zeros(size, size)
     } else {
-        let right_boundary_t = right_boundary.clone().transpose();
-        right_boundary * right_boundary_t
+        let product = if dimension == 0 {
+            // For dimension 0 Laplacian: right_boundary is (num_edges, num_vertices) = (num_edges, 7)
+            // We need: right_boundary^T * right_boundary = (7, num_edges) * (num_edges, 7) = (7, 7)
+            right_boundary.transpose() * &right_boundary
+        } else {
+            // For higher dimensions: right_boundary is (num_higher_simplices, num_current_simplices)
+            // We compute: right_boundary * right_boundary^T = (num_current_simplices, num_current_simplices)
+            &right_boundary * right_boundary.transpose()
+        };
+        // Ensure the product has the correct dimensions (size x size)
+        if product.nrows() == size && product.ncols() == size {
+            product
+        } else {
+            // If dimensions don't match, create a zero matrix of the correct size
+            eprintln!(
+                "Laplacian matrix dimension mismatch: dimension={}, size={}, right_boundary=({}, {}), product=({}, {}). Using zero matrix.",
+                dimension, size, right_boundary.nrows(), right_boundary.ncols(), product.nrows(), product.ncols()
+            );
+            DMatrix::zeros(size, size)
+        }
     };
+
+    // Final safety check before addition
+    if left.nrows() != right.nrows() || left.ncols() != right.ncols() {
+        eprintln!(
+            "Laplacian addition dimension mismatch: left=({}, {}), right=({}, {}). Using left only.",
+            left.nrows(), left.ncols(), right.nrows(), right.ncols()
+        );
+        return left;
+    }
 
     left + right
 }

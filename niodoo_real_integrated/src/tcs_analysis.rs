@@ -938,8 +938,9 @@ impl TCSAnalyzer {
             .flat_map(|point| point.iter().copied())
             .collect();
         let tensor = Tensor::from_vec(flat, (points.len(), dims), device)?;
-        let norms = tensor.sqr()?.sum_keepdim(1)?;
-        let norms_t = norms.transpose(0, 1)?;
+        let norms = tensor.sqr()?.sum_keepdim(1)?; // Shape: (n, 1)
+        let norms_t = norms.transpose(0, 1)?; // Shape: (1, n)
+        // Ensure correct broadcasting: (n, 1) + (1, n) -> (n, n)
         let mut dist_sq = norms.broadcast_add(&norms_t)?;
         let product = tensor.matmul(&tensor.transpose(0, 1)?)?;
         let scalar = Tensor::new(&[2.0f32], &product.device())?;

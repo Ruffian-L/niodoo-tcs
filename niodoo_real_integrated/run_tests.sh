@@ -4,6 +4,32 @@
 
 set -euo pipefail
 
+CLEAN=0
+SKIP_SERVICE_CHECKS="${SKIP_SERVICE_CHECKS:-0}"
+
+while (($#)); do
+    case "$1" in
+        --clean)
+            CLEAN=1
+            shift
+            ;;
+        --skip-services)
+            SKIP_SERVICE_CHECKS=1
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $(basename "$0") [--clean] [--skip-services]"
+            echo "  --clean           Force cargo clean before running tests"
+            echo "  --skip-services   Skip external service availability checks"
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -19,11 +45,39 @@ cd "$SCRIPT_DIR"
 echo "🧪 Running all NIODOO Real Integrated tests"
 echo "   TMPDIR: $TMPDIR"
 echo "   CARGO_TARGET_DIR: $CARGO_TARGET_DIR"
+
+if [ "$CLEAN" -eq 1 ]; then
+    echo "   CLEAN: enabled (forced)"
+else
+    echo "   CLEAN: skipped (use --clean to force)"
+fi
+
+if [ "$SKIP_SERVICE_CHECKS" = "1" ]; then
+    echo "   SERVICE CHECKS: skipped"
+else
+    echo "   SERVICE CHECKS: required"
+fi
+
 echo ""
 
-# Clean up any previous test artifacts
-echo "🧹 Cleaning previous test artifacts..."
-cargo clean --target-dir "$CARGO_TARGET_DIR" 2>/dev/null || true
+if [ "$SKIP_SERVICE_CHECKS" != "1" ]; then
+    echo "🔍 Verifying external services..."
+    if ! "$PROJECT_ROOT/test_services.sh"; then
+        echo "❌ Service availability check failed. Aborting tests."
+        exit 1
+    fi
+else
+    echo "⚠️  Skipping external service verification (requested)."
+fi
+
+if [ "$CLEAN" -eq 1 ]; then
+    echo ""
+    echo "🧹 Cleaning previous test artifacts (forced clean)..."
+    cargo clean --target-dir "$CARGO_TARGET_DIR" 2>/dev/null || true
+else
+    echo ""
+    echo "⚡️ Re-using incremental build cache (no cargo clean)."
+fi
 
 # Run unit tests
 echo ""

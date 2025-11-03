@@ -1,0 +1,6 @@
+[submodule "Niodoo-TCT"]
+	path = Niodoo-TCT
+	url = https://github.com/Ruffian-L/Niodoo-TCT.git
+[submodule "niodoo-ai"]
+	path = niodoo-ai
+	url = https://github.com/Ruffian-L/niodoo-ai.git

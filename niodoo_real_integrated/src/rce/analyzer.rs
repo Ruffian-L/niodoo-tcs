@@ -5,6 +5,7 @@ use crate::metrics::rce_metrics;
 use crate::tcs_analysis::TopologicalSignature;
 use crate::torus::PadGhostState;
 use tcs_rce::beta_meta::{compute_beta_meta, BetaMetaInputs, BetaMetaWeights};
+use tracing::{info, debug};
 
 pub struct RceAnalyzer {
     last_betti: Option<[usize; 3]>,
@@ -60,6 +61,15 @@ impl RceAnalyzer {
     }
 
     pub fn update(&mut self, pad: &PadGhostState, topo: &TopologicalSignature) -> f64 {
+        self.update_with_prompt_timestamp(pad, topo, None)
+    }
+
+    pub fn update_with_prompt_timestamp(
+        &mut self,
+        pad: &PadGhostState,
+        topo: &TopologicalSignature,
+        prompt_ts: Option<Instant>,
+    ) -> f64 {
         // dBetti/dt
         let now = Instant::now();
         let dt_secs = self
@@ -67,6 +77,13 @@ impl RceAnalyzer {
             .map(|prev| now.duration_since(prev).as_secs_f64())
             .unwrap_or(1.0);
         self.last_ts = Some(now);
+
+        // Record update latency (time between consecutive updates)
+        let m = rce_metrics();
+        if dt_secs > 0.0 && dt_secs < 1000.0 {
+            // Only record reasonable latencies (avoid initial start and outliers)
+            m.record_update_latency(dt_secs);
+        }
 
         let d_betti_norm = if let Some(prev) = self.last_betti {
             let diff0 = (topo.betti_numbers[0] as f64 - prev[0] as f64).abs();
@@ -93,12 +110,48 @@ impl RceAnalyzer {
 
         // Metrics
         self.peak_beta_meta = self.peak_beta_meta.max(beta);
-        let m = rce_metrics();
         m.record_beta_meta(beta, self.peak_beta_meta);
         m.record_persistence_entropy(h_topo);
         m.record_spectral_gap(topo.spectral_gap);
-        if beta >= self.threshold {
+        
+        let is_spike = beta >= self.threshold;
+        if is_spike {
             m.inc_spike();
+            
+            // Record prompt-to-spike latency if prompt timestamp is available
+            if let Some(prompt_start) = prompt_ts {
+                let prompt_to_spike_latency = now.duration_since(prompt_start).as_secs_f64();
+                if prompt_to_spike_latency > 0.0 && prompt_to_spike_latency < 60.0 {
+                    m.record_prompt_to_spike_latency(prompt_to_spike_latency);
+                    info!(
+                        beta = beta,
+                        threshold = self.threshold,
+                        dt_secs = dt_secs,
+                        prompt_to_spike_secs = prompt_to_spike_latency,
+                        persistence_entropy = h_topo,
+                        spectral_gap = topo.spectral_gap,
+                        "rce.beta_meta_spike"
+                    );
+                }
+            } else {
+                info!(
+                    beta = beta,
+                    threshold = self.threshold,
+                    dt_secs = dt_secs,
+                    persistence_entropy = h_topo,
+                    spectral_gap = topo.spectral_gap,
+                    "rce.beta_meta_spike"
+                );
+            }
+        } else {
+            debug!(
+                beta = beta,
+                threshold = self.threshold,
+                dt_secs = dt_secs,
+                persistence_entropy = h_topo,
+                spectral_gap = topo.spectral_gap,
+                "rce.beta_meta_update"
+            );
         }
 
         beta

@@ -21,6 +21,8 @@ use tracing_subscriber::{
 use niodoo_real_integrated::config::{CliArgs, OutputFormat};
 use niodoo_real_integrated::metrics::metrics;
 use niodoo_real_integrated::pipeline::{Pipeline, PipelineCycle};
+#[cfg(feature = "svc")]
+use niodoo_real_integrated::health::{HealthServer, HealthStatus};
 
 #[derive(Serialize)]
 struct CsvRecord {
@@ -41,6 +43,36 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let mut pipeline = Pipeline::initialise(args.clone()).await?;
+
+    #[cfg(feature = "svc")]
+    let health_registry = {
+        // Only start health server if running as a service (no --prompt flag)
+        if args.prompt.is_none() && args.prompt_file.is_none() {
+            let port = health_server_port();
+            let server = HealthServer::new(port);
+            let registry = server.registry();
+            let registry_clone = registry.clone();
+
+            tokio::spawn(async move {
+                if let Err(error) = server.start().await {
+                    warn!(%error, port, "health check server terminated unexpectedly");
+                }
+            });
+
+            registry_clone
+                .register_component(
+                    "pipeline".to_string(),
+                    HealthStatus::Healthy,
+                    Some("Pipeline initialised".to_string()),
+                )
+                .await;
+
+            Some(registry)
+        } else {
+            // CLI mode: no health server
+            None
+        }
+    };
 
     // Setup signal handlers for graceful shutdown
     let shutdown_flag = Arc::new(AtomicBool::new(false));
@@ -114,7 +146,42 @@ async fn main() -> Result<()> {
     let metrics_dump = metrics().gather()?;
     println!("\n# Prometheus Metrics\n{}", metrics_dump);
 
+    #[cfg(feature = "svc")]
+    {
+        if let Some(registry) = health_registry {
+            // Service mode: keep alive
+            registry
+                .register_component(
+                    "pipeline".to_string(),
+                    HealthStatus::Unhealthy,
+                    Some("Pipeline shutdown".to_string()),
+                )
+                .await;
+            // Keep process alive for service mode
+            tokio::signal::ctrl_c().await?;
+        }
+        // CLI mode: no health registry, exit immediately
+    }
+
     Ok(())
+}
+
+#[cfg(feature = "svc")]
+fn health_server_port() -> u16 {
+    const DEFAULT_PORT: u16 = 9090;
+    const PORT_ENV_VARS: [&str; 3] = ["NIODOO_HEALTH_PORT", "HEALTH_PORT", "PROMETHEUS_PORT"];
+
+    for key in PORT_ENV_VARS {
+        if let Ok(value) = std::env::var(key) {
+            if let Ok(port) = value.parse::<u16>() {
+                return port;
+            } else {
+                warn!(port_env = key, raw = %value, "invalid health server port override; using default");
+            }
+        }
+    }
+
+    DEFAULT_PORT
 }
 
 fn init_tracing() {
