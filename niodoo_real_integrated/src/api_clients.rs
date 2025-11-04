@@ -250,7 +250,14 @@ impl ClaudeClient {
 
                 if !response.status().is_success() {
                     let status = response.status();
-                    let body = response.text().await.unwrap_or_default();
+                    // Log error body but don't fail if text parsing fails
+                    let body = match response.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            warn!(%status, error = %e, "Claude API returned error and failed to read body");
+                            String::new()
+                        }
+                    };
                     warn!(%status, %body, "Claude API returned error");
                     anyhow::bail!("Claude API error: {status}");
                 }
@@ -427,7 +434,14 @@ impl GptClient {
 
                 if !response.status().is_success() {
                     let status = response.status();
-                    let body = response.text().await.unwrap_or_default();
+                    // Log error body but don't fail if text parsing fails
+                    let body = match response.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            warn!(%status, error = %e, "GPT API returned error and failed to read body");
+                            String::new()
+                        }
+                    };
                     warn!(%status, %body, "GPT API returned error");
                     anyhow::bail!("GPT API error: {status}");
                 }

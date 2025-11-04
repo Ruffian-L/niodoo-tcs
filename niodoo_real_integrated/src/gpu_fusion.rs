@@ -68,7 +68,10 @@ impl GpuTensorFusion {
         alpha: f32,
         rank: usize,
     ) -> Result<Tensor> {
-        // Pre-compute scaling factor
+        // Pre-compute scaling factor - protect against division by zero
+        if rank == 0 {
+            anyhow::bail!("LoRA rank must be > 0, got {}", rank);
+        }
         let scaling = alpha / rank as f32;
         
         // Fused: input @ A @ B * scaling in single optimized operation

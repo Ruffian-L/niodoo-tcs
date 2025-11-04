@@ -318,7 +318,8 @@ impl TopologyMemoryAnalyzer {
 
         // Sum over all edges
         for edge_idx in graph.edge_indices() {
-            let (source, target) = graph.edge_endpoints(edge_idx).unwrap();
+            let (source, target) = graph.edge_endpoints(edge_idx)
+                .ok_or_else(|| anyhow!("Invalid edge index: {:?}", edge_idx))?;
             let source_id = graph[source].id.clone();
             let target_id = graph[target].id.clone();
 

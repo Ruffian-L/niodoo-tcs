@@ -114,11 +114,19 @@ impl TcsPredictor {
         for (sig, _, _) in recent {
             if sig.knot_complexity > 0.4 && avg_perf < 0.5 {
                 // High knot correlates with low performance - strengthen penalty
-                *self.feature_weights.get_mut("knot_complexity").unwrap() *= 1.05;
+                if let Some(weight) = self.feature_weights.get_mut("knot_complexity") {
+                    *weight *= 1.05;
+                } else {
+                    warn!("feature_weights missing 'knot_complexity' key");
+                }
             }
             if sig.spectral_gap < 0.3 && avg_perf > 0.7 {
                 // Low gap correlates with high performance - strengthen bonus
-                *self.feature_weights.get_mut("spectral_gap").unwrap() *= 1.05;
+                if let Some(weight) = self.feature_weights.get_mut("spectral_gap") {
+                    *weight *= 1.05;
+                } else {
+                    warn!("feature_weights missing 'spectral_gap' key");
+                }
             }
         }
 

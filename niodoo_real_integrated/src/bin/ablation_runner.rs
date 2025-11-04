@@ -194,7 +194,7 @@ impl AblationRunner {
         // Compute real metrics from execution
         let latency_stats = if !latencies_vec.is_empty() {
             let mut sorted = latencies_vec.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let p50_idx = (sorted.len() as f64 * 0.5) as usize;
             let p95_idx = (sorted.len() as f64 * 0.95) as usize;
             let p99_idx = (sorted.len() as f64 * 0.99).min(sorted.len() as f64 - 1.0) as usize;

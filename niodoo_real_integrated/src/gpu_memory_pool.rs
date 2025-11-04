@@ -36,7 +36,8 @@ impl GpuMemoryPool {
         let total_elements: usize = shape.iter().product();
         let pool_idx = Self::size_bucket(total_elements);
         
-        let mut pools = self.pools.lock().unwrap();
+        let mut pools = self.pools.lock()
+            .map_err(|e| candle_core::Error::Msg(format!("Failed to acquire lock: {}", e)))?;
         
         // Ensure pool exists
         while pools.len() <= pool_idx {
@@ -60,16 +61,16 @@ impl GpuMemoryPool {
         let total_elements: usize = tensor.shape().dims().iter().product();
         let pool_idx = Self::size_bucket(total_elements);
         
-        let mut pools = self.pools.lock().unwrap();
-        
-        // Ensure pool exists
-        while pools.len() <= pool_idx {
-            pools.push(VecDeque::new());
-        }
-        
-        // Add to pool if not full
-        if pools[pool_idx].len() < self.max_pool_size {
-            pools[pool_idx].push_back(tensor);
+        if let Ok(mut pools) = self.pools.lock() {
+            // Ensure pool exists
+            while pools.len() <= pool_idx {
+                pools.push(VecDeque::new());
+            }
+            
+            // Add to pool if not full
+            if pools[pool_idx].len() < self.max_pool_size {
+                pools[pool_idx].push_back(tensor);
+            }
         }
     }
 
@@ -83,19 +84,23 @@ impl GpuMemoryPool {
 
     /// Clear pool to free GPU memory
     pub fn clear(&self) {
-        let mut pools = self.pools.lock().unwrap();
-        pools.clear();
-        info!("GPU memory pool cleared");
+        if let Ok(mut pools) = self.pools.lock() {
+            pools.clear();
+            info!("GPU memory pool cleared");
+        }
     }
 
     /// Get pool statistics
     pub fn stats(&self) -> (usize, usize) {
-        let pools = self.pools.lock().unwrap();
-        let total_tensors: usize = pools.iter().map(|p| p.len()).sum();
-        let total_elements: usize = pools.iter().flat_map(|p| {
-            p.iter().map(|t| t.shape().dims().iter().product::<usize>())
-        }).sum();
-        (total_tensors, total_elements)
+        if let Ok(pools) = self.pools.lock() {
+            let total_tensors: usize = pools.iter().map(|p| p.len()).sum();
+            let total_elements: usize = pools.iter().flat_map(|p| {
+                p.iter().map(|t| t.shape().dims().iter().product::<usize>())
+            }).sum();
+            (total_tensors, total_elements)
+        } else {
+            (0, 0)
+        }
     }
 }
 

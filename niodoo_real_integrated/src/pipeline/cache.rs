@@ -149,7 +149,9 @@ impl CachedEmbedding {
 
         let mut decoded = Vec::with_capacity(self.len_f32);
         for chunk in bytes.chunks_exact(4) {
-            decoded.push(f32::from_le_bytes(chunk.try_into().unwrap()));
+            decoded.push(f32::from_le_bytes(chunk.try_into().map_err(|_| {
+                anyhow::anyhow!("Failed to convert 4-byte chunk to f32 array")
+            })?));
         }
         Ok(decoded)
     }

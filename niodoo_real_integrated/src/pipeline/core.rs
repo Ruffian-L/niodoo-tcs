@@ -262,8 +262,11 @@ impl Pipeline {
             None
         };
 
+        // Create config_arc early so it can be shared with components
+        let config_arc = Arc::new(parking_lot::RwLock::new(config.clone()));
+
         let erag = if config.optimized_erag {
-            EragClient::new_with_config_and_quantization(
+            let mut erag_client = EragClient::new_with_config_and_quantization(
                 &config.qdrant_url,
                 &config.qdrant_collection,
                 config.qdrant_vector_dim,
@@ -274,9 +277,11 @@ impl Pipeline {
                 config.qdrant_quantization,
                 gpu_fitness_calc.clone(), // Phase 4.3: Pass GPU calculator
             )
-            .await?
+            .await?;
+            erag_client.set_config(config_arc.clone());
+            erag_client
         } else {
-            EragClient::new_with_config(
+            let mut erag_client = EragClient::new_with_config(
                 &config.qdrant_url,
                 &config.qdrant_collection,
                 config.qdrant_vector_dim,
@@ -286,7 +291,9 @@ impl Pipeline {
                 config.erag_batch_flush_ms,
                 gpu_fitness_calc.clone(), // Phase 4.3: Pass GPU calculator
             )
-            .await?
+            .await?;
+            erag_client.set_config(config_arc.clone());
+            erag_client
         };
 
         // Log collection state for diagnostics
@@ -316,7 +323,7 @@ impl Pipeline {
         info!(model = %config.vllm_model, endpoint = %config.vllm_endpoint, "Initialized GenerationEngine with vLLM model");
         generator.set_mock_mode(config.mock_mode);
         generator.set_system_prompt(config.system_prompt.clone());
-        let config_arc = Arc::new(parking_lot::RwLock::new(config.clone()));
+        generator.set_config(config_arc.clone());
         let security_manager = Arc::new(PromptSecurityManager::new(config.security.clone())?);
         security_manager.audit_config_snapshot(&config);
 

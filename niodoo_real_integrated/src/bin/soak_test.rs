@@ -161,7 +161,9 @@ impl SoakMetrics {
         let (avg_memory, memory_growth) = if memory_samples.len() >= 2 {
             let samples: Vec<f64> = memory_samples.iter().copied().collect();
             let avg = samples.iter().sum::<f64>() / samples.len() as f64;
-            let growth = samples.last().unwrap() - samples.first().unwrap();
+            // Safety: We checked len() >= 2 above, so first() and last() are guaranteed Some
+            let growth = samples.last().expect("samples.len() >= 2 ensures last() exists")
+                - samples.first().expect("samples.len() >= 2 ensures first() exists");
             (avg, growth)
         } else {
             (0.0, 0.0)

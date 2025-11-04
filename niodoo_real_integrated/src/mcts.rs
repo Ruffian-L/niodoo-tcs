@@ -544,12 +544,17 @@ impl MctsDaydreamer {
 
         let source_path: Vec<String> = path.iter().map(|n| format!("{:?}", n.action)).collect();
 
-        let final_state = path.last().unwrap().state.clone();
+        // Safety: path is checked for empty above, so last() is guaranteed Some
+        let final_state = path.last()
+            .expect("path checked for empty above")
+            .state.clone();
 
         Some(SyntheticEpisode {
             content: format!(
                 "Synthetic episode from MCTS exploration: {:?}",
-                path.last().unwrap().action
+                path.last()
+                    .expect("path checked for empty above")
+                    .action
             ),
             source_path,
             value,

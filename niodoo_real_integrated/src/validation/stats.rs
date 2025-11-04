@@ -38,7 +38,7 @@ pub fn bootstrap_percentile_ci(
 
         // Compute percentile for this bootstrap sample
         let mut sorted = sample;
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let index = (percentile * (sorted.len() - 1) as f64) as usize;
         bootstrap_samples.push(sorted[index]);
     }
@@ -122,7 +122,7 @@ pub fn mann_whitney_u(values1: &[f64], values2: &[f64]) -> (f64, f64) {
         .chain(values2.iter().enumerate().map(|(i, &v)| (v, i + n1)))
         .collect();
 
-    all_values.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    all_values.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
     // Assign ranks (handle ties by averaging)
     let mut ranks = vec![0.0; n1 + n2];
@@ -258,7 +258,7 @@ impl StatisticalSummary {
         }
 
         let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let mean = values.iter().sum::<f64>() / values.len() as f64;
         let variance = values

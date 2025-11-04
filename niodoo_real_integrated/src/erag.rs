@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::VecDeque;
 use std::sync::Arc;
+use parking_lot::RwLock;
 use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
 use tracing::{info, instrument, warn};
@@ -22,6 +23,7 @@ use uuid::Uuid;
 use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 
 use crate::compass::{CascadeStage, CompassOutcome};
+use crate::config::RuntimeConfig;
 use crate::torus::PadGhostState;
 use crate::weighted_episodic_mem::{
     age_in_days, calculate_fitness_score, initialize_memory_metadata, update_retrieval_stats,
@@ -255,6 +257,10 @@ impl EragClient {
         }
 
         Ok(client)
+    }
+
+    pub fn set_config(&mut self, config: Arc<RwLock<RuntimeConfig>>) {
+        self.config = Some(config);
     }
 
     #[instrument(skip_all, fields(dim = vector.len()))]

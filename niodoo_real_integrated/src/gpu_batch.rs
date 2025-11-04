@@ -10,7 +10,9 @@ use std::sync::Arc;
 #[cfg(feature = "gpu")]
 use tokio::sync::Mutex;
 #[cfg(feature = "gpu")]
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+#[cfg(feature = "gpu")]
+use crate::embedding::Embedder;
 
 /// GPU batch processor for embeddings - RTX 5090 optimized
 #[cfg(feature = "gpu")]
@@ -18,12 +20,23 @@ pub struct GpuEmbeddingBatcher {
     device: Device,
     optimal_batch_size: usize,
     cache: Arc<Mutex<std::collections::HashMap<String, Tensor>>>,
+    embedder: Option<Arc<dyn Embedder>>,
+    embedding_dim: usize,
 }
 
 #[cfg(feature = "gpu")]
 impl GpuEmbeddingBatcher {
     /// Create batch processor optimized for RTX 5090
     pub fn new(device: Device) -> Self {
+        Self::new_with_embedder(device, None, 896)
+    }
+
+    /// Create batch processor with embedder for real embeddings
+    pub fn new_with_embedder(
+        device: Device,
+        embedder: Option<Arc<dyn Embedder>>,
+        embedding_dim: usize,
+    ) -> Self {
         let optimal_batch_size = if std::env::var("HARDWARE")
             .ok()
             .map(|v| v.to_lowercase().contains("5090"))
@@ -38,6 +51,8 @@ impl GpuEmbeddingBatcher {
             device,
             optimal_batch_size,
             cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            embedder,
+            embedding_dim,
         }
     }
 
@@ -73,12 +88,43 @@ impl GpuEmbeddingBatcher {
         }
 
         // Process uncached in optimal batch sizes
-        for chunk in uncached_prompts.chunks(self.optimal_batch_size) {
-            // In real implementation, this would call embedding model
-            // For now, return placeholder tensors
-            for (chunk_idx, prompt) in chunk.iter().enumerate() {
-                let global_idx = uncached_indices[chunk_idx];
-                let tensor = Tensor::zeros((896,), candle_core::DType::F32, &self.device)?;
+        if let Some(embedder) = &self.embedder {
+            // Real implementation: use embedder
+            let mut uncached_idx = 0;
+            for chunk in uncached_prompts.chunks(self.optimal_batch_size) {
+                let mut chunk_embeddings = Vec::new();
+                for prompt in chunk.iter() {
+                    match embedder.embed(prompt).await {
+                        Ok(emb_vec) => {
+                            chunk_embeddings.push(emb_vec);
+                        }
+                        Err(e) => {
+                            warn!(error = %e, prompt = prompt, "Failed to embed prompt, using zeros");
+                            chunk_embeddings.push(vec![0.0; self.embedding_dim]);
+                        }
+                    }
+                }
+                
+                // Convert to tensors and cache
+                let mut cache = self.cache.lock().await;
+                for (chunk_idx, (prompt, emb_vec)) in chunk.iter().zip(chunk_embeddings.iter()) {
+                    let global_idx = uncached_indices[uncached_idx + chunk_idx];
+                    let tensor = Tensor::from_vec(
+                        emb_vec.clone(),
+                        (self.embedding_dim,),
+                        &self.device
+                    )?;
+                    results[global_idx] = Some(tensor.clone());
+                    cache.insert(prompt.clone(), tensor);
+                }
+                uncached_idx += chunk.len();
+            }
+        } else {
+            // Fallback: return zeros if no embedder provided
+            warn!("GpuEmbeddingBatcher: No embedder provided, using zero tensors. Use new_with_embedder() for real embeddings.");
+            for (idx, prompt) in uncached_prompts.iter().enumerate() {
+                let global_idx = uncached_indices[idx];
+                let tensor = Tensor::zeros((self.embedding_dim,), candle_core::DType::F32, &self.device)?;
                 results[global_idx] = Some(tensor.clone());
                 
                 // Cache result
@@ -119,12 +165,15 @@ impl GpuTokenizerBatcher {
     }
 
     /// Batch tokenize multiple prompts
+    /// PLACEHOLDER: Returns placeholder token IDs
+    /// Future: Integrate with actual GPU tokenizer (e.g., HuggingFace tokenizers on GPU)
     pub async fn batch_tokenize(&self, prompts: &[String]) -> Result<Vec<Vec<u32>>> {
         // Process in optimal batch sizes
         let mut results = Vec::new();
         for chunk in prompts.chunks(self.optimal_batch_size) {
-            // In real implementation, this would batch tokenize
-            // For now, return placeholder token IDs
+            // PLACEHOLDER: In real implementation, this would batch tokenize
+            // Current: Returns placeholder token IDs [1, 2, 3]
+            // Future: Call actual GPU tokenizer with batch processing
             for _prompt in chunk {
                 results.push(vec![1, 2, 3]); // Placeholder
             }

@@ -127,11 +127,15 @@ impl AQARunner {
                 return solution_path == expected;
             }
             // Check if solution contains goal state
-            let last_step = solution_path.last().unwrap();
+            // Safety: solution_path is checked for empty above, so last() is guaranteed Some
+            let last_step = solution_path.last()
+                .expect("solution_path checked for empty above");
             last_step.contains(&task.goal_state)
         } else {
             // No expected solution, check if goal is reached
-            let last_step = solution_path.last().unwrap();
+            // Safety: solution_path is checked for empty above, so last() is guaranteed Some
+            let last_step = solution_path.last()
+                .expect("solution_path checked for empty above");
             last_step.contains(&task.goal_state)
         }
     }

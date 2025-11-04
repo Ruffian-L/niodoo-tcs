@@ -27,7 +27,12 @@ impl QwenStatefulEmbedder {
         let model_path = model_path.as_ref();
         
         // Check if MOCK_MODE is enabled (for testing)
-        if std::env::var("MOCK_MODE").is_ok() && std::env::var("MOCK_MODE").unwrap() == "true" {
+        let mock_mode = std::env::var("MOCK_MODE")
+            .ok()
+            .and_then(|v| if v == "true" { Some(true) } else { None })
+            .unwrap_or(false);
+        
+        if mock_mode {
             warn!("MOCK_MODE enabled - creating mock embedder");
             return Self::new_mock(expected_dim);
         }
@@ -42,7 +47,9 @@ impl QwenStatefulEmbedder {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(30); // 30 second timeout for initialization
 
-        let model_path_str = model_path.to_str().unwrap().to_string();
+        let model_path_str = model_path.to_str()
+            .ok_or_else(|| anyhow!("Model path contains invalid UTF-8: {}", model_path.display()))?
+            .to_string();
         let (tx, rx) = std::sync::mpsc::channel();
         
         let handle = std::thread::spawn(move || {

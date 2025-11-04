@@ -183,7 +183,7 @@ impl LoadTestMetrics {
             return 0.0;
         }
         let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let index = (percentile * (sorted.len() - 1) as f64) as usize;
         sorted[index]
     }

@@ -337,6 +337,16 @@ impl Curator {
 
     fn parse_curator_response(&self, text: &str) -> Result<CuratorRefineResult> {
         // Try to extract JSON from response
+        // Safety: Check if text is empty before searching
+        if text.is_empty() {
+            warn!("Curator response is empty; treating as empty refined text");
+            return Ok(CuratorRefineResult {
+                refined: String::new(),
+                learned: false,
+                reason: "Empty response".to_string(),
+            });
+        }
+        
         let json_start = text.find('{').unwrap_or(0);
         let json_text = &text[json_start..];
         let json_end = json_text

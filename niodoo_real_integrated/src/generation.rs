@@ -10,7 +10,9 @@ use tracing::{info, instrument, warn};
 
 use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use crate::compass::CompassOutcome;
+use crate::config::RuntimeConfig;
 use crate::util::rouge_l;
+use parking_lot::RwLock;
 
 #[derive(Debug, Clone)]
 pub struct GenerationResult {
@@ -65,6 +67,7 @@ impl GenerationEngine {
             mock_mode: false,
             circuit_breaker,
             client_timeout_secs: 60, // Default timeout for legacy constructor
+            config: None, // No config for legacy constructor
         })
     }
 
@@ -305,7 +308,14 @@ impl GenerationEngine {
 
             if !resp.status().is_success() {
                 let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
+                // Log error body but don't fail if text parsing fails
+                let body = match resp.text().await {
+                    Ok(text) => text,
+                    Err(e) => {
+                        warn!(%status, error = %e, endpoint = %endpoint_url_clone, "vLLM returned error status and failed to read body");
+                        String::new()
+                    }
+                };
                 warn!(%status, %body, endpoint = %endpoint_url_clone, "vLLM returned error status");
                 anyhow::bail!("vLLM request failed: {status}");
             }
@@ -515,12 +525,16 @@ impl GenerationEngine {
                 .unwrap_or(false),
             circuit_breaker,
             client_timeout_secs,
+            config: None,
         })
     }
 
     /// Apply runtime config
+    /// NOTE: Currently a stub - runtime config is applied during engine construction.
+    /// This method exists for future dynamic config updates.
     pub fn apply_runtime_from_config(&mut self, _config: &crate::config::CliArgs) {
-        // Stub implementation
+        // Stub implementation - config is applied during engine construction
+        // Future: could update client timeout, circuit breaker settings, etc.
     }
 
     /// Update params
@@ -535,8 +549,11 @@ impl GenerationEngine {
     }
 
     /// Set system prompt
+    /// NOTE: Currently a stub - system prompts are handled via vLLM API configuration.
+    /// This method exists for future client-side prompt management.
     pub fn set_system_prompt(&mut self, _prompt: String) {
-        // Stub implementation
+        // Stub implementation - system prompts handled via vLLM API
+        // Future: could inject system prompts into request payloads
     }
 
     /// Generate with params
@@ -562,6 +579,8 @@ impl GenerationEngine {
             max_tokens: self.max_tokens,
             mock_mode: false,
             circuit_breaker: self.circuit_breaker.clone(),
+            client_timeout_secs: self.client_timeout_secs,
+            config: self.config.clone(),
         };
         temp_engine.request_text(prompt).await
     }
@@ -768,7 +787,8 @@ impl GenerationEngine {
         self.config = Some(config);
     }
 
-    pub fn reflexion_retry(
+    /// Retry generation with reflexion-style prompt repair.
+    pub async fn reflexion_retry(
         &self,
         prompt: &str,
         baseline_rouge: f64,
@@ -823,13 +843,13 @@ impl GenerationEngine {
             );
         }
 
-        let guard = self.config.read();
-        let temp_base_multiplier = guard.generation_cot_repair_temp_base_multiplier;
-        let temp_iteration_increment = guard.generation_cot_repair_temp_iteration_increment;
-        let top_p_increment = guard.generation_cot_repair_top_p_increment;
-        let top_p_max = guard.generation_cot_repair_top_p_max;
-        let temp_min = guard.generation_cot_repair_temp_min;
-        let temp_max = guard.generation_cot_repair_temp_max;
+        let guard = self.config.as_ref().map(|c| c.read());
+        let temp_base_multiplier = guard.as_ref().map(|g| g.generation_cot_repair_temp_base_multiplier).unwrap_or(1.0);
+        let temp_iteration_increment = guard.as_ref().map(|g| g.generation_cot_repair_temp_iteration_increment).unwrap_or(0.05);
+        let top_p_increment = guard.as_ref().map(|g| g.generation_cot_repair_top_p_increment).unwrap_or(0.05);
+        let top_p_max = guard.as_ref().map(|g| g.generation_cot_repair_top_p_max).unwrap_or(0.95);
+        let temp_min = guard.as_ref().map(|g| g.generation_cot_repair_temp_min).unwrap_or(0.1);
+        let temp_max = guard.as_ref().map(|g| g.generation_cot_repair_temp_max).unwrap_or(1.0);
         drop(guard);
 
         let temperature = (self.temperature * temp_base_multiplier) + (temp_iteration_increment * iteration as f64);
