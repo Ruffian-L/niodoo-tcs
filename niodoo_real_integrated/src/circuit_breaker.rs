@@ -39,13 +39,51 @@ pub struct CircuitBreakerConfig {
 
 impl Default for CircuitBreakerConfig {
     fn default() -> Self {
+        Self::from_env()
+    }
+}
+
+impl CircuitBreakerConfig {
+    /// Create circuit breaker config from environment variables with defaults
+    /// Environment variables (all optional):
+    /// - CIRCUIT_BREAKER_FAILURE_THRESHOLD: Failure threshold (default: 5)
+    /// - CIRCUIT_BREAKER_SUCCESS_THRESHOLD: Success threshold (default: 2)
+    /// - CIRCUIT_BREAKER_TIMEOUT_SECS: Timeout in seconds (default: 60)
+    /// - CIRCUIT_BREAKER_BASE_DELAY_MS: Base delay in milliseconds (default: 100)
+    /// - CIRCUIT_BREAKER_MAX_DELAY_SECS: Maximum delay in seconds (default: 30)
+    /// - CIRCUIT_BREAKER_BACKOFF_EXPONENT: Backoff exponent (default: 2.0)
+    pub fn from_env() -> Self {
         Self {
-            failure_threshold: 5,
-            success_threshold: 2,
-            timeout: Duration::from_secs(60),
-            base_delay: Duration::from_millis(100),
-            max_delay: Duration::from_secs(30),
-            backoff_exponent: 2.0,
+            failure_threshold: std::env::var("CIRCUIT_BREAKER_FAILURE_THRESHOLD")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5),
+            success_threshold: std::env::var("CIRCUIT_BREAKER_SUCCESS_THRESHOLD")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(2),
+            timeout: Duration::from_secs(
+                std::env::var("CIRCUIT_BREAKER_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(60)
+            ),
+            base_delay: Duration::from_millis(
+                std::env::var("CIRCUIT_BREAKER_BASE_DELAY_MS")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(100)
+            ),
+            max_delay: Duration::from_secs(
+                std::env::var("CIRCUIT_BREAKER_MAX_DELAY_SECS")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(30)
+            ),
+            backoff_exponent: std::env::var("CIRCUIT_BREAKER_BACKOFF_EXPONENT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(2.0),
         }
     }
 }

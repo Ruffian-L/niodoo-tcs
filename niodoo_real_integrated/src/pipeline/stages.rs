@@ -8,6 +8,8 @@ use tracing::{info, warn};
 use crate::compass::{CascadeTransition, CompassOutcome, CompassQuadrant};
 use crate::config::{env_value, TopologyMode};
 use crate::consonance::{compute_consonance, ConsonanceMetrics};
+#[cfg(feature = "gpu")]
+use crate::consonance::{compute_topological_consistency, compute_erag_relevance, compute_compass_transition, compute_confidence};
 use crate::data::Experience;
 use crate::erag::CollapseResult;
 use crate::generation::GenerationResult;
@@ -183,7 +185,10 @@ impl Pipeline {
                     Ok(hit)
                 } else {
                     // Dynamic top_k based on config knobs (reuses retrieval_top_k_increment as delta)
-                    let top_k = (3i32 + retrieval_top_k_increment).clamp(1, 50) as usize;
+                    let top_k = (self.config.base_retrieval_top_k + retrieval_top_k_increment).clamp(
+                        self.config.pipeline_retrieval_top_k_min as i32,
+                        self.config.pipeline_retrieval_top_k_max as i32
+                    ) as usize;
                     let collapse = erag_client
                         .collapse_with_limit(&embedding_for_collapse, top_k)
                         .await?;
@@ -196,8 +201,9 @@ impl Pipeline {
         )?;
         // Measure elapsed time AFTER the work completes
         let compass_erag_elapsed = compass_erag_start.elapsed().as_secs_f64() * 1000.0;
-        timings.compass_ms = compass_erag_elapsed / 2.0;
-        timings.erag_ms = compass_erag_elapsed / 2.0;
+        let split_ratio = self.config.pipeline_timing_split_ratio;
+        timings.compass_ms = compass_erag_elapsed * split_ratio;
+        timings.erag_ms = compass_erag_elapsed * (1.0 - split_ratio);
         info!(
             "Pipeline stage: compass completed in {:.2}ms",
             timings.compass_ms
@@ -231,10 +237,74 @@ impl Pipeline {
             ntoken_features_for_compass // Use compass features if no endpoint
         };
 
-        // EMOTIONAL CASCADE INTEGRATION: Compute consonance and detect hyperfocus
+        // RTX 5090 OPTIMIZATION: Parallelize consonance + hyperfocus detection
+        // These can run concurrently since hyperfocus only needs consonance score
         let last_compass = self.last_compass_outcome.lock().await.clone();
 
         // Compute partial consonance (without curator for now)
+        // RTX 5090: Use GPU-accelerated consonance if available
+        #[cfg(feature = "gpu")]
+        let partial_consonance = {
+            if let Ok(device) = candle_core::Device::cuda_if_available(0) {
+                use crate::gpu_consonance::GpuConsonanceCalculator;
+                let gpu_calc = GpuConsonanceCalculator::new(device);
+                
+                // Extract PAD state for GPU variance calculation
+                let pad_array = [pad_state.pad];
+                if let Ok(variances) = gpu_calc.batch_pad_variance(&pad_array).await {
+                    if !variances.is_empty() {
+                        let pad_variance = variances[0];
+                        let emotional_coherence = (1.0 - pad_variance.min(1.0)).max(0.0);
+                        
+                        // Compute other components (still CPU for now, can be optimized later)
+                        let topological_consistency = compute_topological_consistency(&topology, &pad_state);
+                        let erag_relevance = compute_erag_relevance(&collapse);
+                        let compass_transition = compute_compass_transition(&compass, last_compass.as_ref());
+                        
+                        // Weighted combination
+                        let sources = vec![
+                            crate::consonance::ConsonanceSource::EmotionalCoherence(emotional_coherence),
+                            crate::consonance::ConsonanceSource::TopologicalConsistency(topological_consistency),
+                            crate::consonance::ConsonanceSource::ERAGRelevance(erag_relevance),
+                            crate::consonance::ConsonanceSource::CompassTransition(compass_transition),
+                            crate::consonance::ConsonanceSource::CuratorQuality(0.5), // No curator yet
+                        ];
+                        
+                        let weights = [0.25, 0.20, 0.25, 0.20, 0.10];
+                        let source_scores_array: [f64; 5] = [
+                            sources[0].score(),
+                            sources[1].score(),
+                            sources[2].score(),
+                            sources[3].score(),
+                            sources[4].score(),
+                        ];
+                        if let Ok(batch_scores) = gpu_calc.batch_weighted_consonance(&[source_scores_array], &weights).await {
+                            if !batch_scores.is_empty() {
+                                let score = batch_scores[0];
+                                let confidence = compute_confidence(&sources);
+                                crate::consonance::ConsonanceMetrics {
+                                    score,
+                                    sources,
+                                    confidence,
+                                    dissonance_score: (1.0 - score).clamp(0.0, 1.0),
+                                }
+                            } else {
+                                compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                            }
+                        } else {
+                            compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                        }
+                    } else {
+                        compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                    }
+                } else {
+                    compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                }
+            } else {
+                compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+            }
+        };
+        #[cfg(not(feature = "gpu"))]
         let partial_consonance = compute_consonance(
             &pad_state,
             &compass,
@@ -275,31 +345,119 @@ impl Pipeline {
         // Stage 5: Tokenizer
         let tokenizer_start = Instant::now();
 
+        // RTX 5090 OPTIMIZATION: GPU-accelerated RCE scoring for cosine similarity
         let mut top_hits = collapse.top_hits.clone();
         if self.config.rce_erag_lambda > 0.0 && !top_hits.is_empty() {
             let lambda = self.config.rce_erag_lambda;
-            top_hits.sort_by(|a, b| {
-                let score = |m: &crate::erag::EragMemory| {
-                    let pad_vec = [pad_state.pad[0] as f64, pad_state.pad[1] as f64, pad_state.pad[2] as f64];
-                    let mem_vec = [
-                        m.emotional_vector.joy as f64,
-                        m.emotional_vector.anger as f64,
-                        m.emotional_vector.surprise as f64,
-                    ];
-                    let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
-                    let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
-                    let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
-                    let cosine = if n1 > 0.0 && n2 > 0.0 {
-                        (dot / (n1 * n2)).clamp(-1.0, 1.0)
+            
+            // RTX 5090: Use GPU for batch cosine similarity if available
+            #[cfg(feature = "gpu")]
+            {
+                if let Ok(device) = candle_core::Device::cuda_if_available(0) {
+                    use crate::gpu_consonance::GpuConsonanceCalculator;
+                    let gpu_calc = GpuConsonanceCalculator::new(device);
+                    
+                    // Prepare vectors for GPU batch processing
+                    let pad_vecs: Vec<Vec<f32>> = vec![vec![pad_state.pad[0] as f32, pad_state.pad[1] as f32, pad_state.pad[2] as f32]; top_hits.len()];
+                    let mem_vecs: Vec<Vec<f32>> = top_hits.iter().map(|m| {
+                        vec![m.emotional_vector.joy, m.emotional_vector.anger, m.emotional_vector.surprise]
+                    }).collect();
+                    
+                    // Batch compute cosine similarities on GPU
+                    if let Ok(cosines) = gpu_calc.batch_cosine_similarity(&pad_vecs, &mem_vecs).await {
+                        // Compute entropy scores
+                        let ent_after_vec: Vec<f64> = top_hits.iter().map(|m| m.entropy_after).collect();
+                        let entropy_scores: Vec<f64> = ent_after_vec.iter().map(|ent_after| {
+                            1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0)
+                        }).collect();
+                        
+                        // Combine scores
+                        let scores: Vec<f64> = cosines.iter().enumerate().map(|(i, &cosine)| {
+                            (self.config.rce_erag_cosine_weight * cosine as f64 + 
+                             self.config.rce_erag_entropy_weight * entropy_scores[i]) * lambda
+                        }).collect();
+                        
+                        // Sort by score
+                        let mut indexed: Vec<(usize, f64)> = scores.into_iter().enumerate().collect();
+                        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+                        top_hits = indexed.into_iter().map(|(i, _)| top_hits[i].clone()).collect();
                     } else {
-                        0.0
+                        // Fallback to CPU if GPU fails
+                        top_hits.sort_by(|a, b| {
+                            let score = |m: &crate::erag::EragMemory| {
+                                let pad_vec = [pad_state.pad[0] as f64, pad_state.pad[1] as f64, pad_state.pad[2] as f64];
+                                let mem_vec = [
+                                    m.emotional_vector.joy as f64,
+                                    m.emotional_vector.anger as f64,
+                                    m.emotional_vector.surprise as f64,
+                                ];
+                                let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
+                                let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
+                                let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
+                                let cosine = if n1 > 0.0 && n2 > 0.0 {
+                                    (dot / (n1 * n2)).clamp(-1.0, 1.0)
+                                } else {
+                                    0.0
+                                };
+                                let ent_after = m.entropy_after;
+                                let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
+                                (self.config.rce_erag_cosine_weight * cosine + self.config.rce_erag_entropy_weight * ent_score) * lambda
+                            };
+                            score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
+                        });
+                    }
+                } else {
+                    // CPU fallback
+                    top_hits.sort_by(|a, b| {
+                        let score = |m: &crate::erag::EragMemory| {
+                            let pad_vec = [pad_state.pad[0] as f64, pad_state.pad[1] as f64, pad_state.pad[2] as f64];
+                            let mem_vec = [
+                                m.emotional_vector.joy as f64,
+                                m.emotional_vector.anger as f64,
+                                m.emotional_vector.surprise as f64,
+                            ];
+                            let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
+                            let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
+                            let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
+                            let cosine = if n1 > 0.0 && n2 > 0.0 {
+                                (dot / (n1 * n2)).clamp(-1.0, 1.0)
+                            } else {
+                                0.0
+                            };
+                            let ent_after = m.entropy_after;
+                            let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
+                            (self.config.rce_erag_cosine_weight * cosine + self.config.rce_erag_entropy_weight * ent_score) * lambda
+                        };
+                        score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
+                    });
+                }
+            }
+            #[cfg(not(feature = "gpu"))]
+            {
+                // CPU-only path
+                top_hits.sort_by(|a, b| {
+                    let score = |m: &crate::erag::EragMemory| {
+                        let pad_vec = [pad_state.pad[0] as f64, pad_state.pad[1] as f64, pad_state.pad[2] as f64];
+                        let mem_vec = [
+                            m.emotional_vector.joy as f64,
+                            m.emotional_vector.anger as f64,
+                            m.emotional_vector.surprise as f64,
+                        ];
+                        let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
+                        let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
+                        let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
+                        let cosine = if n1 > 0.0 && n2 > 0.0 {
+                            (dot / (n1 * n2)).clamp(-1.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        let ent_after = m.entropy_after;
+                        let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
+                        (self.config.rce_erag_cosine_weight * cosine + self.config.rce_erag_entropy_weight * ent_score) * lambda
                     };
-                    let ent_after = m.entropy_after;
-                    let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
-                    (0.7 * cosine + 0.3 * ent_score) * lambda
-                };
-                score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
-            });
+                    score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
+                });
+            }
         }
 
         let mut adapted_context = if self.config.rce_erag_lambda > 0.0 && !top_hits.is_empty() {
@@ -308,8 +466,8 @@ impl Pipeline {
                 .flat_map(|m| m.erag_context.clone())
                 .collect::<Vec<_>>()
                 .join("\n");
-            if ctx.len() > 100 {
-                ctx.truncate(100);
+            if ctx.len() > self.config.context_truncation_limit {
+                ctx.truncate(self.config.context_truncation_limit);
             }
             ctx
         } else {
@@ -317,7 +475,7 @@ impl Pipeline {
         };
 
         if self.config.rce_actions_enabled && !self.config.rce_shadow_mode {
-            if topology.persistence_entropy > 0.7 || topology.spectral_gap > 0.7 {
+            if topology.persistence_entropy > self.config.rce_adaptation_entropy_threshold || topology.spectral_gap > self.config.rce_adaptation_spectral_gap_threshold {
                 adapted_context = adapted_context.replace(". ", ".\n");
                 adapted_context = adapted_context.replace("; ", ";\n");
                 adapted_context = adapted_context.replace(", ", ",\n");
@@ -401,7 +559,7 @@ impl Pipeline {
                         .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                         .unwrap_or(0.5),
                 ),
-                curator_quality: Some(0.8), // Default quality for consistency voting
+                curator_quality: Some(self.config.consistency_voting_quality), // Default quality for consistency voting
                 failure_type: None,
                 failure_details: None,
             }
@@ -472,7 +630,7 @@ impl Pipeline {
                 .rce_spike_streak
                 .fetch_add(1, AtomicOrdering::SeqCst)
                 + 1;
-                        if streak >= 3 {
+                        if streak >= self.config.rce_circuit_breaker_streak {
                             // Circuit breaker: slow mode – avoid further aggressive adjustments
                             tracing::warn!("RCE circuit breaker: sustained β_meta spikes ({}). Entering slow mode.", streak);
                         } else {
@@ -557,7 +715,7 @@ impl Pipeline {
             let source = generation.source.to_lowercase();
             source.contains("fallback") || source.contains("mock")
         };
-        let failure_signals = FailureSignals::evaluate(
+        let failure_signals = FailureSignals::evaluate_with_thresholds(
             generation.rouge_score,
             entropy_delta,
             Some(ucb1_score),
@@ -566,6 +724,7 @@ impl Pipeline {
             fallback_source,
             tokenizer_output.oov_rate,
             0,
+            &self.config.failure_signal_thresholds,
         );
         let mut failure = failure_signals.severity().to_string();
         let mut details = failure_signals.summary();
@@ -593,7 +752,7 @@ impl Pipeline {
 
         let quality_acceptable = (curated_experience.quality_score as f64)
             >= self.config.curator_minimum_threshold as f64;
-        let rouge_acceptable = generation.rouge_score >= 0.25;
+        let rouge_acceptable = generation.rouge_score >= self.config.rouge_acceptable_threshold;
         if failure == "soft" && (quality_acceptable || rouge_acceptable) {
             info!(
                 rouge = generation.rouge_score,
@@ -644,7 +803,7 @@ impl Pipeline {
         info!("About to lock learning mutex");
 
         // Wrap learning update in timeout to prevent hanging
-        let learning_result = tokio::time::timeout(Duration::from_secs(10), async {
+        let learning_result = tokio::time::timeout(Duration::from_secs(self.config.learning_timeout_secs), async {
             self.learning
                 .lock()
                 .await
@@ -669,7 +828,7 @@ impl Pipeline {
                 return Err(anyhow::anyhow!("Learning update failed: {}", e));
             }
             Err(_) => {
-                warn!("Learning update timed out after 10s - using default outcome");
+                warn!("Learning update timed out after {}s - using default outcome", self.config.learning_timeout_secs);
                 // Create a default learning outcome
                 LearningOutcome {
                     events: vec!["learning_timeout".to_string()],
@@ -751,7 +910,7 @@ impl Pipeline {
                 controller.record_feedback(curated_experience.quality_score, curated_experience.learned);
             }
             
-            let reward = generation.rouge_score * 0.5 + (1.0 - pad_state.entropy) * 0.5;
+            let reward = generation.rouge_score * self.config.reward_rouge_weight + (1.0 - pad_state.entropy) * self.config.reward_entropy_weight;
             if let Err(e) = self
                 .learning
                 .lock()
@@ -780,7 +939,7 @@ impl Pipeline {
         // Wrap upsert in timeout to prevent hanging
         info!("About to upsert memory with timeout");
         match tokio::time::timeout(
-            Duration::from_secs(5),
+            Duration::from_secs(self.config.memory_upsert_timeout_secs),
             self.erag.upsert_memory_with_cascade(
                 &embedding, // Use embedding directly, not experience_embedding which was moved
                 &pad_state,
@@ -796,7 +955,7 @@ impl Pipeline {
         {
             Ok(Ok(_)) => info!("Memory upserted successfully"),
             Ok(Err(e)) => warn!("Failed to upsert memory: {}", e),
-            Err(_) => warn!("Upsert memory timed out after 5s - continuing"),
+            Err(_) => warn!("Upsert memory timed out after {}s - continuing", self.config.memory_upsert_timeout_secs),
         }
         info!("After upsert");
 
@@ -884,7 +1043,8 @@ impl Pipeline {
         // INTEGRATION FIX: Handle healing state specially - enhance instead of retry
         if initial_failure == "none" && compass.is_healing {
             // In healing state with good topology - apply enhancement strategies
-            if topology.knot_complexity < 0.4 && topology.spectral_gap > 0.6 {
+            if topology.knot_complexity < self.config.pipeline_healing_knot_threshold 
+                && topology.spectral_gap > self.config.pipeline_healing_spectral_gap_threshold {
                 info!("Healing state detected with good topology - applying enhancement");
 
                 // Generate an enhanced version leveraging the good state
@@ -895,7 +1055,7 @@ impl Pipeline {
 
                 if let Ok(enhanced_str) = self
                     .generator
-                    .generate_with_params(&enhancement_prompt, 0.3, 0.95) // Low temp for stability
+                    .generate_with_params(&enhancement_prompt, self.config.enhancement_temperature, self.config.enhancement_top_p) // Low temp for stability
                     .await
                 {
                     // Wrap String in GenerationResult
@@ -1099,13 +1259,13 @@ impl Pipeline {
             // Re-evaluate failure with new metrics
             // OPTIMIZATION: Adjust ucb1_score based on ROUGE improvement to avoid infinite retry loops
             // If ROUGE improved significantly, boost ucb1 to reflect successful retry
-            let adjusted_ucb1 = if retry_gen.rouge_score > current_gen.rouge_score + 0.1 {
-                // ROUGE improved by >0.1, boost ucb1 to reflect success
-                ucb1_score.max(0.2).min(1.0)
-            } else if retry_count > 3 {
-                // After 3 retries, if we're still here but ROUGE is reasonable, relax ucb1 check
+            let adjusted_ucb1 = if retry_gen.rouge_score > current_gen.rouge_score + self.config.rouge_improvement_threshold {
+                // ROUGE improved by configured threshold, boost ucb1 to reflect success
+                ucb1_score.max(self.config.ucb1_boost_threshold).min(self.config.pipeline_ucb1_max_clamp)
+            } else if retry_count > self.config.retry_count_for_relaxation {
+                // After configured retry count, if we're still here but ROUGE is reasonable, relax ucb1 check
                 // This prevents infinite loops from stale ucb1_score
-                ucb1_score.max(0.15)
+                ucb1_score.max(self.config.ucb1_relaxation_threshold)
             } else {
                 ucb1_score
             };
@@ -1116,7 +1276,7 @@ impl Pipeline {
                 source.contains("fallback") || source.contains("mock")
             };
             let low_quality_hits = curated.promoted_tokens.len();
-            let retry_failure_signals = FailureSignals::evaluate(
+            let retry_failure_signals = FailureSignals::evaluate_with_thresholds(
                 retry_gen.rouge_score,
                 entropy_delta,
                 Some(adjusted_ucb1),
@@ -1125,6 +1285,7 @@ impl Pipeline {
                 retry_fallback,
                 oov_rate,
                 low_quality_hits,
+                &self.config.failure_signal_thresholds,
             );
             let failure = retry_failure_signals.severity().to_string();
             let _new_details = retry_failure_signals.summary();
@@ -1148,7 +1309,7 @@ impl Pipeline {
                 let exponent = ((retry_count.saturating_sub(1)) as u32).min(backoff_exponent_cap);
                 let multiplier = 1_u64 << exponent;
                 let delay_ms = (base_delay_ms * multiplier).min(backoff_cap_ms);
-                if delay_ms > 100 {
+                if delay_ms > self.config.delay_threshold_ms {
                     info!(
                         retry = retry_count,
                         delay_ms, "Backoff delay before next retry"
@@ -1196,10 +1357,10 @@ impl Pipeline {
 
         // TOPOLOGY INTEGRATION: Analyze quality with topological insights
         // Calculate base quality score based on output length, entropy, and topology
-        let base = 0.5f32;
-        let length_factor = (output.len().min(1000) as f32 / 1000.0) * 0.2;
-        let entropy_factor = if pad_state.entropy < 0.5 {
-            0.15f32
+        let base = self.config.quality_base_score;
+        let length_factor = (output.len().min(self.config.quality_max_length) as f32 / self.config.quality_max_length as f32) * self.config.quality_length_factor_weight;
+        let entropy_factor = if pad_state.entropy < self.config.quality_entropy_threshold {
+            self.config.quality_entropy_factor_weight
         } else {
             0.0f32
         };
@@ -1209,8 +1370,8 @@ impl Pipeline {
         let mut adjusted_quality = base_quality;
 
         // High knot complexity indicates tangled/complex reasoning - slight quality penalty
-        if topology.knot_complexity > 0.6 {
-            adjusted_quality *= 0.9;
+        if topology.knot_complexity > self.config.knot_complexity_penalty_threshold {
+            adjusted_quality *= self.config.knot_complexity_penalty_multiplier;
             info!(
                 "High knot complexity {:.3} - reducing quality",
                 topology.knot_complexity
@@ -1218,8 +1379,8 @@ impl Pipeline {
         }
 
         // High spectral gap indicates good exploration - quality bonus
-        if topology.spectral_gap > 0.7 {
-            adjusted_quality *= 1.1;
+        if topology.spectral_gap > self.config.spectral_gap_bonus_threshold {
+            adjusted_quality *= self.config.spectral_gap_bonus_multiplier;
             info!(
                 "High spectral gap {:.3} - boosting quality",
                 topology.spectral_gap
@@ -1227,13 +1388,13 @@ impl Pipeline {
         }
 
         // High Betti-1 indicates many loops/cycles - check if intentional
-        if topology.betti_numbers[1] > 3 {
+        if topology.betti_numbers[1] > self.config.betti1_quality_threshold {
             // In Discover quadrant, loops are good (exploration)
             if compass.quadrant == CompassQuadrant::Discover {
-                adjusted_quality *= 1.05;
+                adjusted_quality *= self.config.betti1_bonus_multiplier;
             } else {
                 // In other quadrants, too many loops might indicate confusion
-                adjusted_quality *= 0.95;
+                adjusted_quality *= self.config.betti1_penalty_multiplier;
             }
             info!(
                 "Betti-1={} affecting quality in {:?} quadrant",
@@ -1242,9 +1403,9 @@ impl Pipeline {
         }
 
         // Persistence entropy indicates structural stability
-        if topology.persistence_entropy < 0.3 {
+        if topology.persistence_entropy < self.config.persistence_entropy_quality_threshold {
             // Low entropy = stable structure = good quality
-            adjusted_quality *= 1.05;
+            adjusted_quality *= self.config.persistence_entropy_bonus_multiplier;
         }
 
         let mut quality_score = adjusted_quality.min(1.0).max(0.0);
@@ -1253,9 +1414,9 @@ impl Pipeline {
         let refinement_threshold = self.config.curator_quality_threshold;
 
         // Force refinement if topology shows problematic patterns
-        let topology_needs_refinement = topology.knot_complexity > 0.7  // Too tangled
-            || (topology.betti_numbers[1] > 5 && compass.quadrant != CompassQuadrant::Discover)  // Too many loops outside exploration
-            || topology.persistence_entropy > 0.8; // Too chaotic structure
+        let topology_needs_refinement = topology.knot_complexity > self.config.topology_refinement_knot_threshold  // Too tangled
+            || (topology.betti_numbers[1] > self.config.topology_refinement_betti1_threshold && compass.quadrant != CompassQuadrant::Discover)  // Too many loops outside exploration
+            || topology.persistence_entropy > self.config.topology_refinement_entropy_threshold; // Too chaotic structure
 
         let refinement_reason = if quality_score < refinement_threshold && topology_needs_refinement
         {
@@ -1287,7 +1448,7 @@ impl Pipeline {
 
                 match self
                     .generator
-                    .generate_with_params(&autonomy_prompt, 0.22, 0.82)
+                    .generate_with_params(&autonomy_prompt, self.config.autonomous_refinement_temperature, self.config.autonomous_refinement_top_p)
                     .await
                 {
                     Ok(autonomous_str) => {
@@ -1310,11 +1471,11 @@ impl Pipeline {
                             
                             if auto_improvement.is_finite() {
                                 quality_score = (quality_score
-                                    + (auto_improvement.clamp(0.0, 1.0) * 0.35) as f32)
+                                    + (auto_improvement.clamp(0.0, 1.0) * self.config.autonomous_refinement_improvement_weight) as f32)
                                     .min(1.0);
                             }
                             refined = candidate.to_string();
-                            learned = auto_improvement > 0.05;
+                            learned = auto_improvement > self.config.autonomous_refinement_improvement_threshold;
                             reason = format!(
                                 "auto_refine|improvement:{:.3}|mode:{}",
                                 auto_improvement,
@@ -1325,7 +1486,7 @@ impl Pipeline {
                                 }
                             );
 
-                            if auto_improvement < 0.25 {
+                            if auto_improvement < self.config.second_pass_refinement_threshold {
                                 let first_improvement = auto_improvement;
                                 let second_prompt = format!(
                                     "You are NIODOO's refinement overdrive. Further tighten the assistant reply so it is laser-focused, free of hedging, and emphasizes one actionable takeaway. Maintain constitutional tone and clear structure.\n\nPrompt:\n{input}\n\nCurrent Refinement:\n{refined}\n\nReturn only the upgraded response.",
@@ -1335,7 +1496,7 @@ impl Pipeline {
 
                                 match self
                                     .generator
-                                    .generate_with_params(&second_prompt, 0.28, 0.78)
+                                    .generate_with_params(&second_prompt, self.config.second_pass_refinement_temperature, self.config.second_pass_refinement_top_p)
                                     .await
                                 {
                                     Ok(second_pass_str) => {
@@ -1361,9 +1522,9 @@ impl Pipeline {
                                             {
                                                 refined = second_candidate.to_string();
                                                 auto_improvement = second_improvement;
-                                                learned = learned || auto_improvement > 0.05;
+                                                learned = learned || auto_improvement > self.config.autonomous_refinement_improvement_threshold;
                                                 quality_score = (quality_score
-                                                    + (second_improvement.clamp(0.0, 1.0) * 0.35)
+                                                    + (second_improvement.clamp(0.0, 1.0) * self.config.autonomous_refinement_improvement_weight)
                                                         as f32)
                                                     .min(1.0);
                                                 reason = format!(
@@ -1478,7 +1639,7 @@ impl Pipeline {
                                 result.reason
                             );
                             if result.learned {
-                                quality_score = (quality_score + 0.1).min(1.0);
+                                quality_score = (quality_score + self.config.pipeline_quality_score_increment).min(1.0);
                             }
                         }
                         Err(e) => {

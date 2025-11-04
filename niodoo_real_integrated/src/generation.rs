@@ -43,11 +43,16 @@ pub struct GenerationEngine {
     max_tokens: usize,
     mock_mode: bool,
     circuit_breaker: Arc<CircuitBreaker>,
+    client_timeout_secs: u64,
+    /// Config for generation parameters (optional, falls back to defaults if None)
+    config: Option<Arc<RwLock<RuntimeConfig>>>,
 }
 
 impl GenerationEngine {
     pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self> {
-        let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
+        let client = Client::builder()
+            .timeout(Duration::from_secs(60)) // Default timeout - should be configurable
+            .build()?;
         let circuit_breaker =
             Arc::new(CircuitBreaker::new("vllm", CircuitBreakerConfig::default()));
         Ok(Self {
@@ -59,6 +64,7 @@ impl GenerationEngine {
             max_tokens: 16,
             mock_mode: false,
             circuit_breaker,
+            client_timeout_secs: 60, // Default timeout for legacy constructor
         })
     }
 
@@ -169,7 +175,8 @@ impl GenerationEngine {
                 content: prompt,
             },
         ];
-        match timeout(Duration::from_secs(5), self.send_chat(messages)).await {
+        let timeout_secs = self.client_timeout_secs;
+        match timeout(Duration::from_secs(timeout_secs), self.send_chat(messages)).await {
             Ok(Ok(resp)) => Ok(resp),
             Ok(Err(error)) => {
                 warn!(
@@ -179,7 +186,11 @@ impl GenerationEngine {
                 Ok("Baseline response unavailable (timeout)".to_string())
             }
             Err(_) => {
-                warn!("baseline generation timed out after 5s; returning fallback text");
+                warn!(
+                    timeout_secs = timeout_secs,
+                    "baseline generation timed out after {}s; returning fallback text",
+                    timeout_secs
+                );
                 Ok("Baseline response unavailable (timeout)".to_string())
             }
         }
@@ -222,7 +233,8 @@ impl GenerationEngine {
                 content: prompt,
             },
         ];
-        let response = match timeout(Duration::from_secs(5), self.send_chat(messages)).await {
+        let timeout_secs = self.client_timeout_secs;
+        let response = match timeout(Duration::from_secs(timeout_secs), self.send_chat(messages)).await {
             Ok(Ok(resp)) => resp,
             Ok(Err(error)) => {
                 warn!(
@@ -234,7 +246,9 @@ impl GenerationEngine {
             Err(_) => {
                 warn!(
                     lens,
-                    "lens generation timed out after 5s; returning fallback text"
+                    timeout_secs = timeout_secs,
+                    "lens generation timed out after {}s; returning fallback text",
+                    timeout_secs
                 );
                 "Lens response unavailable (timeout)".to_string()
             }
@@ -349,7 +363,7 @@ impl GenerationEngine {
             .client
             .post(&endpoint_url)
             .json(&payload)
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(self.client_timeout_secs))
             .send()
             .await
             .with_context(|| {
@@ -448,8 +462,9 @@ impl GenerationEngine {
         model: &str,
         max_tokens: usize,
         _consistency_variance_threshold: f64,
+        client_timeout_secs: u64,
     ) -> Result<Self> {
-        let client = Client::builder().timeout(Duration::from_secs(60)).build()?;
+        let client = Client::builder().timeout(Duration::from_secs(client_timeout_secs)).build()?;
 
         // DEBUG: Log input model ID
         info!("GenerationEngine::new_with_config called with model={}", model);
@@ -499,6 +514,7 @@ impl GenerationEngine {
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
             circuit_breaker,
+            client_timeout_secs,
         })
     }
 
@@ -551,19 +567,46 @@ impl GenerationEngine {
     }
 
     /// Generate with consistency voting
+    /// Generates three candidate responses with varying temperature/top_p and selects best via ROUGE
     pub async fn generate_with_consistency(
         &self,
-        _tokenizer: &crate::token_manager::TokenizerOutput,
+        tokenizer: &crate::token_manager::TokenizerOutput,
         _compass: &crate::compass::CompassOutcome,
     ) -> Result<ConsistencyVotingResult> {
-        // Stub implementation
+        use crate::util::rouge_l;
+        
+        let start = std::time::Instant::now();
+        let prompt = &tokenizer.augmented_prompt;
+        
+        // Generate three candidates with different sampling parameters for diversity
+        let candidate_1 = self.generate_with_params(prompt, self.temperature, self.top_p).await?;
+        let candidate_2 = self.generate_with_params(prompt, self.temperature * 0.9, self.top_p * 0.95).await?;
+        let candidate_3 = self.generate_with_params(prompt, self.temperature * 1.1, self.top_p * 1.05).await?;
+        
+        // Compute ROUGE-L scores against the prompt as reference
+        let rouge_1 = rouge_l(prompt, &candidate_1);
+        let rouge_2 = rouge_l(prompt, &candidate_2);
+        let rouge_3 = rouge_l(prompt, &candidate_3);
+        
+        let rouge_scores = vec![rouge_1, rouge_2, rouge_3];
+        
+        // Select winner: highest ROUGE score, or first candidate if all equal
+        let winner_index = rouge_scores
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(idx, _)| idx)
+            .unwrap_or(0);
+        
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        
         Ok(ConsistencyVotingResult {
-            candidate_1: "Stub response 1".to_string(),
-            candidate_2: "Stub response 2".to_string(),
-            candidate_3: "Stub response 3".to_string(),
-            rouge_scores: vec![0.5, 0.5, 0.5],
-            latency_ms: 0.0,
-            winner_index: 0,
+            candidate_1,
+            candidate_2,
+            candidate_3,
+            rouge_scores,
+            latency_ms,
+            winner_index,
         })
     }
 
@@ -721,15 +764,35 @@ impl GenerationEngine {
     }
 
     /// Retry generation with reflexion-style prompt repair.
-    pub async fn reflexion_retry(
+    pub fn set_config(&mut self, config: Arc<RwLock<RuntimeConfig>>) {
+        self.config = Some(config);
+    }
+
+    pub fn reflexion_retry(
         &self,
         prompt: &str,
         baseline_rouge: f64,
         details: &str,
     ) -> Result<String> {
+        let temp_base_multiplier = self.config.as_ref()
+            .map(|c| c.read().generation_reflexion_temp_base_multiplier)
+            .unwrap_or(0.7);
+        let temp_stability_multiplier = self.config.as_ref()
+            .map(|c| c.read().generation_reflexion_temp_stability_multiplier)
+            .unwrap_or(0.3);
+        let top_p_increment = self.config.as_ref()
+            .map(|c| c.read().generation_reflexion_top_p_increment)
+            .unwrap_or(0.05);
+        let top_p_stability_increment = self.config.as_ref()
+            .map(|c| c.read().generation_reflexion_top_p_stability_increment)
+            .unwrap_or(0.2);
+        let top_p_max = self.config.as_ref()
+            .map(|c| c.read().generation_reflexion_top_p_max)
+            .unwrap_or(0.99);
+        
         let stability = 1.0_f64 - baseline_rouge.clamp(0.0, 1.0);
-        let temperature = (self.temperature * 0.7) + (0.3 * stability);
-        let top_p = (self.top_p + 0.05 + (0.2 * stability)).min(0.99);
+        let temperature = (self.temperature * temp_base_multiplier) + (temp_stability_multiplier * stability);
+        let top_p = (self.top_p + top_p_increment + (top_p_stability_increment * stability)).min(top_p_max);
         let reflexion_prompt = format!(
             "{prompt}\n\n[Context]\nPrior attempt struggled because: {details}. Improve the response with clear reasoning, explicit decisions, and emotionally grounded alignment.]"
         );
@@ -760,10 +823,19 @@ impl GenerationEngine {
             );
         }
 
-        let temperature = (self.temperature * 0.6) + (0.1 * iteration as f64);
-        let top_p = (self.top_p + 0.05).min(0.98);
+        let guard = self.config.read();
+        let temp_base_multiplier = guard.generation_cot_repair_temp_base_multiplier;
+        let temp_iteration_increment = guard.generation_cot_repair_temp_iteration_increment;
+        let top_p_increment = guard.generation_cot_repair_top_p_increment;
+        let top_p_max = guard.generation_cot_repair_top_p_max;
+        let temp_min = guard.generation_cot_repair_temp_min;
+        let temp_max = guard.generation_cot_repair_temp_max;
+        drop(guard);
+
+        let temperature = (self.temperature * temp_base_multiplier) + (temp_iteration_increment * iteration as f64);
+        let top_p = (self.top_p + top_p_increment).min(top_p_max);
         let repaired = self
-            .generate_with_params(&repair_prompt, temperature.clamp(0.1, 1.2), top_p)
+            .generate_with_params(&repair_prompt, temperature.clamp(temp_min, temp_max), top_p)
             .await?;
 
         let latency_ms = start.elapsed().as_secs_f64() * 1000.0;

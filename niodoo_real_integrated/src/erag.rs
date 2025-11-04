@@ -94,6 +94,8 @@ pub struct EragClient {
     optimized_erag: bool,
     /// Phase 4.3: GPU fitness calculator (optional)
     pub gpu_fitness_calculator: Option<Arc<crate::gpu_fitness::GPUMemoryFitnessCalculator>>,
+    /// Config for ERAG parameters (optional, falls back to defaults if None)
+    config: Option<Arc<RwLock<RuntimeConfig>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +223,7 @@ impl EragClient {
             batch_flush_ms,
             optimized_erag,
             gpu_fitness_calculator: gpu_calculator, // Phase 4.3: Store GPU calculator
+            config: None,
         };
 
         // Start background flush task if batching is enabled
@@ -379,8 +382,14 @@ impl EragClient {
             for (mem, sim) in memories.iter_mut().zip(sims.iter_mut()) {
                 if let Some(stage) = mem.cascade_stage {
                     if stage == preferred {
-                        // Boost similarity score by 20% for cascade-aligned memories
-                        *sim = (*sim * 1.2).min(1.0);
+                        // Boost similarity score by configurable multiplier for cascade-aligned memories
+                        let boost_multiplier = self.config.as_ref()
+                            .map(|c| c.read().erag_similarity_boost_multiplier)
+                            .unwrap_or(1.2);
+                        let boost_max = self.config.as_ref()
+                            .map(|c| c.read().erag_similarity_boost_max)
+                            .unwrap_or(1.0);
+                        *sim = (*sim * boost_multiplier).min(boost_max);
                     }
                 }
             }
@@ -1085,13 +1094,109 @@ impl EragClient {
         Ok(experiences)
     }
 
-    /// Query tough knots
-    pub async fn query_tough_knots(&self, limit: usize) -> Result<Vec<EragMemory>> {
-        // Stub implementation - returns empty vector
-        Ok(Vec::new())
+    /// Query tough knots - memories with high knot complexity or low curator quality
+    /// Used for anti-forgetting training to focus on difficult cases
+    /// 
+    /// # Parameters
+    /// - `limit`: Maximum number of tough memories to return
+    /// - `multiplier`: Fetch multiplier (fetch limit * multiplier samples to filter from)
+    /// - `max_fetch`: Maximum fetch size cap (prevents excessive queries)
+    /// - `knot_threshold`: Knot complexity threshold (memories with complexity > threshold are considered tough)
+    /// - `quality_threshold`: Curator quality threshold (memories with quality < threshold are considered tough)
+    /// - `knot_multiplier`: Multiplier for knot complexity in toughness score calculation
+    pub async fn query_tough_knots(
+        &self,
+        limit: usize,
+        multiplier: usize,
+        max_fetch: usize,
+        knot_threshold: f64,
+        quality_threshold: f64,
+        knot_multiplier: f64,
+    ) -> Result<Vec<EragMemory>> {
+        // Validate parameters
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        if multiplier == 0 {
+            return Err(anyhow!("query_tough_knots: multiplier must be > 0"));
+        }
+        if max_fetch == 0 {
+            return Err(anyhow!("query_tough_knots: max_fetch must be > 0"));
+        }
+        if !knot_threshold.is_finite() || knot_threshold < 0.0 {
+            return Err(anyhow!("query_tough_knots: knot_threshold must be finite and >= 0.0"));
+        }
+        if !quality_threshold.is_finite() || quality_threshold < 0.0 || quality_threshold > 1.0 {
+            return Err(anyhow!("query_tough_knots: quality_threshold must be finite and in [0.0, 1.0]"));
+        }
+        if !knot_multiplier.is_finite() || knot_multiplier < 0.0 {
+            return Err(anyhow!("query_tough_knots: knot_multiplier must be finite and >= 0.0"));
+        }
+        
+        // Fetch a larger sample to filter from
+        let max_fetch_calc = (limit.max(1) * multiplier).min(max_fetch);
+        let search_points = self
+            .search_points_with_vector(vec![0.0; self.vector_dim], max_fetch_calc, None, true)
+            .await?;
+
+        let mut tough_memories: Vec<(EragMemory, f64)> = search_points
+            .into_iter()
+            .filter_map(|point| {
+                let memory = scored_point_to_experience(&point, self.vector_dim)?;
+                
+                // Extract knot complexity and curator quality from payload
+                // Fallback to fitness score if available (lower fitness = tougher)
+                let knot_complexity = point.payload
+                    .get("knot_complexity")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                
+                let curator_quality = point.payload
+                    .get("curator_quality")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or_else(|| {
+                        // Fallback: use fitness score if available (lower = tougher)
+                        if let Some(ref meta) = memory.weighted_metadata {
+                            meta.fitness_score as f64
+                        } else {
+                            1.0 // Default to assuming good quality if unknown
+                        }
+                    });
+                
+                // Calculate toughness score: high knot complexity OR low curator quality
+                let toughness_score = if knot_complexity > knot_threshold || curator_quality < quality_threshold {
+                    // Prioritize memories with both high knot complexity AND low quality
+                    knot_complexity * knot_multiplier + (1.0 - curator_quality)
+                } else {
+                    0.0
+                };
+                
+                if toughness_score > 0.0 {
+                    Some((memory, toughness_score))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Sort by toughness score (highest first)
+        tough_memories.sort_by(|(_, a), (_, b)| {
+            b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        // Return top limit memories
+        let result: Vec<EragMemory> = tough_memories
+            .into_iter()
+            .take(limit)
+            .map(|(memory, _)| memory)
+            .collect();
+        
+        Ok(result)
     }
 
     /// Store failure case
+    /// Stores failure metadata to Qdrant for analysis and anti-forgetting training
+    /// Uses zero vector for embedding since failures don't have proper context/embedding
     pub async fn store_failure(
         &self,
         input: &str,
@@ -1100,17 +1205,119 @@ impl EragClient {
         failure_type: &str,
         retry_count: u32,
     ) -> Result<()> {
-        // Store failure memory with weighted metadata
-        // For now, just log - full implementation would store to Qdrant
-        tracing::warn!(
-            input = %input,
-            output = %output,
-            failure_type = %failure_type,
-            retry_count = retry_count,
-            details = ?details,
-            "Storing failure case"
+        // Create a zero vector for failures (they don't have proper embeddings)
+        // This ensures failures don't interfere with similarity search
+        let failure_vector = vec![0.0f32; self.vector_dim];
+        
+        // Create minimal PAD state for failure (neutral state)
+        let pad_state = PadGhostState {
+            pad: [0.0, 0.0, 0.0],
+            mu: [0.0, 0.0, 0.0],
+            sigma: [0.0, 0.0, 0.0],
+            entropy: 0.0,
+        };
+        
+        // Create minimal compass state for failure
+        let compass = CompassOutcome {
+            quadrant: crate::compass::CompassQuadrant::Panic, // Failures map to Panic quadrant
+            entropy: 0.0,
+            is_threat: true,
+            is_healing: false,
+            pad_state: pad_state.clone(),
+            mcts_branches: vec![],
+            cascade_stage: None,
+        };
+        
+        // Create failure memory with metadata
+        let failure_context = if let Some(details) = details {
+            vec![format!("Failure type: {}", failure_type), format!("Retry count: {}", retry_count), details]
+        } else {
+            vec![format!("Failure type: {}", failure_type), format!("Retry count: {}", retry_count)]
+        };
+        
+        let memory = EragMemory {
+            input: input.to_string(),
+            output: output.to_string(),
+            emotional_vector: EmotionalVector::from_pad(&pad_state),
+            erag_context: failure_context,
+            entropy_before: 0.0,
+            entropy_after: 0.0,
+            timestamp: Utc::now().to_rfc3339(),
+            compass_state: Some("Failure".to_string()),
+            cascade_stage: None,
+            weighted_metadata: Some(initialize_memory_metadata(&pad_state, 0.0)),
+        };
+        
+        let mut payload = encode_payload(&memory);
+        // Add failure-specific metadata
+        payload.insert("failure_type".to_string(), JsonValue::String(failure_type.to_string()));
+        payload.insert("retry_count".to_string(), JsonValue::from(retry_count as u64));
+        payload.insert("is_failure".to_string(), JsonValue::Bool(true));
+        
+        // Convert payload to Qdrant Payload format
+        let mut qdrant_payload = Payload::new();
+        for (k, v) in payload {
+            match v {
+                JsonValue::String(s) => qdrant_payload.insert(k, s),
+                JsonValue::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        qdrant_payload.insert(k, i);
+                    } else if let Some(f) = n.as_f64() {
+                        qdrant_payload.insert(k, f);
+                    } else {
+                        qdrant_payload.insert(k, n.to_string());
+                    }
+                }
+                JsonValue::Bool(b) => qdrant_payload.insert(k, b),
+                JsonValue::Array(arr) => {
+                    let strs: Vec<String> = arr
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+                    if !strs.is_empty() {
+                        qdrant_payload.insert(k, strs);
+                    } else {
+                        qdrant_payload.insert(k, arr.iter().map(|v| v.to_string()).collect::<Vec<_>>());
+                    }
+                }
+                _ => qdrant_payload.insert(k, v.to_string()),
+            }
+        }
+        
+        let point = PointStruct::new(
+            uuid::Uuid::new_v4().to_string(),
+            failure_vector,
+            qdrant_payload,
         );
-        Ok(())
+        
+        // Store failure immediately (don't batch failures)
+        match self
+            .circuit_breaker
+            .call(|| async {
+                self.client
+                    .upsert_points(self.collection.clone(), None, vec![point], None)
+                    .await
+                    .map_err(|e| anyhow!("failed to store failure case: {}", e))
+            })
+            .await
+        {
+            Ok(_) => {
+                info!(
+                    failure_type = %failure_type,
+                    retry_count = retry_count,
+                    "Stored failure case to Qdrant"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                warn!(
+                    error = %e,
+                    failure_type = %failure_type,
+                    "Failed to store failure case to Qdrant"
+                );
+                Err(e)
+            }
+        }
     }
 
     /// Check collection info and index health (Phase 1.4)
@@ -1402,6 +1609,7 @@ impl Clone for EragClient {
             batch_flush_ms: self.batch_flush_ms,
             optimized_erag: self.optimized_erag,
             gpu_fitness_calculator: self.gpu_fitness_calculator.clone(), // Phase 4.3: Clone GPU calculator
+            config: self.config.clone(),
         }
     }
 }

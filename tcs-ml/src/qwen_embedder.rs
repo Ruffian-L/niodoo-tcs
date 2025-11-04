@@ -65,11 +65,31 @@ impl QwenEmbedder {
             // Try CUDA execution provider - if it fails or hangs, fallback to CPU
             // The timeout wrapper in QwenStatefulEmbedder will catch hangs
             let mut cuda_options = CUDAExecutionProviderOptions::default();
+            // RTX 5090 optimization: Use much higher GPU memory limit (4GB+)
+            // Check hardware profile from environment
+            let default_mem_limit_mb = if std::env::var("HARDWARE")
+                .ok()
+                .map(|v| v.to_lowercase())
+                .map(|v| v.contains("5090") || v.contains("rtx5090"))
+                .unwrap_or(false)
+            {
+                4096 // RTX 5090: 4GB for embeddings
+            } else if std::env::var("HARDWARE")
+                .ok()
+                .map(|v| v.to_lowercase())
+                .map(|v| v.contains("h200"))
+                .unwrap_or(false)
+            {
+                2048 // H200: 2GB
+            } else {
+                512 // Default conservative
+            };
+            
             let gpu_mem_limit_mb = std::env::var("QWEN_CUDA_MEM_LIMIT_MB")
                 .ok()
                 .and_then(|raw| raw.parse::<usize>().ok())
                 .filter(|&mb| mb > 0)
-                .unwrap_or(512);
+                .unwrap_or(default_mem_limit_mb);
             cuda_options.gpu_mem_limit = gpu_mem_limit_mb * 1024 * 1024;
 
             match session_builder

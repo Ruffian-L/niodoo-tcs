@@ -140,7 +140,7 @@ fn compute_pad_variance(pad_state: &PadGhostState) -> f64 {
 }
 
 /// Compute topological consistency based on knot complexity and entropy alignment
-fn compute_topological_consistency(
+pub fn compute_topological_consistency(
     topology: &TopologicalSignature,
     pad_state: &PadGhostState,
 ) -> f64 {
@@ -171,7 +171,7 @@ fn compute_topological_consistency(
 }
 
 /// Compute ERAG relevance based on retrieval similarity scores
-fn compute_erag_relevance(collapse: &CollapseResult) -> f64 {
+pub fn compute_erag_relevance(collapse: &CollapseResult) -> f64 {
     // High average similarity = good retrieval = consonance
     // If no hits, low relevance
     if collapse.top_hits.is_empty() {
@@ -189,7 +189,7 @@ fn compute_erag_relevance(collapse: &CollapseResult) -> f64 {
 }
 
 /// Compute compass transition smoothness
-fn compute_compass_transition(
+pub fn compute_compass_transition(
     compass: &CompassOutcome,
     last_compass: Option<&CompassOutcome>,
 ) -> f64 {
@@ -229,7 +229,7 @@ fn compute_compass_transition(
 }
 
 /// Compute confidence in consonance score based on source agreement
-fn compute_confidence(sources: &[ConsonanceSource]) -> f64 {
+pub fn compute_confidence(sources: &[ConsonanceSource]) -> f64 {
     if sources.is_empty() {
         return 0.0;
     }

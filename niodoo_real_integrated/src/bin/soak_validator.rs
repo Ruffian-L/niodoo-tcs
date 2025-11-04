@@ -229,12 +229,11 @@ async fn main() -> Result<()> {
     // Load environment
     niodoo_real_integrated::config::prime_environment();
 
-    // Override env vars for gRPC + vLLM curator
-    unsafe {
-        std::env::set_var("QDRANT_USE_GRPC", "true");
-        std::env::set_var("CURATOR_BACKEND", "vllm");
-        std::env::set_var("ENABLE_CURATOR", "true");
-    }
+    // Override env vars for gRPC + vLLM curator using safe set_env_override
+    // This uses the thread-safe environment override system instead of unsafe set_var
+    niodoo_real_integrated::config::set_env_override("QDRANT_USE_GRPC", "true");
+    niodoo_real_integrated::config::set_env_override("CURATOR_BACKEND", "vllm");
+    niodoo_real_integrated::config::set_env_override("ENABLE_CURATOR", "true");
 
     info!(
         threads = args.num_threads,
@@ -246,10 +245,8 @@ async fn main() -> Result<()> {
     // Create output directory
     std::fs::create_dir_all(&args.output_dir).context("Failed to create output directory")?;
 
-    // Set topology mode via environment
-    unsafe {
-        std::env::set_var("TOPOLOGY_MODE", "hybrid");
-    }
+    // Set topology mode via safe environment override
+    niodoo_real_integrated::config::set_env_override("TOPOLOGY_MODE", "hybrid");
 
     // Initialize pipeline (shared across threads)
     let cli_args = CliArgs {

@@ -175,11 +175,61 @@ impl Pipeline {
             info!("Initializing torus pad mapper with entropy seed");
             TorusSeedStrategy::Random
         };
-        let compass = Arc::new(AsyncMutex::new(CompassEngine::new(
-            thresholds.mcts_c,
-            thresholds.variance_spike,
-            thresholds.variance_stagnation,
-        )));
+        let compass = {
+            use crate::compass::CompassConfig;
+            let compass_config = CompassConfig {
+                h1_persistence_divisor: config.compass_h1_persistence_divisor,
+                h1_penalty_scale: config.compass_h1_penalty_scale,
+                sheaf_energy_threshold: config.compass_sheaf_energy_threshold,
+                sheaf_boost_multiplier: config.compass_sheaf_boost_multiplier,
+                dominance_penalty_multiplier: config.compass_dominance_penalty_multiplier,
+                dominance_boost_multiplier: config.compass_dominance_boost_multiplier,
+                arousal_penalty_multiplier: config.compass_arousal_penalty_multiplier,
+                random_noise_range: config.compass_random_noise_range,
+                pleasure_boost_probability: config.compass_pleasure_boost_probability,
+                pleasure_boost_multiplier: config.compass_pleasure_boost_multiplier,
+                base_threat_arousal_threshold: config.compass_base_threat_arousal_threshold,
+                variance_spike_multiplier: config.compass_variance_spike_multiplier,
+                random_threat_probability: config.compass_random_threat_probability,
+                random_threat_arousal_threshold: config.compass_random_threat_arousal_threshold,
+                random_threat_pleasure_threshold: config.compass_random_threat_pleasure_threshold,
+                healing_pleasure_threshold: config.compass_healing_pleasure_threshold,
+                healing_dominance_threshold: config.compass_healing_dominance_threshold,
+                quadrant_panic_pleasure_threshold: config.compass_quadrant_panic_pleasure_threshold,
+                quadrant_panic_arousal_threshold: config.compass_quadrant_panic_arousal_threshold,
+                quadrant_persist_arousal_threshold: config.compass_quadrant_persist_arousal_threshold,
+                reward_panic_to_discover: config.compass_reward_panic_to_discover,
+                reward_panic_to_persist: config.compass_reward_panic_to_persist,
+                reward_panic_to_master: config.compass_reward_panic_to_master,
+                reward_master_to_panic: config.compass_reward_master_to_panic,
+                reward_default: config.compass_reward_default,
+                reward_entropy_multiplier: config.compass_reward_entropy_multiplier,
+                mcts_h1_bonus_cap: config.compass_mcts_h1_bonus_cap,
+                mcts_h1_bonus_multiplier: config.compass_mcts_h1_bonus_multiplier,
+                mcts_persistence_divisor: config.compass_mcts_persistence_divisor,
+                mcts_persistence_multiplier: config.compass_mcts_persistence_multiplier,
+                mcts_knot_multiplier: config.compass_mcts_knot_multiplier,
+                mcts_knot_multiplier_cap: config.compass_mcts_knot_multiplier_cap,
+                mcts_knot_weight: config.compass_mcts_knot_weight,
+                mcts_gap_multiplier: config.compass_mcts_gap_multiplier,
+                mcts_entropy_multiplier: config.compass_mcts_entropy_multiplier,
+                mcts_entropy_multiplier_cap: config.compass_mcts_entropy_multiplier_cap,
+                mcts_entropy_weight: config.compass_mcts_entropy_weight,
+                mcts_h0_bonus_cap: config.compass_mcts_h0_bonus_cap,
+                mcts_h0_bonus_multiplier: config.compass_mcts_h0_bonus_multiplier,
+                mcts_default_exploration_base: config.compass_mcts_default_exploration_base,
+                mcts_default_exploration_divisor: config.compass_mcts_default_exploration_divisor,
+                cascade_min_consonance: config.compass_cascade_min_consonance,
+                cascade_recognition_satisfaction_consonance: config.compass_cascade_recognition_satisfaction_consonance,
+                cascade_calm_motivation_consonance: config.compass_cascade_calm_motivation_consonance,
+            };
+            Arc::new(AsyncMutex::new(CompassEngine::new_with_config(
+                thresholds.mcts_c,
+                thresholds.variance_spike,
+                thresholds.variance_stagnation,
+                compass_config,
+            )))
+        };
 
         // Optional embedded Qdrant startup (spawns Qdrant as child process)
         #[cfg(feature = "embedded-qdrant")]
@@ -261,6 +311,7 @@ impl Pipeline {
             &config.vllm_model,
             config.generation_max_tokens,
             config.consistency_variance_threshold,
+            config.generation_client_timeout_secs,
         )?;
         info!(model = %config.vllm_model, endpoint = %config.vllm_endpoint, "Initialized GenerationEngine with vLLM model");
         generator.set_mock_mode(config.mock_mode);
@@ -272,7 +323,7 @@ impl Pipeline {
         // Phase 4.2: Initialize curator feedback controller
         let curator_feedback = Arc::new(AsyncMutex::new(CuratorFeedbackController::new(
             config.curator_quality_threshold,
-            20, // window_size: track last 20 curator responses
+            &config,
         )));
 
         let erag_arc = Arc::new(erag.clone());
@@ -331,17 +382,22 @@ impl Pipeline {
         };
 
         let embedding_cache = PipelineCache::new(
-            NonZeroUsize::new(1000).unwrap(),
+            NonZeroUsize::new(config.embedding_cache_capacity.max(1))
+                .ok_or_else(|| anyhow::anyhow!("embedding_cache_capacity must be > 0"))?,
             Duration::from_secs(config.embedding_cache_ttl_secs),
         );
         let collapse_cache = PipelineCache::new(
-            NonZeroUsize::new(500).unwrap(),
+            NonZeroUsize::new(config.collapse_cache_capacity.max(1))
+                .ok_or_else(|| anyhow::anyhow!("collapse_cache_capacity must be > 0"))?,
             Duration::from_secs(config.collapse_cache_ttl_secs),
         );
 
-        let topology_analyzer = Arc::new(TopologyMemoryAnalyzer::new(0.3));
+        let topology_analyzer = Arc::new(TopologyMemoryAnalyzer::new(config.topology_memory_analyzer_threshold));
         let consolidation_manager = Arc::new(AsyncMutex::new(MemoryConsolidationManager::new()));
-        let mcts_daydreamer = Arc::new(MctsDaydreamer::new(1.414, 5)); // sqrt(2) exploration, depth 5
+        let mcts_daydreamer = Arc::new(MctsDaydreamer::new(
+            config.mcts_exploration_constant,
+            config.mcts_depth,
+        ));
 
         // Create discovery queue for async processing
         let (discovery_tx, mut discovery_rx) = tokio::sync::mpsc::unbounded_channel::<Discovery>();
@@ -359,7 +415,7 @@ impl Pipeline {
                     discovery = discovery_rx.recv() => {
                         if let Some(disc) = discovery {
                             discovery_buffer.push(disc);
-                            if discovery_buffer.len() >= 10 {
+                            if discovery_buffer.len() >= config.discovery_buffer_threshold {
                                 // Process batch
                                 for disc in discovery_buffer.drain(..) {
                                     weight_evolver_clone.register_discovery(disc).await;
@@ -367,7 +423,7 @@ impl Pipeline {
                             }
                         }
                     }
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                    _ = tokio::time::sleep(Duration::from_secs(config.discovery_buffer_interval_secs)) => {
                         // Process remaining discoveries every second
                         if !discovery_buffer.is_empty() {
                             for disc in discovery_buffer.drain(..) {
@@ -383,7 +439,7 @@ impl Pipeline {
         let gpu_fitness_calc_clone = gpu_fitness_calc.clone();
         let erag_refresh = erag_arc.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            let mut interval = tokio::time::interval(Duration::from_secs(config.gpu_fitness_refresh_interval_secs));
             loop {
                 interval.tick().await;
                 if let Some(ref calc) = gpu_fitness_calc_clone {
@@ -446,14 +502,14 @@ impl Pipeline {
     ) {
         match param {
             "temperature" => {
-                config.temperature = (config.temperature + delta).clamp(0.1, 1.0);
+                config.temperature = (config.temperature + delta).clamp(config.pipeline_param_min, config.pipeline_param_max);
             }
             "top_p" => {
-                config.top_p = (config.top_p + delta).clamp(0.1, 1.0);
+                config.top_p = (config.top_p + delta).clamp(config.pipeline_param_min, config.pipeline_param_max);
             }
             "retrieval_top_k" => {
                 let updated =
-                    (config.phase2_retrieval_top_k_increment as f64 + delta).clamp(0.0, 10.0);
+                    (config.phase2_retrieval_top_k_increment as f64 + delta).clamp(config.pipeline_retrieval_top_k_increment_min, config.pipeline_retrieval_top_k_increment_max);
                 config.phase2_retrieval_top_k_increment = updated.round() as i32;
             }
             _ => {
@@ -758,6 +814,30 @@ fn baseline_topological_signature(
 
     let computation_time_ms = analysis_start.elapsed().as_secs_f64() * 1000.0;
 
+    // Compute Euler characteristic: χ = β₀ - β₁ + β₂
+    let euler_characteristic = betti0 as f64 - betti1 as f64 + betti2 as f64;
+
+    // Compute persistence metrics from persistence_features
+    let persistence_deltas: Vec<f64> = persistence_features
+        .iter()
+        .map(|pf| (pf.death as f64 - pf.birth as f64).max(0.0))
+        .collect();
+    
+    let total_persistence = persistence_deltas.iter().sum::<f64>();
+    let max_persistence = persistence_deltas.iter().copied().fold(0.0, f64::max);
+    let mean_persistence = if persistence_deltas.is_empty() {
+        0.0
+    } else {
+        total_persistence / persistence_deltas.len() as f64
+    };
+
+    // Laplacian spectral radius: maximum eigenvalue from spectral_basis
+    let laplacian_spectral_radius = if spectral_basis.is_empty() {
+        0.0
+    } else {
+        spectral_basis[0]
+    };
+
     TopologicalSignature::new(
         persistence_features,
         [betti0, betti1, betti2],
@@ -768,10 +848,10 @@ fn baseline_topological_signature(
         computation_time_ms,
         persistence_entropy,
         spectral_gap,
-        0.0, // euler_characteristic - placeholder
-        0.0, // total_persistence - placeholder
-        0.0, // max_persistence - placeholder
-        0.0, // mean_persistence - placeholder
-        0.0, // laplacian_spectral_radius - placeholder
+        euler_characteristic,
+        total_persistence,
+        max_persistence,
+        mean_persistence,
+        laplacian_spectral_radius,
     )
 }

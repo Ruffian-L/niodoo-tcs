@@ -243,7 +243,10 @@ impl LearningLoop {
             evolution: EvolutionLoop::new(20, 5, 0.05, rng_seed),
             predictor: TcsPredictor::new(), // FIXED: Removed underscore
             lora_trainer: Arc::clone(&lora_trainer),
-            reward_threshold: -0.5,
+            reward_threshold: {
+                let guard = config.read();
+                guard.learning_reward_threshold
+            },
             tokenizer: Some(tokenizer.clone()),
             curated_buffer: Vec::new(),
             lora_epochs,
@@ -445,7 +448,7 @@ impl LearningLoop {
         self.predictor
             .update(topology, reward - predicted_reward_delta, performance);
 
-        // Every 5 episodes, run Reptile and check QLoRA trigger
+        // Every N episodes, run Reptile and check QLoRA trigger
         // Skip QLoRA training in soak test mode for performance
         let skip_qlora = std::env::var("SKIP_QLORA_TRAINING")
             .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
@@ -457,9 +460,26 @@ impl LearningLoop {
             .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
             .unwrap_or(false);
 
-        if self.episode_count % 5 == 0 {
-            self.reptile_step(32).await?;
-            if !skip_qlora && self.average_reward() < 0.0 {
+        let reptile_interval = {
+            let guard = self.config.read();
+            guard.learning_reptile_episode_interval
+        };
+        let reptile_batch_size = {
+            let guard = self.config.read();
+            guard.learning_reptile_batch_size
+        };
+        let qlora_low_reward_threshold = {
+            let guard = self.config.read();
+            guard.learning_qlora_low_reward_threshold
+        };
+        let qlora_sample_count = {
+            let guard = self.config.read();
+            guard.learning_qlora_sample_count
+        };
+
+        if self.episode_count % reptile_interval == 0 {
+            self.reptile_step(reptile_batch_size).await?;
+            if !skip_qlora && self.average_reward() < qlora_low_reward_threshold {
                 if run_qlora_async {
                     // Background training: collect data, then spawn blocking task
                     let erag_clone = self.erag.clone();
@@ -469,7 +489,7 @@ impl LearningLoop {
 
                     tokio::spawn(async move {
                         // Collect low-reward tuples (async)
-                        let _low_tuples = match erag_clone.query_low_reward_tuples(-0.5, 16).await {
+                        let _low_tuples = match erag_clone.query_low_reward_tuples(qlora_low_reward_threshold, qlora_sample_count).await {
                             Ok(tuples) => tuples,
                             Err(e) => {
                                 warn!(%e, "Failed to query low-reward tuples for background QLoRA");
@@ -540,8 +560,12 @@ impl LearningLoop {
             self.decay_schedules();
         }
 
-        // Phase 5.2: Evolution step every 50 episodes
-        if self.episode_count % 50 == 0 {
+        // Phase 5.2: Evolution step every N episodes
+        let evolution_interval = {
+            let guard = self.config.read();
+            guard.learning_evolution_episode_interval
+        };
+        if self.episode_count % evolution_interval == 0 {
             self.evolution_step().await?;
         }
 
@@ -820,7 +844,10 @@ impl LearningLoop {
     }
 
     fn record_executor_experience(&mut self, experience: &Experience) {
-        if self.executor_memory.len() >= EXECUTOR_MEMORY_LIMIT {
+        if self.executor_memory.len() >= {
+            let guard = self.config.read();
+            guard.learning_executor_memory_limit
+        } {
             self.executor_memory.pop_front();
         }
         self.executor_memory.push_back(experience.clone());
@@ -849,7 +876,10 @@ impl LearningLoop {
             .collect::<HashSet<_>>()
             .len();
 
-        let clusters = Self::cluster_executor_experiences(&snapshot, EXECUTOR_CLUSTER_THRESHOLD);
+        let clusters = Self::cluster_executor_experiences(&snapshot, {
+            let guard = self.config.read();
+            guard.learning_executor_cluster_threshold
+        });
         if clusters.is_empty() {
             info!(
                 memory = sample_size,
@@ -859,7 +889,10 @@ impl LearningLoop {
             );
             self.executor_memory.clear();
             self.executor_distill_threshold =
-                (self.executor_distill_threshold + 8).min(EXECUTOR_MEMORY_LIMIT.saturating_sub(32));
+                (self.executor_distill_threshold + 8).min({
+                    let guard = self.config.read();
+                    guard.learning_executor_memory_limit.saturating_sub(32)
+                });
             return;
         }
 
@@ -1030,12 +1063,37 @@ impl LearningLoop {
         mode: &str,
         history_dist: f64,
     ) -> f64 {
-        let penalty = sig.knot_complexity * 0.5
-            + (sig.betti_numbers[1] as f64) * 0.2
-            + sig.persistence_entropy * 0.1;
-        let weight = if mode == "Discover" { 0.5 } else { 1.0 };
-        let conv_bonus = if sig.spectral_gap < 0.5 { 0.3 } else { -0.2 };
-        let novelty_bonus = if history_dist > 0.1 { 0.2 } else { 0.0 };
+        let penalty = sig.knot_complexity * {
+            let guard = self.config.read();
+            guard.learning_tcs_knot_penalty
+        }
+            + (sig.betti_numbers[1] as f64) * {
+                let guard = self.config.read();
+                guard.learning_tcs_betti1_penalty
+            }
+            + sig.persistence_entropy * {
+                let guard = self.config.read();
+                guard.learning_tcs_entropy_penalty
+            };
+        let weight = if mode == "Discover" {
+            let guard = self.config.read();
+            guard.learning_tcs_discover_weight
+        } else {
+            1.0
+        };
+        let guard = self.config.read();
+        let spectral_gap_threshold = guard.learning_tcs_spectral_gap_threshold;
+        let conv_bonus = if sig.spectral_gap < spectral_gap_threshold {
+            guard.learning_tcs_convergence_bonus
+        } else {
+            guard.learning_tcs_convergence_penalty
+        };
+        let novelty_threshold = guard.learning_tcs_novelty_threshold;
+        let novelty_bonus = if history_dist > novelty_threshold {
+            guard.learning_tcs_novelty_bonus
+        } else {
+            0.0
+        };
         base - (penalty * weight) + conv_bonus + novelty_bonus
     }
 
@@ -1101,7 +1159,10 @@ impl LearningLoop {
         }
 
         // Sample random batch for learning
-        let batch_size = 32.min(self.replay_buffer.len());
+        let batch_size = {
+            let guard = self.config.read();
+            guard.learning_dqn_batch_size.min(self.replay_buffer.len())
+        };
         // Convert VecDeque to Vec for sampling
         let buffer_vec: Vec<_> = self.replay_buffer.iter().cloned().collect();
         let mut batch = Vec::with_capacity(batch_size);
@@ -1155,12 +1216,30 @@ impl LearningLoop {
         // Estimate metric changes based on action
         let mut new_metrics = state.metrics.clone();
         match action.param.as_str() {
-            "temperature" => new_metrics[0] += action.delta * 0.05, // affect entropy
-            "top_p" => new_metrics[1] += action.delta * 0.1,        // affect rouge
-            "mcts_c" => new_metrics[3] += action.delta * 0.1,       // affect ucb1
-            "retrieval_top_k" => new_metrics[4] += action.delta * 0.01, // affect curator
-            "novelty_threshold" => new_metrics[1] += action.delta * 0.05, // affect rouge
-            "self_awareness_level" => new_metrics[0] += action.delta * 0.03, // affect entropy
+            "temperature" => new_metrics[0] += action.delta * {
+                let guard = self.config.read();
+                guard.learning_dqn_temp_multiplier
+            },
+            "top_p" => new_metrics[1] += action.delta * {
+                let guard = self.config.read();
+                guard.learning_dqn_top_p_multiplier
+            },
+            "mcts_c" => new_metrics[3] += action.delta * {
+                let guard = self.config.read();
+                guard.learning_dqn_mcts_c_multiplier
+            },
+            "retrieval_top_k" => new_metrics[4] += action.delta * {
+                let guard = self.config.read();
+                guard.learning_dqn_retrieval_multiplier
+            },
+            "novelty_threshold" => new_metrics[1] += action.delta * {
+                let guard = self.config.read();
+                guard.learning_dqn_novelty_multiplier
+            },
+            "self_awareness_level" => new_metrics[0] += action.delta * {
+                let guard = self.config.read();
+                guard.learning_dqn_awareness_multiplier
+            },
             _ => {}
         }
         DqnState {
@@ -1256,7 +1335,10 @@ impl LearningLoop {
 
         let batch_len = batch.len();
         for tuple in batch {
-            let delta = tuple.action.delta * 0.01; // Inner gradient
+                    let delta = tuple.action.delta * {
+                        let guard = self.config.read();
+                        guard.learning_reptile_inner_gradient_multiplier
+                    }; // Inner gradient
             *param_deltas
                 .entry(tuple.action.param.clone())
                 .or_insert(0.0) += delta;
@@ -1546,12 +1628,24 @@ impl LearningLoop {
 
     fn decay_schedules(&mut self) {
         let episodes = self.episode_count as f64;
-        let epsilon_decay_rate = 0.001;
+        let epsilon_decay_rate = {
+            let guard = self.config.read();
+            guard.learning_epsilon_decay_rate
+        };
         self.epsilon = self.initial_epsilon / (1.0 + episodes * epsilon_decay_rate).max(1.0);
-        self.epsilon = self.epsilon.max(0.01);
-        let alpha_decay_rate = 0.0005;
+        self.epsilon = self.epsilon.max({
+            let guard = self.config.read();
+            guard.learning_epsilon_minimum
+        });
+        let alpha_decay_rate = {
+            let guard = self.config.read();
+            guard.learning_alpha_decay_rate
+        };
         self.alpha = self.initial_alpha / (1.0 + episodes * alpha_decay_rate).max(1.0);
-        self.alpha = self.alpha.max(0.001);
+        self.alpha = self.alpha.max({
+            let guard = self.config.read();
+            guard.learning_alpha_minimum
+        });
     }
 
     pub fn save_lora_adapter<P: AsRef<Path>>(&self, path: P) -> Result<()> {
@@ -1585,7 +1679,13 @@ impl LearningLoop {
             return Ok(());
         }
         let num_recent = recent.len();
-        let num_old = ((num_recent as f64 * 0.3).max(10.0) as usize).min(50);
+        let num_old = {
+            let guard = self.config.read();
+            let ratio = guard.learning_evolution_old_episodes_ratio;
+            let min = guard.learning_evolution_old_episodes_min;
+            let max = guard.learning_evolution_old_episodes_max;
+            ((num_recent as f64 * ratio).max(min as f64) as usize).min(max)
+        };
         let old_tuples = self.erag.query_old_dqn_tuples(1, num_old).await?;
         let mut mixed_episodes: Vec<(f64, f64)> = recent.clone();
         // Note: query_old_dqn_tuples returns Experience, not ReplayTuple
@@ -1599,11 +1699,32 @@ impl LearningLoop {
             }
         }
 
-        // Phase 5.2: Query tough knots (20% of episodes for anti-forgetting)
-        let num_tough = (mixed_episodes.len() as f64 * 0.2).max(1.0) as usize;
+        // Phase 5.2: Query tough knots (configurable ratio of episodes for anti-forgetting)
+        let num_tough = {
+            let guard = self.config.read();
+            let ratio = guard.learning_tough_knots_ratio;
+            (mixed_episodes.len() as f64 * ratio).max(1.0) as usize
+        };
+        let tough_knots_params = {
+            let guard = self.config.read();
+            (
+                guard.tough_knots_multiplier,
+                guard.tough_knots_max_fetch,
+                guard.tough_knots_knot_threshold,
+                guard.tough_knots_quality_threshold,
+                guard.tough_knots_knot_multiplier,
+            )
+        };
         let tough_knots = self
             .erag
-            .query_tough_knots(num_tough)
+            .query_tough_knots(
+                num_tough,
+                tough_knots_params.0,
+                tough_knots_params.1,
+                tough_knots_params.2,
+                tough_knots_params.3,
+                tough_knots_params.4,
+            )
             .await
             .unwrap_or_default();
         if !tough_knots.is_empty() {

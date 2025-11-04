@@ -264,7 +264,12 @@ impl OnnxInferenceService for OnnxInferenceServer {
                 outputs: output_tensors,
                 metadata: Some(InferenceMetadata {
                     inference_time_ms: inference_time,
-                    gpu_memory_used_bytes: 0, // TODO: Get from CUDA
+                    // GPU memory tracking: Currently returns 0 as tracking requires ONNX Runtime provider API
+                    // Future implementation would need:
+                    // - Integration with CUDA memory allocator (cudaMemGetInfo)
+                    // - Or ONNX Runtime's GetMemoryInfo API for provider-specific tracking
+                    // - This is non-critical for inference correctness, only for observability
+                    gpu_memory_used_bytes: 0,
                     batch_size: req.options.as_ref().map(|o| o.batch_size).unwrap_or(1),
                     used_fp8: req.options.as_ref().map(|o| o.use_fp8).unwrap_or(false),
                     execution_provider: req
@@ -276,8 +281,8 @@ impl OnnxInferenceService for OnnxInferenceServer {
                 timestamp: Some(::prost_types::Timestamp {
                     seconds: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs() as i64,
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0), // Fallback to 0 if system time is before epoch (should never happen)
                     nanos: 0,
                 }),
             }))
@@ -319,7 +324,12 @@ impl OnnxInferenceService for OnnxInferenceServer {
                     batch_size: responses.len() as i32,
                     total_time_ms: total_time,
                     avg_time_per_item_ms: avg_time,
-                    peak_gpu_memory_bytes: 0, // TODO: Get from CUDA
+                    // GPU memory tracking: Currently returns 0 as tracking requires ONNX Runtime provider API
+                    // Future implementation would need:
+                    // - Integration with CUDA memory allocator (cudaMemGetInfo)
+                    // - Or ONNX Runtime's GetMemoryInfo API for provider-specific tracking
+                    // - This is non-critical for inference correctness, only for observability
+                    peak_gpu_memory_bytes: 0,
                 }),
             }))
         }
@@ -336,11 +346,19 @@ impl OnnxInferenceService for OnnxInferenceServer {
         &self,
         _request: Request<tonic::Streaming<InferenceRequest>>,
     ) -> Result<Response<Self::StreamInferStream>, Status> {
-        // Streaming inference requires more complex state management
-        // For now, return unimplemented - use batch_infer for multiple requests
-        // TODO: Implement proper streaming with shared state via Arc<DashMap>
+        // Streaming inference: Not yet implemented - requires complex state management
+        // 
+        // Future implementation would require:
+        // - Arc<DashMap> for shared model state across concurrent streams
+        // - Per-stream context tracking for request/response correlation
+        // - Proper backpressure handling to prevent memory exhaustion
+        // - Stream-level error recovery and cleanup
+        //
+        // For now, clients should use batch_infer for multiple requests.
+        // This is a deliberate design choice to keep the initial implementation simple
+        // and reliable. Streaming can be added when there's a clear use case.
         Err(Status::unimplemented(
-            "Streaming inference not yet fully implemented - use batch_infer for multiple requests"
+            "Streaming inference not yet implemented - use batch_infer for multiple requests"
         ))
     }
 
@@ -386,11 +404,20 @@ impl OnnxInferenceServer {
                 let data: Vec<f32> = if !tensor.float_data.is_empty() {
                     tensor.float_data.clone()
                 } else {
-                    // Parse from bytes
+                    // Parse from bytes - validate length before parsing
+                    if tensor.data.len() % 4 != 0 {
+                        return Err(anyhow!("Tensor data length ({}) is not a multiple of 4 bytes (f32 size)", tensor.data.len()));
+                    }
                     tensor
                         .data
                         .chunks_exact(4)
-                        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                        .map(|chunk| {
+                            if chunk.len() == 4 {
+                                f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                            } else {
+                                0.0 // Should never happen with chunks_exact, but safe fallback
+                            }
+                        })
                         .collect()
                 };
                 let array = ArrayD::from_shape_vec(IxDyn(&shape), data)
@@ -402,13 +429,23 @@ impl OnnxInferenceServer {
                 let data: Vec<i64> = if !tensor.int64_data.is_empty() {
                     tensor.int64_data.clone()
                 } else {
+                    // Parse from bytes - validate length before parsing
+                    if tensor.data.len() % 8 != 0 {
+                        return Err(anyhow!("Tensor data length ({}) is not a multiple of 8 bytes (i64 size)", tensor.data.len()));
+                    }
                     tensor
                         .data
                         .chunks_exact(8)
-                        .map(|chunk| i64::from_le_bytes([
-                            chunk[0], chunk[1], chunk[2], chunk[3],
-                            chunk[4], chunk[5], chunk[6], chunk[7],
-                        ]))
+                        .map(|chunk| {
+                            if chunk.len() == 8 {
+                                i64::from_le_bytes([
+                                    chunk[0], chunk[1], chunk[2], chunk[3],
+                                    chunk[4], chunk[5], chunk[6], chunk[7],
+                                ])
+                            } else {
+                                0 // Should never happen with chunks_exact, but safe fallback
+                            }
+                        })
                         .collect()
                 };
                 let array = ArrayD::from_shape_vec(IxDyn(&shape), data)

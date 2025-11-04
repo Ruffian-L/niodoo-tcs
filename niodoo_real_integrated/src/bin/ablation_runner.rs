@@ -125,23 +125,117 @@ impl AblationRunner {
         // Initialize pipeline with ablation config
         let cli_args = CliArgs::default();
         
-        let _pipeline = Pipeline::initialise(cli_args).await
+        let pipeline = Pipeline::initialise(cli_args).await
             .context("Failed to initialize pipeline for ablation test")?;
 
-        // Run load test
-        // Note: Would integrate with metrics_runner here
-        // For now, simulate with placeholder metrics
+        // Run actual load test by executing pipeline cycles
+        // This replaces the placeholder metrics with real execution data
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::Arc;
+        use tokio::sync::Mutex as AsyncMutex;
+        use std::time::{Duration, Instant};
+        
+        let pipeline_mutex = Arc::new(AsyncMutex::new(pipeline));
+        let latencies = Arc::new(AsyncMutex::new(Vec::new()));
+        let request_count = Arc::new(AtomicU64::new(0));
+        let start_time = Instant::now();
+        let end_time = start_time + Duration::from_secs(duration_secs);
+        
+        // Generate test prompts
+        let test_prompts = vec![
+            "Explain quantum computing in detail".to_string(),
+            "Describe the theory of relativity".to_string(),
+            "What is machine learning?".to_string(),
+        ];
+        
+        // Run concurrent load test
+        let mut handles = Vec::new();
+        for user_id in 0..concurrent_users {
+            let pipeline_clone = pipeline_mutex.clone();
+            let latencies_clone = latencies.clone();
+            let request_count_clone = request_count.clone();
+            let prompts = test_prompts.clone();
+            
+            let handle = tokio::spawn(async move {
+                let mut prompt_idx = 0;
+                while Instant::now() < end_time {
+                    let prompt = prompts[prompt_idx % prompts.len()].clone();
+                    prompt_idx += 1;
+                    
+                    let cycle_start = Instant::now();
+                    let pipeline_guard = pipeline_clone.lock().await;
+                    
+                    match pipeline_guard.process(prompt.as_str()).await {
+                        Ok(_cycle) => {
+                            let latency_ms = cycle_start.elapsed().as_secs_f64() * 1000.0;
+                            latencies_clone.lock().await.push(latency_ms);
+                            request_count_clone.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(e) => {
+                            tracing::warn!(user_id, error = %e, "Ablation test request failed");
+                        }
+                    }
+                    
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            });
+            handles.push(handle);
+        }
+        
+        // Wait for all workers
+        for handle in handles {
+            let _ = handle.await;
+        }
+        
+        let actual_duration = start_time.elapsed().as_secs_f64();
+        let latencies_vec = latencies.lock().await.clone();
+        let requests = request_count.load(Ordering::Relaxed);
+        
+        // Compute real metrics from execution
+        let latency_stats = if !latencies_vec.is_empty() {
+            let mut sorted = latencies_vec.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let p50_idx = (sorted.len() as f64 * 0.5) as usize;
+            let p95_idx = (sorted.len() as f64 * 0.95) as usize;
+            let p99_idx = (sorted.len() as f64 * 0.99).min(sorted.len() as f64 - 1.0) as usize;
+            
+            StatisticalSummary {
+                mean: latencies_vec.iter().sum::<f64>() / latencies_vec.len() as f64,
+                std: {
+                    let mean = latencies_vec.iter().sum::<f64>() / latencies_vec.len() as f64;
+                    let variance = latencies_vec.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / latencies_vec.len() as f64;
+                    variance.sqrt()
+                },
+                p50: sorted[p50_idx],
+                p95: sorted[p95_idx],
+                p99: sorted[p99_idx],
+            }
+        } else {
+            StatisticalSummary {
+                mean: 0.0,
+                std: 0.0,
+                p50: 0.0,
+                p95: 0.0,
+                p99: 0.0,
+            }
+        };
+        
+        let throughput = if actual_duration > 0.0 {
+            requests as f64 / actual_duration
+        } else {
+            0.0
+        };
         
         let metrics = AblationMetrics {
-            latency: StatisticalSummary::from_values(&vec![100.0, 120.0, 150.0]),
-            throughput: 2500.0,
+            latency: latency_stats,
+            throughput,
             quality_slis: QualitySLISummary {
-                tcs_stability_cv: Some(0.05),
-                rce_beta_meta_compliance: Some(1.0),
+                tcs_stability_cv: None, // Would need to extract from pipeline metrics
+                rce_beta_meta_compliance: None,
             },
             topological: TopologicalSummary {
-                persistence_entropy: Some(1.5),
-                beta_meta_current: Some(1.0),
+                persistence_entropy: None, // Would need to extract from pipeline metrics
+                beta_meta_current: None,
             },
         };
 

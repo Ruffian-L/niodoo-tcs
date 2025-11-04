@@ -243,6 +243,10 @@ pub enum HardwareProfile {
     #[serde(rename = "h200")]
     #[value(alias = "H200")]
     H200,
+    #[serde(rename = "5090")]
+    #[value(alias = "RTX5090")]
+    #[value(alias = "rtx5090")]
+    RTX5090,
 }
 
 impl fmt::Display for HardwareProfile {
@@ -251,6 +255,7 @@ impl fmt::Display for HardwareProfile {
             HardwareProfile::Beelink => "beelink",
             HardwareProfile::Laptop5080Q => "5080q",
             HardwareProfile::H200 => "h200",
+            HardwareProfile::RTX5090 => "5090",
         };
         f.write_str(label)
     }
@@ -262,6 +267,7 @@ impl HardwareProfile {
             HardwareProfile::Beelink => 8,
             HardwareProfile::Laptop5080Q => 4,
             HardwareProfile::H200 => 32, // H200 can handle massive batch sizes
+            HardwareProfile::RTX5090 => 64, // RTX 5090 Blackwell - aggressive batching
         }
     }
 
@@ -270,6 +276,7 @@ impl HardwareProfile {
             HardwareProfile::Beelink => 100.0,
             HardwareProfile::Laptop5080Q => 180.0,
             HardwareProfile::H200 => 50.0, // H200 is blazing fast
+            HardwareProfile::RTX5090 => 30.0, // RTX 5090 is even faster
         }
     }
 
@@ -278,6 +285,7 @@ impl HardwareProfile {
             HardwareProfile::Beelink => 128_000,
             HardwareProfile::Laptop5080Q => 256_000,
             HardwareProfile::H200 => 512_000, // H200 has 141GB HBM3e
+            HardwareProfile::RTX5090 => 512_000, // RTX 5090 has 32GB GDDR7 - match H200 capacity
         }
     }
 }
@@ -923,6 +931,538 @@ pub struct RuntimeConfig {
     /// Bypass nTokens layer for ablation testing
     #[serde(default)]
     pub n_tokens_bypass: bool,
+
+    // Pipeline runtime configuration
+    /// Curator feedback controller window size (number of responses to track)
+    #[serde(default = "default_curator_feedback_window_size")]
+    pub curator_feedback_window_size: usize,
+    /// Curator feedback - threshold adjustment percentage per trend unit
+    #[serde(default = "default_curator_feedback_threshold_adjustment")]
+    pub curator_feedback_threshold_adjustment: f32,
+    /// Curator feedback - adaptive threshold minimum bound
+    #[serde(default = "default_curator_feedback_threshold_min")]
+    pub curator_feedback_threshold_min: f32,
+    /// Curator feedback - adaptive threshold maximum bound
+    #[serde(default = "default_curator_feedback_threshold_max")]
+    pub curator_feedback_threshold_max: f32,
+    /// Curator feedback - quality trend threshold for parameter adjustments
+    #[serde(default = "default_curator_feedback_quality_trend_threshold")]
+    pub curator_feedback_quality_trend_threshold: f32,
+    /// Curator feedback - temperature adjustment multiplier
+    #[serde(default = "default_curator_feedback_temp_adjustment_multiplier")]
+    pub curator_feedback_temp_adjustment_multiplier: f32,
+    /// Curator feedback - learned rate threshold for top_p adjustment (low threshold)
+    #[serde(default = "default_curator_feedback_learned_rate_low")]
+    pub curator_feedback_learned_rate_low: f32,
+    /// Curator feedback - quality threshold for top_p adjustment (low threshold)
+    #[serde(default = "default_curator_feedback_quality_low")]
+    pub curator_feedback_quality_low: f32,
+    /// Curator feedback - top_p increase adjustment for low learned rate
+    #[serde(default = "default_curator_feedback_top_p_increase")]
+    pub curator_feedback_top_p_increase: f64,
+    /// Curator feedback - learned rate threshold for top_p adjustment (high threshold)
+    #[serde(default = "default_curator_feedback_learned_rate_high")]
+    pub curator_feedback_learned_rate_high: f32,
+    /// Curator feedback - quality threshold for top_p adjustment (high threshold)
+    #[serde(default = "default_curator_feedback_quality_high")]
+    pub curator_feedback_quality_high: f32,
+    /// Curator feedback - top_p decrease adjustment for high learned rate
+    #[serde(default = "default_curator_feedback_top_p_decrease")]
+    pub curator_feedback_top_p_decrease: f64,
+    /// Curator feedback - quality threshold for retrieval_top_k increase
+    #[serde(default = "default_curator_feedback_retrieval_quality_threshold")]
+    pub curator_feedback_retrieval_quality_threshold: f32,
+    /// Curator feedback - retrieval_top_k increase adjustment
+    #[serde(default = "default_curator_feedback_retrieval_top_k_increase")]
+    pub curator_feedback_retrieval_top_k_increase: f64,
+    /// Curator feedback - quality threshold for retrieval_top_k decrease (high threshold)
+    #[serde(default = "default_curator_feedback_retrieval_quality_high")]
+    pub curator_feedback_retrieval_quality_high: f32,
+    /// Curator feedback - learned rate threshold for retrieval_top_k decrease
+    #[serde(default = "default_curator_feedback_retrieval_learned_rate_high")]
+    pub curator_feedback_retrieval_learned_rate_high: f32,
+    /// Curator feedback - retrieval_top_k decrease adjustment
+    #[serde(default = "default_curator_feedback_retrieval_top_k_decrease")]
+    pub curator_feedback_retrieval_top_k_decrease: f64,
+    /// Pipeline - retrieval top_k minimum limit
+    #[serde(default = "default_pipeline_retrieval_top_k_min")]
+    pub pipeline_retrieval_top_k_min: usize,
+    /// Pipeline - retrieval top_k maximum limit
+    #[serde(default = "default_pipeline_retrieval_top_k_max")]
+    pub pipeline_retrieval_top_k_max: usize,
+    /// Pipeline - timing split ratio for compass/erag parallel execution (default 0.5 = 50/50)
+    #[serde(default = "default_pipeline_timing_split_ratio")]
+    pub pipeline_timing_split_ratio: f64,
+    /// Pipeline - healing state knot complexity threshold
+    #[serde(default = "default_pipeline_healing_knot_threshold")]
+    pub pipeline_healing_knot_threshold: f64,
+    /// Pipeline - healing state spectral gap threshold
+    #[serde(default = "default_pipeline_healing_spectral_gap_threshold")]
+    pub pipeline_healing_spectral_gap_threshold: f64,
+    /// Pipeline - UCB1 score maximum clamp value
+    #[serde(default = "default_pipeline_ucb1_max_clamp")]
+    pub pipeline_ucb1_max_clamp: f64,
+    /// Pipeline - curator quality score increment for refinement passes
+    #[serde(default = "default_pipeline_quality_score_increment")]
+    pub pipeline_quality_score_increment: f32,
+    /// Pipeline - parameter adjustment minimum bounds (temperature/top_p)
+    #[serde(default = "default_pipeline_param_min")]
+    pub pipeline_param_min: f64,
+    /// Pipeline - parameter adjustment maximum bounds (temperature/top_p)
+    #[serde(default = "default_pipeline_param_max")]
+    pub pipeline_param_max: f64,
+    /// Pipeline - retrieval top_k increment minimum bound
+    #[serde(default = "default_pipeline_retrieval_top_k_increment_min")]
+    pub pipeline_retrieval_top_k_increment_min: f64,
+    /// Pipeline - retrieval top_k increment maximum bound
+    #[serde(default = "default_pipeline_retrieval_top_k_increment_max")]
+    pub pipeline_retrieval_top_k_increment_max: f64,
+    /// Topology memory analyzer - similarity threshold
+    #[serde(default = "default_topology_memory_analyzer_threshold")]
+    pub topology_memory_analyzer_threshold: f64,
+    /// Discovery buffer processing interval in seconds
+    #[serde(default = "default_discovery_buffer_interval_secs")]
+    pub discovery_buffer_interval_secs: u64,
+    /// Embedding cache capacity (number of entries)
+    #[serde(default = "default_embedding_cache_capacity")]
+    pub embedding_cache_capacity: usize,
+    /// Collapse cache capacity (number of entries)
+    #[serde(default = "default_collapse_cache_capacity")]
+    pub collapse_cache_capacity: usize,
+    /// MCTS exploration constant (UCB1 exploration parameter, typically sqrt(2))
+    #[serde(default = "default_mcts_exploration_constant")]
+    pub mcts_exploration_constant: f64,
+    /// MCTS search depth (maximum tree depth)
+    #[serde(default = "default_mcts_depth")]
+    pub mcts_depth: usize,
+    /// Discovery buffer threshold (batch size for processing discoveries)
+    #[serde(default = "default_discovery_buffer_threshold")]
+    pub discovery_buffer_threshold: usize,
+    /// GPU fitness refresh interval in seconds
+    #[serde(default = "default_gpu_fitness_refresh_interval_secs")]
+    pub gpu_fitness_refresh_interval_secs: u64,
+    /// Learning loop timeout in seconds
+    #[serde(default = "default_learning_timeout_secs")]
+    pub learning_timeout_secs: u64,
+    /// Context truncation limit (maximum context items to keep)
+    #[serde(default = "default_context_truncation_limit")]
+    pub context_truncation_limit: usize,
+    /// Base retrieval top_k (minimum number of results to retrieve)
+    #[serde(default = "default_base_retrieval_top_k")]
+    pub base_retrieval_top_k: i32,
+    /// Delay threshold in milliseconds (for various delay checks)
+    #[serde(default = "default_delay_threshold_ms")]
+    pub delay_threshold_ms: u64,
+    /// Generation HTTP client timeout in seconds
+    #[serde(default = "default_generation_client_timeout_secs")]
+    pub generation_client_timeout_secs: u64,
+    /// Memory upsert timeout in seconds
+    #[serde(default = "default_memory_upsert_timeout_secs")]
+    pub memory_upsert_timeout_secs: u64,
+    /// ROUGE acceptable threshold (minimum ROUGE score for soft failure bypass)
+    #[serde(default = "default_rouge_acceptable_threshold")]
+    pub rouge_acceptable_threshold: f64,
+    /// ROUGE improvement threshold for retry success (delta improvement)
+    #[serde(default = "default_rouge_improvement_threshold")]
+    pub rouge_improvement_threshold: f64,
+    /// UCB1 score boost threshold (minimum score when ROUGE improves)
+    #[serde(default = "default_ucb1_boost_threshold")]
+    pub ucb1_boost_threshold: f64,
+    /// UCB1 score relaxation threshold (after multiple retries)
+    #[serde(default = "default_ucb1_relaxation_threshold")]
+    pub ucb1_relaxation_threshold: f64,
+    /// Retry count threshold for UCB1 relaxation
+    #[serde(default = "default_retry_count_for_relaxation")]
+    pub retry_count_for_relaxation: u32,
+    /// Quality calculation base score
+    #[serde(default = "default_quality_base_score")]
+    pub quality_base_score: f32,
+    /// Quality calculation maximum length for length factor
+    #[serde(default = "default_quality_max_length")]
+    pub quality_max_length: usize,
+    /// Quality calculation length factor weight
+    #[serde(default = "default_quality_length_factor_weight")]
+    pub quality_length_factor_weight: f32,
+    /// Quality calculation entropy threshold (below this gets bonus)
+    #[serde(default = "default_quality_entropy_threshold")]
+    pub quality_entropy_threshold: f64,
+    /// Quality calculation entropy factor weight
+    #[serde(default = "default_quality_entropy_factor_weight")]
+    pub quality_entropy_factor_weight: f32,
+    /// Knot complexity threshold for quality penalty
+    #[serde(default = "default_knot_complexity_penalty_threshold")]
+    pub knot_complexity_penalty_threshold: f64,
+    /// Knot complexity quality penalty multiplier
+    #[serde(default = "default_knot_complexity_penalty_multiplier")]
+    pub knot_complexity_penalty_multiplier: f32,
+    /// Spectral gap threshold for quality bonus
+    #[serde(default = "default_spectral_gap_bonus_threshold")]
+    pub spectral_gap_bonus_threshold: f64,
+    /// Spectral gap quality bonus multiplier
+    #[serde(default = "default_spectral_gap_bonus_multiplier")]
+    pub spectral_gap_bonus_multiplier: f32,
+    /// Betti-1 threshold for quality adjustment
+    #[serde(default = "default_betti1_quality_threshold")]
+    pub betti1_quality_threshold: usize,
+    /// Betti-1 quality bonus multiplier (in Discover quadrant)
+    #[serde(default = "default_betti1_bonus_multiplier")]
+    pub betti1_bonus_multiplier: f32,
+    /// Betti-1 quality penalty multiplier (in other quadrants)
+    #[serde(default = "default_betti1_penalty_multiplier")]
+    pub betti1_penalty_multiplier: f32,
+    /// Persistence entropy threshold for quality bonus (low entropy = stable)
+    #[serde(default = "default_persistence_entropy_quality_threshold")]
+    pub persistence_entropy_quality_threshold: f64,
+    /// Persistence entropy quality bonus multiplier
+    #[serde(default = "default_persistence_entropy_bonus_multiplier")]
+    pub persistence_entropy_bonus_multiplier: f32,
+    /// Topology refinement knot complexity threshold
+    #[serde(default = "default_topology_refinement_knot_threshold")]
+    pub topology_refinement_knot_threshold: f64,
+    /// Topology refinement Betti-1 threshold
+    #[serde(default = "default_topology_refinement_betti1_threshold")]
+    pub topology_refinement_betti1_threshold: usize,
+    /// Topology refinement persistence entropy threshold
+    #[serde(default = "default_topology_refinement_entropy_threshold")]
+    pub topology_refinement_entropy_threshold: f64,
+    /// Autonomous refinement temperature (low for stability)
+    #[serde(default = "default_autonomous_refinement_temperature")]
+    pub autonomous_refinement_temperature: f64,
+    /// Autonomous refinement top_p
+    #[serde(default = "default_autonomous_refinement_top_p")]
+    pub autonomous_refinement_top_p: f64,
+    /// Autonomous refinement improvement weight
+    #[serde(default = "default_autonomous_refinement_improvement_weight")]
+    pub autonomous_refinement_improvement_weight: f32,
+    /// Autonomous refinement improvement threshold
+    #[serde(default = "default_autonomous_refinement_improvement_threshold")]
+    pub autonomous_refinement_improvement_threshold: f64,
+    /// Second pass refinement improvement threshold
+    #[serde(default = "default_second_pass_refinement_threshold")]
+    pub second_pass_refinement_threshold: f64,
+    /// Second pass refinement temperature
+    #[serde(default = "default_second_pass_refinement_temperature")]
+    pub second_pass_refinement_temperature: f64,
+    /// Second pass refinement top_p
+    #[serde(default = "default_second_pass_refinement_top_p")]
+    pub second_pass_refinement_top_p: f64,
+    /// Enhancement prompt temperature (for healing state)
+    #[serde(default = "default_enhancement_temperature")]
+    pub enhancement_temperature: f64,
+    /// Enhancement prompt top_p (for healing state)
+    #[serde(default = "default_enhancement_top_p")]
+    pub enhancement_top_p: f64,
+    /// Reward calculation ROUGE weight
+    #[serde(default = "default_reward_rouge_weight")]
+    pub reward_rouge_weight: f64,
+    /// Reward calculation entropy weight
+    #[serde(default = "default_reward_entropy_weight")]
+    pub reward_entropy_weight: f64,
+    /// Default curator quality for consistency voting
+    #[serde(default = "default_consistency_voting_quality")]
+    pub consistency_voting_quality: f64,
+    /// Failure signal thresholds configuration
+    #[serde(default)]
+    pub failure_signal_thresholds: FailureSignalThresholds,
+    /// RCE-ERAG cosine similarity weight (for ranking)
+    #[serde(default = "default_rce_erag_cosine_weight")]
+    pub rce_erag_cosine_weight: f64,
+    /// RCE-ERAG entropy score weight (for ranking)
+    #[serde(default = "default_rce_erag_entropy_weight")]
+    pub rce_erag_entropy_weight: f64,
+    /// RCE adaptation persistence entropy threshold
+    #[serde(default = "default_rce_adaptation_entropy_threshold")]
+    pub rce_adaptation_entropy_threshold: f64,
+    /// RCE adaptation spectral gap threshold
+    #[serde(default = "default_rce_adaptation_spectral_gap_threshold")]
+    pub rce_adaptation_spectral_gap_threshold: f64,
+    /// RCE circuit breaker streak threshold
+    #[serde(default = "default_rce_circuit_breaker_streak")]
+    pub rce_circuit_breaker_streak: u32,
+    /// Tough knots query multiplier (fetch N * multiplier samples)
+    #[serde(default = "default_tough_knots_multiplier")]
+    pub tough_knots_multiplier: usize,
+    /// Tough knots query maximum fetch size
+    #[serde(default = "default_tough_knots_max_fetch")]
+    pub tough_knots_max_fetch: usize,
+    /// Tough knots knot complexity threshold
+    #[serde(default = "default_tough_knots_knot_threshold")]
+    pub tough_knots_knot_threshold: f64,
+    /// Tough knots curator quality threshold
+    #[serde(default = "default_tough_knots_quality_threshold")]
+    pub tough_knots_quality_threshold: f64,
+    /// Tough knots knot complexity multiplier (for scoring)
+    #[serde(default = "default_tough_knots_knot_multiplier")]
+    pub tough_knots_knot_multiplier: f64,
+    /// Compass PAD adjustment - H1 persistence normalization divisor
+    #[serde(default = "default_compass_h1_persistence_divisor")]
+    pub compass_h1_persistence_divisor: f64,
+    /// Compass PAD adjustment - H1 penalty scale factor
+    #[serde(default = "default_compass_h1_penalty_scale")]
+    pub compass_h1_penalty_scale: f64,
+    /// Compass PAD adjustment - sheaf energy threshold for boost
+    #[serde(default = "default_compass_sheaf_energy_threshold")]
+    pub compass_sheaf_energy_threshold: f64,
+    /// Compass PAD adjustment - sheaf boost multiplier
+    #[serde(default = "default_compass_sheaf_boost_multiplier")]
+    pub compass_sheaf_boost_multiplier: f64,
+    /// Compass PAD adjustment - dominance penalty multiplier
+    #[serde(default = "default_compass_dominance_penalty_multiplier")]
+    pub compass_dominance_penalty_multiplier: f64,
+    /// Compass PAD adjustment - dominance boost multiplier
+    #[serde(default = "default_compass_dominance_boost_multiplier")]
+    pub compass_dominance_boost_multiplier: f64,
+    /// Compass PAD adjustment - arousal penalty multiplier
+    #[serde(default = "default_compass_arousal_penalty_multiplier")]
+    pub compass_arousal_penalty_multiplier: f64,
+    /// Compass PAD adjustment - random noise range
+    #[serde(default = "default_compass_random_noise_range")]
+    pub compass_random_noise_range: f64,
+    /// Compass PAD adjustment - pleasure boost probability
+    #[serde(default = "default_compass_pleasure_boost_probability")]
+    pub compass_pleasure_boost_probability: f64,
+    /// Compass PAD adjustment - pleasure boost multiplier
+    #[serde(default = "default_compass_pleasure_boost_multiplier")]
+    pub compass_pleasure_boost_multiplier: f64,
+    /// Compass threat detection - base threat arousal threshold
+    #[serde(default = "default_compass_base_threat_arousal_threshold")]
+    pub compass_base_threat_arousal_threshold: f64,
+    /// Compass threat detection - variance spike multiplier
+    #[serde(default = "default_compass_variance_spike_multiplier")]
+    pub compass_variance_spike_multiplier: f64,
+    /// Compass threat detection - random threat probability
+    #[serde(default = "default_compass_random_threat_probability")]
+    pub compass_random_threat_probability: f64,
+    /// Compass threat detection - random threat arousal threshold
+    #[serde(default = "default_compass_random_threat_arousal_threshold")]
+    pub compass_random_threat_arousal_threshold: f64,
+    /// Compass threat detection - random threat pleasure threshold
+    #[serde(default = "default_compass_random_threat_pleasure_threshold")]
+    pub compass_random_threat_pleasure_threshold: f64,
+    /// Compass healing detection - pleasure threshold
+    #[serde(default = "default_compass_healing_pleasure_threshold")]
+    pub compass_healing_pleasure_threshold: f64,
+    /// Compass healing detection - dominance threshold
+    #[serde(default = "default_compass_healing_dominance_threshold")]
+    pub compass_healing_dominance_threshold: f64,
+    /// Compass quadrant thresholds - panic pleasure threshold
+    #[serde(default = "default_compass_quadrant_panic_pleasure_threshold")]
+    pub compass_quadrant_panic_pleasure_threshold: f64,
+    /// Compass quadrant thresholds - panic arousal threshold
+    #[serde(default = "default_compass_quadrant_panic_arousal_threshold")]
+    pub compass_quadrant_panic_arousal_threshold: f64,
+    /// Compass quadrant thresholds - persist arousal threshold
+    #[serde(default = "default_compass_quadrant_persist_arousal_threshold")]
+    pub compass_quadrant_persist_arousal_threshold: f64,
+    /// Compass intrinsic reward - panic to discover base reward
+    #[serde(default = "default_compass_reward_panic_to_discover")]
+    pub compass_reward_panic_to_discover: f64,
+    /// Compass intrinsic reward - panic to persist base reward
+    #[serde(default = "default_compass_reward_panic_to_persist")]
+    pub compass_reward_panic_to_persist: f64,
+    /// Compass intrinsic reward - panic to master base reward
+    #[serde(default = "default_compass_reward_panic_to_master")]
+    pub compass_reward_panic_to_master: f64,
+    /// Compass intrinsic reward - master to panic base reward
+    #[serde(default = "default_compass_reward_master_to_panic")]
+    pub compass_reward_master_to_panic: f64,
+    /// Compass intrinsic reward - default base reward
+    #[serde(default = "default_compass_reward_default")]
+    pub compass_reward_default: f64,
+    /// Compass intrinsic reward - entropy delta multiplier
+    #[serde(default = "default_compass_reward_entropy_multiplier")]
+    pub compass_reward_entropy_multiplier: f64,
+    /// Compass MCTS branch - H1 bonus cap and multiplier
+    #[serde(default = "default_compass_mcts_h1_bonus_cap")]
+    pub compass_mcts_h1_bonus_cap: f64,
+    #[serde(default = "default_compass_mcts_h1_bonus_multiplier")]
+    pub compass_mcts_h1_bonus_multiplier: f64,
+    /// Compass MCTS branch - persistence bonus divisor and multiplier
+    #[serde(default = "default_compass_mcts_persistence_divisor")]
+    pub compass_mcts_persistence_divisor: f64,
+    #[serde(default = "default_compass_mcts_persistence_multiplier")]
+    pub compass_mcts_persistence_multiplier: f64,
+    /// Compass MCTS branch - knot bonus multiplier and cap
+    #[serde(default = "default_compass_mcts_knot_multiplier")]
+    pub compass_mcts_knot_multiplier: f64,
+    #[serde(default = "default_compass_mcts_knot_multiplier_cap")]
+    pub compass_mcts_knot_multiplier_cap: f64,
+    #[serde(default = "default_compass_mcts_knot_weight")]
+    pub compass_mcts_knot_weight: f64,
+    /// Compass MCTS branch - gap bonus multiplier
+    #[serde(default = "default_compass_mcts_gap_multiplier")]
+    pub compass_mcts_gap_multiplier: f64,
+    /// Compass MCTS branch - entropy bonus multiplier and cap
+    #[serde(default = "default_compass_mcts_entropy_multiplier")]
+    pub compass_mcts_entropy_multiplier: f64,
+    #[serde(default = "default_compass_mcts_entropy_multiplier_cap")]
+    pub compass_mcts_entropy_multiplier_cap: f64,
+    #[serde(default = "default_compass_mcts_entropy_weight")]
+    pub compass_mcts_entropy_weight: f64,
+    /// Compass MCTS branch - H0 bonus cap and multiplier
+    #[serde(default = "default_compass_mcts_h0_bonus_cap")]
+    pub compass_mcts_h0_bonus_cap: f64,
+    #[serde(default = "default_compass_mcts_h0_bonus_multiplier")]
+    pub compass_mcts_h0_bonus_multiplier: f64,
+    /// Compass MCTS branch - default exploration bonus base and divisor
+    #[serde(default = "default_compass_mcts_default_exploration_base")]
+    pub compass_mcts_default_exploration_base: f64,
+    #[serde(default = "default_compass_mcts_default_exploration_divisor")]
+    pub compass_mcts_default_exploration_divisor: f64,
+    /// Compass cascade - minimum consonance threshold
+    #[serde(default = "default_compass_cascade_min_consonance")]
+    pub compass_cascade_min_consonance: f64,
+    /// Compass cascade - recognition to satisfaction consonance threshold
+    #[serde(default = "default_compass_cascade_recognition_satisfaction_consonance")]
+    pub compass_cascade_recognition_satisfaction_consonance: f64,
+    /// Compass cascade - calm to motivation consonance threshold
+    #[serde(default = "default_compass_cascade_calm_motivation_consonance")]
+    pub compass_cascade_calm_motivation_consonance: f64,
+    /// Learning loop - executor memory limit
+    #[serde(default = "default_learning_executor_memory_limit")]
+    pub learning_executor_memory_limit: usize,
+    /// Learning loop - executor cluster threshold
+    #[serde(default = "default_learning_executor_cluster_threshold")]
+    pub learning_executor_cluster_threshold: f32,
+    /// Learning loop - reward threshold for QLoRA trigger
+    #[serde(default = "default_learning_reward_threshold")]
+    pub learning_reward_threshold: f64,
+    /// Learning loop - reptile episode interval
+    #[serde(default = "default_learning_reptile_episode_interval")]
+    pub learning_reptile_episode_interval: u32,
+    /// Learning loop - evolution episode interval
+    #[serde(default = "default_learning_evolution_episode_interval")]
+    pub learning_evolution_episode_interval: u32,
+    /// Learning loop - reptile batch size
+    #[serde(default = "default_learning_reptile_batch_size")]
+    pub learning_reptile_batch_size: usize,
+    /// Learning loop - QLoRA low reward threshold
+    #[serde(default = "default_learning_qlora_low_reward_threshold")]
+    pub learning_qlora_low_reward_threshold: f64,
+    /// Learning loop - QLoRA sample count
+    #[serde(default = "default_learning_qlora_sample_count")]
+    pub learning_qlora_sample_count: usize,
+    /// Learning loop - QLoRA max samples
+    #[serde(default = "default_learning_qlora_max_samples")]
+    pub learning_qlora_max_samples: usize,
+    /// Learning loop - epsilon decay rate
+    #[serde(default = "default_learning_epsilon_decay_rate")]
+    pub learning_epsilon_decay_rate: f64,
+    /// Learning loop - epsilon minimum
+    #[serde(default = "default_learning_epsilon_minimum")]
+    pub learning_epsilon_minimum: f64,
+    /// Learning loop - alpha decay rate
+    #[serde(default = "default_learning_alpha_decay_rate")]
+    pub learning_alpha_decay_rate: f64,
+    /// Learning loop - alpha minimum
+    #[serde(default = "default_learning_alpha_minimum")]
+    pub learning_alpha_minimum: f64,
+    /// Learning loop - evolution old episodes ratio
+    #[serde(default = "default_learning_evolution_old_episodes_ratio")]
+    pub learning_evolution_old_episodes_ratio: f64,
+    /// Learning loop - evolution old episodes min
+    #[serde(default = "default_learning_evolution_old_episodes_min")]
+    pub learning_evolution_old_episodes_min: usize,
+    /// Learning loop - evolution old episodes max
+    #[serde(default = "default_learning_evolution_old_episodes_max")]
+    pub learning_evolution_old_episodes_max: usize,
+    /// Learning loop - tough knots ratio
+    #[serde(default = "default_learning_tough_knots_ratio")]
+    pub learning_tough_knots_ratio: f64,
+    /// Learning loop - TCS reward shaping knot penalty
+    #[serde(default = "default_learning_tcs_knot_penalty")]
+    pub learning_tcs_knot_penalty: f64,
+    /// Learning loop - TCS reward shaping Betti1 penalty
+    #[serde(default = "default_learning_tcs_betti1_penalty")]
+    pub learning_tcs_betti1_penalty: f64,
+    /// Learning loop - TCS reward shaping entropy penalty
+    #[serde(default = "default_learning_tcs_entropy_penalty")]
+    pub learning_tcs_entropy_penalty: f64,
+    /// Learning loop - TCS reward shaping discover mode weight
+    #[serde(default = "default_learning_tcs_discover_weight")]
+    pub learning_tcs_discover_weight: f64,
+    /// Learning loop - TCS reward shaping spectral gap threshold
+    #[serde(default = "default_learning_tcs_spectral_gap_threshold")]
+    pub learning_tcs_spectral_gap_threshold: f64,
+    /// Learning loop - TCS reward shaping convergence bonus
+    #[serde(default = "default_learning_tcs_convergence_bonus")]
+    pub learning_tcs_convergence_bonus: f64,
+    /// Learning loop - TCS reward shaping convergence penalty
+    #[serde(default = "default_learning_tcs_convergence_penalty")]
+    pub learning_tcs_convergence_penalty: f64,
+    /// Learning loop - TCS reward shaping novelty threshold
+    #[serde(default = "default_learning_tcs_novelty_threshold")]
+    pub learning_tcs_novelty_threshold: f64,
+    /// Learning loop - TCS reward shaping novelty bonus
+    #[serde(default = "default_learning_tcs_novelty_bonus")]
+    pub learning_tcs_novelty_bonus: f64,
+    /// Learning loop - DQN batch size
+    #[serde(default = "default_learning_dqn_batch_size")]
+    pub learning_dqn_batch_size: usize,
+    /// Learning loop - DQN parameter adjustment multipliers
+    #[serde(default = "default_learning_dqn_temp_multiplier")]
+    pub learning_dqn_temp_multiplier: f64,
+    #[serde(default = "default_learning_dqn_top_p_multiplier")]
+    pub learning_dqn_top_p_multiplier: f64,
+    #[serde(default = "default_learning_dqn_mcts_c_multiplier")]
+    pub learning_dqn_mcts_c_multiplier: f64,
+    #[serde(default = "default_learning_dqn_retrieval_multiplier")]
+    pub learning_dqn_retrieval_multiplier: f64,
+    #[serde(default = "default_learning_dqn_novelty_multiplier")]
+    pub learning_dqn_novelty_multiplier: f64,
+    #[serde(default = "default_learning_dqn_awareness_multiplier")]
+    pub learning_dqn_awareness_multiplier: f64,
+    /// Learning loop - Reptile inner gradient multiplier
+    #[serde(default = "default_learning_reptile_inner_gradient_multiplier")]
+    pub learning_reptile_inner_gradient_multiplier: f64,
+    /// Learning loop - Evolution fitness multipliers
+    #[serde(default = "default_learning_evolution_temp_multiplier")]
+    pub learning_evolution_temp_multiplier: f64,
+    #[serde(default = "default_learning_evolution_alpha_multiplier")]
+    pub learning_evolution_alpha_multiplier: f64,
+    /// Learning loop - Evolution mutation std multipliers
+    #[serde(default = "default_learning_evolution_mutation_reduce_multiplier")]
+    pub learning_evolution_mutation_reduce_multiplier: f64,
+    #[serde(default = "default_learning_evolution_mutation_increase_multiplier")]
+    pub learning_evolution_mutation_increase_multiplier: f64,
+    /// Generation - reflexion temperature base multiplier
+    #[serde(default = "default_generation_reflexion_temp_base_multiplier")]
+    pub generation_reflexion_temp_base_multiplier: f64,
+    /// Generation - reflexion temperature stability multiplier
+    #[serde(default = "default_generation_reflexion_temp_stability_multiplier")]
+    pub generation_reflexion_temp_stability_multiplier: f64,
+    /// Generation - reflexion top_p increment
+    #[serde(default = "default_generation_reflexion_top_p_increment")]
+    pub generation_reflexion_top_p_increment: f64,
+    /// Generation - reflexion top_p stability increment
+    #[serde(default = "default_generation_reflexion_top_p_stability_increment")]
+    pub generation_reflexion_top_p_stability_increment: f64,
+    /// Generation - reflexion top_p maximum
+    #[serde(default = "default_generation_reflexion_top_p_max")]
+    pub generation_reflexion_top_p_max: f64,
+    /// Generation - CoT repair temperature base multiplier
+    #[serde(default = "default_generation_cot_repair_temp_base_multiplier")]
+    pub generation_cot_repair_temp_base_multiplier: f64,
+    /// Generation - CoT repair temperature iteration increment
+    #[serde(default = "default_generation_cot_repair_temp_iteration_increment")]
+    pub generation_cot_repair_temp_iteration_increment: f64,
+    /// Generation - CoT repair top_p increment
+    #[serde(default = "default_generation_cot_repair_top_p_increment")]
+    pub generation_cot_repair_top_p_increment: f64,
+    /// Generation - CoT repair top_p maximum
+    #[serde(default = "default_generation_cot_repair_top_p_max")]
+    pub generation_cot_repair_top_p_max: f64,
+    /// Generation - CoT repair temperature min/max
+    #[serde(default = "default_generation_cot_repair_temp_min")]
+    pub generation_cot_repair_temp_min: f64,
+    #[serde(default = "default_generation_cot_repair_temp_max")]
+    pub generation_cot_repair_temp_max: f64,
+    /// ERAG - similarity boost multiplier
+    #[serde(default = "default_erag_similarity_boost_multiplier")]
+    pub erag_similarity_boost_multiplier: f64,
+    /// ERAG - similarity boost maximum
+    #[serde(default = "default_erag_similarity_boost_max")]
+    pub erag_similarity_boost_max: f64,
 }
 
 /// Weighted Episodic Memory configuration
@@ -1242,16 +1782,20 @@ impl RuntimeConfig {
 
         let requested_qdrant_dim = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
             .and_then(|value| value.parse::<usize>().ok());
-        if let Some(value) = requested_qdrant_dim {
-            if value != 896usize {
-                warn!(
-                    expected = 896usize,
-                    provided = value,
-                    "Qdrant dim fixed to 896; overriding provided value"
-                );
-            }
+        
+        // Use requested dimension or default to 896
+        // Note: The embedding model determines the actual vector dimension
+        // This allows override but warns if mismatch with expected value
+        let qdrant_vector_dim = requested_qdrant_dim.unwrap_or(896);
+        
+        if qdrant_vector_dim != 896 {
+            warn!(
+                requested = qdrant_vector_dim,
+                expected = 896,
+                "Qdrant vector dimension ({}) differs from expected (896). Ensure embedding model matches.",
+                qdrant_vector_dim
+            );
         }
-        let qdrant_vector_dim = 896usize;
 
         let ollama_endpoint =
             env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
@@ -1448,8 +1992,17 @@ impl RuntimeConfig {
             .unwrap_or_else(default_repetition_penalty);
         let lens_snippet_chars = env_with_fallback(&["LENS_SNIPPET_CHARS"])
             .and_then(|v| v.parse::<usize>().ok())
-            .map(|n| n.clamp(100, 500))
             .unwrap_or_else(default_lens_snippet_chars);
+        
+        // Validate lens_snippet_chars is within reasonable bounds
+        // Allow override via environment variable but warn if outside expected range
+        if lens_snippet_chars < 50 || lens_snippet_chars > 1000 {
+            warn!(
+                value = lens_snippet_chars,
+                "LENS_SNIPPET_CHARS ({}) outside typical range (50-1000). This may impact performance.",
+                lens_snippet_chars
+            );
+        }
         let cot_temp_increment = env_with_fallback(&["COT_TEMP_INCREMENT"])
             .and_then(|v| v.parse().ok())
             .unwrap_or_else(default_cot_temp_increment);
@@ -1668,6 +2221,189 @@ impl RuntimeConfig {
             n_tokens_bypass: env_with_fallback(&["N_TOKENS_BYPASS"])
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
+            // Pipeline runtime configuration
+            curator_feedback_window_size: default_curator_feedback_window_size(),
+            curator_feedback_threshold_adjustment: default_curator_feedback_threshold_adjustment(),
+            curator_feedback_threshold_min: default_curator_feedback_threshold_min(),
+            curator_feedback_threshold_max: default_curator_feedback_threshold_max(),
+            curator_feedback_quality_trend_threshold: default_curator_feedback_quality_trend_threshold(),
+            curator_feedback_temp_adjustment_multiplier: default_curator_feedback_temp_adjustment_multiplier(),
+            curator_feedback_learned_rate_low: default_curator_feedback_learned_rate_low(),
+            curator_feedback_quality_low: default_curator_feedback_quality_low(),
+            curator_feedback_top_p_increase: default_curator_feedback_top_p_increase(),
+            curator_feedback_learned_rate_high: default_curator_feedback_learned_rate_high(),
+            curator_feedback_quality_high: default_curator_feedback_quality_high(),
+            curator_feedback_top_p_decrease: default_curator_feedback_top_p_decrease(),
+            curator_feedback_retrieval_quality_threshold: default_curator_feedback_retrieval_quality_threshold(),
+            curator_feedback_retrieval_top_k_increase: default_curator_feedback_retrieval_top_k_increase(),
+            curator_feedback_retrieval_quality_high: default_curator_feedback_retrieval_quality_high(),
+            curator_feedback_retrieval_learned_rate_high: default_curator_feedback_retrieval_learned_rate_high(),
+            curator_feedback_retrieval_top_k_decrease: default_curator_feedback_retrieval_top_k_decrease(),
+            pipeline_retrieval_top_k_min: default_pipeline_retrieval_top_k_min(),
+            pipeline_retrieval_top_k_max: default_pipeline_retrieval_top_k_max(),
+            pipeline_timing_split_ratio: default_pipeline_timing_split_ratio(),
+            pipeline_healing_knot_threshold: default_pipeline_healing_knot_threshold(),
+            pipeline_healing_spectral_gap_threshold: default_pipeline_healing_spectral_gap_threshold(),
+            pipeline_ucb1_max_clamp: default_pipeline_ucb1_max_clamp(),
+            pipeline_quality_score_increment: default_pipeline_quality_score_increment(),
+            pipeline_param_min: default_pipeline_param_min(),
+            pipeline_param_max: default_pipeline_param_max(),
+            pipeline_retrieval_top_k_increment_min: default_pipeline_retrieval_top_k_increment_min(),
+            pipeline_retrieval_top_k_increment_max: default_pipeline_retrieval_top_k_increment_max(),
+            topology_memory_analyzer_threshold: default_topology_memory_analyzer_threshold(),
+            discovery_buffer_interval_secs: default_discovery_buffer_interval_secs(),
+            embedding_cache_capacity: default_embedding_cache_capacity(),
+            collapse_cache_capacity: default_collapse_cache_capacity(),
+            mcts_exploration_constant: default_mcts_exploration_constant(),
+            mcts_depth: default_mcts_depth(),
+            discovery_buffer_threshold: default_discovery_buffer_threshold(),
+            gpu_fitness_refresh_interval_secs: default_gpu_fitness_refresh_interval_secs(),
+            learning_timeout_secs: default_learning_timeout_secs(),
+            context_truncation_limit: default_context_truncation_limit(),
+            base_retrieval_top_k: default_base_retrieval_top_k(),
+            delay_threshold_ms: default_delay_threshold_ms(),
+            generation_client_timeout_secs: default_generation_client_timeout_secs(),
+            memory_upsert_timeout_secs: default_memory_upsert_timeout_secs(),
+            rouge_acceptable_threshold: default_rouge_acceptable_threshold(),
+            rouge_improvement_threshold: default_rouge_improvement_threshold(),
+            ucb1_boost_threshold: default_ucb1_boost_threshold(),
+            ucb1_relaxation_threshold: default_ucb1_relaxation_threshold(),
+            retry_count_for_relaxation: default_retry_count_for_relaxation(),
+            quality_base_score: default_quality_base_score(),
+            quality_max_length: default_quality_max_length(),
+            quality_length_factor_weight: default_quality_length_factor_weight(),
+            quality_entropy_threshold: default_quality_entropy_threshold(),
+            quality_entropy_factor_weight: default_quality_entropy_factor_weight(),
+            knot_complexity_penalty_threshold: default_knot_complexity_penalty_threshold(),
+            knot_complexity_penalty_multiplier: default_knot_complexity_penalty_multiplier(),
+            spectral_gap_bonus_threshold: default_spectral_gap_bonus_threshold(),
+            spectral_gap_bonus_multiplier: default_spectral_gap_bonus_multiplier(),
+            betti1_quality_threshold: default_betti1_quality_threshold(),
+            betti1_bonus_multiplier: default_betti1_bonus_multiplier(),
+            betti1_penalty_multiplier: default_betti1_penalty_multiplier(),
+            persistence_entropy_quality_threshold: default_persistence_entropy_quality_threshold(),
+            persistence_entropy_bonus_multiplier: default_persistence_entropy_bonus_multiplier(),
+            topology_refinement_knot_threshold: default_topology_refinement_knot_threshold(),
+            topology_refinement_betti1_threshold: default_topology_refinement_betti1_threshold(),
+            topology_refinement_entropy_threshold: default_topology_refinement_entropy_threshold(),
+            autonomous_refinement_temperature: default_autonomous_refinement_temperature(),
+            autonomous_refinement_top_p: default_autonomous_refinement_top_p(),
+            autonomous_refinement_improvement_weight: default_autonomous_refinement_improvement_weight(),
+            autonomous_refinement_improvement_threshold: default_autonomous_refinement_improvement_threshold(),
+            second_pass_refinement_threshold: default_second_pass_refinement_threshold(),
+            second_pass_refinement_temperature: default_second_pass_refinement_temperature(),
+            second_pass_refinement_top_p: default_second_pass_refinement_top_p(),
+            enhancement_temperature: default_enhancement_temperature(),
+            enhancement_top_p: default_enhancement_top_p(),
+            reward_rouge_weight: default_reward_rouge_weight(),
+            reward_entropy_weight: default_reward_entropy_weight(),
+            consistency_voting_quality: default_consistency_voting_quality(),
+            failure_signal_thresholds: FailureSignalThresholds::default(),
+            rce_erag_cosine_weight: default_rce_erag_cosine_weight(),
+            rce_erag_entropy_weight: default_rce_erag_entropy_weight(),
+            rce_adaptation_entropy_threshold: default_rce_adaptation_entropy_threshold(),
+            rce_adaptation_spectral_gap_threshold: default_rce_adaptation_spectral_gap_threshold(),
+            rce_circuit_breaker_streak: default_rce_circuit_breaker_streak(),
+            tough_knots_multiplier: default_tough_knots_multiplier(),
+            tough_knots_max_fetch: default_tough_knots_max_fetch(),
+            tough_knots_knot_threshold: default_tough_knots_knot_threshold(),
+            tough_knots_quality_threshold: default_tough_knots_quality_threshold(),
+            tough_knots_knot_multiplier: default_tough_knots_knot_multiplier(),
+            compass_h1_persistence_divisor: default_compass_h1_persistence_divisor(),
+            compass_h1_penalty_scale: default_compass_h1_penalty_scale(),
+            compass_sheaf_energy_threshold: default_compass_sheaf_energy_threshold(),
+            compass_sheaf_boost_multiplier: default_compass_sheaf_boost_multiplier(),
+            compass_dominance_penalty_multiplier: default_compass_dominance_penalty_multiplier(),
+            compass_dominance_boost_multiplier: default_compass_dominance_boost_multiplier(),
+            compass_arousal_penalty_multiplier: default_compass_arousal_penalty_multiplier(),
+            compass_random_noise_range: default_compass_random_noise_range(),
+            compass_pleasure_boost_probability: default_compass_pleasure_boost_probability(),
+            compass_pleasure_boost_multiplier: default_compass_pleasure_boost_multiplier(),
+            compass_base_threat_arousal_threshold: default_compass_base_threat_arousal_threshold(),
+            compass_variance_spike_multiplier: default_compass_variance_spike_multiplier(),
+            compass_random_threat_probability: default_compass_random_threat_probability(),
+            compass_random_threat_arousal_threshold: default_compass_random_threat_arousal_threshold(),
+            compass_random_threat_pleasure_threshold: default_compass_random_threat_pleasure_threshold(),
+            compass_healing_pleasure_threshold: default_compass_healing_pleasure_threshold(),
+            compass_healing_dominance_threshold: default_compass_healing_dominance_threshold(),
+            compass_quadrant_panic_pleasure_threshold: default_compass_quadrant_panic_pleasure_threshold(),
+            compass_quadrant_panic_arousal_threshold: default_compass_quadrant_panic_arousal_threshold(),
+            compass_quadrant_persist_arousal_threshold: default_compass_quadrant_persist_arousal_threshold(),
+            compass_reward_panic_to_discover: default_compass_reward_panic_to_discover(),
+            compass_reward_panic_to_persist: default_compass_reward_panic_to_persist(),
+            compass_reward_panic_to_master: default_compass_reward_panic_to_master(),
+            compass_reward_master_to_panic: default_compass_reward_master_to_panic(),
+            compass_reward_default: default_compass_reward_default(),
+            compass_reward_entropy_multiplier: default_compass_reward_entropy_multiplier(),
+            compass_mcts_h1_bonus_cap: default_compass_mcts_h1_bonus_cap(),
+            compass_mcts_h1_bonus_multiplier: default_compass_mcts_h1_bonus_multiplier(),
+            compass_mcts_persistence_divisor: default_compass_mcts_persistence_divisor(),
+            compass_mcts_persistence_multiplier: default_compass_mcts_persistence_multiplier(),
+            compass_mcts_knot_multiplier: default_compass_mcts_knot_multiplier(),
+            compass_mcts_knot_multiplier_cap: default_compass_mcts_knot_multiplier_cap(),
+            compass_mcts_knot_weight: default_compass_mcts_knot_weight(),
+            compass_mcts_gap_multiplier: default_compass_mcts_gap_multiplier(),
+            compass_mcts_entropy_multiplier: default_compass_mcts_entropy_multiplier(),
+            compass_mcts_entropy_multiplier_cap: default_compass_mcts_entropy_multiplier_cap(),
+            compass_mcts_entropy_weight: default_compass_mcts_entropy_weight(),
+            compass_mcts_h0_bonus_cap: default_compass_mcts_h0_bonus_cap(),
+            compass_mcts_h0_bonus_multiplier: default_compass_mcts_h0_bonus_multiplier(),
+            compass_mcts_default_exploration_base: default_compass_mcts_default_exploration_base(),
+            compass_mcts_default_exploration_divisor: default_compass_mcts_default_exploration_divisor(),
+            compass_cascade_min_consonance: default_compass_cascade_min_consonance(),
+            compass_cascade_recognition_satisfaction_consonance: default_compass_cascade_recognition_satisfaction_consonance(),
+            compass_cascade_calm_motivation_consonance: default_compass_cascade_calm_motivation_consonance(),
+            learning_executor_memory_limit: default_learning_executor_memory_limit(),
+            learning_executor_cluster_threshold: default_learning_executor_cluster_threshold(),
+            learning_reward_threshold: default_learning_reward_threshold(),
+            learning_reptile_episode_interval: default_learning_reptile_episode_interval(),
+            learning_evolution_episode_interval: default_learning_evolution_episode_interval(),
+            learning_reptile_batch_size: default_learning_reptile_batch_size(),
+            learning_qlora_low_reward_threshold: default_learning_qlora_low_reward_threshold(),
+            learning_qlora_sample_count: default_learning_qlora_sample_count(),
+            learning_qlora_max_samples: default_learning_qlora_max_samples(),
+            learning_epsilon_decay_rate: default_learning_epsilon_decay_rate(),
+            learning_epsilon_minimum: default_learning_epsilon_minimum(),
+            learning_alpha_decay_rate: default_learning_alpha_decay_rate(),
+            learning_alpha_minimum: default_learning_alpha_minimum(),
+            learning_evolution_old_episodes_ratio: default_learning_evolution_old_episodes_ratio(),
+            learning_evolution_old_episodes_min: default_learning_evolution_old_episodes_min(),
+            learning_evolution_old_episodes_max: default_learning_evolution_old_episodes_max(),
+            learning_tough_knots_ratio: default_learning_tough_knots_ratio(),
+            learning_tcs_knot_penalty: default_learning_tcs_knot_penalty(),
+            learning_tcs_betti1_penalty: default_learning_tcs_betti1_penalty(),
+            learning_tcs_entropy_penalty: default_learning_tcs_entropy_penalty(),
+            learning_tcs_discover_weight: default_learning_tcs_discover_weight(),
+            learning_tcs_spectral_gap_threshold: default_learning_tcs_spectral_gap_threshold(),
+            learning_tcs_convergence_bonus: default_learning_tcs_convergence_bonus(),
+            learning_tcs_convergence_penalty: default_learning_tcs_convergence_penalty(),
+            learning_tcs_novelty_threshold: default_learning_tcs_novelty_threshold(),
+            learning_tcs_novelty_bonus: default_learning_tcs_novelty_bonus(),
+            learning_dqn_batch_size: default_learning_dqn_batch_size(),
+            learning_dqn_temp_multiplier: default_learning_dqn_temp_multiplier(),
+            learning_dqn_top_p_multiplier: default_learning_dqn_top_p_multiplier(),
+            learning_dqn_mcts_c_multiplier: default_learning_dqn_mcts_c_multiplier(),
+            learning_dqn_retrieval_multiplier: default_learning_dqn_retrieval_multiplier(),
+            learning_dqn_novelty_multiplier: default_learning_dqn_novelty_multiplier(),
+            learning_dqn_awareness_multiplier: default_learning_dqn_awareness_multiplier(),
+            learning_reptile_inner_gradient_multiplier: default_learning_reptile_inner_gradient_multiplier(),
+            learning_evolution_temp_multiplier: default_learning_evolution_temp_multiplier(),
+            learning_evolution_alpha_multiplier: default_learning_evolution_alpha_multiplier(),
+            learning_evolution_mutation_reduce_multiplier: default_learning_evolution_mutation_reduce_multiplier(),
+            learning_evolution_mutation_increase_multiplier: default_learning_evolution_mutation_increase_multiplier(),
+            generation_reflexion_temp_base_multiplier: default_generation_reflexion_temp_base_multiplier(),
+            generation_reflexion_temp_stability_multiplier: default_generation_reflexion_temp_stability_multiplier(),
+            generation_reflexion_top_p_increment: default_generation_reflexion_top_p_increment(),
+            generation_reflexion_top_p_stability_increment: default_generation_reflexion_top_p_stability_increment(),
+            generation_reflexion_top_p_max: default_generation_reflexion_top_p_max(),
+            generation_cot_repair_temp_base_multiplier: default_generation_cot_repair_temp_base_multiplier(),
+            generation_cot_repair_temp_iteration_increment: default_generation_cot_repair_temp_iteration_increment(),
+            generation_cot_repair_top_p_increment: default_generation_cot_repair_top_p_increment(),
+            generation_cot_repair_top_p_max: default_generation_cot_repair_top_p_max(),
+            generation_cot_repair_temp_min: default_generation_cot_repair_temp_min(),
+            generation_cot_repair_temp_max: default_generation_cot_repair_temp_max(),
+            erag_similarity_boost_multiplier: default_erag_similarity_boost_multiplier(),
+            erag_similarity_boost_max: default_erag_similarity_boost_max(),
         };
 
         runtime.apply_hardware_overrides(args.hardware);
@@ -1680,6 +2416,41 @@ impl RuntimeConfig {
 
     fn apply_hardware_overrides(&mut self, hardware: HardwareProfile) {
         match hardware {
+            HardwareProfile::RTX5090 => {
+                info!("Applying RTX 5090 hardware overrides - MAXIMUM GPU UTILIZATION");
+
+                // Force GPU usage everywhere
+                self.use_gpu_fitness = true;
+                self.optimized_erag = true;
+                self.cache_prefetch_enabled = true;
+                self.cache_prefetch_parallelism = self.cache_prefetch_parallelism.max(16);
+                self.cache_prefetch_prompts = self.cache_prefetch_prompts.max(32);
+                self.cache_prefetch_top_hits = self.cache_prefetch_top_hits.max(16);
+                self.erag_batch_size = self.erag_batch_size.max(512); // Larger batches for RTX 5090
+                self.erag_batch_flush_ms = self.erag_batch_flush_ms.min(100);
+                self.generation_max_tokens = self.generation_max_tokens.max(8192);
+                self.dynamic_token_max = self.dynamic_token_max.max(2048);
+                self.token_promotion_interval = self.token_promotion_interval.min(20);
+                self.cache_capacity = self.cache_capacity.max(8_192);
+                
+                // FORCE CUDA - no fallbacks
+                self.weighted_memory_config.gpu_device = "cuda".to_string();
+
+                if self.parallel_curator_rouge == false {
+                    self.parallel_curator_rouge = true;
+                }
+
+                info!(
+                    use_gpu_fitness = self.use_gpu_fitness,
+                    optimized_erag = self.optimized_erag,
+                    gpu_device = %self.weighted_memory_config.gpu_device,
+                    erag_batch_size = self.erag_batch_size,
+                    generation_max_tokens = self.generation_max_tokens,
+                    token_promotion_interval = self.token_promotion_interval,
+                    cache_prefetch_parallelism = self.cache_prefetch_parallelism,
+                    "RTX 5090 MAXIMUM GPU overrides applied"
+                );
+            }
             HardwareProfile::H200 => {
                 info!("Applying H200 hardware overrides");
 
@@ -1922,6 +2693,808 @@ fn default_parallel_curator_rouge() -> bool {
     env_with_fallback(&["PARALLEL_CURATOR_ROUGE"])
         .and_then(|v| v.parse().ok())
         .unwrap_or(true) // Default to true for optimization
+}
+
+fn default_curator_feedback_window_size() -> usize {
+    20
+}
+
+fn default_curator_feedback_threshold_adjustment() -> f32 {
+    0.05
+}
+
+fn default_curator_feedback_threshold_min() -> f32 {
+    0.3
+}
+
+fn default_curator_feedback_threshold_max() -> f32 {
+    0.9
+}
+
+fn default_curator_feedback_quality_trend_threshold() -> f32 {
+    0.05
+}
+
+fn default_curator_feedback_temp_adjustment_multiplier() -> f32 {
+    0.1
+}
+
+fn default_curator_feedback_learned_rate_low() -> f32 {
+    0.3
+}
+
+fn default_curator_feedback_quality_low() -> f32 {
+    0.6
+}
+
+fn default_curator_feedback_top_p_increase() -> f64 {
+    0.05
+}
+
+fn default_curator_feedback_learned_rate_high() -> f32 {
+    0.7
+}
+
+fn default_curator_feedback_quality_high() -> f32 {
+    0.7
+}
+
+fn default_curator_feedback_top_p_decrease() -> f64 {
+    -0.02
+}
+
+fn default_curator_feedback_retrieval_quality_threshold() -> f32 {
+    0.5
+}
+
+fn default_curator_feedback_retrieval_top_k_increase() -> f64 {
+    1.0
+}
+
+fn default_curator_feedback_retrieval_quality_high() -> f32 {
+    0.8
+}
+
+fn default_curator_feedback_retrieval_learned_rate_high() -> f32 {
+    0.6
+}
+
+fn default_curator_feedback_retrieval_top_k_decrease() -> f64 {
+    -0.5
+}
+
+fn default_pipeline_retrieval_top_k_min() -> usize {
+    1
+}
+
+fn default_pipeline_retrieval_top_k_max() -> usize {
+    50
+}
+
+fn default_pipeline_timing_split_ratio() -> f64 {
+    0.5
+}
+
+fn default_pipeline_healing_knot_threshold() -> f64 {
+    0.4
+}
+
+fn default_pipeline_healing_spectral_gap_threshold() -> f64 {
+    0.6
+}
+
+fn default_pipeline_ucb1_max_clamp() -> f64 {
+    1.0
+}
+
+fn default_pipeline_quality_score_increment() -> f32 {
+    0.1
+}
+
+fn default_pipeline_param_min() -> f64 {
+    0.1
+}
+
+fn default_pipeline_param_max() -> f64 {
+    1.0
+}
+
+fn default_pipeline_retrieval_top_k_increment_min() -> f64 {
+    0.0
+}
+
+fn default_pipeline_retrieval_top_k_increment_max() -> f64 {
+    10.0
+}
+
+fn default_topology_memory_analyzer_threshold() -> f64 {
+    0.3
+}
+
+fn default_discovery_buffer_interval_secs() -> u64 {
+    1
+}
+
+fn default_embedding_cache_capacity() -> usize {
+    1000
+}
+
+fn default_collapse_cache_capacity() -> usize {
+    500
+}
+
+fn default_mcts_exploration_constant() -> f64 {
+    1.414 // sqrt(2) - standard UCB1 exploration constant
+}
+
+fn default_mcts_depth() -> usize {
+    5
+}
+
+fn default_discovery_buffer_threshold() -> usize {
+    10
+}
+
+fn default_gpu_fitness_refresh_interval_secs() -> u64 {
+    30
+}
+
+fn default_learning_timeout_secs() -> u64 {
+    10
+}
+
+fn default_context_truncation_limit() -> usize {
+    100
+}
+
+fn default_base_retrieval_top_k() -> i32 {
+    3
+}
+
+fn default_delay_threshold_ms() -> u64 {
+    100
+}
+
+fn default_generation_client_timeout_secs() -> u64 {
+    60
+}
+
+fn default_memory_upsert_timeout_secs() -> u64 {
+    5
+}
+
+fn default_rouge_acceptable_threshold() -> f64 {
+    0.25
+}
+
+fn default_rouge_improvement_threshold() -> f64 {
+    0.1
+}
+
+fn default_ucb1_boost_threshold() -> f64 {
+    0.2
+}
+
+fn default_ucb1_relaxation_threshold() -> f64 {
+    0.15
+}
+
+fn default_retry_count_for_relaxation() -> u32 {
+    3
+}
+
+fn default_quality_base_score() -> f32 {
+    0.5
+}
+
+fn default_quality_max_length() -> usize {
+    1000
+}
+
+fn default_quality_length_factor_weight() -> f32 {
+    0.2
+}
+
+fn default_quality_entropy_threshold() -> f64 {
+    0.5
+}
+
+fn default_quality_entropy_factor_weight() -> f32 {
+    0.15
+}
+
+fn default_knot_complexity_penalty_threshold() -> f64 {
+    0.6
+}
+
+fn default_knot_complexity_penalty_multiplier() -> f32 {
+    0.9
+}
+
+fn default_spectral_gap_bonus_threshold() -> f64 {
+    0.7
+}
+
+fn default_spectral_gap_bonus_multiplier() -> f32 {
+    1.1
+}
+
+fn default_betti1_quality_threshold() -> usize {
+    3
+}
+
+fn default_betti1_bonus_multiplier() -> f32 {
+    1.05
+}
+
+fn default_betti1_penalty_multiplier() -> f32 {
+    0.95
+}
+
+fn default_persistence_entropy_quality_threshold() -> f64 {
+    0.3
+}
+
+fn default_persistence_entropy_bonus_multiplier() -> f32 {
+    1.05
+}
+
+fn default_topology_refinement_knot_threshold() -> f64 {
+    0.7
+}
+
+fn default_topology_refinement_betti1_threshold() -> usize {
+    5
+}
+
+fn default_topology_refinement_entropy_threshold() -> f64 {
+    0.8
+}
+
+fn default_autonomous_refinement_temperature() -> f64 {
+    0.22
+}
+
+fn default_autonomous_refinement_top_p() -> f64 {
+    0.82
+}
+
+fn default_autonomous_refinement_improvement_weight() -> f32 {
+    0.35
+}
+
+fn default_autonomous_refinement_improvement_threshold() -> f64 {
+    0.05
+}
+
+fn default_second_pass_refinement_threshold() -> f64 {
+    0.25
+}
+
+fn default_second_pass_refinement_temperature() -> f64 {
+    0.28
+}
+
+fn default_second_pass_refinement_top_p() -> f64 {
+    0.78
+}
+
+fn default_enhancement_temperature() -> f64 {
+    0.3
+}
+
+fn default_enhancement_top_p() -> f64 {
+    0.95
+}
+
+fn default_reward_rouge_weight() -> f64 {
+    0.5
+}
+
+fn default_reward_entropy_weight() -> f64 {
+    0.5
+}
+
+fn default_consistency_voting_quality() -> f64 {
+    0.8
+}
+
+/// Failure signal thresholds for hard/soft failure detection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureSignalThresholds {
+    /// Hard failure ROUGE threshold (below this triggers hard failure)
+    #[serde(default = "default_hard_rouge_threshold")]
+    pub hard_rouge_threshold: f64,
+    /// Hard failure entropy delta threshold (above this triggers hard failure)
+    #[serde(default = "default_hard_entropy_delta_threshold")]
+    pub hard_entropy_delta_threshold: f64,
+    /// Hard failure curator threshold (below this triggers hard failure)
+    #[serde(default = "default_hard_curator_threshold")]
+    pub hard_curator_threshold: f64,
+    /// Soft failure UCB1 threshold (below this triggers soft failure)
+    #[serde(default = "default_soft_ucb_threshold")]
+    pub soft_ucb_threshold: f64,
+    /// Soft failure average similarity threshold (below this triggers soft failure)
+    #[serde(default = "default_soft_avg_similarity_threshold")]
+    pub soft_avg_similarity_threshold: f32,
+    /// Soft failure OOV rate threshold (above this triggers soft failure)
+    #[serde(default = "default_soft_oov_threshold")]
+    pub soft_oov_threshold: f64,
+    /// Low quality hits threshold (above this triggers soft failure)
+    #[serde(default = "default_low_quality_hits_threshold")]
+    pub low_quality_hits_threshold: usize,
+}
+
+impl Default for FailureSignalThresholds {
+    fn default() -> Self {
+        Self {
+            hard_rouge_threshold: default_hard_rouge_threshold(),
+            hard_entropy_delta_threshold: default_hard_entropy_delta_threshold(),
+            hard_curator_threshold: default_hard_curator_threshold(),
+            soft_ucb_threshold: default_soft_ucb_threshold(),
+            soft_avg_similarity_threshold: default_soft_avg_similarity_threshold(),
+            soft_oov_threshold: default_soft_oov_threshold(),
+            low_quality_hits_threshold: default_low_quality_hits_threshold(),
+        }
+    }
+}
+
+fn default_hard_rouge_threshold() -> f64 {
+    0.5
+}
+
+fn default_hard_entropy_delta_threshold() -> f64 {
+    0.1
+}
+
+fn default_hard_curator_threshold() -> f64 {
+    0.7
+}
+
+fn default_soft_ucb_threshold() -> f64 {
+    0.3
+}
+
+fn default_soft_avg_similarity_threshold() -> f32 {
+    0.4
+}
+
+fn default_soft_oov_threshold() -> f64 {
+    0.2
+}
+
+fn default_low_quality_hits_threshold() -> usize {
+    3
+}
+
+fn default_rce_erag_cosine_weight() -> f64 {
+    0.7
+}
+
+fn default_rce_erag_entropy_weight() -> f64 {
+    0.3
+}
+
+fn default_rce_adaptation_entropy_threshold() -> f64 {
+    0.7
+}
+
+fn default_rce_adaptation_spectral_gap_threshold() -> f64 {
+    0.7
+}
+
+fn default_rce_circuit_breaker_streak() -> u32 {
+    3
+}
+
+fn default_tough_knots_multiplier() -> usize {
+    4
+}
+
+fn default_tough_knots_max_fetch() -> usize {
+    512
+}
+
+fn default_tough_knots_knot_threshold() -> f64 {
+    0.4
+}
+
+fn default_tough_knots_quality_threshold() -> f64 {
+    0.5
+}
+
+fn default_tough_knots_knot_multiplier() -> f64 {
+    2.0
+}
+
+// Compass PAD adjustment defaults
+fn default_compass_h1_persistence_divisor() -> f64 {
+    2.5
+}
+
+fn default_compass_h1_penalty_scale() -> f64 {
+    0.3
+}
+
+fn default_compass_sheaf_energy_threshold() -> f64 {
+    0.3
+}
+
+fn default_compass_sheaf_boost_multiplier() -> f64 {
+    0.5
+}
+
+fn default_compass_dominance_penalty_multiplier() -> f64 {
+    0.7
+}
+
+fn default_compass_dominance_boost_multiplier() -> f64 {
+    0.8
+}
+
+fn default_compass_arousal_penalty_multiplier() -> f64 {
+    0.5
+}
+
+fn default_compass_random_noise_range() -> f64 {
+    0.4
+}
+
+fn default_compass_pleasure_boost_probability() -> f64 {
+    0.15
+}
+
+fn default_compass_pleasure_boost_multiplier() -> f64 {
+    1.1
+}
+
+// Compass threat detection defaults
+fn default_compass_base_threat_arousal_threshold() -> f64 {
+    0.05
+}
+
+fn default_compass_variance_spike_multiplier() -> f64 {
+    1.2
+}
+
+fn default_compass_random_threat_probability() -> f64 {
+    0.45
+}
+
+fn default_compass_random_threat_arousal_threshold() -> f64 {
+    -0.2
+}
+
+fn default_compass_random_threat_pleasure_threshold() -> f64 {
+    0.35
+}
+
+// Compass healing detection defaults
+fn default_compass_healing_pleasure_threshold() -> f64 {
+    0.25
+}
+
+fn default_compass_healing_dominance_threshold() -> f64 {
+    0.05
+}
+
+// Compass quadrant thresholds defaults
+fn default_compass_quadrant_panic_pleasure_threshold() -> f64 {
+    -0.1
+}
+
+fn default_compass_quadrant_panic_arousal_threshold() -> f64 {
+    0.2
+}
+
+fn default_compass_quadrant_persist_arousal_threshold() -> f64 {
+    0.2
+}
+
+// Compass intrinsic reward defaults
+fn default_compass_reward_panic_to_discover() -> f64 {
+    10.0
+}
+
+fn default_compass_reward_panic_to_persist() -> f64 {
+    -1.0
+}
+
+fn default_compass_reward_panic_to_master() -> f64 {
+    10.0
+}
+
+fn default_compass_reward_master_to_panic() -> f64 {
+    -5.0
+}
+
+fn default_compass_reward_default() -> f64 {
+    1.0
+}
+
+fn default_compass_reward_entropy_multiplier() -> f64 {
+    5.0
+}
+
+// Compass MCTS branch defaults
+fn default_compass_mcts_h1_bonus_cap() -> f64 {
+    5.0
+}
+
+fn default_compass_mcts_h1_bonus_multiplier() -> f64 {
+    0.1
+}
+
+fn default_compass_mcts_persistence_divisor() -> f64 {
+    3.0
+}
+
+fn default_compass_mcts_persistence_multiplier() -> f64 {
+    0.15
+}
+
+fn default_compass_mcts_knot_multiplier() -> f64 {
+    2.0
+}
+
+fn default_compass_mcts_knot_multiplier_cap() -> f64 {
+    1.0
+}
+
+fn default_compass_mcts_knot_weight() -> f64 {
+    0.2
+}
+
+fn default_compass_mcts_gap_multiplier() -> f64 {
+    0.15
+}
+
+fn default_compass_mcts_entropy_multiplier() -> f64 {
+    1.5
+}
+
+fn default_compass_mcts_entropy_multiplier_cap() -> f64 {
+    1.0
+}
+
+fn default_compass_mcts_entropy_weight() -> f64 {
+    0.12
+}
+
+fn default_compass_mcts_h0_bonus_cap() -> f64 {
+    5.0
+}
+
+fn default_compass_mcts_h0_bonus_multiplier() -> f64 {
+    0.1
+}
+
+fn default_compass_mcts_default_exploration_base() -> f64 {
+    0.05
+}
+
+fn default_compass_mcts_default_exploration_divisor() -> f64 {
+    3.0
+}
+
+// Compass cascade defaults
+fn default_compass_cascade_min_consonance() -> f64 {
+    0.7
+}
+
+fn default_compass_cascade_recognition_satisfaction_consonance() -> f64 {
+    0.8
+}
+
+fn default_compass_cascade_calm_motivation_consonance() -> f64 {
+    0.75
+}
+
+// Learning loop defaults
+fn default_learning_executor_memory_limit() -> usize {
+    256
+}
+
+fn default_learning_executor_cluster_threshold() -> f32 {
+    0.82
+}
+
+fn default_learning_reward_threshold() -> f64 {
+    -0.5
+}
+
+fn default_learning_reptile_episode_interval() -> u32 {
+    5
+}
+
+fn default_learning_evolution_episode_interval() -> u32 {
+    50
+}
+
+fn default_learning_reptile_batch_size() -> usize {
+    32
+}
+
+fn default_learning_qlora_low_reward_threshold() -> f64 {
+    -0.5
+}
+
+fn default_learning_qlora_sample_count() -> usize {
+    16
+}
+
+fn default_learning_qlora_max_samples() -> usize {
+    64
+}
+
+fn default_learning_epsilon_decay_rate() -> f64 {
+    0.001
+}
+
+fn default_learning_epsilon_minimum() -> f64 {
+    0.01
+}
+
+fn default_learning_alpha_decay_rate() -> f64 {
+    0.0005
+}
+
+fn default_learning_alpha_minimum() -> f64 {
+    0.001
+}
+
+fn default_learning_evolution_old_episodes_ratio() -> f64 {
+    0.3
+}
+
+fn default_learning_evolution_old_episodes_min() -> usize {
+    10
+}
+
+fn default_learning_evolution_old_episodes_max() -> usize {
+    50
+}
+
+fn default_learning_tough_knots_ratio() -> f64 {
+    0.2
+}
+
+fn default_learning_tcs_knot_penalty() -> f64 {
+    0.5
+}
+
+fn default_learning_tcs_betti1_penalty() -> f64 {
+    0.2
+}
+
+fn default_learning_tcs_entropy_penalty() -> f64 {
+    0.1
+}
+
+fn default_learning_tcs_discover_weight() -> f64 {
+    0.5
+}
+
+fn default_learning_tcs_spectral_gap_threshold() -> f64 {
+    0.5
+}
+
+fn default_learning_tcs_convergence_bonus() -> f64 {
+    0.3
+}
+
+fn default_learning_tcs_convergence_penalty() -> f64 {
+    -0.2
+}
+
+fn default_learning_tcs_novelty_threshold() -> f64 {
+    0.1
+}
+
+fn default_learning_tcs_novelty_bonus() -> f64 {
+    0.2
+}
+
+fn default_learning_dqn_batch_size() -> usize {
+    32
+}
+
+fn default_learning_dqn_temp_multiplier() -> f64 {
+    0.05
+}
+
+fn default_learning_dqn_top_p_multiplier() -> f64 {
+    0.1
+}
+
+fn default_learning_dqn_mcts_c_multiplier() -> f64 {
+    0.1
+}
+
+fn default_learning_dqn_retrieval_multiplier() -> f64 {
+    0.01
+}
+
+fn default_learning_dqn_novelty_multiplier() -> f64 {
+    0.05
+}
+
+fn default_learning_dqn_awareness_multiplier() -> f64 {
+    0.03
+}
+
+fn default_learning_reptile_inner_gradient_multiplier() -> f64 {
+    0.01
+}
+
+fn default_learning_evolution_temp_multiplier() -> f64 {
+    0.2
+}
+
+fn default_learning_evolution_alpha_multiplier() -> f64 {
+    0.1
+}
+
+fn default_learning_evolution_mutation_reduce_multiplier() -> f64 {
+    0.7
+}
+
+fn default_learning_evolution_mutation_increase_multiplier() -> f64 {
+    1.3
+}
+
+// Generation defaults
+fn default_generation_reflexion_temp_base_multiplier() -> f64 {
+    0.7
+}
+
+fn default_generation_reflexion_temp_stability_multiplier() -> f64 {
+    0.3
+}
+
+fn default_generation_reflexion_top_p_increment() -> f64 {
+    0.05
+}
+
+fn default_generation_reflexion_top_p_stability_increment() -> f64 {
+    0.2
+}
+
+fn default_generation_reflexion_top_p_max() -> f64 {
+    0.99
+}
+
+fn default_generation_cot_repair_temp_base_multiplier() -> f64 {
+    0.6
+}
+
+fn default_generation_cot_repair_temp_iteration_increment() -> f64 {
+    0.1
+}
+
+fn default_generation_cot_repair_top_p_increment() -> f64 {
+    0.05
+}
+
+fn default_generation_cot_repair_top_p_max() -> f64 {
+    0.98
+}
+
+fn default_generation_cot_repair_temp_min() -> f64 {
+    0.1
+}
+
+fn default_generation_cot_repair_temp_max() -> f64 {
+    1.2
+}
+
+// ERAG defaults
+fn default_erag_similarity_boost_multiplier() -> f64 {
+    1.2
+}
+
+fn default_erag_similarity_boost_max() -> f64 {
+    1.0
 }
 
 fn env_with_fallback(keys: &[&str]) -> Option<String> {

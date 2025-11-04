@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::config::FailureSignalThresholds;
+
 #[derive(Debug, Clone)]
 pub struct FailureSignals {
     pub rouge: f64,
@@ -33,42 +35,61 @@ impl FailureSignals {
         oov_rate: f64,
         low_quality_hits: usize,
     ) -> Self {
-        const HARD_ROUGE_THRESHOLD: f64 = 0.5;
-        const HARD_ENTROPY_DELTA_THRESHOLD: f64 = 0.1;
-        const HARD_CURATOR_THRESHOLD: f64 = 0.7;
-        const SOFT_UCB_THRESHOLD: f64 = 0.3;
-        const SOFT_AVG_SIMILARITY_THRESHOLD: f32 = 0.4;
-        const SOFT_OOV_THRESHOLD: f64 = 0.2;
-        const LOW_QUALITY_HITS_THRESHOLD: usize = 3;
+        // Use default thresholds for backward compatibility
+        Self::evaluate_with_thresholds(
+            rouge,
+            entropy_delta,
+            min_ucb,
+            average_similarity,
+            curator_score,
+            fallback_source,
+            oov_rate,
+            low_quality_hits,
+            &FailureSignalThresholds::default(),
+        )
+    }
 
+    /// Evaluate with custom thresholds (for configurable behavior)
+    #[allow(clippy::too_many_arguments)]
+    pub fn evaluate_with_thresholds(
+        rouge: f64,
+        entropy_delta: f64,
+        min_ucb: Option<f64>,
+        average_similarity: f32,
+        curator_score: Option<f64>,
+        fallback_source: bool,
+        oov_rate: f64,
+        low_quality_hits: usize,
+        thresholds: &FailureSignalThresholds,
+    ) -> Self {
         let mut soft_triggers = Vec::new();
         let mut hard_triggers = Vec::new();
 
-        if rouge < HARD_ROUGE_THRESHOLD {
-            hard_triggers.push("rouge_below_0_5");
+        if rouge < thresholds.hard_rouge_threshold {
+            hard_triggers.push("rouge_below_threshold");
         }
 
-        if entropy_delta > HARD_ENTROPY_DELTA_THRESHOLD {
-            hard_triggers.push("entropy_delta_above_0_1");
+        if entropy_delta > thresholds.hard_entropy_delta_threshold {
+            hard_triggers.push("entropy_delta_above_threshold");
         }
 
         if let Some(curator) = curator_score {
-            if curator < HARD_CURATOR_THRESHOLD {
-                hard_triggers.push("curator_score_below_0_7");
+            if curator < thresholds.hard_curator_threshold {
+                hard_triggers.push("curator_score_below_threshold");
             }
         }
 
         if let Some(ucb) = min_ucb {
-            if ucb < SOFT_UCB_THRESHOLD {
-                soft_triggers.push("ucb1_below_0_3");
+            if ucb < thresholds.soft_ucb_threshold {
+                soft_triggers.push("ucb1_below_threshold");
             }
         }
 
-        if average_similarity < SOFT_AVG_SIMILARITY_THRESHOLD {
+        if average_similarity < thresholds.soft_avg_similarity_threshold {
             soft_triggers.push("average_similarity_low");
         }
 
-        if oov_rate > SOFT_OOV_THRESHOLD {
+        if oov_rate > thresholds.soft_oov_threshold {
             soft_triggers.push("oov_rate_high");
         }
 
@@ -76,7 +97,7 @@ impl FailureSignals {
             soft_triggers.push("fallback_generation");
         }
 
-        if low_quality_hits >= LOW_QUALITY_HITS_THRESHOLD {
+        if low_quality_hits >= thresholds.low_quality_hits_threshold {
             soft_triggers.push("many_low_quality_hits");
         }
 

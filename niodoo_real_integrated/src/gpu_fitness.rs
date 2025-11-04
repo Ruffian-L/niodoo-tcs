@@ -15,6 +15,8 @@ use ndarray::Array1;
 use tracing::info;
 #[cfg(feature = "gpu")]
 use tracing::warn;
+#[cfg(feature = "gpu")]
+use crate::gpu_fusion::GpuTensorFusion;
 
 /// GPU fitness calculator with CPU fallback
 pub struct GPUMemoryFitnessCalculator {
@@ -22,6 +24,9 @@ pub struct GPUMemoryFitnessCalculator {
     device: String,
     /// Whether GPU is available
     gpu_available: bool,
+    /// GPU memory pool for tensor reuse (RTX 5090 optimization)
+    #[cfg(feature = "gpu")]
+    memory_pool: Option<crate::gpu_memory_pool::GpuMemoryPool>,
 }
 
 impl GPUMemoryFitnessCalculator {
@@ -36,9 +41,23 @@ impl GPUMemoryFitnessCalculator {
         // Phase 5.2: Record GPU availability metric
         crate::metrics::gpu_fitness_metrics().set_gpu_available(gpu_available);
 
+        // RTX 5090 OPTIMIZATION: Initialize GPU memory pool for tensor reuse
+        #[cfg(feature = "gpu")]
+        let memory_pool = if gpu_available && device == "cuda" {
+            if let Ok(cuda_device) = Device::cuda_if_available(0) {
+                Some(crate::gpu_memory_pool::GpuMemoryPool::new(cuda_device, 200)) // 200 tensors per bucket
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Self {
             device: device.to_string(),
             gpu_available,
+            #[cfg(feature = "gpu")]
+            memory_pool,
         }
     }
 
@@ -176,29 +195,21 @@ impl GPUMemoryFitnessCalculator {
         let retrieval_t = Tensor::from_vec(retrieval, (batch,), &device)?;
         let beta1_t = Tensor::from_vec(beta1_norm, (batch,), &device)?;
         let consonance_t = Tensor::from_vec(consonance_norm, (batch,), &device)?;
-        let resource_penalty_t = Tensor::zeros((batch,), DType::F32, &device)?;
 
-        let w0 = Tensor::new(&[weights[0]], &device)?;
-        let w1 = Tensor::new(&[weights[1]], &device)?;
-        let w2 = Tensor::new(&[weights[2]], &device)?;
-        let w3 = Tensor::new(&[weights[3]], &device)?;
-        let w4 = Tensor::new(&[weights[4]], &device)?;
-        let w5 = Tensor::new(&[weights[5]], &device)?;
+        // RTX 5090 OPTIMIZATION: Use fused tensor operations for maximum GPU utilization
+        let fusion = GpuTensorFusion::new(device);
+        let fitness = fusion.fused_fitness_calculation(
+            &temporal_t,
+            &pad_t,
+            &retrieval_t,
+            &beta1_t,
+            &consonance_t,
+            weights,
+        )?;
 
-        let mut fitness = temporal_t.broadcast_mul(&w0)?;
-        fitness = fitness.add(&pad_t.broadcast_mul(&w1)?)?;
-        fitness = fitness.add(&beta1_t.broadcast_mul(&w2)?)?;
-        fitness = fitness.add(&retrieval_t.broadcast_mul(&w3)?)?;
-        fitness = fitness.add(&consonance_t.broadcast_mul(&w4)?)?;
-        fitness = fitness.sub(&resource_penalty_t.broadcast_mul(&w5)?)?;
-
-        let zero = Tensor::new(&[0.0f32], &device)?;
-        let one = Tensor::new(&[1.0f32], &device)?;
-        fitness = fitness.maximum(&zero)?;
-        fitness = fitness.minimum(&one)?;
-
-        let fitness_cpu = fitness.to_device(&Device::Cpu)?;
-        let scores = fitness_cpu.to_vec1::<f32>()?;
+        // Stay on GPU as long as possible - only move to CPU for final result extraction
+        // This maximizes GPU utilization on RTX 5090
+        let scores = fitness.to_vec1::<f32>()?;
         Ok(scores)
     }
 

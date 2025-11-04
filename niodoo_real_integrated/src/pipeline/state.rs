@@ -8,53 +8,10 @@ use crate::learning::LearningOutcome;
 use crate::tcs_analysis::TopologicalSignature;
 use crate::token_manager::TokenizerOutput;
 use crate::torus::PadGhostState;
+use crate::config::RuntimeConfig;
 use std::collections::{HashMap, VecDeque};
 
 use super::metrics::StageTimings;
-
-#[derive(Debug, Clone)]
-pub struct Thresholds {
-    pub entropy_mean: f64,
-    pub entropy_high: f64,
-    pub variance_stagnation: f64,
-    pub variance_spike: f64,
-    pub mirage_sigma: f64,
-    pub mcts_c: f64,
-}
-
-#[derive(Debug, Clone)]
-pub struct PipelineCycle {
-    pub prompt: String,
-    pub baseline_response: String,
-    pub hybrid_response: String,
-    pub entropy: f64,
-    pub rouge: f64,
-    pub latency_ms: f64,
-    pub compass: CompassOutcome,
-    pub generation: GenerationResult,
-    pub tokenizer: TokenizerOutput,
-    pub collapse: CollapseResult,
-    pub learning: LearningOutcome,
-    pub stage_timings: StageTimings,
-    pub last_entropy: f64,
-    pub failure: String,
-    pub pad_state: PadGhostState,
-    pub topology: TopologicalSignature,
-    pub topology_mode: crate::config::TopologyMode,
-    pub consonance: Option<ConsonanceMetrics>,
-    pub hyperfocus: Option<HyperfocusEvent>,
-    pub cascade_transition: Option<CascadeTransition>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct CuratedExperience {
-    pub refined_response: String,
-    pub quality_score: f32,
-    pub promoted_tokens: Vec<String>,
-    pub learned: bool,
-    pub reason: String,
-    pub experience: Option<Experience>,
-}
 
 /// Phase 4.2: Curator feedback controller for adaptive parameter adjustment
 #[derive(Debug, Clone)]
@@ -71,17 +28,58 @@ pub struct CuratorFeedbackController {
     base_threshold: f32,
     /// Quality trend: positive = improving, negative = degrading
     quality_trend: f32,
+    /// Config values for thresholds and adjustments
+    config: CuratorFeedbackConfig,
+}
+
+#[derive(Debug, Clone)]
+struct CuratorFeedbackConfig {
+    threshold_adjustment: f32,
+    threshold_min: f32,
+    threshold_max: f32,
+    quality_trend_threshold: f32,
+    temp_adjustment_multiplier: f32,
+    learned_rate_low: f32,
+    quality_low: f32,
+    top_p_increase: f64,
+    learned_rate_high: f32,
+    quality_high: f32,
+    top_p_decrease: f64,
+    retrieval_quality_threshold: f32,
+    retrieval_top_k_increase: f64,
+    retrieval_quality_high: f32,
+    retrieval_learned_rate_high: f32,
+    retrieval_top_k_decrease: f64,
 }
 
 impl CuratorFeedbackController {
-    pub fn new(base_threshold: f32, window_size: usize) -> Self {
+    pub fn new(base_threshold: f32, config: &RuntimeConfig) -> Self {
+        let feedback_config = CuratorFeedbackConfig {
+            threshold_adjustment: config.curator_feedback_threshold_adjustment,
+            threshold_min: config.curator_feedback_threshold_min,
+            threshold_max: config.curator_feedback_threshold_max,
+            quality_trend_threshold: config.curator_feedback_quality_trend_threshold,
+            temp_adjustment_multiplier: config.curator_feedback_temp_adjustment_multiplier,
+            learned_rate_low: config.curator_feedback_learned_rate_low,
+            quality_low: config.curator_feedback_quality_low,
+            top_p_increase: config.curator_feedback_top_p_increase,
+            learned_rate_high: config.curator_feedback_learned_rate_high,
+            quality_high: config.curator_feedback_quality_high,
+            top_p_decrease: config.curator_feedback_top_p_decrease,
+            retrieval_quality_threshold: config.curator_feedback_retrieval_quality_threshold,
+            retrieval_top_k_increase: config.curator_feedback_retrieval_top_k_increase,
+            retrieval_quality_high: config.curator_feedback_retrieval_quality_high,
+            retrieval_learned_rate_high: config.curator_feedback_retrieval_learned_rate_high,
+            retrieval_top_k_decrease: config.curator_feedback_retrieval_top_k_decrease,
+        };
         Self {
-            quality_history: VecDeque::with_capacity(window_size),
-            learned_history: VecDeque::with_capacity(window_size),
-            window_size,
+            quality_history: VecDeque::with_capacity(config.curator_feedback_window_size),
+            learned_history: VecDeque::with_capacity(config.curator_feedback_window_size),
+            window_size: config.curator_feedback_window_size,
             adaptive_threshold: base_threshold,
             base_threshold,
             quality_trend: 0.0,
+            config: feedback_config,
         }
     }
 
@@ -114,9 +112,9 @@ impl CuratorFeedbackController {
         // Update adaptive threshold based on quality trend
         // If quality is improving, raise threshold (stricter)
         // If quality is degrading, lower threshold (more lenient)
-        let threshold_adjustment = self.quality_trend * 0.05; // 5% adjustment per trend unit
+        let threshold_adjustment = self.quality_trend * self.config.threshold_adjustment;
         self.adaptive_threshold = (self.base_threshold + threshold_adjustment)
-            .clamp(0.3, 0.9); // Clamp between reasonable bounds
+            .clamp(self.config.threshold_min, self.config.threshold_max);
         
         // Phase 5.2: Record metrics
         crate::metrics::curator_feedback_metrics().record_feedback(
@@ -164,8 +162,8 @@ impl CuratorFeedbackController {
         // Adjust temperature based on quality trend
         // If quality is improving, reduce temperature (more focused)
         // If quality is degrading, increase temperature (more exploratory)
-        if self.quality_trend.abs() > 0.05 {
-            let temp_adjustment = -self.quality_trend * 0.1; // Inverse relationship
+        if self.quality_trend.abs() > self.config.quality_trend_threshold {
+            let temp_adjustment = -self.quality_trend * self.config.temp_adjustment_multiplier;
             adjustments.insert("temperature".to_string(), temp_adjustment as f64);
             crate::metrics::curator_feedback_metrics().record_parameter_adjustment("temperature");
         }
@@ -173,22 +171,22 @@ impl CuratorFeedbackController {
         // Adjust top_p based on learned rate
         // High learned rate = curator is happy, maintain current top_p
         // Low learned rate = curator is rejecting, increase top_p (more diverse)
-        if learned_rate < 0.3 && quality_avg < 0.6 {
-            adjustments.insert("top_p".to_string(), 0.05); // Increase diversity
+        if learned_rate < self.config.learned_rate_low && quality_avg < self.config.quality_low {
+            adjustments.insert("top_p".to_string(), self.config.top_p_increase);
             crate::metrics::curator_feedback_metrics().record_parameter_adjustment("top_p");
-        } else if learned_rate > 0.7 && quality_avg > 0.7 {
-            adjustments.insert("top_p".to_string(), -0.02); // Slightly reduce diversity
+        } else if learned_rate > self.config.learned_rate_high && quality_avg > self.config.quality_high {
+            adjustments.insert("top_p".to_string(), self.config.top_p_decrease);
             crate::metrics::curator_feedback_metrics().record_parameter_adjustment("top_p");
         }
 
         // Adjust retrieval_top_k based on quality
         // Higher quality = curator is satisfied, maintain current k
         // Lower quality = need more context, increase k
-        if quality_avg < 0.5 {
-            adjustments.insert("retrieval_top_k".to_string(), 1.0); // Increase context
+        if quality_avg < self.config.retrieval_quality_threshold {
+            adjustments.insert("retrieval_top_k".to_string(), self.config.retrieval_top_k_increase);
             crate::metrics::curator_feedback_metrics().record_parameter_adjustment("retrieval_top_k");
-        } else if quality_avg > 0.8 && learned_rate > 0.6 {
-            adjustments.insert("retrieval_top_k".to_string(), -0.5); // Reduce context (less noise)
+        } else if quality_avg > self.config.retrieval_quality_high && learned_rate > self.config.retrieval_learned_rate_high {
+            adjustments.insert("retrieval_top_k".to_string(), self.config.retrieval_top_k_decrease);
             crate::metrics::curator_feedback_metrics().record_parameter_adjustment("retrieval_top_k");
         }
 

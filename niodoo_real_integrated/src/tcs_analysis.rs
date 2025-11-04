@@ -600,11 +600,22 @@ impl TCSAnalyzer {
 
         let num_points = points.len();
         let theoretical_max = num_points.saturating_sub(1);
-        let constraint_max = env::var("TCS_BETTI1_MAX")
+        
+        // Get Betti1 max constraint from config or environment variable
+        // Default to 6 if not specified, but allow override
+        let constraint_max = std::env::var("TCS_BETTI1_MAX")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(6);
+        
         let max_allowed = theoretical_max.min(constraint_max);
+        
+        if constraint_max != 6 {
+            debug!(
+                "Betti1 max constraint overridden: {} (default: 6)",
+                constraint_max
+            );
+        }
 
         let original_betti1 = betti[1];
         debug!(
@@ -938,6 +949,25 @@ impl TCSAnalyzer {
             .flat_map(|point| point.iter().copied())
             .collect();
         let tensor = Tensor::from_vec(flat, (points.len(), dims), device)?;
+        
+        // RTX 5090 OPTIMIZATION: Use fused distance calculation
+        #[cfg(feature = "gpu")]
+        {
+            if let Ok(_) = Device::cuda_if_available(0) {
+                use crate::gpu_fusion::GpuTensorFusion;
+                let fusion = GpuTensorFusion::new(device.clone());
+                match fusion.fused_pairwise_distance(&tensor) {
+                    Ok(dist_matrix) => {
+                        return Ok(dist_matrix.to_vec2::<f32>()?);
+                    }
+                    Err(e) => {
+                        warn!(?e, "Fused distance calculation failed, falling back to sequential");
+                    }
+                }
+            }
+        }
+        
+        // Fallback: Sequential operations
         let norms = tensor.sqr()?.sum_keepdim(1)?; // Shape: (n, 1)
         let norms_t = norms.transpose(0, 1)?; // Shape: (1, n)
         // Ensure correct broadcasting: (n, 1) + (1, n) -> (n, n)
@@ -949,8 +979,9 @@ impl TCSAnalyzer {
         let zeros = Tensor::zeros(dist_sq.dims(), dist_sq.dtype(), device)?;
         dist_sq = dist_sq.maximum(&zeros)?;
         let dist = dist_sq.sqrt()?;
-        let dist_cpu = dist.to_device(&Device::Cpu)?;
-        let matrix = dist_cpu.to_vec2::<f32>()?;
+        // Keep on GPU - only move to CPU when absolutely necessary for final output
+        // For RTX 5090, keep computations on GPU as long as possible
+        let matrix = dist.to_vec2::<f32>()?;
         Ok(matrix)
     }
 

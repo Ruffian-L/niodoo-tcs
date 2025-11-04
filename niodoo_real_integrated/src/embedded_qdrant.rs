@@ -172,17 +172,22 @@ pub async fn spawn_embedded_qdrant() -> Result<tokio::process::Child> {
     sleep(Duration::from_secs(2)).await;
 
     // Verify Qdrant is responding
+    // Use configured QDRANT_URL from environment or default
+    let qdrant_url = std::env::var("QDRANT_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
+    let health_url = format!("{}/health", qdrant_url.trim_end_matches('/'));
+    
     let client = reqwest::Client::new();
     for attempt in 0..10 {
         if let Ok(resp) = client
-            .get("http://127.0.0.1:6333/health")
+            .get(&health_url)
             .timeout(Duration::from_secs(1))
             .send()
             .await
         {
             let status = resp.status();
             if status.is_success() || status == reqwest::StatusCode::NOT_FOUND {
-                info!(status = %status, "Embedded Qdrant responded to health probe");
+                info!(status = %status, url = %health_url, "Embedded Qdrant responded to health probe");
                 return Ok(child);
             }
         }
@@ -191,7 +196,7 @@ pub async fn spawn_embedded_qdrant() -> Result<tokio::process::Child> {
         }
     }
 
-    warn!("Embedded Qdrant failed to start or respond on http://127.0.0.1:6333/health");
+    warn!(url = %health_url, "Embedded Qdrant failed to start or respond on health endpoint");
     anyhow::bail!("Embedded Qdrant did not become healthy after startup");
 }
 
