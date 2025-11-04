@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+### 2025-11-03 – Topology-Aware Mistral Stack Bootstrap
+- Expanded `Niodoo-TCT` with feature vectorisation utilities (`ntokens/features.py`), a hidden-state adapter, CLI feature extractor, updated roadmap, refreshed README instructions, and accompanying tests to cover Betti curve sampling and sheaf metrics.
+- Introduced the `niodoo_ai` Python package providing YAML-driven configuration, dataset builders, topology augmentors, and QLoRA training/evaluation orchestration plus helper scripts (`prepare_data.py`, `train_topology.py`, `evaluate_topology.py`).
+- Added unit tests for config parsing and dataset preparation, default training configuration (`config/default.yaml`), per-project requirements, and a comprehensive README outlining the workflow.
+- Authored `docs/TOPOLOGY_PIPELINE.md` summarising the integration between `Niodoo-TCT` and `niodoo-ai`, including command references and data requirements.
+
 ### 2025-01-XX – Git Submodules Configuration
 - Converted Niodoo-TCT directory to git submodule
   - Registered Niodoo-TCT as submodule pointing to https://github.com/Ruffian-L/Niodoo-TCT.git

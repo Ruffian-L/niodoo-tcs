@@ -55,7 +55,7 @@ check_services() {
     SERVICES_OK=true
     
     # Check vLLM
-    if curl -s -f http://127.0.0.1:5001/health > /dev/null 2>&1; then
+    if curl -s -f http://127.0.0.1:5001/v1/models > /dev/null 2>&1; then
         echo "  ✅ vLLM service available"
     else
         echo "  ⚠️  vLLM service not available (will use mock mode)"
@@ -78,6 +78,8 @@ build_binaries() {
     echo "Building validation binaries..."
     
     cd niodoo_real_integrated
+    
+    mkdir -p "$RESULTS_DIR"
     
     if cargo build --bin metrics_runner --release --features svc 2>&1 | tee "$RESULTS_DIR/build_metrics_runner.log"; then
         test_passed "metrics_runner binary build"
