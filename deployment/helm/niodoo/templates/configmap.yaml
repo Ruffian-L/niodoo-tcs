@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "niodoo.fullname" . }}-config
+  labels:
+    {{- include "niodoo.labels" . | nindent 4 }}
+data:
+  qdrant_url: {{ .Values.config.qdrant_url | quote }}
+  vllm_endpoint: {{ .Values.config.vllm_endpoint | quote }}
+  vllm_model: {{ .Values.config.vllm_model | quote }}
+  cache_capacity: {{ .Values.config.cache_capacity | quote }}
+  similarity_threshold: {{ .Values.config.similarity_threshold | quote }}
+  generation_max_tokens: {{ .Values.config.generation_max_tokens | quote }}
+  token_promotion_interval: {{ .Values.config.token_promotion_interval | quote }}
+  embedding_cache_ttl_secs: {{ .Values.config.embedding_cache_ttl_secs | quote }}
+  collapse_cache_ttl_secs: {{ .Values.config.collapse_cache_ttl_secs | quote }}

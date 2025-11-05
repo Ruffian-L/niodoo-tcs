@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_NiodooQt_FILE /home/ruffian/Desktop/Projects/Niodoo-Feeling/03_BACKUP_ORIGINALS/Orginal_Src/build/NiodooQt)
+set(__QT_DEPLOY_TARGET_NiodooQt_TYPE EXECUTABLE)

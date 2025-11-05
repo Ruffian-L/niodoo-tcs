@@ -1,0 +1,20 @@
+[package]
+name = "niodoo-tcs-bridge"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Topology Team <niodoo@dev>"]
+description = "Bridge between TCS Qwen embedder and Niodoo consciousness engine"
+
+[dependencies]
+tcs-ml = { path = "../tcs-ml", features = ["onnx-with-tokenizers"] }
+niodoo-core = { path = "../niodoo-core" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+nalgebra = { workspace = true }
+
+[features]
+default = []
+onnx-with-tokenizers = ["tcs-ml/onnx-with-tokenizers"]

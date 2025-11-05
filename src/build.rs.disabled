@@ -1,0 +1,22 @@
+fn main() {
+    // CUDA 13.0 with sm_120 support - build script output to stdout is allowed
+    println!("cargo:rustc-env=CUDA_COMPUTE_CAP=120");
+    println!("cargo:rustc-env=CUDA_ARCH=sm_120");
+    println!("cargo:rustc-env=CANDLE_CUDA_ARCH=120");
+
+    // CUDA 13.0 paths
+    println!("cargo:rustc-env=CUDA_HOME=/usr/local/cuda-13.0");
+    println!("cargo:rustc-env=CUDA_ROOT=/usr/local/cuda-13.0");
+    println!("cargo:rustc-env=CUDA_PATH=/usr/local/cuda-13.0");
+
+    // Enable CUDA optimizations
+    println!("cargo:rustc-env=CUDA_OPTIMIZE=1");
+    println!("cargo:rustc-env=CUDA_FAST_MATH=1");
+
+    // Link CUDA libraries
+    println!("cargo:rustc-link-lib=cuda");
+    println!("cargo:rustc-link-lib=cudart");
+
+    // Tell cargo to rerun this build script if CUDA paths change
+    println!("cargo:rerun-if-changed=/usr/local/cuda-13.0");
+}

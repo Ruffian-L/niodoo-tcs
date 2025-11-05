@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package curator_executor;
+
+import "google/protobuf/timestamp.proto";
+
+// Experience data structure
+message Experience {
+  string id = 1;
+  string input = 2;
+  string output = 3;
+  string context = 4;
+  string task_type = 5;
+  float success_score = 6;
+  google.protobuf.Timestamp timestamp = 7;
+  repeated float embedding = 8;
+}
+
+// Distilled training example
+message DistilledExample {
+  string instruction = 1;
+  string output = 2;
+  float quality_score = 3;
+  int32 cluster_size = 4;
+}
+
+// Task execution request
+message ExecuteTaskRequest {
+  string task_input = 1;
+  string task_type = 2;
+  bool use_memory = 3;
+}
+
+// Task execution response
+message ExecuteTaskResponse {
+  string output = 1;
+  float success_score = 2;
+  uint64 execution_time_ms = 3;
+  string error_message = 4;
+}
+
+// Store experience request
+message StoreExperienceRequest {
+  Experience experience = 1;
+}
+
+// Store experience response
+message StoreExperienceResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+// Search similar experiences request
+message SearchSimilarRequest {
+  repeated float query_embedding = 1;
+  uint32 limit = 2;
+  float score_threshold = 3;
+}
+
+// Search similar experiences response
+message SearchSimilarResponse {
+  repeated Experience experiences = 1;
+  repeated float scores = 2;
+}
+
+// Distill knowledge request
+message DistillKnowledgeRequest {
+  uint32 num_clusters = 1;
+}
+
+// Distill knowledge response
+message DistillKnowledgeResponse {
+  repeated DistilledExample examples = 1;
+}
+
+// Curator service - handles memory and distillation
+service CuratorService {
+  rpc StoreExperience(StoreExperienceRequest) returns (StoreExperienceResponse);
+  rpc SearchSimilar(SearchSimilarRequest) returns (SearchSimilarResponse);
+  rpc DistillKnowledge(DistillKnowledgeRequest) returns (DistillKnowledgeResponse);
+}
+
+// Executor service - handles task execution
+service ExecutorService {
+  rpc ExecuteTask(ExecuteTaskRequest) returns (ExecuteTaskResponse);
+}
+
+// Learning service - handles fine-tuning
+service LearningService {
+  rpc TriggerFineTune(TriggerFineTuneRequest) returns (TriggerFineTuneResponse);
+  rpc GetTrainingStatus(GetTrainingStatusRequest) returns (GetTrainingStatusResponse);
+}
+
+// Fine-tuning request
+message TriggerFineTuneRequest {
+  repeated DistilledExample training_data = 1;
+  string model_path = 2;
+  float learning_rate = 3;
+  uint32 num_epochs = 4;
+}
+
+// Fine-tuning response
+message TriggerFineTuneResponse {
+  bool success = 1;
+  string job_id = 2;
+  string error_message = 3;
+}
+
+// Training status request
+message GetTrainingStatusRequest {
+  string job_id = 1;
+}
+
+// Training status response
+message GetTrainingStatusResponse {
+  string status = 1;  // "running", "completed", "failed"
+  float progress = 2;  // 0.0 to 1.0
+  string error_message = 3;
+}

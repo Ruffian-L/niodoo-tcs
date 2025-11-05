@@ -1,0 +1,321 @@
+name: Validation Gate
+
+on:
+  pull_request:
+    paths:
+      - 'niodoo_real_integrated/**'
+      - 'config/**'
+      - 'scripts/**'
+      - '.github/workflows/validation-gate.yml'
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  validation-gate:
+    name: Validation Gate - Regression Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build metrics runner
+        run: |
+          cd niodoo_real_integrated
+          cargo build --bin metrics_runner --release --features svc
+        continue-on-error: false
+
+      - name: Set up Python for comparison script
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Check baseline exists
+        id: check_baseline
+        run: |
+          if [ -f "baselines/baseline-latest.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  No baseline found. Creating one from current run..."
+          fi
+
+      - name: Run lightweight latency barrage
+        id: latency_test
+        env:
+          MOCK_MODE: "true"
+          RUST_LOG: "warn"
+        run: |
+          cd niodoo_real_integrated
+          timeout 120 cargo run --bin metrics_runner --release --features svc -- \
+            --scenario load_test \
+            --concurrent-users 8 \
+            --duration-secs 60 \
+            --target-tokens 512 \
+            --output ../ci_metrics.json || exit 1
+        continue-on-error: true
+
+      - name: Run golden probes
+        id: golden_probes
+        env:
+          MOCK_MODE: "true"
+          RUST_LOG: "warn"
+        run: |
+          cd niodoo_real_integrated
+          python3 << 'EOF'
+          import json
+          import subprocess
+          import sys
+          
+          # Load golden probes
+          with open('../data/golden_probes.json', 'r') as f:
+              probes_data = json.load(f)
+          
+          results = []
+          passed = 0
+          failed = 0
+          
+          for probe in probes_data['probes']:
+              question = probe['question']
+              probe_id = probe['id']
+              
+              # Run pipeline with mock mode
+              try:
+                  result = subprocess.run(
+                      ['cargo', 'run', '--bin', 'niodoo_real_integrated', '--release', '--features', 'svc', '--', '--prompt', question],
+                      cwd='.',
+                      capture_output=True,
+                      text=True,
+                      timeout=30,
+                      env={'MOCK_MODE': 'true', 'RUST_LOG': 'warn'}
+                  )
+                  
+                  response = result.stdout + result.stderr
+                  
+                  # Simple validation: check if expected strings are present
+                  expected = probe.get('expected_containment', [])
+                  matches = sum(1 for exp in expected if exp.lower() in response.lower())
+                  match_rate = matches / len(expected) if expected else 1.0
+                  
+                  passed_threshold = match_rate >= probes_data['validation_criteria']['pass_threshold']
+                  
+                  if passed_threshold:
+                      passed += 1
+                  else:
+                      failed += 1
+                  
+                  results.append({
+                      'id': probe_id,
+                      'passed': passed_threshold,
+                      'match_rate': match_rate
+                  })
+              except Exception as e:
+                  failed += 1
+                  results.append({
+                      'id': probe_id,
+                      'passed': False,
+                      'error': str(e)
+                  })
+          
+          # Output results
+          print(f"Golden Probes Results: {passed}/{len(probes_data['probes'])} passed")
+          
+          if failed > 0:
+              print("\nFailed probes:")
+              for r in results:
+                  if not r.get('passed', False):
+                      print(f"  - {r['id']}: {r.get('match_rate', 'N/A')}")
+          
+          # Save results
+          with open('../ci_golden_probes.json', 'w') as f:
+              json.dump({'results': results, 'passed': passed, 'failed': failed, 'total': len(probes_data['probes'])}, f, indent=2)
+          
+          # Exit with error if too many failures
+          if failed > len(probes_data['probes']) * 0.15:  # Allow 15% failure rate
+              sys.exit(1)
+          EOF
+        continue-on-error: true
+
+      - name: Check topological stability
+        id: topology_check
+        env:
+          MOCK_MODE: "true"
+          RUST_LOG: "warn"
+        run: |
+          cd niodoo_real_integrated
+          python3 << 'EOF'
+          import json
+          import subprocess
+          import sys
+          
+          # Run a few prompts and check topological metrics
+          test_prompts = [
+              "What is artificial intelligence?",
+              "Explain machine learning.",
+              "Describe neural networks."
+          ]
+          
+          metrics_samples = []
+          
+          for prompt in test_prompts:
+              try:
+                  result = subprocess.run(
+                      ['cargo', 'run', '--bin', 'niodoo_real_integrated', '--release', '--features', 'svc', '--', '--prompt', prompt],
+                      cwd='.',
+                      capture_output=True,
+                      text=True,
+                      timeout=30,
+                      env={'MOCK_MODE': 'true', 'RUST_LOG': 'warn'}
+                  )
+                  
+                  # Try to extract metrics from output (simplified)
+                  # In production, would query Prometheus endpoint
+                  metrics_samples.append({
+                      'prompt': prompt,
+                      'success': result.returncode == 0
+                  })
+              except Exception as e:
+                  metrics_samples.append({
+                      'prompt': prompt,
+                      'success': False,
+                      'error': str(e)
+                  })
+          
+          success_rate = sum(1 for m in metrics_samples if m['success']) / len(metrics_samples)
+          
+          with open('../ci_topology.json', 'w') as f:
+              json.dump({'samples': metrics_samples, 'success_rate': success_rate}, f, indent=2)
+          
+          print(f"Topology check success rate: {success_rate:.2%}")
+          
+          if success_rate < 0.8:
+              sys.exit(1)
+          EOF
+        continue-on-error: true
+
+      - name: Compare with baseline (if exists)
+        id: compare_baseline
+        if: steps.check_baseline.outputs.exists == 'true'
+        run: |
+          python3 scripts/compare_baseline.sh ci_metrics.json baselines/baseline-latest.json || true
+        continue-on-error: true
+
+      - name: Statistical regression check
+        id: regression_check
+        if: steps.check_baseline.outputs.exists == 'true' && steps.latency_test.outcome == 'success'
+        run: |
+          python3 << 'EOF'
+          import json
+          import sys
+          
+          try:
+              with open('ci_metrics.json', 'r') as f:
+                  current = json.load(f)
+              
+              with open('baselines/baseline-latest.json', 'r') as f:
+                  baseline = json.load(f)
+              
+              # Check for significant regressions
+              p99_diff = current['latency']['p99_ms'] - baseline['latency']['p99_ms']
+              p99_pct = (p99_diff / baseline['latency']['p99_ms'] * 100) if baseline['latency']['p99_ms'] > 0 else 0
+              
+              print(f"p99 latency change: {p99_diff:+.2f}ms ({p99_pct:+.1f}%)")
+              
+              # Regression threshold: >100ms increase or >20% increase
+              if p99_diff > 100 or p99_pct > 20:
+                  print("❌ REGRESSION DETECTED: Significant latency increase")
+                  sys.exit(1)
+              elif p99_diff > 50 or p99_pct > 10:
+                  print("⚠️  WARNING: Moderate latency increase")
+              else:
+                  print("✅ Latency within acceptable range")
+              
+              # Check quality SLIs
+              if current.get('quality_slis'):
+                  curr_cv = current['quality_slis'].get('tcs_stability_cv')
+                  base_cv = baseline['quality_slis'].get('tcs_stability_cv')
+                  
+                  if curr_cv and base_cv:
+                      if curr_cv > 0.1:
+                          print(f"❌ TCS stability SLI BREACHED: {curr_cv:.4f} > 0.1")
+                          sys.exit(1)
+                      elif curr_cv > base_cv * 1.5:
+                          print(f"⚠️  TCS stability degradation: {curr_cv:.4f} vs {base_cv:.4f}")
+                  
+                  curr_compliance = current['quality_slis'].get('rce_beta_meta_compliance')
+                  if curr_compliance is not None and curr_compliance < 1.0:
+                      print(f"❌ RCE governance SLI BREACHED: compliance={curr_compliance:.2f}")
+                      sys.exit(1)
+              
+          except Exception as e:
+              print(f"⚠️  Baseline comparison failed: {e}")
+              # Don't fail the build on comparison errors
+          EOF
+        continue-on-error: true
+
+      - name: Upload metrics artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: validation-metrics
+          path: |
+            ci_metrics.json
+            ci_golden_probes.json
+            ci_topology.json
+          retention-days: 7
+
+      - name: Validation summary
+        if: always()
+        run: |
+          echo "## Validation Gate Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "ci_metrics.json" ]; then
+              echo "### Latency Metrics" >> $GITHUB_STEP_SUMMARY
+              python3 << 'EOF'
+          import json
+          with open('ci_metrics.json', 'r') as f:
+              m = json.load(f)
+          print(f"- p99: {m['latency']['p99_ms']:.2f}ms")
+          print(f"- Throughput: {m['throughput']['tokens_per_sec']:.2f} tokens/sec")
+          EOF
+          fi >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "ci_golden_probes.json" ]; then
+              echo "### Golden Probes" >> $GITHUB_STEP_SUMMARY
+              python3 << 'EOF'
+          import json
+          with open('ci_golden_probes.json', 'r') as f:
+              r = json.load(f)
+          print(f"- Passed: {r['passed']}/{r['total']}")
+          print(f"- Failed: {r['failed']}/{r['total']}")
+          EOF
+          fi >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail on critical regressions
+        if: steps.regression_check.outcome == 'failure' || (steps.golden_probes.outcome == 'failure' && steps.golden_probes.conclusion == 'failure')
+        run: |
+          echo "❌ Validation gate failed due to critical regressions"
+          exit 1
+

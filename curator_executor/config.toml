@@ -1,0 +1,31 @@
+[vllm]
+endpoint = "http://beelink:8000"
+curator_model = "Qwen2.5-0.5B-Instruct"
+executor_model = "Qwen2.5-Coder-7B-Instruct"
+
+[memory_core]
+qdrant_url = "http://localhost:6333"
+collection_name = "experiences"
+vector_dim = 768
+max_memory_size = 100000
+
+[curator]
+embedding_dim = 768
+max_context_length = 2048
+distillation_batch_size = 32
+clustering_threshold = 0.8
+
+[executor]
+max_context_length = 8192
+max_new_tokens = 2048
+temperature = 0.7
+top_p = 0.9
+repetition_penalty = 1.1
+
+[learning]
+fine_tune_interval = 1000
+lora_rank = 16
+learning_rate = 0.0001
+batch_size = 4
+num_epochs = 3
+model_save_path = "models/fine_tuned/"

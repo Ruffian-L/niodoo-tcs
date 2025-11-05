@@ -1,0 +1,250 @@
+# Prometheus Alerting Rules for niodoo_real_integrated
+# Based on Table 1 SLOs from the Empirical Validation Plan
+
+groups:
+  - name: niodoo_pipeline_slos
+    interval: 30s
+    rules:
+      # 1. PromptSecurityManager Latency SLO
+      - alert: PromptSecurityManagerLatencyBreach
+        expr: histogram_quantile(0.99, rate(niodoo_stage_latency_ms_bucket{stage="security"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          layer: PromptSecurityManager
+          sli_type: latency
+        annotations:
+          summary: "PromptSecurityManager p99 latency exceeds SLO"
+          description: "p99 latency is {{ $value }}ms (SLO: < 10ms) for the last 5 minutes"
+
+      # 2. PromptSecurityManager Availability SLO
+      - alert: PromptSecurityManagerAvailabilityBreach
+        expr: (1 - (sum(rate(niodoo_threat_cycles_total[5m])) / sum(rate(niodoo_stage_latency_ms_count{stage="security"}[5m])))) < 0.9999
+        for: 5m
+        labels:
+          severity: critical
+          layer: PromptSecurityManager
+          sli_type: availability
+        annotations:
+          summary: "PromptSecurityManager success rate below SLO"
+          description: "Success rate is {{ $value | humanizePercentage }} (SLO: 99.99%)"
+
+      # 3. QwenStatefulEmbedder Throughput SLO
+      - alert: QwenEmbedderThroughputBreach
+        expr: rate(niodoo_stage_latency_ms_count{stage="embedding"}[5m]) < 500
+        for: 5m
+        labels:
+          severity: warning
+          layer: QwenStatefulEmbedder
+          sli_type: throughput
+        annotations:
+          summary: "QwenStatefulEmbedder throughput below SLO"
+          description: "Throughput is {{ $value }} embeddings/sec (SLO: > 500 per core)"
+
+      # 4. QwenStatefulEmbedder Latency SLO
+      - alert: QwenEmbedderLatencyBreach
+        expr: histogram_quantile(0.99, rate(niodoo_stage_latency_ms_bucket{stage="embedding"}[5m])) > 50
+        for: 5m
+        labels:
+          severity: warning
+          layer: QwenStatefulEmbedder
+          sli_type: latency
+        annotations:
+          summary: "QwenStatefulEmbedder p99 latency exceeds SLO"
+          description: "p99 latency is {{ $value }}ms (SLO: < 50ms for 512-token input)"
+
+      # 5. ERAG Latency SLO
+      - alert: EragLatencyBreach
+        expr: histogram_quantile(0.99, rate(niodoo_stage_latency_ms_bucket{stage="erag"}[5m])) > 200
+        for: 5m
+        labels:
+          severity: warning
+          layer: ERAG
+          sli_type: latency
+        annotations:
+          summary: "ERAG p99 latency exceeds SLO"
+          description: "p99 latency is {{ $value }}ms (SLO: < 200ms including GPU weighting)"
+
+      # 6. ERAG Availability SLO
+      - alert: EragAvailabilityBreach
+        expr: (sum(rate(qdrant_grpc_responses_total[5m])) - sum(rate(qdrant_grpc_responses_fail_total[5m]))) / sum(rate(qdrant_grpc_responses_total[5m])) < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          layer: ERAG
+          sli_type: availability
+        annotations:
+          summary: "ERAG gRPC success rate below SLO"
+          description: "Success rate is {{ $value | humanizePercentage }} (SLO: 99.9%)"
+
+      # 7. TCSAnalyzer Latency SLO
+      - alert: TCSAnalyzerLatencyBreach
+        expr: histogram_quantile(0.99, rate(tcs_computation_latency_ms_bucket[5m])) > 150
+        for: 5m
+        labels:
+          severity: warning
+          layer: TCSAnalyzer
+          sli_type: latency
+        annotations:
+          summary: "TCSAnalyzer p99 latency exceeds SLO"
+          description: "p99 latency is {{ $value }}ms (SLO: < 150ms in Hybrid mode)"
+
+      # 8. TCSAnalyzer Quality (Stability) SLO
+      - alert: TCSAnalyzerStabilityBreach
+        expr: niodoo_quality_sli_tcs_stability_cv > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          layer: TCSAnalyzer
+          sli_type: quality_stability
+        annotations:
+          summary: "TCSAnalyzer stability SLI exceeds threshold"
+          description: "Coefficient of variation is {{ $value }} (SLO: < 0.1)"
+
+      # 9. CompassEngine/Curator Latency SLO
+      - alert: CompassEngineLatencyBreach
+        expr: histogram_quantile(0.99, rate(niodoo_stage_latency_ms_bucket{stage=~"compass|curator"}[5m])) > 20
+        for: 5m
+        labels:
+          severity: warning
+          layer: CompassEngine
+          sli_type: latency
+        annotations:
+          summary: "CompassEngine/Curator p99 latency exceeds SLO"
+          description: "p99 latency is {{ $value }}ms (SLO: < 20ms)"
+
+      # 10. GenerationEngine TTFT SLO
+      - alert: GenerationEngineTTFTBreach
+        expr: histogram_quantile(0.99, rate(vllm_request_latency_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          layer: GenerationEngine
+          sli_type: latency_ttft
+        annotations:
+          summary: "GenerationEngine p99 TTFT exceeds SLO"
+          description: "p99 TTFT is {{ $value }}s (SLO: < 500ms @ 16 concurrent users)"
+
+      # 11. GenerationEngine Throughput SLO
+      - alert: GenerationEngineThroughputBreach
+        expr: rate(vllm_generation_tokens_total[5m]) < 3000
+        for: 5m
+        labels:
+          severity: warning
+          layer: GenerationEngine
+          sli_type: throughput
+        annotations:
+          summary: "GenerationEngine throughput below SLO"
+          description: "Throughput is {{ $value }} tokens/sec (SLO: > 3000 tokens/sec on H200)"
+
+      # 12. WeightedMemory/MCTS Latency SLO
+      - alert: WeightedMemoryLatencyBreach
+        expr: histogram_quantile(0.99, rate(weighted_memory_weight_update_latency_ms_bucket[5m])) > 75
+        for: 5m
+        labels:
+          severity: warning
+          layer: WeightedMemory
+          sli_type: latency
+        annotations:
+          summary: "WeightedMemory p99 latency exceeds SLO"
+          description: "p99 latency is {{ $value }}ms (SLO: < 75ms for memory write/update)"
+
+      # 13. nTokens Layer Latency SLO
+      - alert: NTokensLatencyBreach
+        expr: histogram_quantile(0.99, rate(niodoo_stage_latency_ms_bucket{stage="ntokens"}[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          layer: nTokens
+          sli_type: latency
+        annotations:
+          summary: "nTokens layer p99 latency exceeds SLO"
+          description: "p99 latency is {{ $value }}ms (SLO: < 10ms per synthesis step)"
+
+      # 14. RCE Layer Quality (Governance) SLO
+      - alert: RCEGovernanceBreach
+        expr: niodoo_quality_sli_rce_beta_meta_compliance == 0
+        for: 10m
+        labels:
+          severity: warning
+          layer: RCE
+          sli_type: quality_governance
+        annotations:
+          summary: "RCE β_meta out of governance range"
+          description: "β_meta is outside [0.8, 1.2] range (current: {{ $value }})"
+
+      # 15. Service Dependency Health Checks
+      - alert: VLLMServiceDown
+        expr: up{job="vllm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          dependency: vllm
+        annotations:
+          summary: "vLLM service is down"
+          description: "vLLM metrics endpoint is unreachable"
+
+      - alert: QdrantServiceDown
+        expr: up{job="qdrant"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          dependency: qdrant
+        annotations:
+          summary: "Qdrant service is down"
+          description: "Qdrant metrics endpoint is unreachable"
+
+      - alert: GPUServiceDown
+        expr: up{job="nvidia-gpu"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          dependency: gpu
+        annotations:
+          summary: "GPU metrics exporter is down"
+          description: "NVIDIA GPU metrics endpoint is unreachable"
+
+      # 16. GPU Resource Exhaustion
+      - alert: GPUHighMemoryUsage
+        expr: (gpu_memory_used_bytes / gpu_memory_total_bytes) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          resource: gpu
+        annotations:
+          summary: "GPU memory usage critically high"
+          description: "GPU memory usage is {{ $value | humanizePercentage }}"
+
+      - alert: GPUTemperatureHigh
+        expr: temperature_gpu > 85
+        for: 5m
+        labels:
+          severity: warning
+          resource: gpu
+        annotations:
+          summary: "GPU temperature is high"
+          description: "GPU temperature is {{ $value }}°C"
+
+      # 17. Qdrant Cluster Health (if distributed)
+      - alert: QdrantClusterUnstable
+        expr: cluster_pending_operations_total > 1000
+        for: 5m
+        labels:
+          severity: warning
+          dependency: qdrant
+        annotations:
+          summary: "Qdrant cluster has excessive pending operations"
+          description: "Pending operations: {{ $value }}"
+
+      # 18. End-to-End Pipeline Latency
+      - alert: PipelineEndToEndLatencyBreach
+        expr: histogram_quantile(0.99, rate(niodoo_latency_ms_bucket[5m])) > 2000
+        for: 5m
+        labels:
+          severity: warning
+          layer: pipeline
+          sli_type: latency_e2e
+        annotations:
+          summary: "End-to-end pipeline p99 latency exceeds threshold"
+          description: "p99 latency is {{ $value }}ms"
+

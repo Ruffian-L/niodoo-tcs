@@ -1,0 +1,185 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: niodoo-pipeline
+  labels:
+    app: niodoo-pipeline
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: niodoo-pipeline
+  template:
+    metadata:
+      labels:
+        app: niodoo-pipeline
+        version: v1
+    spec:
+      containers:
+      - name: niodoo-pipeline
+        image: niodoo-pipeline:latest
+        imagePullPolicy: Always
+        ports:
+        - name: health
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: QDRANT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: niodoo-config
+              key: qdrant_url
+        - name: VLLM_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: niodoo-config
+              key: vllm_endpoint
+        - name: VLLM_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: niodoo-config
+              key: vllm_model
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RUST_LOG
+          value: "info"
+        - name: OTEL_SERVICE_NAME
+          value: "niodoo-pipeline"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector:4317"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config
+          mountPath: /etc/niodoo
+          readOnly: true
+        - name: storage
+          mountPath: /var/lib/niodoo
+      volumes:
+      - name: config
+        configMap:
+          name: niodoo-config
+      - name: storage
+        persistentVolumeClaim:
+          claimName: niodoo-storage
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - niodoo-pipeline
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: niodoo-pipeline
+  labels:
+    app: niodoo-pipeline
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: health
+    protocol: TCP
+    name: health
+  selector:
+    app: niodoo-pipeline
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: niodoo-config
+data:
+  qdrant_url: "http://qdrant:6333"
+  vllm_endpoint: "http://vllm:8000"
+  vllm_model: "Qwen2.5-7B-Instruct-AWQ"
+  cache_capacity: "256"
+  similarity_threshold: "0.7"
+  generation_max_tokens: "512"
+  token_promotion_interval: "50"
+  embedding_cache_ttl_secs: "3600"
+  collapse_cache_ttl_secs: "1800"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: niodoo-storage
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: niodoo-pipeline-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: niodoo-pipeline
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 2
+        periodSeconds: 15
+      selectPolicy: Max
