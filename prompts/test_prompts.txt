@@ -1,0 +1,5 @@
+Async pipeline architecture with Arc RwLock primitives
+Concurrent spawn blocking for Compass evaluation
+Multi-swarm parallelism with rayon and futures
+Learning loop Q-table behind Arc RwLock for safe updates
+Pipeline swarm mode stress testing

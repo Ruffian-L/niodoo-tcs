@@ -7,10 +7,14 @@
 //! Atiyah–Segal axioms, together with a lightweight TQFT engine used by the
 //! orchestrator for higher-order reasoning about cognitive state transitions.
 
+mod code_trajectory;
+
 use nalgebra::{DMatrix, DVector};
 use num_complex::Complex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+pub use code_trajectory::{CodeTrajectory, TrajectoryPoint, TrajectoryType};
 
 const EPSILON: f32 = 1e-5;
 
@@ -439,6 +443,49 @@ impl TQFTEngine {
             _ => None,
         }
     }
+
+    /// Reason from a code trajectory, computing cobordisms for each transition
+    /// and returning the final state after applying all transitions
+    pub fn reason_from_code_trajectory(
+        &self,
+        trajectory: &CodeTrajectory,
+        initial_state: Option<&DVector<Complex<f32>>>,
+    ) -> Result<DVector<Complex<f32>>, String> {
+        if trajectory.points.is_empty() {
+            return Err("Empty trajectory".to_string());
+        }
+
+        // Use provided initial state or default to unit
+        let mut current_state = initial_state
+            .map(|s| s.clone())
+            .unwrap_or_else(|| self.algebra.unit());
+
+        // Process trajectory transitions
+        let mut transitions = Vec::new();
+        for i in 1..trajectory.points.len() {
+            let before = trajectory.points[i - 1].betti;
+            let after = trajectory.points[i].betti;
+
+            if let Some(cobordism) = Self::infer_cobordism_from_betti(&before, &after) {
+                transitions.push(cobordism);
+            }
+        }
+
+        // Apply all cobordisms
+        self.reason(&current_state, &transitions)
+    }
+
+    /// Compute temporal Betti derivative (dBetti/dt) from a code trajectory
+    /// Returns the norm ||dBetti/dt|| which is key for detecting "thought-knots"
+    pub fn compute_temporal_betti_derivative(trajectory: &CodeTrajectory) -> f64 {
+        trajectory.compute_betti_derivative_norm()
+    }
+
+    /// Detect "thought-knots" in a code trajectory
+    /// A thought-knot is a persistent Betti-1 loop (dBetti/dt → 0 or high β₁)
+    pub fn detect_thought_knot(trajectory: &CodeTrajectory, threshold: f64) -> bool {
+        trajectory.detect_thought_knot(threshold)
+    }
 }
 
 #[cfg(test)]
@@ -508,5 +555,41 @@ mod tests {
         };
 
         assert!(algebra.verify_axioms().is_ok());
+    }
+
+    #[test]
+    fn test_reason_from_code_trajectory() {
+        let engine = TQFTEngine::new(2).unwrap();
+        let mut traj = CodeTrajectory::new(TrajectoryType::CfgPath);
+        
+        use std::collections::HashMap;
+        traj.add_point(0.0, [1, 0, 0], HashMap::new());
+        traj.add_point(1.0, [2, 0, 0], HashMap::new());
+        traj.add_point(2.0, [2, 1, 0], HashMap::new());
+
+        let result = engine.reason_from_code_trajectory(&traj, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_compute_temporal_betti_derivative() {
+        let mut traj = CodeTrajectory::new(TrajectoryType::CommitSequence);
+        use std::collections::HashMap;
+        traj.add_point(0.0, [1, 0, 0], HashMap::new());
+        traj.add_point(1.0, [2, 1, 0], HashMap::new());
+
+        let norm = TQFTEngine::compute_temporal_betti_derivative(&traj);
+        assert!(norm > 0.0);
+    }
+
+    #[test]
+    fn test_detect_thought_knot() {
+        let mut traj = CodeTrajectory::new(TrajectoryType::DfgPath);
+        use std::collections::HashMap;
+        // Stuck state
+        traj.add_point(0.0, [1, 1, 0], HashMap::new());
+        traj.add_point(1.0, [1, 1, 0], HashMap::new());
+
+        assert!(TQFTEngine::detect_thought_knot(&traj, 0.1));
     }
 }

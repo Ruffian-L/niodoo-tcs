@@ -1,0 +1,1 @@
+{"name": "baseline", "init": "failed", "duration": 0, "error": "[2m2025-11-08T04:50:50.329075Z[0m [32m INFO[0m Initialized embedding client [3mendpoint[0m[2m=[0mhttp://127.0.0.1:11434 [3mmodel[0m[2m=[0m/workspace/models/Qwen2.5-0.5B-Instruct/onnx/model_fp16.onnx [3mmock_mode[0m[2m=[0mfalse"}

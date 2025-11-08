@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-11-07T21:18:20.748200Z",
+  "mode": "regular",
+  "total": 1,
+  "passed": 0,
+  "failed": 1,
+  "success_rate": 0.0,
+  "results": [
+    {
+      "success": false,
+      "response": "",
+      "latency_ms": 759.3080997467041,
+      "returncode": -6,
+      "stages": {},
+      "response_length": 0,
+      "stdout_preview": "2025-11-07T21:18:20.522439Z  INFO RuntimeConfig: vllm_model=/workspace/Niodoo-Final/outputs/qwen25-coder-topology-20251105/merged\n2025-11-07T21:18:20.523478Z  INFO Config loaded: CURATOR_MODEL=qwen2:0.5b model=qwen2:0.5b\n2025-11-07T21:18:20.523485Z  INFO Topology mode configured mode=Hybrid\n",
+      "stderr_preview": "\nthread '<unnamed>' (275749) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n",
+      "prompt": "What is consciousness?",
+      "validations": {
+        "has_response": false,
+        "response_not_empty": false,
+        "completed_successfully": false,
+        "has_stage_timings": false,
+        "reasonable_latency": true
+      }
+    }
+  ]
+}

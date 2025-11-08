@@ -155,6 +155,7 @@ scraper = "0.19"
 
 # TCS (Topological Cognitive System) dependencies
 # tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
+tcs-tqft = { path = "../tcs-tqft" }
 num-complex = "0.4"
 num-traits = "0.2"
 statrs = "0.16"

@@ -12,6 +12,9 @@ use num_complex::Complex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// Re-export code trajectory types for convenience
+pub use tcs_tqft::{CodeTrajectory, TrajectoryPoint, TrajectoryType};
+
 /// Frobenius algebra: the core algebraic structure for 2D TQFT
 /// Encodes multiplication and comultiplication operations that preserve
 /// the Frobenius condition: (μ ⊗ id) ∘ (id ⊗ Δ) = Δ ∘ μ
@@ -335,6 +338,29 @@ impl TQFTEngine {
             (0, -1, 0) => Some(Cobordism::Death), // Loop destroyed
             _ => None,                           // Complex topological change
         }
+    }
+
+    /// Reason from a code trajectory (re-export from tcs-tqft for compatibility)
+    /// This method provides integration with the code trajectory module
+    pub fn reason_from_code_trajectory(
+        &self,
+        trajectory: &tcs_tqft::CodeTrajectory,
+        initial_state: Option<&DVector<Complex<f32>>>,
+    ) -> Result<DVector<Complex<f32>>, String> {
+        // Delegate to tcs-tqft implementation
+        let engine = tcs_tqft::TQFTEngine::new(self.dimension)
+            .map_err(|e| format!("Failed to create TQFT engine: {}", e))?;
+        engine.reason_from_code_trajectory(trajectory, initial_state)
+    }
+
+    /// Compute temporal Betti derivative from code trajectory
+    pub fn compute_temporal_betti_derivative(trajectory: &tcs_tqft::CodeTrajectory) -> f64 {
+        tcs_tqft::TQFTEngine::compute_temporal_betti_derivative(trajectory)
+    }
+
+    /// Detect thought-knots in code trajectory
+    pub fn detect_thought_knot(trajectory: &tcs_tqft::CodeTrajectory, threshold: f64) -> bool {
+        tcs_tqft::TQFTEngine::detect_thought_knot(trajectory, threshold)
     }
 }
 

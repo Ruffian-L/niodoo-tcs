@@ -122,6 +122,16 @@ if [[ "$LOWER_HARDWARE" == "h200" ]]; then
     VLLM_ENABLE_CHUNKED_PREFILL=${VLLM_ENABLE_CHUNKED_PREFILL:-1}
     VLLM_USE_DEEP_GEMM=${VLLM_USE_DEEP_GEMM:-1}
     VLLM_ALL2ALL_BACKEND=${VLLM_ALL2ALL_BACKEND:-pplx}
+elif [[ "$LOWER_HARDWARE" == "a100" ]]; then
+    VLLM_GPU_MEMORY_UTILIZATION=${VLLM_GPU_MEMORY_UTILIZATION:-0.85}
+    VLLM_MAX_MODEL_LEN=${VLLM_MAX_MODEL_LEN:-32768}
+    VLLM_MAX_NUM_BATCHED_TOKENS=${VLLM_MAX_NUM_BATCHED_TOKENS:-16384}
+    VLLM_MAX_NUM_SEQS=${VLLM_MAX_NUM_SEQS:-128}
+    VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}
+    VLLM_KV_CACHE_DTYPE=${VLLM_KV_CACHE_DTYPE:-fp16}
+    VLLM_ENABLE_CHUNKED_PREFILL=${VLLM_ENABLE_CHUNKED_PREFILL:-1}
+    VLLM_USE_DEEP_GEMM=${VLLM_USE_DEEP_GEMM:-0}
+    VLLM_ALL2ALL_BACKEND=${VLLM_ALL2ALL_BACKEND:-}
 fi
 
 echo "🚀 STARTING ALL SERVICES..."
@@ -204,18 +214,17 @@ else
     docker restart qdrant || echo "   ⚠️  Qdrant not in docker, check supervisor"
 fi
 
-# Ollama
+# Ollama - DEPRECATED: Curator now uses vLLM with Qwen 2.5 Topology
 echo ""
-echo "3️⃣ Starting Ollama (${OLLAMA_HOST}:${OLLAMA_PORT})..."
+echo "3️⃣ Ollama (DEPRECATED - Curator uses vLLM/Qwen 2.5 Topology now)..."
 if ! command -v ollama >/dev/null 2>&1; then
-    echo "   ⚠️  Ollama CLI not found; skipping (set OLLAMA_ENDPOINT to a remote host if needed)"
+    echo "   ⚠️  Ollama not installed (not needed - curator uses vLLM)"
 elif curl -s "${OLLAMA_BASE}/api/embeddings" \
     -H "Content-Type: application/json" \
     -d '{"model":"qwen2.5:0.5b","prompt":"test"}' > /dev/null 2>&1; then
-    echo "   ✅ Ollama already running"
+    echo "   ⚠️  Ollama is running but deprecated; curator uses vLLM with Qwen 2.5 Topology"
 else
-    echo "   Ensuring Ollama model..."
-    OLLAMA_HOST="${OLLAMA_HOST}:${OLLAMA_PORT}" ollama pull qwen2.5:0.5b
+    echo "   ⚠️  Ollama not running (not needed - curator uses vLLM with Qwen 2.5 Topology)"
 fi
 
 echo ""

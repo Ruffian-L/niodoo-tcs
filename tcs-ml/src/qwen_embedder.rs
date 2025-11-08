@@ -65,7 +65,7 @@ impl QwenEmbedder {
             // Try CUDA execution provider - if it fails or hangs, fallback to CPU
             // The timeout wrapper in QwenStatefulEmbedder will catch hangs
             let mut cuda_options = CUDAExecutionProviderOptions::default();
-            // RTX 5090 optimization: Use much higher GPU memory limit (4GB+)
+            // Hardware-specific GPU memory limits for embeddings
             // Check hardware profile from environment
             let default_mem_limit_mb = if std::env::var("HARDWARE")
                 .ok()
@@ -74,6 +74,13 @@ impl QwenEmbedder {
                 .unwrap_or(false)
             {
                 4096 // RTX 5090: 4GB for embeddings
+            } else if std::env::var("HARDWARE")
+                .ok()
+                .map(|v| v.to_lowercase())
+                .map(|v| v.contains("a100"))
+                .unwrap_or(false)
+            {
+                6144 // A100: 6GB for embeddings (leaves room for training)
             } else if std::env::var("HARDWARE")
                 .ok()
                 .map(|v| v.to_lowercase())
@@ -310,13 +317,18 @@ impl QwenEmbedder {
                 source: e.into(),
             })?;
 
-        // Convert to CowArrays and keep them alive
-        let input_ids_cow = CowArray::from(input_ids_array.into_dyn());
-        let attention_mask_cow = CowArray::from(attention_mask_array.into_dyn());
-        let position_ids_cow = CowArray::from(position_ids_array.into_dyn());
+        // CRITICAL: Use ArrayD directly (like grpc_inference does) to preserve i64 type
+        // Convert to dynamic arrays explicitly preserving the i64 type
+        let input_ids_dyn: ndarray::ArrayD<i64> = input_ids_array.into_dyn();
+        
+        // Keep attention_mask as i64 (model expects int64 for attention_mask)
+        let attention_mask_dyn: ndarray::ArrayD<i64> = attention_mask_array.into_dyn();
+        
+        // Preserve i64 type for position_ids
+        let position_ids_dyn: ndarray::ArrayD<i64> = position_ids_array.into_dyn();
 
-        // Store all KV cache CowArrays first, converting f32 to f16 for FP16 model
-        let mut kv_cows = Vec::with_capacity(self.config.num_layers * 2);
+        // Store all KV cache arrays first, converting f32 to f16 for FP16 model
+        let mut kv_arrays = Vec::with_capacity(self.config.num_layers * 2);
         for layer in 0..self.config.num_layers {
             let key_name = format!("past_key_values.{}.key", layer);
             let value_name = format!("past_key_values.{}.value", layer);
@@ -328,14 +340,23 @@ impl QwenEmbedder {
             let key_f16: Array4<f16> = key_cache.mapv(|x| f16::from_f32(x));
             let value_f16: Array4<f16> = value_cache.mapv(|x| f16::from_f32(x));
 
-            let key_cow = CowArray::from(key_f16.into_dyn());
-            let value_cow = CowArray::from(value_f16.into_dyn());
-
-            kv_cows.push(key_cow);
-            kv_cows.push(value_cow);
+            kv_arrays.push(key_f16.into_dyn());
+            kv_arrays.push(value_f16.into_dyn());
         }
 
-        // Now create Value objects from the stored CowArrays
+        // CRITICAL: Keep all CowArrays alive in a vector to ensure lifetimes
+        // Convert to CowArray with explicit type preservation
+        let input_ids_cow: CowArray<'_, i64, _> = CowArray::from(input_ids_dyn);
+        let attention_mask_cow: CowArray<'_, i64, _> = CowArray::from(attention_mask_dyn);
+        let position_ids_cow: CowArray<'_, i64, _> = CowArray::from(position_ids_dyn);
+        
+        // Store KV cache CowArrays
+        let mut kv_cows = Vec::with_capacity(self.config.num_layers * 2);
+        for kv_array in kv_arrays {
+            kv_cows.push(CowArray::from(kv_array));
+        }
+        
+        // Now create Value objects - all CowArrays are kept alive above
         let input_ids_value = Value::from_array(self.session.allocator(), &input_ids_cow)
             .map_err(|e| QwenError::OnnxInference { source: e })?;
         let attention_mask_value = Value::from_array(self.session.allocator(), &attention_mask_cow)
@@ -350,7 +371,8 @@ impl QwenEmbedder {
             kv_values.push(kv_value);
         }
 
-        // Combine all input values
+        // Combine all input values in the order expected by the model
+        // The model expects: input_ids (int64), attention_mask (int64), position_ids (int64), then KV cache
         let mut input_values = vec![input_ids_value, attention_mask_value, position_ids_value];
         input_values.extend(kv_values);
 
@@ -359,6 +381,7 @@ impl QwenEmbedder {
             debug!(
                 target: "tcs-ml::qwen_embedder",
                 input_count = input_values.len(),
+                session_input_count = self.session.inputs.len(),
                 seq_len,
                 context_before,
                 "Running ONNX inference"

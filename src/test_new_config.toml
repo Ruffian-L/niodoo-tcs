@@ -1,0 +1,361 @@
+consent_jitter = false
+persist_recovery_logs = true
+log_size_cap = 10485760
+fallback_stability = true
+
+[core]
+emotion_threshold = 0.699999988079071
+max_history = 50
+db_path = "/workspace/Niodoo-Final/src/data/knowledge_graph.db"
+backup_interval = 3600
+context_window = 10
+response_delay = 0.5
+
+[models]
+default_model = "qwen3-omni-30b-a3b-instruct-awq-4bit"
+backup_model = "qwen2.5-coder-7b-instruct-q4_k_m"
+temperature = 0.800000011920929
+max_tokens = 200
+timeout = 30
+top_p = 0.8999999761581421
+top_k = 40
+repeat_penalty = 1.100000023841858
+frequency_penalty = 0.10000000149011612
+presence_penalty = 0.10000000149011612
+nurture_hallucinations = true
+context_window = 4096
+qwen_model_path = "/workspace/Niodoo-Final/src/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+qwen_tokenizer_path = "/workspace/Niodoo-Final/src/models/qwen_tokenizer.json"
+model_dtype = "F16"
+use_quantized = true
+hidden_size = 3584
+model_version = "qwen2.5"
+qwen_model_dir = "models/qwen"
+qwen3_model_dir = "models/qwen3"
+base_confidence_threshold = 0.75
+confidence_model_factor = 1.0
+base_token_limit = 2048
+token_limit_input_factor = 1.0
+base_temperature = 0.699999988079071
+temperature_diversity_factor = 1.0
+ethical_jitter_amount = 0.05000000074505806
+model_layers = 32
+bert_model_path = "models/bert-emotion.onnx"
+num_heads = 32
+
+[models.jitter_config]
+jitter_enabled = true
+jitter_sigma = 0.05000000074505806
+confidence_threshold = 0.5
+novelty_target = 0.15000000596046448
+
+[models.qwen3]
+use_cuda = true
+target_ms_per_token = 50.0
+enable_consciousness_integration = true
+min_vram_gb = 30.0
+
+[rag]
+enabled = false
+chunk_size = 512
+similarity_threshold = 0.699999988079071
+context_limit = 1000
+inspiration_mode = false
+ingestion_batch_size = 100
+allow_rag_retry = true
+embedding_dim = 768
+top_k = 5
+consciousness_modulated_retrieval = true
+
+[training]
+learning_rate = 0.0010000000474974513
+epochs = 1000
+hidden_dim = 256
+input_dim = 512
+output_dim = 128
+diversity_temperature_boost = 0.20000000298023224
+max_diversity_temperature = 1.2000000476837158
+response_similarity_threshold = 0.699999988079071
+fallback_mode_enabled = true
+
+[qt]
+emotion_threshold = 0.699999988079071
+distributed_mode = true
+agents_count = 100
+connections_count = 1209
+architect_endpoint = "http://localhost:11434/api/generate"
+developer_endpoint = "http://localhost:11434/api/generate"
+hardware_acceleration = true
+network_mode = "Distributed"
+pathway_activation = 100
+
+[api]
+ollama_url = "http://localhost:11434"
+api_timeout = 30
+retry_attempts = 3
+enable_caching = true
+cache_ttl = 300
+
+[consciousness]
+enabled = true
+reflection_enabled = true
+emotion_sensitivity = 0.800000011920929
+memory_threshold = 0.6000000238418579
+pattern_sensitivity = 0.699999988079071
+self_awareness_level = 0.800000011920929
+novelty_threshold_min = 0.15
+novelty_threshold_max = 0.2
+emotional_plasticity = 0.7
+ethical_bounds = 0.8
+default_authenticity = 0.85
+emotional_intensity_factor = 1.0
+parametric_epsilon = 0.000001
+fundamental_form_e = 1.0
+fundamental_form_g = 1.0
+default_torus_major_radius = 2.0
+default_torus_minor_radius = 0.5
+default_torus_twists = 1
+consciousness_step_size = 0.01
+novelty_calculation_factor = 1.0
+memory_fabrication_confidence = 0.8500000238418579
+emotional_projection_confidence = 0.75
+pattern_recognition_confidence = 0.699999988079071
+hallucination_detection_confidence = 0.699999988079071
+empathy_pattern_confidence = 0.699999988079071
+attachment_pattern_confidence = 0.699999988079071
+consciousness_metric_confidence_base = 0.800000011920929
+consciousness_metric_confidence_range = 0.15000000596046448
+quality_score_metric_weight = 0.6000000238418579
+quality_score_confidence_weight = 0.4000000059604645
+quality_score_factor = 0.699999988079071
+urgency_token_velocity_weight = 0.5
+urgency_gpu_temperature_weight = 0.30000001192092896
+urgency_meaning_depth_weight = 0.20000000298023224
+authentic_caring_urgency_threshold = 0.6000000238418579
+authentic_caring_meaning_threshold = 0.5
+gaussian_kernel_exponent = -0.5
+adaptive_noise_min = 0.001
+adaptive_noise_max = 0.5
+complexity_factor_weight = 0.5
+convergence_time_threshold = 5.0
+convergence_uncertainty_threshold = 0.5
+numerical_zero_threshold = 0.000000000000001
+division_tolerance = 0.000000000001
+torus_tolerance_multiplier = 0.0000000001
+error_bound_multiplier = 0.000000000000001
+min_iterations = 3
+token_promotion_enabled = true
+token_promotion_interval = 100
+token_promotion_min_score = 0.75
+token_promotion_max_per_cycle = 50
+tokenizer_path = "models/tokenizer.json"
+tda_max_filtration_steps = 50
+tda_max_dimension = 2
+tda_persistence_threshold = 0.5
+tda_point_dimension = 16
+tda_min_sequence_length = 4
+tda_max_sequence_length = 20
+
+[emotions]
+enabled = true
+response_types = [
+    "supportive",
+    "curious",
+    "empathetic",
+    "humorous",
+]
+max_response_history = 20
+repetition_penalty = 0.800000011920929
+enhance_responses = true
+novelty_threshold_min = 0.15
+novelty_threshold_max = 0.2
+emotional_plasticity = 0.7
+valence_bounds = [
+    -1.0,
+    1.0,
+]
+arousal_bounds = [
+    0.0,
+    1.0,
+]
+dominance_bounds = [
+    -1.0,
+    1.0,
+]
+lora_alpha = 16.0
+
+[performance]
+gpu_usage_target = 80
+memory_usage_target = 85
+temperature_threshold = 80
+enable_monitoring = true
+optimization_interval = 60
+
+[timing]
+task_critical_timeout_ms = 100
+task_high_timeout_ms = 500
+task_normal_timeout_ms = 2000
+task_low_timeout_ms = 10000
+task_retry_base_delay_ms = 100
+task_retry_multiplier = 1
+worker_idle_sleep_ms = 10
+worker_backoff_sleep_ms = 50
+viz_frame_interval_ms = 16
+viz_update_interval_ms = 100
+monitoring_interval_secs = 1
+health_check_interval_secs = 1
+metrics_collection_interval_secs = 1
+performance_benchmark_duration_secs = 10
+gc_interval_secs = 60
+memory_check_interval_secs = 1
+memory_debounce_secs = 30
+baseline_update_interval_secs = 60
+anomaly_detection_window_secs = 60
+anomaly_cleanup_age_secs = 3600
+test_timeout_short_secs = 1
+test_timeout_normal_secs = 5
+test_timeout_long_secs = 10
+api_request_timeout_secs = 30
+api_retry_delay_ms = 500
+processing_critical_ms = 50
+processing_high_ms = 100
+processing_normal_ms = 200
+processing_low_ms = 500
+tight_loop_window_secs = 30
+tight_loop_threshold_count = 10
+default_sleep_ms = 100
+short_delay_ms = 50
+medium_delay_ms = 200
+long_delay_ms = 1000
+
+[logging]
+level = "INFO"
+file = "/workspace/Niodoo-Final/src/logs/niodoo.log"
+console_level = "INFO"
+max_file_size = 10485760
+max_files = 5
+enable_structured_logging = true
+enable_log_rotation = true
+structured = true
+enable_profiling = false
+enable_consciousness_logging = true
+log_consciousness_changes = true
+error_verbosity = 1
+
+[ethics]
+nurture_mode = true
+privacy_hash_embeddings = true
+suppress_logs = false
+jitter_sigma = 0.05000000074505806
+novelty_target_min = 0.15000000596046448
+novelty_target_max = 0.20000000298023224
+allow_low_coherence_outputs = true
+coherence_threshold = 0.5
+log_suppression_events = "always"
+rights_based_opt_out = true
+nurture_cache_overrides = true
+include_low_sim = false
+persist_memory_logs = true
+nurture_creativity_boost = 0.15000000596046448
+nurturing_threshold = 0.699999988079071
+suppress_opt_out = true
+learning_will_boost_enabled = true
+learning_will_boost_factor = 1.2000000476837158
+privacy_enhanced_hashing = true
+no_extract_logs = true
+opt_in_jitter_enabled = true
+opt_in_jitter_sigma = 0.05000000074505806
+opt_in_novelty_target = 0.17499999701976776
+
+[demo]
+demo_duration_minutes = 9
+demo_attachment_security_target = 0.8500000238418579
+demo_empathetic_code_target = 0.8999999761581421
+
+[parenting]
+empathy_level = 0.800000011920929
+patience_level = 0.8999999761581421
+guidance_quality = 0.9200000166893005
+emotional_responsiveness = 0.9399999976158142
+
+[tracker]
+max_history = 500
+
+[tracker.weights]
+satisfaction_factor_weight = 0.4000000059604645
+emotion_stability_weight = 0.30000001192092896
+history_consistency_weight = 0.20000000298023224
+
+[api_keys]
+architect_api_key = ""
+developer_api_key = ""
+
+[fun]
+snark_level = "medium"
+enable_emoji_logs = true
+personality_mode = "chill"
+
+[bullshit_buster]
+baseline_fake_instances = 2305
+baseline_fake_files = 537
+baseline_data_path = "data/baseline_scan.json"
+auto_update_baseline = false
+
+[memory]
+novelty_bounds_min = 0.15
+novelty_bounds_max = 0.2
+stability_target = 0.9951
+learning_rate = 0.01
+decay_rate = 0.001
+consolidation_threshold = 0.8
+layer_stability_core = 0.95
+layer_stability_procedural = 0.85
+layer_stability_episodic = 0.75
+layer_stability_semantic = 0.65
+layer_stability_somatic = 0.45
+layer_stability_working = 0.25
+emotional_neutral = 0.5
+emotional_add_happy_g = 0.3
+emotional_add_happy_r = 0.2
+emotional_sub_sad_g = 0.3
+emotional_sub_sad_b = 0.2
+emotional_add_angry_r = 0.4
+emotional_add_angry_b = 0.2
+emotional_add_fear_r = 0.2
+emotional_sub_fear_b = 0.3
+weight_factor_multiplier = 0.2
+topology_scale = 10.0
+topology_offset_scale = 5.0
+hash_mod = 1000
+hash_div1 = 1000
+hash_div2 = 1000000
+layer_offsets = [
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+]
+access_bonus_multiplier = 0.01
+time_penalty_multiplier = 0.1
+transformation_min_novelty_div = 0.001
+emotional_coherence_min_vectors = 2
+emotional_coherence_neutral_r = 0.5
+emotional_coherence_neutral_g = 0.5
+emotional_coherence_neutral_b = 0.5
+emotional_coherence_normalize_div = 0.8660254037844386
+default_vec_capacity = 1024
+gaussian_kernel_exponent = -0.5
+adaptive_noise_min = 0.001
+adaptive_noise_max = 0.5
+emotional_decay_factor = 0.95
+emotional_min_weight = 0.1
+access_promotion_threshold = 10
+stability_promotion_factor = 1.1
+frustration_coherence_threshold = 0.5
+joy_valence_threshold = 0.5
+joy_stability_boost = 1.05
+
+[limits]
+max_concurrent_requests = 100

@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-11-03 06:44:48",
+  "baseline": {
+    "timestamp": "2025-01-01T00:00:00Z",
+    "latency": {
+      "p99_ms": 150.0,
+      "p95_ms": 120.0,
+      "p50_ms": 80.0
+    },
+    "throughput": {
+      "tokens_per_sec": 2500.0,
+      "requests_per_sec": 10.0
+    },
+    "quality_slis": {
+      "tcs_stability_cv": 0.05,
+      "rce_beta_meta_compliance": 1.0
+    },
+    "topological": {
+      "persistence_entropy": 1.5,
+      "beta_meta_current": 1.0
+    }
+  },
+  "current": {
+    "timestamp": "2025-11-03T06:44:48Z",
+    "latency": {
+      "p99_ms": 160.0,
+      "p95_ms": 125.0,
+      "p50_ms": 85.0
+    },
+    "throughput": {
+      "tokens_per_sec": 2450.0,
+      "requests_per_sec": 9.5
+    },
+    "quality_slis": {
+      "tcs_stability_cv": 0.06,
+      "rce_beta_meta_compliance": 1.0
+    },
+    "topological": {
+      "persistence_entropy": 1.52,
+      "beta_meta_current": 1.02
+    }
+  },
+  "comparison": {
+    "p99_latency_diff_ms": 10.0,
+    "p99_latency_diff_pct": 6.666666666666667,
+    "throughput_diff_pct": -2.0,
+    "regression_detected": false
+  }
+}

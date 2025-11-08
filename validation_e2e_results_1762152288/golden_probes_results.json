@@ -1,0 +1,54 @@
+{
+  "timestamp": "2025-11-03 06:44:48",
+  "total": 5,
+  "passed": 1,
+  "failed": 4,
+  "pass_rate": 0.2,
+  "results": [
+    {
+      "id": "golden-001",
+      "category": "single_hop",
+      "question": "What is the capital of France?",
+      "passed": false,
+      "match_rate": 0.0,
+      "matches": 0,
+      "total_expected": 1
+    },
+    {
+      "id": "golden-002",
+      "category": "multi_hop",
+      "question": "If Alice is taller than Bob, and Bob is taller than Charlie, who is the tallest?",
+      "passed": true,
+      "match_rate": 1.0,
+      "matches": 1,
+      "total_expected": 1
+    },
+    {
+      "id": "golden-003",
+      "category": "temporal",
+      "question": "In a conversation where the user first mentioned they prefer coffee, then later asked about recommendations, what should I recommend?",
+      "passed": false,
+      "match_rate": 0.0,
+      "matches": 0,
+      "total_expected": 1
+    },
+    {
+      "id": "golden-004",
+      "category": "arithmetic",
+      "question": "What is 17 multiplied by 23?",
+      "passed": false,
+      "match_rate": 0.0,
+      "matches": 0,
+      "total_expected": 1
+    },
+    {
+      "id": "golden-005",
+      "category": "reasoning",
+      "question": "All birds can fly. Penguins are birds. Can penguins fly? Explain your reasoning.",
+      "passed": false,
+      "match_rate": 0.6666666666666666,
+      "matches": 2,
+      "total_expected": 3
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "no_erag",
+  "timestamp": "2025-11-08T04:48:57+00:00",
+  "success_count": 0,
+  "fail_count": 3,
+  "total_prompts": 3,
+  "latencies": [],
+  "avg_latency_sec": 0,
+  "min_latency_sec": 999999,
+  "max_latency_sec": 0,
+  "success_rate": 0
+}

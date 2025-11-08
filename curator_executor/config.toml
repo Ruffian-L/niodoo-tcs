@@ -1,5 +1,5 @@
 [vllm]
-endpoint = "http://beelink:8000"
+endpoint = "http://beelink:5001"
 curator_model = "Qwen2.5-0.5B-Instruct"
 executor_model = "Qwen2.5-Coder-7B-Instruct"
 

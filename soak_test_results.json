@@ -1,0 +1,15 @@
+{
+  "duration_secs": 60.099358428,
+  "total_operations": 2739,
+  "successful_operations": 0,
+  "failed_operations": 2739,
+  "success_rate": 0.0,
+  "avg_latency_ms": 8.057685286600949,
+  "ops_per_sec": 45.574529772749,
+  "avg_memory_mb": 1112.6640625,
+  "peak_memory_mb": 1112.6640625,
+  "memory_growth_mb": 0.0,
+  "threat_count": 0,
+  "healing_count": 0,
+  "breakthroughs": 0
+}

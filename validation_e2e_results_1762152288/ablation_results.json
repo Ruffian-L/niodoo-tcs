@@ -1,0 +1,73 @@
+{
+  "timestamp": "2025-11-03 06:44:48",
+  "experiments": [
+    {
+      "experiment": "DisableRce",
+      "timestamp": "2025-11-03 06:44:48",
+      "metrics": {
+        "latency_p99_ms": 180.0,
+        "throughput_tokens_per_sec": 2200.0,
+        "quality_slis": {
+          "tcs_stability_cv": 0.08,
+          "rce_beta_meta_compliance": 0.9
+        }
+      },
+      "comparison": {
+        "latency_change_p99_ms": 30.0,
+        "latency_change_pct": 20.0,
+        "regression_detected": true
+      }
+    },
+    {
+      "experiment": "BypassNTokens",
+      "timestamp": "2025-11-03 06:44:48",
+      "metrics": {
+        "latency_p99_ms": 180.0,
+        "throughput_tokens_per_sec": 2200.0,
+        "quality_slis": {
+          "tcs_stability_cv": 0.08,
+          "rce_beta_meta_compliance": 1.0
+        }
+      },
+      "comparison": {
+        "latency_change_p99_ms": 30.0,
+        "latency_change_pct": 20.0,
+        "regression_detected": true
+      }
+    },
+    {
+      "experiment": "DisableGpuFitness",
+      "timestamp": "2025-11-03 06:44:48",
+      "metrics": {
+        "latency_p99_ms": 180.0,
+        "throughput_tokens_per_sec": 2200.0,
+        "quality_slis": {
+          "tcs_stability_cv": 0.08,
+          "rce_beta_meta_compliance": 1.0
+        }
+      },
+      "comparison": {
+        "latency_change_p99_ms": 30.0,
+        "latency_change_pct": 20.0,
+        "regression_detected": true
+      }
+    },
+    {
+      "experiment": "BypassErag",
+      "timestamp": "2025-11-03 06:44:48",
+      "metrics": {
+        "latency_p99_ms": 180.0,
+        "throughput_tokens_per_sec": 2200.0,
+        "quality_slis": {
+          "tcs_stability_cv": 0.08,
+          "rce_beta_meta_compliance": 1.0
+        }
+      },
+      "comparison": {
+        "latency_change_p99_ms": 30.0,
+        "latency_change_pct": 20.0,
+        "regression_detected": true
+      }
+    }
+  ]
+}

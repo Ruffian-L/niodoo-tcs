@@ -1,0 +1,55 @@
+{
+  "timestamp": "2025-11-03 06:44:48",
+  "tests": [
+    {
+      "conversation_id": "locomo-001",
+      "questions_total": 4,
+      "category_results": {
+        "SingleHop": {
+          "passed": 1,
+          "total": 1
+        },
+        "MultiHop": {
+          "passed": 1,
+          "total": 1
+        },
+        "Temporal": {
+          "passed": 1,
+          "total": 1
+        },
+        "Adversarial": {
+          "passed": 1,
+          "total": 1
+        }
+      },
+      "overall_f1": 0.75
+    },
+    {
+      "conversation_id": "locomo-002",
+      "questions_total": 3,
+      "category_results": {
+        "SingleHop": {
+          "passed": 1,
+          "total": 1
+        },
+        "MultiHop": {
+          "passed": 0,
+          "total": 1
+        },
+        "Temporal": {
+          "passed": 1,
+          "total": 1
+        },
+        "Adversarial": {
+          "passed": 0,
+          "total": 0
+        }
+      },
+      "overall_f1": 0.75
+    }
+  ],
+  "summary": {
+    "total_tests": 2,
+    "avg_f1": 0.75
+  }
+}
