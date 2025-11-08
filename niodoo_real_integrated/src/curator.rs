@@ -1,6 +1,7 @@
 //! Curator: Memory guardian and knowledge distiller
 //! Adapted from curator_executor for niodoo_real_integrated integration
-//! Supports both Ollama (CPU) and vLLM (GPU) backends
+//! Uses vLLM backend with Qwen 2.5 Topology model (default)
+//! Ollama backend is deprecated but still supported for backward compatibility
 
 use anyhow::{Context, Result};
 use reqwest::Client;
@@ -39,7 +40,8 @@ pub struct CuratorRefineResult {
     pub reason: String,
 }
 
-/// The Curator interacts with a lightweight Qwen model via Ollama or vLLM
+/// The Curator uses Qwen 2.5 Topology model via vLLM (default)
+/// Ollama backend is deprecated but still supported for backward compatibility
 pub struct Curator {
     client: Client,
     config: CuratorConfig,
@@ -68,10 +70,10 @@ impl Curator {
                     );
                 }
                 CuratorBackend::Ollama => {
-                    info!(
+                    warn!(
                         endpoint = %config.ollama_endpoint,
                         model = %config.model_name,
-                        "Curator using Ollama backend (CPU)"
+                        "Curator using deprecated Ollama backend; migrate to vLLM with Qwen 2.5 Topology"
                     );
                 }
             }

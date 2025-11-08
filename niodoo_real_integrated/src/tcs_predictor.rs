@@ -2,7 +2,7 @@
 //! Predicts reward deltas and optimal actions based on topological features
 
 use std::collections::HashMap;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::config::RuntimeConfig;
 use crate::tcs_analysis::TopologicalSignature;

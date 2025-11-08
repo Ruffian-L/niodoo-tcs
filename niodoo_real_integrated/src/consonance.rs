@@ -62,6 +62,27 @@ pub fn compute_consonance(
     curator: Option<&CuratedResponse>,
     last_compass: Option<&CompassOutcome>,
 ) -> ConsonanceMetrics {
+    compute_consonance_with_weights(
+        pad_state,
+        compass,
+        erag_collapse,
+        topology,
+        curator,
+        last_compass,
+        &[0.25, 0.20, 0.25, 0.20, 0.10], // Default weights for backward compatibility
+    )
+}
+
+/// Compute consonance metrics with configurable weights
+pub fn compute_consonance_with_weights(
+    pad_state: &PadGhostState,
+    compass: &CompassOutcome,
+    erag_collapse: &CollapseResult,
+    topology: &TopologicalSignature,
+    curator: Option<&CuratedResponse>,
+    last_compass: Option<&CompassOutcome>,
+    weights: &[f64; 5], // [emotional, topological, erag, compass, curator]
+) -> ConsonanceMetrics {
     let mut sources = Vec::new();
 
     // 1. Emotional Coherence: PAD stability
@@ -105,9 +126,7 @@ pub fn compute_consonance(
     };
     sources.push(ConsonanceSource::CuratorQuality(curator_quality));
 
-    // Weighted average of all sources
-    // Weights: emotional=0.25, topological=0.20, ERAG=0.25, compass=0.20, curator=0.10
-    let weights = [0.25, 0.20, 0.25, 0.20, 0.10];
+    // Weighted average of all sources using provided weights
     let weighted_sum: f64 = sources
         .iter()
         .zip(weights.iter())
@@ -235,6 +254,7 @@ pub fn compute_confidence(sources: &[ConsonanceSource]) -> f64 {
     }
 
     let scores: Vec<f64> = sources.iter().map(|s| s.score()).collect();
+    // Guard against division by zero (sources.is_empty() checked above, but defensive)
     let mean = scores.iter().sum::<f64>() / scores.len() as f64;
 
     // Standard deviation - lower = more agreement = higher confidence

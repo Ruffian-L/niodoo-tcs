@@ -166,3 +166,23 @@ pub fn entropy_from_logprobs(logprobs: &[f64]) -> f64 {
     let probs: Vec<f64> = logprobs.iter().map(|&lp| lp.exp()).collect();
     shannon_entropy(&probs)
 }
+
+/// Compute cosine similarity between two 3D vectors (for PAD state vectors)
+/// Returns value in range [-1.0, 1.0], or 0.0 if either vector has zero norm
+pub fn cosine_similarity_3d(pad_vec: [f64; 3], mem_vec: [f64; 3]) -> f64 {
+    let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
+    let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
+    let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
+    
+    if n1 > 0.0 && n2 > 0.0 {
+        (dot / (n1 * n2)).clamp(-1.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+/// Compute entropy score based on topology persistence entropy and memory entropy
+/// Returns value in range [0.0, 1.0] where 1.0 means perfect match
+pub fn compute_entropy_score(topology_persistence_entropy: f64, memory_entropy: f64) -> f64 {
+    1.0 - (topology_persistence_entropy - memory_entropy).abs().min(1.0)
+}

@@ -10,8 +10,7 @@ use blake3::hash as blake3_hash;
 use bytemuck::cast_slice;
 use lru::LruCache;
 use lz4_flex::block::{compress_prepend_size, decompress_size_prepended};
-use parking_lot::RwLock;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tracing::warn;
 
 use crate::erag::CollapseResult;
@@ -43,31 +42,31 @@ impl<T> CacheEntry<T> {
 
 #[derive(Clone)]
 pub struct PipelineCache<T> {
-    ttl: Arc<RwLock<Duration>>,
+    ttl: Arc<AsyncRwLock<Duration>>,
     inner: Arc<AsyncMutex<LruCache<u64, CacheEntry<T>>>>,
 }
 
 impl<T> PipelineCache<T> {
     pub fn new(capacity: NonZeroUsize, ttl: Duration) -> Self {
         Self {
-            ttl: Arc::new(RwLock::new(ttl)),
+            ttl: Arc::new(AsyncRwLock::new(ttl)),
             inner: Arc::new(AsyncMutex::new(LruCache::new(capacity))),
         }
     }
 
-    pub fn update_ttl(&self, ttl: Duration) {
-        *self.ttl.write() = ttl;
+    pub async fn update_ttl(&self, ttl: Duration) {
+        *self.ttl.write().await = ttl;
     }
 
-    fn ttl(&self) -> Duration {
-        *self.ttl.read()
+    async fn ttl(&self) -> Duration {
+        *self.ttl.read().await
     }
 
     pub async fn get(&self, key: &u64, now: Instant) -> Option<T>
     where
         T: Clone,
     {
-        let ttl = self.ttl();
+        let ttl = self.ttl().await;
         let mut guard = self.inner.lock().await;
         if let Some(entry) = guard.get(key) {
             if entry.is_expired(now, ttl) {
@@ -222,8 +221,8 @@ impl EmbeddingCache {
         }
     }
 
-    pub fn update_ttl(&self, ttl: Duration) {
-        self.inner.update_ttl(ttl);
+    pub async fn update_ttl(&self, ttl: Duration) {
+        self.inner.update_ttl(ttl).await;
     }
 
     pub async fn fetch(&self, key: &u64, now: Instant) -> Result<Option<CacheHit<Vec<f32>>>> {
@@ -271,8 +270,8 @@ impl CollapseCache {
         }
     }
 
-    pub fn update_ttl(&self, ttl: Duration) {
-        self.inner.update_ttl(ttl);
+    pub async fn update_ttl(&self, ttl: Duration) {
+        self.inner.update_ttl(ttl).await;
     }
 
     pub async fn fetch(&self, key: &u64, now: Instant) -> Result<Option<CacheHit<CollapseResult>>> {

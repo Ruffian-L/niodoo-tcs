@@ -247,7 +247,7 @@ pub fn update_retrieval_stats(metadata: &mut WeightedMemoryMetadata) {
 
 /// Initialize memory metadata for new memory
 pub fn initialize_memory_metadata(
-    pad_state: &PadGhostState,
+    _pad_state: &PadGhostState,
     consolidation_level: f32,
 ) -> WeightedMemoryMetadata {
     WeightedMemoryMetadata {

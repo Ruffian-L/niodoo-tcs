@@ -235,8 +235,8 @@ impl CompassEngine {
     }
 
     /// Get config value or default
-    fn get_config(&self) -> &CompassConfig {
-        self.config.as_ref().unwrap_or(&CompassConfig::default())
+    fn get_config(&self) -> CompassConfig {
+        self.config.clone().unwrap_or_else(|| CompassConfig::default())
     }
 
     #[instrument(skip_all)]

@@ -411,14 +411,18 @@ impl TopologyCache {
     }
 }
 
+/// Topological snapshot computed from distance matrix
+/// 
+/// Contains Betti numbers, persistence features, and spectral information.
+/// Made public for RL Execution Harness integration.
 #[derive(Debug, Clone)]
-struct LaplacianSnapshot {
-    features: Vec<PersistentFeature>,
-    entropy_weights: Vec<(usize, f32)>,
-    betti: [usize; 3],
-    spectra: Vec<LaplacianSpectrum>,
-    spectral_flux: [f64; 3],
-    motifs: MotifMetrics,
+pub struct LaplacianSnapshot {
+    pub features: Vec<PersistentFeature>,
+    pub entropy_weights: Vec<(usize, f32)>,
+    pub betti: [usize; 3],
+    pub spectra: Vec<LaplacianSpectrum>,
+    pub spectral_flux: [f64; 3],
+    pub motifs: MotifMetrics,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -829,6 +833,18 @@ impl TCSAnalyzer {
         Ok(Self::pairwise_cpu(points))
     }
 
+    /// Compute topological snapshot from distance matrix (public API for RL harness)
+    /// 
+    /// This method allows external code (e.g., CodeTopologyAnalyzer) to compute
+    /// topology from arbitrary distance matrices, such as those derived from code CFGs.
+    pub fn compute_topology_from_distances(
+        &self,
+        distances: &[Vec<f32>],
+        max_filtration: f32,
+    ) -> LaplacianSnapshot {
+        self.compute_snapshot(distances, max_filtration)
+    }
+
     fn compute_snapshot(
         &self,
         distances: &[Vec<f32>],
@@ -915,7 +931,9 @@ impl TCSAnalyzer {
                 continue;
             }
             let mut eigenvalues = spectrum.eigenvalues.clone();
-            eigenvalues.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            // Filter out NaN values and sort safely
+            eigenvalues.retain(|&v| v.is_finite());
+            eigenvalues.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let mut previous = 0.0f64;
             for value in eigenvalues {
                 if value <= self.zero_tolerance {

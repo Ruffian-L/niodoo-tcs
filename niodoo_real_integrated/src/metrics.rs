@@ -14,16 +14,25 @@ use prometheus::{
     Gauge, Histogram, HistogramOpts, HistogramVec, TextEncoder,
 };
 
-static METRICS: Lazy<PipelineMetrics> = Lazy::new(|| {
-    PipelineMetrics::new().unwrap_or_else(|e| {
-        panic!("Failed to initialize Prometheus metrics: {}. This is a critical infrastructure failure.", e);
-    })
+// Use Option to allow graceful degradation if metrics initialization fails
+static METRICS: Lazy<Option<PipelineMetrics>> = Lazy::new(|| {
+    match PipelineMetrics::new() {
+        Ok(metrics) => Some(metrics),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to initialize Prometheus metrics; continuing without metrics");
+            None
+        }
+    }
 });
 
-static WEIGHTED_MEMORY_METRICS: Lazy<WeightedMemoryMetrics> = Lazy::new(|| {
-    WeightedMemoryMetrics::new().unwrap_or_else(|e| {
-        panic!("Failed to initialize weighted memory metrics: {}. This is a critical infrastructure failure.", e);
-    })
+static WEIGHTED_MEMORY_METRICS: Lazy<Option<WeightedMemoryMetrics>> = Lazy::new(|| {
+    match WeightedMemoryMetrics::new() {
+        Ok(metrics) => Some(metrics),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to initialize weighted memory metrics; continuing without metrics");
+            None
+        }
+    }
 });
 
 #[derive(Clone)]
@@ -106,8 +115,8 @@ impl PipelineMetrics {
     }
 }
 
-pub fn metrics() -> &'static PipelineMetrics {
-    &METRICS
+pub fn metrics() -> Option<&'static PipelineMetrics> {
+    METRICS.as_ref()
 }
 
 /// RCE metrics (β_meta, spectral gap, persistence entropy, spike counter)
@@ -204,17 +213,18 @@ impl RceMetrics {
     }
 }
 
-static RCE_METRICS: Lazy<RceMetrics> = Lazy::new(|| {
-    RceMetrics::new().unwrap_or_else(|e| {
-        panic!(
-            "Failed to initialize RCE metrics: {}. This is a critical infrastructure failure.",
-            e
-        );
-    })
+static RCE_METRICS: Lazy<Option<RceMetrics>> = Lazy::new(|| {
+    match RceMetrics::new() {
+        Ok(metrics) => Some(metrics),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to initialize RCE metrics; continuing without metrics");
+            None
+        }
+    }
 });
 
-pub fn rce_metrics() -> &'static RceMetrics {
-    &RCE_METRICS
+pub fn rce_metrics() -> Option<&'static RceMetrics> {
+    RCE_METRICS.as_ref()
 }
 
 #[derive(Clone)]
@@ -325,6 +335,11 @@ impl CacheMetrics {
 
 static CACHE_METRICS: Lazy<CacheMetrics> = Lazy::new(|| {
     CacheMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize cache metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
         panic!(
             "Failed to initialize cache metrics: {}. This is a critical infrastructure failure.",
             e
@@ -399,8 +414,19 @@ impl TokenizerMetrics {
     }
 }
 
-static TOKENIZER_METRICS: Lazy<TokenizerMetrics> =
-    Lazy::new(|| TokenizerMetrics::new().expect("failed to initialise tokenizer metrics"));
+static TOKENIZER_METRICS: Lazy<TokenizerMetrics> = Lazy::new(|| {
+    TokenizerMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize tokenizer metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
+        panic!(
+            "Failed to initialize tokenizer metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
+    })
+});
 
 pub fn tokenizer_metrics() -> &'static TokenizerMetrics {
     &TOKENIZER_METRICS
@@ -538,8 +564,8 @@ impl WeightedMemoryMetrics {
     }
 }
 
-pub fn weighted_memory_metrics() -> &'static WeightedMemoryMetrics {
-    &WEIGHTED_MEMORY_METRICS
+pub fn weighted_memory_metrics() -> Option<&'static WeightedMemoryMetrics> {
+    WEIGHTED_MEMORY_METRICS.as_ref()
 }
 
 /// ERAG batch operation metrics (Phase 1.5)
@@ -651,6 +677,11 @@ impl EragBatchMetrics {
 
 static ERAG_BATCH_METRICS: Lazy<EragBatchMetrics> = Lazy::new(|| {
     EragBatchMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize ERAG batch metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
         panic!(
             "Failed to initialize ERAG batch metrics: {}. This is a critical infrastructure failure.",
             e
@@ -849,6 +880,11 @@ impl TCSAnalyzerMetrics {
 
 static TCS_ANALYZER_METRICS: Lazy<TCSAnalyzerMetrics> = Lazy::new(|| {
     TCSAnalyzerMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize TCS analyzer metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
         panic!(
             "Failed to initialize TCS analyzer metrics: {}. This is a critical infrastructure failure.",
             e
@@ -963,6 +999,11 @@ impl CuratorFeedbackMetrics {
 
 static CURATOR_FEEDBACK_METRICS: Lazy<CuratorFeedbackMetrics> = Lazy::new(|| {
     CuratorFeedbackMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize curator feedback metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
         panic!(
             "Failed to initialize curator feedback metrics: {}. This is a critical infrastructure failure.",
             e
@@ -1050,6 +1091,11 @@ impl CrdtConsolidationMetrics {
 
 static CRDT_CONSOLIDATION_METRICS: Lazy<CrdtConsolidationMetrics> = Lazy::new(|| {
     CrdtConsolidationMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize CRDT consolidation metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
         panic!(
             "Failed to initialize CRDT consolidation metrics: {}. This is a critical infrastructure failure.",
             e
@@ -1138,6 +1184,11 @@ impl GPUFitnessMetrics {
 
 static GPU_FITNESS_METRICS: Lazy<GPUFitnessMetrics> = Lazy::new(|| {
     GPUFitnessMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize GPU fitness metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
         panic!(
             "Failed to initialize GPU fitness metrics: {}. This is a critical infrastructure failure.",
             e
@@ -1205,6 +1256,11 @@ impl QualitySLIMetrics {
 
 static QUALITY_SLI_METRICS: Lazy<QualitySLIMetrics> = Lazy::new(|| {
     QualitySLIMetrics::new().unwrap_or_else(|e| {
+        tracing::error!(
+            error = %e,
+            "Failed to initialize Quality SLI metrics: {}. This is a critical infrastructure failure.",
+            e
+        );
         panic!(
             "Failed to initialize Quality SLI metrics: {}. This is a critical infrastructure failure.",
             e

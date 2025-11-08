@@ -143,8 +143,12 @@ async fn main() -> Result<()> {
 
     emit_summary(&cycles);
 
-    let metrics_dump = metrics().gather()?;
-    println!("\n# Prometheus Metrics\n{}", metrics_dump);
+    if let Some(m) = metrics() {
+        let metrics_dump = m.gather()?;
+        println!("\n# Prometheus Metrics\n{}", metrics_dump);
+    } else {
+        println!("\n# Prometheus Metrics\n(metrics unavailable)");
+    }
 
     #[cfg(feature = "svc")]
     {

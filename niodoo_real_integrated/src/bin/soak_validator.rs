@@ -271,11 +271,12 @@ async fn main() -> Result<()> {
     let metrics_log = Arc::new(Mutex::new(Vec::<CycleMetrics>::new()));
 
     // Spawn concurrent threads
+    let cycles_per = args.cycles_per_thread;
     let handles: Vec<_> = (0..args.num_threads)
         .map(|thread_id| {
             let pipeline = pipelines[thread_id].clone();
             let metrics_log = metrics_log.clone();
-            let cycles_per = args.cycles_per_thread;
+            let cycles_per = cycles_per;
 
             tokio::spawn(async move {
                 let mut rng = StdRng::seed_from_u64(42 + thread_id as u64);

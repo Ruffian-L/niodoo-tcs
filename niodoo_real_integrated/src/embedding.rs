@@ -15,10 +15,16 @@ pub trait Embedder: Send + Sync {
     async fn embed(&self, prompt: &str) -> Result<Vec<f32>>;
 }
 
+/// Internal embedder enum for real or mock
+enum EmbedderInner {
+    Real(QwenEmbedder),
+    Mock { expected_dim: usize },
+}
+
 /// Wraps the stateful ONNX Qwen embedder in an async-friendly API.
 #[derive(Clone)]
 pub struct QwenStatefulEmbedder {
-    inner: Arc<Mutex<QwenEmbedder>>,
+    inner: Arc<Mutex<EmbedderInner>>,
     expected_dim: usize,
 }
 
@@ -81,16 +87,17 @@ impl QwenStatefulEmbedder {
         };
         
         Ok(Self {
-            inner: Arc::new(Mutex::new(embedder)),
+            inner: Arc::new(Mutex::new(EmbedderInner::Real(embedder))),
             expected_dim,
         })
     }
 
     /// Create a mock embedder for testing (returns random normalized vectors)
-    fn new_mock(_expected_dim: usize) -> Result<Self> {
-        // Mock mode is handled by tcs_ml::QwenEmbedder when MOCK_MODE env var is set
-        // For now, require a valid model path even in mock mode
-        Err(anyhow!("Mock embedder requires MOCK_MODE env var set in tcs_ml - provide a valid model path"))
+    fn new_mock(expected_dim: usize) -> Result<Self> {
+        Ok(Self {
+            inner: Arc::new(Mutex::new(EmbedderInner::Mock { expected_dim })),
+            expected_dim,
+        })
     }
 }
 
@@ -103,12 +110,40 @@ impl Embedder for QwenStatefulEmbedder {
         let expected = self.expected_dim;
         let embedding = task::spawn_blocking(move || {
             let mut guard = embedder.blocking_lock();
-            guard.embed(&prompt_owned)
+            match &mut *guard {
+                EmbedderInner::Real(emb) => emb.embed(&prompt_owned),
+                EmbedderInner::Mock { expected_dim } => {
+                    use rand::{Rng, SeedableRng};
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    
+                    let mut hasher = DefaultHasher::new();
+                    prompt_owned.hash(&mut hasher);
+                    let hash = hasher.finish();
+                    
+                    let mut rng = rand::rngs::StdRng::seed_from_u64(hash);
+                    
+                    let mut embedding = Vec::with_capacity(*expected_dim);
+                    for _ in 0..*expected_dim {
+                        embedding.push(rng.gen_range(-1.0..1.0));
+                    }
+                    
+                    let norm: f32 = embedding.iter().map(|v| v * v).sum::<f32>().sqrt();
+                    if norm > 0.0 {
+                        for v in &mut embedding {
+                            *v /= norm;
+                        }
+                    }
+                    
+                    Ok(embedding)
+                }
+            }
         })
         .await
-        .context("embed task join error")?;
+        .context("embed task join error")?
+        .map_err(|e: QwenError| anyhow!(e))?;
 
-        let mut embedding = embedding.map_err(|e: QwenError| anyhow!(e))?;
+        let mut embedding = embedding;
         if embedding.len() != expected {
             if embedding.len() < expected {
                 embedding.resize(expected, 0.0);

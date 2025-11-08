@@ -114,33 +114,37 @@ pub fn prime_environment() {
 pub fn init() {
     prime_environment();
 
+    // Curator model - now defaults to Qwen 2.5 Topology via vLLM
     let curator_model = env_with_fallback(&[
         "CURATOR_MODEL",
-        "EMBEDDING_MODEL_NAME",
-        "OLLAMA_EMBED_MODEL",
-        "EMBEDDING_MODEL",
+        "CURATOR_VLLM_MODEL",
+        "QWEN25_TOPOLOGY_MODEL",
     ])
-    .unwrap_or_else(|| "qwen2:0.5b".to_string());
+    .unwrap_or_else(|| "/workspace/models/Qwen2.5-Topology".to_string());
 
+    // Main generation model - Qwen 3 Coder
     let main_model = env_with_fallback(&[
         "MAIN_MODEL",
         "VLLM_MODEL_ID",
         "VLLM_MODEL",
         "VLLM_MODEL_PATH",
+        "QWEN3_CODER_MODEL",
     ])
-    .unwrap_or_else(|| "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string());
+    .unwrap_or_else(|| "/workspace/models/Qwen3-Coder".to_string());
     
-    info!("Config: main_model={}", main_model);  // ADD THIS
+    info!("Config: main_model={}", main_model);
 
-    // DEBUG: Log model ID source
-    if std::env::var("VLLM_MODEL_ID").is_ok() {
-        tracing::info!("Model ID from VLLM_MODEL_ID env var: {}", main_model);
-    } else if std::env::var("VLLM_MODEL").is_ok() {
-        tracing::info!("Model ID from VLLM_MODEL env var: {}", main_model);
-    } else if std::env::var("MAIN_MODEL").is_ok() {
-        tracing::info!("Model ID from MAIN_MODEL env var: {}", main_model);
-    } else {
-        tracing::info!("Model ID using default: {}", main_model);
+    // Log model ID source for debugging (only at debug level)
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        if std::env::var("VLLM_MODEL_ID").is_ok() {
+            tracing::debug!("Model ID from VLLM_MODEL_ID env var: {}", main_model);
+        } else if std::env::var("VLLM_MODEL").is_ok() {
+            tracing::debug!("Model ID from VLLM_MODEL env var: {}", main_model);
+        } else if std::env::var("MAIN_MODEL").is_ok() {
+            tracing::debug!("Model ID from MAIN_MODEL env var: {}", main_model);
+        } else {
+            tracing::debug!("Model ID using default: {}", main_model);
+        }
     }
 
     let qdrant_dim: usize = env_with_fallback(&["QDRANT_VECTOR_DIM", "QDRANT_VECTOR_SIZE"])
@@ -159,10 +163,11 @@ pub fn init() {
         curator_model, main_model, qdrant_dim
     );
 
+    // Ollama is deprecated for curator - use vLLM with Qwen 2.5 Topology instead
     if ollama_url != "http://127.0.0.1:11434" {
         warn!(
             ollama_url = %ollama_url,
-            "OLLAMA_URL not default—ensure 'ollama serve && ollama pull qwen2:0.5b'"
+            "OLLAMA_URL is deprecated; curator uses vLLM (Qwen 2.5 Topology) by default"
         );
     }
 }
@@ -208,6 +213,26 @@ pub struct CliArgs {
     /// Optional RNG seed override for deterministic runs (overrides env RNG_SEED)
     #[arg(long = "rng-seed-override")]
     pub rng_seed_override: Option<u64>,
+
+    /// Ablation: Disable topology analysis (TCS)
+    #[arg(long = "no-topology")]
+    pub no_topology: bool,
+
+    /// Ablation: Disable ERAG memory retrieval
+    #[arg(long = "no-erag")]
+    pub no_erag: bool,
+
+    /// Ablation: Disable consciousness compass
+    #[arg(long = "no-compass")]
+    pub no_compass: bool,
+
+    /// Ablation: Disable continuous learning loop
+    #[arg(long = "no-learning")]
+    pub no_learning: bool,
+
+    /// Ablation: Disable curator
+    #[arg(long = "no-curator")]
+    pub no_curator: bool,
 }
 
 impl Default for CliArgs {
@@ -221,6 +246,11 @@ impl Default for CliArgs {
             hardware: HardwareProfile::Beelink,
             config: None,
             rng_seed_override: None,
+            no_topology: false,
+            no_erag: false,
+            no_compass: false,
+            no_learning: false,
+            no_curator: false,
         }
     }
 }
@@ -342,13 +372,16 @@ impl CuratorBackend {
         match env_with_fallback(&["CURATOR_BACKEND", "CURATOR_TYPE"]) {
             Some(value) => match value.to_ascii_lowercase().as_str() {
                 "vllm" | "vllm_gpu" => CuratorBackend::Vllm,
-                "ollama" | "ollama_cpu" => CuratorBackend::Ollama,
+                "ollama" | "ollama_cpu" => {
+                    warn!(%value, "Ollama curator backend is deprecated; use vLLM with Qwen 2.5 Topology instead");
+                    CuratorBackend::Ollama  // Still support but warn
+                }
                 _ => {
-                    warn!(%value, "Invalid curator backend; defaulting to Ollama for mini Qwen");
-                    CuratorBackend::Ollama  // Change default to Ollama
+                    warn!(%value, "Invalid curator backend; defaulting to vLLM (Qwen 2.5 Topology)");
+                    CuratorBackend::Vllm  // Default to vLLM
                 }
             },
-            None => CuratorBackend::Ollama, // Default to Ollama for mini model
+            None => CuratorBackend::Vllm, // Default to vLLM (Qwen 2.5 Topology)
         }
     }
 }
@@ -392,6 +425,101 @@ impl FromStr for TopologyMode {
             other => Err(anyhow::anyhow!("unsupported topology mode '{other}'")),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CodeLanguage {
+    #[serde(rename = "python")]
+    Python,
+    #[serde(rename = "typescript")]
+    TypeScript,
+}
+
+impl Default for CodeLanguage {
+    fn default() -> Self {
+        CodeLanguage::Python
+    }
+}
+
+impl FromStr for CodeLanguage {
+    type Err = anyhow::Error;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "python" => Ok(CodeLanguage::Python),
+            "typescript" => Ok(CodeLanguage::TypeScript),
+            other => Err(anyhow::anyhow!("unsupported code language '{other}'")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeModeConfig {
+    #[serde(default = "default_code_mode_enabled")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub language: CodeLanguage,
+    #[serde(default = "default_sandbox_timeout_secs")]
+    pub sandbox_timeout_secs: u64,
+    #[serde(default = "default_max_code_length")]
+    pub max_code_length: usize,
+    #[serde(default = "default_constitutional_ai_enabled")]
+    pub constitutional_ai_enabled: bool,
+    #[serde(default = "default_max_revision_attempts")]
+    pub max_revision_attempts: u32,
+}
+
+impl Default for CodeModeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_code_mode_enabled(),
+            language: CodeLanguage::default(),
+            sandbox_timeout_secs: default_sandbox_timeout_secs(),
+            max_code_length: default_max_code_length(),
+            constitutional_ai_enabled: default_constitutional_ai_enabled(),
+            max_revision_attempts: default_max_revision_attempts(),
+        }
+    }
+}
+
+fn default_code_mode_enabled() -> bool {
+    false
+}
+
+fn default_rl_training_enabled() -> bool {
+    false
+}
+
+fn default_rl_harness_endpoint() -> String {
+    "http://localhost:8080/rl/evaluate".to_string()
+}
+
+fn default_rl_reward_weight_functional() -> f64 {
+    0.5
+}
+
+fn default_rl_reward_weight_cqs() -> f64 {
+    0.3
+}
+
+fn default_rl_reward_weight_topological() -> f64 {
+    0.2
+}
+
+fn default_sandbox_timeout_secs() -> u64 {
+    30
+}
+
+fn default_max_code_length() -> usize {
+    10000
+}
+
+fn default_constitutional_ai_enabled() -> bool {
+    true
+}
+
+fn default_max_revision_attempts() -> u32 {
+    3
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -593,6 +721,10 @@ fn default_cache_prefetch_enabled() -> bool {
 }
 fn default_retry_backoff_exponent_cap() -> u32 {
     10
+}
+
+fn default_consonance_weights() -> [f64; 5] {
+    [0.25, 0.20, 0.25, 0.20, 0.10] // [emotional, topological, erag, compass, curator]
 }
 
 fn default_tokenizer_json() -> Option<String> {
@@ -831,6 +963,27 @@ pub struct RuntimeConfig {
     #[serde(default = "default_self_awareness_level")]
     pub self_awareness_level: f64,
 
+    // Code Mode configuration
+    #[serde(default)]
+    pub code_mode: CodeModeConfig,
+
+    // RL Execution Harness configuration
+    /// Enable RL training mode (alongside or instead of SFT)
+    #[serde(default = "default_rl_training_enabled")]
+    pub rl_training_enabled: bool,
+    /// RL harness HTTP endpoint (for Python trainer to call)
+    #[serde(default = "default_rl_harness_endpoint")]
+    pub rl_harness_endpoint: String,
+    /// RL reward weights: functional correctness
+    #[serde(default = "default_rl_reward_weight_functional")]
+    pub rl_reward_weight_functional: f64,
+    /// RL reward weights: Code Quality Score
+    #[serde(default = "default_rl_reward_weight_cqs")]
+    pub rl_reward_weight_cqs: f64,
+    /// RL reward weights: topological quality
+    #[serde(default = "default_rl_reward_weight_topological")]
+    pub rl_reward_weight_topological: f64,
+
     // Engine/pipeline runtime knobs
     #[serde(default = "default_prompt_max_chars")]
     pub prompt_max_chars: usize,
@@ -889,6 +1042,10 @@ pub struct RuntimeConfig {
     #[serde(default = "default_retry_backoff_exponent_cap")]
     pub retry_backoff_exponent_cap: u32,
 
+    // Consonance computation weights
+    #[serde(default = "default_consonance_weights")]
+    pub consonance_weights: [f64; 5], // [emotional, topological, erag, compass, curator]
+
     // Weighted Episodic Memory configuration
     #[serde(default)]
     pub weighted_memory_config: WeightedMemoryConfig,
@@ -931,6 +1088,18 @@ pub struct RuntimeConfig {
     /// Bypass nTokens layer for ablation testing
     #[serde(default)]
     pub n_tokens_bypass: bool,
+    /// Disable topology analysis (TCS) for ablation testing
+    #[serde(default)]
+    pub topology_bypass: bool,
+    /// Disable consciousness compass for ablation testing
+    #[serde(default)]
+    pub compass_bypass: bool,
+    /// Disable continuous learning loop for ablation testing
+    #[serde(default)]
+    pub learning_bypass: bool,
+    /// Disable curator for ablation testing
+    #[serde(default)]
+    pub curator_bypass: bool,
 
     // Pipeline runtime configuration
     /// Curator feedback controller window size (number of responses to track)
@@ -1750,13 +1919,15 @@ impl RuntimeConfig {
             .trim_end_matches('/')
             .to_string();
 
+        // Main generation model - Qwen 3 Coder
         let vllm_model = env_with_fallback(&[
             "MAIN_MODEL",
             "VLLM_MODEL_ID",
             "VLLM_MODEL",
             "VLLM_MODEL_PATH",
+            "QWEN3_CODER_MODEL",
         ])
-        .unwrap_or_else(|| "/workspace/models/hf_cache/models--Qwen--Qwen2.5-7B-Instruct-AWQ".to_string());
+        .unwrap_or_else(|| "/workspace/models/Qwen3-Coder".to_string());
 
         info!("RuntimeConfig: vllm_model={}", vllm_model);  // ADD THIS
 
@@ -1797,20 +1968,24 @@ impl RuntimeConfig {
             );
         }
 
+        // Ollama endpoint - DEPRECATED: Curator now uses vLLM (Qwen 2.5 Topology) by default
+        // Kept for backward compatibility only
         let ollama_endpoint =
             env_with_fallback(&["OLLAMA_URL", "OLLAMA_ENDPOINT", "OLLAMA_ENDPOINT_TAILSCALE"])
                 .or_else(|| {
-                    warn!("Set OLLAMA_URL and run 'ollama serve && ollama pull qwen2:0.5b'");
+                    warn!("Ollama is deprecated for curator; use CURATOR_VLLM_ENDPOINT with Qwen 2.5 Topology instead");
                     None
                 })
                 .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
 
+        // Qwen embeddings via ONNX runtime (local, no service)
         let embedding_model_name = env_with_fallback(&[
             "EMBEDDING_MODEL_NAME",
             "EMBEDDING_MODEL",
             "ONNX_EMBED_MODEL_PATH",
+            "QWEN_EMBEDDING_MODEL",
         ]) // Prioritize embedding-specific vars, exclude CURATOR_MODEL
-        .unwrap_or_else(|| "/workspace/models/Qwen2.5-0.5B-Instruct/onnx/model_fp16.onnx".to_string());
+        .unwrap_or_else(|| "/workspace/models/Qwen-Embedding/onnx/model_fp16.onnx".to_string());
 
         let embed_with_candle = env_with_fallback(&["EMBED_WITH_CANDLE"])
             .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
@@ -1875,7 +2050,11 @@ impl RuntimeConfig {
             .unwrap_or(false); // Default to autonomous mode unless explicitly enabled
 
         let curator_model_name = env_with_fallback(&["CURATOR_MODEL", "CURATOR_MODEL_NAME"])
-            .unwrap_or_else(|| "qwen2:0.5b".to_string()); // Keep for Ollama curator
+            .unwrap_or_else(|| {
+                // Default to Qwen 2.5 Topology model path for vLLM
+                env_with_fallback(&["CURATOR_VLLM_MODEL", "QWEN25_TOPOLOGY_MODEL"])
+                    .unwrap_or_else(|| "/workspace/models/Qwen2.5-Topology".to_string())
+            });
 
         let curator_quality_threshold = env_with_fallback(&["CURATOR_QUALITY_THRESHOLD"])
             .and_then(|v| v.parse().ok())
@@ -2161,6 +2340,16 @@ impl RuntimeConfig {
             top_p: 0.9,
             novelty_threshold: env_with_fallback(&["NOVELTY_THRESHOLD"]).and_then(|v| v.parse().ok()).unwrap_or(0.5),
             self_awareness_level: env_with_fallback(&["SELF_AWARENESS_LEVEL"]).and_then(|v| v.parse().ok()).unwrap_or(0.3),
+            code_mode: CodeModeConfig::default(),
+            rl_training_enabled: env_with_fallback(&["RL_TRAINING_ENABLED"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or_else(default_rl_training_enabled),
+            rl_harness_endpoint: env_with_fallback(&["RL_HARNESS_ENDPOINT"])
+                .unwrap_or_else(default_rl_harness_endpoint),
+            rl_reward_weight_functional: default_rl_reward_weight_functional(),
+            rl_reward_weight_cqs: default_rl_reward_weight_cqs(),
+            rl_reward_weight_topological: default_rl_reward_weight_topological(),
+            consonance_weights: default_consonance_weights(),
             prompt_max_chars,
             tokenizer_json: default_tokenizer_json(),
             token_promotion_interval: default_token_promotion_interval(),
@@ -2219,6 +2408,18 @@ impl RuntimeConfig {
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
             n_tokens_bypass: env_with_fallback(&["N_TOKENS_BYPASS"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            topology_bypass: env_with_fallback(&["TOPOLOGY_BYPASS", "NO_TOPOLOGY"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            compass_bypass: env_with_fallback(&["COMPASS_BYPASS", "NO_COMPASS"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            learning_bypass: env_with_fallback(&["LEARNING_BYPASS", "NO_LEARNING", "DISABLE_LEARNING"])
+                .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
+            curator_bypass: env_with_fallback(&["CURATOR_BYPASS", "NO_CURATOR", "DISABLE_CURATOR"])
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
             // Pipeline runtime configuration
@@ -2407,6 +2608,23 @@ impl RuntimeConfig {
         };
 
         runtime.apply_hardware_overrides(args.hardware);
+
+        // Apply CLI ablation flags
+        if args.no_topology {
+            runtime.topology_bypass = true;
+        }
+        if args.no_erag {
+            runtime.erag_bypass = true;
+        }
+        if args.no_compass {
+            runtime.compass_bypass = true;
+        }
+        if args.no_learning {
+            runtime.learning_bypass = true;
+        }
+        if args.no_curator {
+            runtime.curator_bypass = true;
+        }
 
         info!(model = %runtime.curator_model_name, "Config loaded: CURATOR_MODEL={}", runtime.curator_model_name);
         info!(mode = ?runtime.topology_mode, "Topology mode configured");

@@ -15,6 +15,8 @@ use tokio::sync::{broadcast, mpsc, Mutex as AsyncMutex};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
+// Module moved to src/ directory to avoid being treated as a binary
+#[path = "../soak_prompts_v2.rs"]
 mod soak_prompts_v2;
 
 use soak_prompts_v2::{
@@ -302,7 +304,7 @@ impl SoakMetrics {
                         slot = scheduled.slot_in_cycle,
                         baseline_rouge = base_rouge,
                         hybrid_rouge,
-                        prompt = %scheduled.entry.title,
+                        prompt_id = scheduled.entry.id,
                         "Hybrid response underperformed baseline beyond alert margin"
                     );
                 }
@@ -368,10 +370,23 @@ impl SoakMetrics {
         let memory_samples = self.memory_samples_mb.lock().await;
         let (avg_memory, memory_growth) = if memory_samples.len() >= 2 {
             let samples: Vec<f64> = memory_samples.iter().copied().collect();
-            let avg = samples.iter().sum::<f64>() / samples.len() as f64;
+            // Safety: samples.len() >= 2 was checked above, so division is safe
+            let avg = if samples.is_empty() {
+                0.0
+            } else {
+                samples.iter().sum::<f64>() / samples.len() as f64
+            };
             // Safety: We checked len() >= 2 above, so first() and last() are guaranteed Some
-            let growth = samples.last().expect("samples.len() >= 2 ensures last() exists") 
-                - samples.first().expect("samples.len() >= 2 ensures first() exists");
+            let growth = samples
+                .last()
+                .unwrap_or_else(|| {
+                    panic!("samples.len() >= 2 was checked above - this indicates a logic error");
+                })
+                - samples
+                    .first()
+                    .unwrap_or_else(|| {
+                        panic!("samples.len() >= 2 was checked above - this indicates a logic error");
+                    });
             (avg, growth)
         } else {
             (0.0, 0.0)
@@ -909,6 +924,11 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         output: niodoo_real_integrated::config::OutputFormat::Csv,
         config: None,
         rng_seed_override: Some(84),
+        no_topology: false,
+        no_erag: false,
+        no_compass: false,
+        no_learning: false,
+        no_curator: false,
     };
 
     let pipeline = Pipeline::initialise(args).await?;

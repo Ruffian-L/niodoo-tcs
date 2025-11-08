@@ -79,10 +79,11 @@ impl RceAnalyzer {
         self.last_ts = Some(now);
 
         // Record update latency (time between consecutive updates)
-        let m = rce_metrics();
-        if dt_secs > 0.0 && dt_secs < 1000.0 {
-            // Only record reasonable latencies (avoid initial start and outliers)
-            m.record_update_latency(dt_secs);
+        if let Some(m) = rce_metrics() {
+            if dt_secs > 0.0 && dt_secs < 1000.0 {
+                // Only record reasonable latencies (avoid initial start and outliers)
+                m.record_update_latency(dt_secs);
+            }
         }
 
         let d_betti_norm = if let Some(prev) = self.last_betti {
@@ -110,19 +111,23 @@ impl RceAnalyzer {
 
         // Metrics
         self.peak_beta_meta = self.peak_beta_meta.max(beta);
-        m.record_beta_meta(beta, self.peak_beta_meta);
-        m.record_persistence_entropy(h_topo);
-        m.record_spectral_gap(topo.spectral_gap);
+        if let Some(m) = rce_metrics() {
+            m.record_beta_meta(beta, self.peak_beta_meta);
+            m.record_persistence_entropy(h_topo);
+            m.record_spectral_gap(topo.spectral_gap);
+        }
         
         let is_spike = beta >= self.threshold;
         if is_spike {
-            m.inc_spike();
-            
-            // Record prompt-to-spike latency if prompt timestamp is available
-            if let Some(prompt_start) = prompt_ts {
-                let prompt_to_spike_latency = now.duration_since(prompt_start).as_secs_f64();
-                if prompt_to_spike_latency > 0.0 && prompt_to_spike_latency < 60.0 {
-                    m.record_prompt_to_spike_latency(prompt_to_spike_latency);
+            if let Some(m) = rce_metrics() {
+                m.inc_spike();
+                
+                // Record prompt-to-spike latency if prompt timestamp is available
+                if let Some(prompt_start) = prompt_ts {
+                    let prompt_to_spike_latency = now.duration_since(prompt_start).as_secs_f64();
+                    if prompt_to_spike_latency > 0.0 && prompt_to_spike_latency < 60.0 {
+                        m.record_prompt_to_spike_latency(prompt_to_spike_latency);
+                    }
                     info!(
                         beta = beta,
                         threshold = self.threshold,
@@ -133,15 +138,6 @@ impl RceAnalyzer {
                         "rce.beta_meta_spike"
                     );
                 }
-            } else {
-                info!(
-                    beta = beta,
-                    threshold = self.threshold,
-                    dt_secs = dt_secs,
-                    persistence_entropy = h_topo,
-                    spectral_gap = topo.spectral_gap,
-                    "rce.beta_meta_spike"
-                );
             }
         } else {
             debug!(

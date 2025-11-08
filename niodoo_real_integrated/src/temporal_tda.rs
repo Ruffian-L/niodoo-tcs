@@ -386,7 +386,12 @@ impl TemporalTDADetector {
         let beta_1_trend = Self::calculate_trend(&beta_1_values);
 
         let arousal_values: Vec<f32> = recent.iter().map(|s| s.arousal.abs()).collect();
-        let avg_arousal = arousal_values.iter().sum::<f32>() / arousal_values.len() as f32;
+        // Guard against division by zero (recent.len() >= 2 checked above, but be safe)
+        let avg_arousal = if arousal_values.is_empty() {
+            0.0
+        } else {
+            arousal_values.iter().sum::<f32>() / arousal_values.len() as f32
+        };
 
         // Token velocity (tokens per second approximation)
         let token_velocity = if recent.len() >= 2 {
@@ -403,12 +408,18 @@ impl TemporalTDADetector {
 
         // Entropy divergence
         let entropy_values: Vec<f64> = recent.iter().map(|s| s.entropy).collect();
-        let entropy_mean = entropy_values.iter().sum::<f64>() / entropy_values.len() as f64;
-        let entropy_variance = entropy_values
-            .iter()
-            .map(|&e| (e - entropy_mean).powi(2))
-            .sum::<f64>()
-            / entropy_values.len() as f64;
+        // Guard against division by zero (recent.len() >= 2 checked above, but be safe)
+        let (entropy_mean, entropy_variance) = if entropy_values.is_empty() {
+            (0.0, 0.0)
+        } else {
+            let mean = entropy_values.iter().sum::<f64>() / entropy_values.len() as f64;
+            let variance = entropy_values
+                .iter()
+                .map(|&e| (e - mean).powi(2))
+                .sum::<f64>()
+                / entropy_values.len() as f64;
+            (mean, variance)
+        };
         let entropy_divergence = entropy_variance.sqrt() > 0.5;
 
         // Dominance trend (placeholder - would need dominance from PAD state)

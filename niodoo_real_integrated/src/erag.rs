@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::VecDeque;
 use std::sync::Arc;
-use parking_lot::RwLock;
+use tokio::sync::RwLock;
 use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
 use tracing::{info, instrument, warn};
@@ -115,6 +115,20 @@ impl EragClient {
         vector_dim: usize,
         similarity_threshold: f32,
     ) -> Result<Self> {
+        // Input validation
+        if vector_dim == 0 {
+            return Err(anyhow!("vector_dim must be > 0, got {}", vector_dim));
+        }
+        if !(0.0..=1.0).contains(&similarity_threshold) {
+            return Err(anyhow!(
+                "similarity_threshold must be in [0.0, 1.0], got {}",
+                similarity_threshold
+            ));
+        }
+        if collection.trim().is_empty() {
+            return Err(anyhow!("collection name cannot be empty"));
+        }
+        
         Self::new_with_config(
             url,
             collection,
@@ -259,7 +273,7 @@ impl EragClient {
         Ok(client)
     }
 
-    pub fn set_config(&mut self, config: Arc<RwLock<RuntimeConfig>>) {
+    pub fn set_config(&mut self, config: Arc<tokio::sync::RwLock<RuntimeConfig>>) {
         self.config = Some(config);
     }
 
@@ -385,17 +399,19 @@ impl EragClient {
 
         // If we have a preferred cascade stage, boost scores for matching memories
         if let Some(preferred) = preferred_stage {
+            // Read config once before the loop
+            let (boost_multiplier, boost_max) = if let Some(config) = &self.config {
+                let guard = config.read().await;
+                (guard.erag_similarity_boost_multiplier, guard.erag_similarity_boost_max)
+            } else {
+                (1.2, 1.0)
+            };
+            
             for (mem, sim) in memories.iter_mut().zip(sims.iter_mut()) {
                 if let Some(stage) = mem.cascade_stage {
                     if stage == preferred {
                         // Boost similarity score by configurable multiplier for cascade-aligned memories
-                        let boost_multiplier = self.config.as_ref()
-                            .map(|c| c.read().erag_similarity_boost_multiplier)
-                            .unwrap_or(1.2);
-                        let boost_max = self.config.as_ref()
-                            .map(|c| c.read().erag_similarity_boost_max)
-                            .unwrap_or(1.0);
-                        *sim = (*sim * boost_multiplier).min(boost_max);
+                        *sim = (*sim * boost_multiplier as f32).min(boost_max as f32);
                     }
                 }
             }
@@ -1148,26 +1164,42 @@ impl EragClient {
         let mut tough_memories: Vec<(EragMemory, f64)> = search_points
             .into_iter()
             .filter_map(|point| {
-                let memory = scored_point_to_experience(&point, self.vector_dim)?;
+                // Convert Qdrant payload to JsonMap
+                let payload_json: JsonMap<String, JsonValue> = point.payload.clone()
+                    .into_iter()
+                    .map(|(k, v)| {
+                        let json_val = match v.kind {
+                            Some(qdrant_client::qdrant::value::Kind::BoolValue(b)) => JsonValue::Bool(b),
+                            Some(qdrant_client::qdrant::value::Kind::IntegerValue(i)) => JsonValue::Number(serde_json::Number::from(i)),
+                            Some(qdrant_client::qdrant::value::Kind::DoubleValue(d)) => JsonValue::Number(serde_json::Number::from_f64(d).unwrap_or(serde_json::Number::from(0))),
+                            Some(qdrant_client::qdrant::value::Kind::StringValue(s)) => JsonValue::String(s),
+                            Some(qdrant_client::qdrant::value::Kind::ListValue(list)) => {
+                                let items: Vec<JsonValue> = list.values.into_iter().filter_map(|v| match v.kind {
+                                    Some(qdrant_client::qdrant::value::Kind::StringValue(s)) => Some(JsonValue::String(s)),
+                                    Some(qdrant_client::qdrant::value::Kind::DoubleValue(d)) => Some(JsonValue::Number(serde_json::Number::from_f64(d).unwrap_or(serde_json::Number::from(0)))),
+                                    _ => None,
+                                }).collect();
+                                JsonValue::Array(items)
+                            },
+                            _ => JsonValue::Null,
+                        };
+                        (k, json_val)
+                    })
+                    .collect();
+                let memory = deserialize_memory(&payload_json);
                 
                 // Extract knot complexity and curator quality from payload
                 // Fallback to fitness score if available (lower fitness = tougher)
                 let knot_complexity = point.payload
                     .get("knot_complexity")
-                    .and_then(|v| v.as_f64())
+                    .and_then(|v| match &v.kind { Some(QdrantValueKind::DoubleValue(d)) => Some(*d), Some(QdrantValueKind::IntegerValue(i)) => Some(*i as f64), _ => None })
                     .unwrap_or(0.0);
                 
                 let curator_quality = point.payload
                     .get("curator_quality")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or_else(|| {
-                        // Fallback: use fitness score if available (lower = tougher)
-                        if let Some(ref meta) = memory.weighted_metadata {
-                            meta.fitness_score as f64
-                        } else {
-                            1.0 // Default to assuming good quality if unknown
-                        }
-                    });
+                    .and_then(|v| match &v.kind { Some(QdrantValueKind::DoubleValue(d)) => Some(*d), Some(QdrantValueKind::IntegerValue(i)) => Some(*i as f64), _ => None })
+                    .unwrap_or(1.0); // Default to assuming good quality if unknown
+
                 
                 // Calculate toughness score: high knot complexity OR low curator quality
                 let toughness_score = if knot_complexity > knot_threshold || curator_quality < quality_threshold {
@@ -1217,23 +1249,22 @@ impl EragClient {
         
         // Create minimal PAD state for failure (neutral state)
         let pad_state = PadGhostState {
-            pad: [0.0, 0.0, 0.0],
-            mu: [0.0, 0.0, 0.0],
-            sigma: [0.0, 0.0, 0.0],
+            pad: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            mu: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            sigma: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             entropy: 0.0,
         };
         
         // Create minimal compass state for failure
         let compass = CompassOutcome {
             quadrant: crate::compass::CompassQuadrant::Panic, // Failures map to Panic quadrant
-            entropy: 0.0,
             is_threat: true,
             is_healing: false,
-            pad_state: pad_state.clone(),
             mcts_branches: vec![],
+            intrinsic_reward: 0.0,
             cascade_stage: None,
+            ucb1_score: Some(0.0),
         };
-        
         // Create failure memory with metadata
         let failure_context = if let Some(details) = details {
             vec![format!("Failure type: {}", failure_type), format!("Retry count: {}", retry_count), details]

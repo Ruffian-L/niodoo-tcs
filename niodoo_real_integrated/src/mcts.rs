@@ -27,6 +27,47 @@ pub enum MctsAction {
     Explore,
 }
 
+/// High-level goal for code generation
+#[derive(Debug, Clone)]
+pub struct CodeGenerationGoal {
+    /// Natural language description of the goal
+    pub description: String,
+    /// Associated MCTS action that generated this goal
+    pub source_action: MctsAction,
+    /// Priority/urgency score
+    pub priority: f64,
+}
+
+impl MctsAction {
+    /// Convert MCTS action to a high-level goal for code generation
+    pub fn to_code_generation_goal(&self, context: &str) -> CodeGenerationGoal {
+        let (description, priority) = match self {
+            MctsAction::Retrieve => (
+                format!("Find topologically similar memories and analyze their outcomes for: {}", context),
+                0.8,
+            ),
+            MctsAction::Decompose => (
+                format!("Break down the problem '{}' into sub-tasks and solve each systematically", context),
+                0.7,
+            ),
+            MctsAction::DirectAnswer => (
+                format!("Generate a direct answer to: {}", context),
+                0.6,
+            ),
+            MctsAction::Explore => (
+                format!("Explore novel approaches and find unexpected connections related to: {}", context),
+                0.9,
+            ),
+        };
+
+        CodeGenerationGoal {
+            description,
+            source_action: *self,
+            priority,
+        }
+    }
+}
+
 impl fmt::Display for MctsAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -428,6 +469,29 @@ impl MctsDaydreamer {
         }
     }
 
+    /// Generate a high-level goal for code generation based on MCTS search results
+    ///
+    /// This method converts the best MCTS action into a natural language goal
+    /// that can be used by the code generation engine.
+    pub fn generate_code_goal(&self, root_node: &MctsNode, user_query: &str) -> CodeGenerationGoal {
+        // Find the best action from MCTS search
+        let best_action = if root_node.children.is_empty() {
+            // No exploration yet, use default action
+            MctsAction::Retrieve
+        } else {
+            // Find child with highest visit count (most explored)
+            root_node
+                .children
+                .iter()
+                .max_by_key(|child| child.visits)
+                .map(|child| child.action)
+                .unwrap_or(MctsAction::Retrieve)
+        };
+
+        // Convert action to goal
+        best_action.to_code_generation_goal(user_query)
+    }
+
     /// Sample seed memory using emotion-guided selection
     ///
     /// Prefers memories with:
@@ -545,15 +609,22 @@ impl MctsDaydreamer {
         let source_path: Vec<String> = path.iter().map(|n| format!("{:?}", n.action)).collect();
 
         // Safety: path is checked for empty above, so last() is guaranteed Some
-        let final_state = path.last()
-            .expect("path checked for empty above")
-            .state.clone();
+        // Use unwrap_or_else with a clear error message for better debugging
+        let final_state = path
+            .last()
+            .unwrap_or_else(|| {
+                panic!("path should not be empty at this point - this indicates a logic error");
+            })
+            .state
+            .clone();
 
         Some(SyntheticEpisode {
             content: format!(
                 "Synthetic episode from MCTS exploration: {:?}",
                 path.last()
-                    .expect("path checked for empty above")
+                    .unwrap_or_else(|| {
+                        panic!("path should not be empty at this point - this indicates a logic error");
+                    })
                     .action
             ),
             source_path,

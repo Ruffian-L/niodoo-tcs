@@ -1,70 +1,44 @@
-# Rust build artifacts
-/target/
+# Build artifacts
+target/
 **/target/
 Cargo.lock
-**/*.rs.bk
-*.pdb
+*.rs.bk
 
-# Binary outputs
-/binaries/
+# Binaries
+/bin/
 *.exe
 *.dll
 *.so
 *.dylib
-simple_tcs_sync
+*.a
 
 # Python artifacts
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.egg-info/
 .Python
 venv/
 env/
-*.pyc
+.venv
+dist/
+build/
 
 # IDE and editor files
 .vscode/
 .idea/
-.grok/
 *.swp
 *.swo
 *~
 .DS_Store
 
-# Build directories
-/build/
-/dist/
-/out/
-
-# Temporary files
-*.tmp
-*.temp
-*.log
-*.bak
-*.orig
-Cargo.toml.backup
-*.backup
-
-# CUDA/GPU artifacts
-*.ptx
-*.cubin
-
-# Documentation build
-/docs/_build/
-/docs/site/
-
-# Test artifacts
-/test-results/
-/coverage/
-*.gcda
-*.gcno
-
-# Environment files (may contain secrets)
+# Environment and secrets
 .env
 .env.local
+*.key
+*.pem
 
-# Large model files
+# Model files (large)
 *.onnx
 *.pt
 *.pth
@@ -72,124 +46,48 @@ Cargo.toml.backup
 *.gguf
 *.ggml
 models/
+checkpoints/
 
-# Old backups and quarantine
-BULLSHIT_QUARANTINE/
-*-backup/
-*-old/
-
-# System files
-Thumbs.db
-.directory
-.claude/
-
-# Local working directories
-vendor/
-constants_core/
-niodoo-core/
-
-# Python virtual environments
-venv/
-.venv/
-
-# Local cargo config
-.cargo/
+# Test and coverage
+/test-results/
+/coverage/
+*.gcda
+*.gcno
 
 # Runtime data
-data/
-
-# Working/scratch files
-*.rs.working
-mock_*.rs
-
-# Local working docs and scripts (not for repo)
-/scripts/
-!/scripts/
-scripts/*
-!/scripts/start_h200_bootstrap.sh
-/docs/working/
-/docs/archive/
-
-# Claude-generated test garbage
-test_*
-simple_*
-standalone_*
-*_test
-*_demo
-quick_test*
-minimal_*
-debug_*
-
-# Learning curve CSVs
-learning_curve_*.csv
-learning_events.json
-learning_events.csv
-
-# Sync folders
-.stfolder/
-.stversions/
-
-# VS Code remote
-.vscode-server/
-
-# Logs and runtime data
 logs/
-*.out
-*.csv
-*.png
-*.json
-*.prom
-*.pid
-learning_log.txt
-continual_learning*.out
-
-# Build and test artifacts
-target-ci/
-target-cursor/
-target_old_*/
-target_local/
-.cargo-target/
-qdrant_data/
-storage/
+*.log
+data/
 results/
-backups/
-niodoo_real_integrated/logs/
-niodoo_real_integrated/results/
-niodoo_real_integrated/target_local/
-
-# Temporary documentation and scripts
-*.md
-!README.md
-!CHANGELOG.md
-!docs/H200_PRIMING_GUIDE.md
-!niodoo_real_integrated/README.md
-COMMANDS_FOR_YOU.txt
-*.txt
-!LICENSE.txt
-*.sh
-!run_*.sh
-!start_*.sh
-!check_*.sh
-!verify_*.sh
-!dashboard.sh
-
-# Docker and monitoring configs (local)
-docker-compose.monitoring.yml
-prometheus.yml
-grafana-*.json
-grafana-provisioning/
-
-# Python virtual environments
-venv_new/
-
-# Working directories
-Niodoo-TCS-Release/
-docs/validation/
+outputs/
 
 # Temporary files
-{ok+=}
-1{ok+=}
+*.tmp
+*.temp
+*.bak
+*.orig
 
-.cargo-tmp/
-TrainingData/
-outputs/
+# OS files
+Thumbs.db
+.directory
+
+# Qdrant stores
+qdrant_data/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Legacy code
+.legacy_code/
+.archive_old/
+models_backup*/
+deployment/src/llama.cpp/
+deployment/
+tmp/
+*.whl
+src/llama.cpp/
+third_party/
+*.tar.gz
+*.tgz
+*.so
+*.so.*

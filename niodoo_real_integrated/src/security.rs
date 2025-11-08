@@ -99,8 +99,17 @@ struct RateLimiter {
 
 impl RateLimiter {
     fn new(window_secs: u64, max_requests: u32) -> Self {
+        // Validate window_secs: must be > 0 for rate limiting to work correctly
+        let window = if window_secs == 0 {
+            tracing::warn!(
+                "Rate limit window_secs is 0, defaulting to 1 second. This may not be intended behavior."
+            );
+            Duration::from_secs(1)
+        } else {
+            Duration::from_secs(window_secs)
+        };
         Self {
-            window: Duration::from_secs(window_secs.max(1)),
+            window,
             max_requests,
             enabled: max_requests > 0,
             timestamps: Mutex::new(VecDeque::new()),

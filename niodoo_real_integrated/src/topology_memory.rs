@@ -13,6 +13,7 @@ use petgraph::{Graph, Undirected};
 use std::collections::{HashMap, HashSet};
 use tracing::info;
 
+use anyhow::anyhow;
 /// Memory graph node
 #[derive(Debug, Clone)]
 pub struct MemoryNode {
@@ -318,8 +319,7 @@ impl TopologyMemoryAnalyzer {
 
         // Sum over all edges
         for edge_idx in graph.edge_indices() {
-            let (source, target) = graph.edge_endpoints(edge_idx)
-                .ok_or_else(|| anyhow!("Invalid edge index: {:?}", edge_idx))?;
+            if let Some((source, target)) = graph.edge_endpoints(edge_idx) {
             let source_id = graph[source].id.clone();
             let target_id = graph[target].id.clone();
 
@@ -332,6 +332,7 @@ impl TopologyMemoryAnalyzer {
                     let a_ij = 1.0; // Edge exists
                     modularity += a_ij - (k_i * k_j) / two_m;
                 }
+            }
             }
         }
 

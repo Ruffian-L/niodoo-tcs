@@ -203,11 +203,16 @@ async fn ready_handler(
 #[cfg(feature = "svc")]
 async fn metrics_handler() -> (StatusCode, String) {
     use crate::metrics::metrics;
-    match metrics().gather() {
-        Ok(metrics_text) => (StatusCode::OK, metrics_text),
-        Err(e) => {
-            warn!(error = %e, "Failed to gather metrics");
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to gather metrics: {}", e))
+    match metrics() {
+        Some(m) => match m.gather() {
+            Ok(metrics_text) => (StatusCode::OK, metrics_text),
+            Err(e) => {
+                warn!(error = %e, "Failed to gather metrics");
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to gather metrics: {}", e))
+            }
+        },
+        None => {
+            (StatusCode::SERVICE_UNAVAILABLE, "Metrics not initialized".to_string())
         }
     }
 }

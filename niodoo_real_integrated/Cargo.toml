@@ -8,9 +8,11 @@ license = "MIT"
 
 [lib]
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["beelink"]
+niodoo-core = []
 knot = ["dep:tcs-knot"]
 onnx = []
 beelink = []
@@ -18,7 +20,7 @@ beelink = []
 gauntlet = []
 examples = []
 embedded-qdrant = []
-pyo3 = ["dep:pyo3"]
+pyo3 = ["dep:pyo3", "dep:pyo3-async-runtimes"]
 otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
 svc = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tonic"]
 edge = []
@@ -47,7 +49,7 @@ tcs-core = { path = "../tcs-core" }
 tcs-tda = { path = "../tcs-tda" }
 tcs-knot = { path = "../tcs-knot", optional = true }
 tcs-tqft = { path = "../tcs-tqft" }
-niodoo-core = { path = "../niodoo-core" }
+# niodoo-core = { path = "../niodoo-core" }  # Not available, commented out
 tcs-rce = { path = "../tcs-rce" }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }
@@ -79,7 +81,14 @@ ahash = "0.8"
 bytemuck = { version = "1.14", default-features = false }
 lz4_flex = { version = "0.11", features = ["std"] }
 pyo3 = { version = "0.22", features = ["auto-initialize"], optional = true }
+pyo3-async-runtimes = { version = "0.22", optional = true }
 half = "2.4"
+tempfile = "3.10"
+tree-sitter = "0.22"
+tree-sitter-rust = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-typescript = "0.23"
+linfa = "0.8"  # Kalman filter for PAD state smoothing
 
 # Optional dependencies for features
 opentelemetry = { version = "0.24", optional = true, features = ["trace"] }
@@ -119,10 +128,6 @@ name = "niodoo_real_integrated"
 path = "src/main.rs"
 
 [[bin]]
-name = "rut_gauntlet"
-path = "src/bin/rut_gauntlet.rs"
-
-[[bin]]
 name = "soak_test"
 path = "src/bin/soak_test.rs"
 
@@ -133,3 +138,27 @@ path = "src/bin/metrics_runner.rs"
 [[bin]]
 name = "ablation_runner"
 path = "src/bin/ablation_runner.rs"
+
+[[bin]]
+name = "ab_test_runner"
+path = "src/bin/ab_test_runner.rs"
+
+[[bin]]
+name = "validation_runner"
+path = "src/bin/validation_runner.rs"
+
+[[bin]]
+name = "test_e2e_pipeline"
+path = "src/bin/test_e2e_pipeline.rs"
+
+[[bin]]
+name = "test_pipeline_integration"
+path = "src/bin/test_pipeline_integration.rs"
+
+[[bin]]
+name = "test_full_e2e_pipeline"
+path = "src/bin/test_full_e2e_pipeline.rs"
+
+[[bin]]
+name = "test_5000_coding_prompts"
+path = "src/bin/test_5000_coding_prompts.rs"

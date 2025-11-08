@@ -159,7 +159,20 @@ impl EmotionalGraphBuilder {
             }
 
             // Sort by similarity and take top N
-            similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            // Handle NaN/invalid floats by treating them as less than valid values
+            similarities.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .unwrap_or_else(|| {
+                        // If comparison fails (NaN), put invalid values at end
+                        if a.1.is_nan() && b.1.is_nan() {
+                            std::cmp::Ordering::Equal
+                        } else if a.1.is_nan() {
+                            std::cmp::Ordering::Greater
+                        } else {
+                            std::cmp::Ordering::Less
+                        }
+                    })
+            });
             similarities.truncate(self.config.max_links_per_sphere);
 
             // Create links - need to store entry_b references for later use

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use dashmap::DashMap;
-use parking_lot::RwLock;
+use tokio::sync::RwLock;
 use rand::prelude::*;
 use rayon::prelude::*;
 use tokio::sync::mpsc;
@@ -151,7 +151,7 @@ pub struct LearningLoop {
     recent_topologies: VecDeque<TopologicalSignature>, // INTEGRATION FIX: Track topology history
     evolution: EvolutionLoop,
     predictor: TcsPredictor, // FIXED: Removed underscore to make it active
-    lora_trainer: Arc<RwLock<LoRATrainer>>, // Shared trainer for sync and async paths
+    lora_trainer: Arc<tokio::sync::RwLock<LoRATrainer>>, // Shared trainer for sync and async paths
     reward_threshold: f64,
     tokenizer: Option<Arc<DynamicTokenizerManager>>,
     curated_buffer: Vec<CuratedSample>,
@@ -165,7 +165,7 @@ pub struct LearningLoop {
 }
 
 impl LearningLoop {
-    pub fn new(
+    pub async fn new(
         window: usize,
         breakthrough_threshold: f64,
         breakthrough_rouge_min: f64,
@@ -173,12 +173,12 @@ impl LearningLoop {
         gamma: f64,
         alpha: f64,
         erag: Arc<EragClient>,
-        config: Arc<RwLock<RuntimeConfig>>,
+        config: Arc<tokio::sync::RwLock<RuntimeConfig>>,
         tokenizer: Arc<DynamicTokenizerManager>,
         rng_seed: u64,
     ) -> Self {
         let action_space: Vec<DqnAction> = {
-            let guard = config.read();
+            let guard = config.read().await;
             guard
                 .dqn_actions
                 .clone()
@@ -202,7 +202,7 @@ impl LearningLoop {
 
         // Initialize LoRA trainer with correct embedding dimensions from config
         let lora_trainer = {
-            let guard = config.read();
+            let guard = config.read().await;
             let embedding_dim = guard.qdrant_vector_dim;
             let use_fp16 = guard.fp16_qlora_adapters; // Phase 3.1: Use config flag
             let lora_config = LoRAConfig {
@@ -220,8 +220,9 @@ impl LearningLoop {
 
         let rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
 
-        let lora_trainer = Arc::new(RwLock::new(lora_trainer));
+        let lora_trainer = Arc::new(tokio::sync::RwLock::new(lora_trainer));
 
+        let config_clone = Arc::clone(&config);
         Self {
             entropy_history: VecDeque::with_capacity(window),
             window,
@@ -234,7 +235,7 @@ impl LearningLoop {
             gamma,
             alpha,
             erag,
-            config,
+            config: config_clone,
             episode_count: 0,
             initial_epsilon: epsilon,
             initial_alpha: alpha,
@@ -244,7 +245,7 @@ impl LearningLoop {
             predictor: TcsPredictor::new(), // FIXED: Removed underscore
             lora_trainer: Arc::clone(&lora_trainer),
             reward_threshold: {
-                let guard = config.read();
+                let guard = config.read().await;
                 guard.learning_reward_threshold
             },
             tokenizer: Some(tokenizer.clone()),
@@ -260,7 +261,7 @@ impl LearningLoop {
 
     /// Phase 3.2: Spawn async training task for batched replay buffer processing
     /// This allows training to happen in the background without blocking the main loop
-    pub fn spawn_async_trainer(&mut self) -> Result<()> {
+    pub async fn spawn_async_trainer(&mut self) -> Result<()> {
         if self.training_tx.is_some() {
             // Already spawned
             return Ok(());
@@ -280,8 +281,15 @@ impl LearningLoop {
 
                 // Perform training in blocking task pool to avoid blocking async runtime
                 let trainer_for_block = Arc::clone(&trainer_clone);
+                // Note: spawn_blocking can't use async, so we clone the trainer before moving into blocking task
+                let trainer_clone_for_block = {
+                    let guard = trainer_for_block.read().await;
+                    (*guard).clone()
+                };
+                use std::sync::RwLock as BlockingRwLock;
+                let trainer_blocking = Arc::new(BlockingRwLock::new(trainer_clone_for_block));
                 let result = tokio::task::spawn_blocking(move || {
-                    let mut trainer_guard = trainer_for_block.write();
+                    let mut trainer_guard = trainer_blocking.write().unwrap();
                     trainer_guard.train(&samples, epochs, learning_rate)
                 })
                 .await;
@@ -311,7 +319,7 @@ impl LearningLoop {
     }
 
     /// Phase 3.2: Queue training batch for async processing
-    fn queue_training_batch(&mut self, samples: Vec<(Vec<f32>, Vec<f32>)>, epochs: usize, learning_rate: f32) {
+    async fn queue_training_batch(&mut self, samples: Vec<(Vec<f32>, Vec<f32>)>, epochs: usize, learning_rate: f32) {
         if let Some(tx) = &self.training_tx {
             let batch = TrainingBatch {
                 samples,
@@ -324,10 +332,10 @@ impl LearningLoop {
         } else {
             // Fallback to synchronous training if async trainer not spawned
             warn!("Async trainer not available, falling back to synchronous training");
-            if let Err(e) = self
-                .lora_trainer
-                .write()
-                .train(&samples, epochs, learning_rate)
+            if let Err(e) = {
+                let mut trainer_guard = self.lora_trainer.write().await;
+                trainer_guard.train(&samples, epochs, learning_rate)
+            }
             {
                 warn!(
                     error = %e,
@@ -369,7 +377,10 @@ impl LearningLoop {
             self.recent_topologies.pop_front();
         }
 
-        let config_snapshot = self.config.read().clone();
+        let config_snapshot = {
+            let guard = self.config.read().await;
+            (*guard).clone()
+        };
         let fallback_ucb = compass
             .ucb1_score
             .unwrap_or(config_snapshot.mcts_c_scale as f64) as f64;
@@ -382,7 +393,7 @@ impl LearningLoop {
         let mut events = Vec::new();
 
         // Stage A: Baseline reward computation (entropy vs rouge)
-        let base_reward = self.compute_reward(entropy_delta, generation.rouge_score);
+        let base_reward = self.compute_reward(entropy_delta, generation.rouge_score).await;
         let state = DqnState::from_metrics(
             entropy_delta,
             generation.rouge_score,
@@ -409,7 +420,7 @@ impl LearningLoop {
         let predicted_reward_delta = predictor_delta;
 
         let action = self.choose_action(&state);
-        let mut next_state = self.estimate_next_state(&state, &action);
+        let mut next_state = self.estimate_next_state(&state, &action).await;
 
         next_state.metrics[0] = entropy_delta.clamp(-1.0, 1.0);
         next_state.metrics[1] = generation.rouge_score;
@@ -423,7 +434,7 @@ impl LearningLoop {
             crate::compass::CompassQuadrant::Persist => "Persist",
             crate::compass::CompassQuadrant::Panic => "Panic",
         };
-        let shaped_reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist);
+        let shaped_reward = self.compute_tcs_reward(base_reward, topology, mode, history_dist).await;
         let reward = shaped_reward + predictor_delta;
         let blended_reward = reward;
 
@@ -461,19 +472,19 @@ impl LearningLoop {
             .unwrap_or(false);
 
         let reptile_interval = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_reptile_episode_interval
         };
         let reptile_batch_size = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_reptile_batch_size
         };
         let qlora_low_reward_threshold = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_qlora_low_reward_threshold
         };
         let qlora_sample_count = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_qlora_sample_count
         };
 
@@ -497,7 +508,10 @@ impl LearningLoop {
                             }
                         };
 
-                        let embedding_dim = config_clone.read().qdrant_vector_dim;
+                        let embedding_dim = {
+                            let guard = config_clone.read().await;
+                            guard.qdrant_vector_dim
+                        };
                         let training_samples: Vec<(Vec<f32>, Vec<f32>)> = replay_buffer_snapshot
                             .iter()
                             .map(|tuple| {
@@ -557,12 +571,12 @@ impl LearningLoop {
                     self.trigger_qlora().await?;
                 }
             }
-            self.decay_schedules();
+            self.decay_schedules().await;
         }
 
         // Phase 5.2: Evolution step every N episodes
         let evolution_interval = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_evolution_episode_interval
         };
         if self.episode_count % evolution_interval == 0 {
@@ -638,25 +652,25 @@ impl LearningLoop {
     /// - If β_meta below threshold (consolidation regime) and curated buffer has enough samples,
     ///   flush to training to consolidate recent learnings.
     /// - If β_meta above threshold (exploration regime), prefer accumulating more diverse samples.
-    pub fn rce_schedule(&mut self, beta_meta: f64, beta_threshold: f64, _persistence_entropy: f64) {
+    pub async fn rce_schedule(&mut self, beta_meta: f64, beta_threshold: f64, _persistence_entropy: f64) {
         let consolidating = beta_meta < beta_threshold;
         if consolidating {
             // Flush sooner to consolidate when system is stable
-            self.flush_curated_if_ready(5);
+            self.flush_curated_if_ready(5).await;
         } else {
             // Exploration regime: wait for larger batch
-            self.flush_curated_if_ready(12);
+            self.flush_curated_if_ready(12).await;
         }
     }
 
-    fn flush_curated_if_ready(&mut self, min_count: usize) {
+    async fn flush_curated_if_ready(&mut self, min_count: usize) {
         if self.curated_buffer.len() < min_count {
             return;
         }
 
         // Reuse the same batching logic as add_curator_learned by building samples
         let embedding_dim = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.qdrant_vector_dim
         };
 
@@ -693,13 +707,13 @@ impl LearningLoop {
         }
 
         let epochs = self.lora_epochs;
-        self.queue_training_batch(training_samples.clone(), epochs, 1e-3_f32);
+        self.queue_training_batch(training_samples.clone(), epochs, 1e-3_f32).await;
         info!(
             count = training_samples.len(),
             "RCE curriculum: QLoRA training queued from curated buffer"
         );
         self.curated_buffer.clear();
-        self.maybe_run_executor_distillation();
+        self.maybe_run_executor_distillation().await;
     }
 
     pub async fn apply_curator_learned(
@@ -717,12 +731,12 @@ impl LearningLoop {
         }
 
         if let Some(exp) = experience {
-            self.record_executor_experience(exp);
+            self.record_executor_experience(exp).await;
         }
 
         // Get embedding dimension from config
         let embedding_dim = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.qdrant_vector_dim
         };
 
@@ -740,7 +754,7 @@ impl LearningLoop {
         });
 
         if self.curated_buffer.len() <= 10 {
-            self.maybe_run_executor_distillation();
+            self.maybe_run_executor_distillation().await;
             return Ok(());
         }
 
@@ -818,13 +832,13 @@ impl LearningLoop {
         {
             info!("LoRA training disabled via DISABLE_LORA");
             self.curated_buffer.clear();
-            self.maybe_run_executor_distillation();
+            self.maybe_run_executor_distillation().await;
             return Ok(());
         }
         let epochs = self.lora_epochs;
         
         // Phase 3.2: Use async training if available, otherwise fallback to sync
-        self.queue_training_batch(training_samples.clone(), epochs, 1e-3_f32);
+        self.queue_training_batch(training_samples.clone(), epochs, 1e-3_f32).await;
         
         info!(
             count = training_samples.len(),
@@ -832,7 +846,7 @@ impl LearningLoop {
             training_samples.len()
         );
         self.curated_buffer.clear();
-        self.maybe_run_executor_distillation();
+        self.maybe_run_executor_distillation().await;
         Ok(())
     }
 
@@ -843,9 +857,9 @@ impl LearningLoop {
         self.entropy_history.push_back(value);
     }
 
-    fn record_executor_experience(&mut self, experience: &Experience) {
+    async fn record_executor_experience(&mut self, experience: &Experience) {
         if self.executor_memory.len() >= {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_executor_memory_limit
         } {
             self.executor_memory.pop_front();
@@ -853,7 +867,7 @@ impl LearningLoop {
         self.executor_memory.push_back(experience.clone());
     }
 
-    fn maybe_run_executor_distillation(&mut self) {
+    async fn maybe_run_executor_distillation(&mut self) {
         if self.executor_memory.len() < self.executor_distill_threshold {
             return;
         }
@@ -877,7 +891,7 @@ impl LearningLoop {
             .len();
 
         let clusters = Self::cluster_executor_experiences(&snapshot, {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_executor_cluster_threshold
         });
         if clusters.is_empty() {
@@ -890,7 +904,7 @@ impl LearningLoop {
             self.executor_memory.clear();
             self.executor_distill_threshold =
                 (self.executor_distill_threshold + 8).min({
-                    let guard = self.config.read();
+                    let guard = self.config.read().await;
                     guard.learning_executor_memory_limit.saturating_sub(32)
                 });
             return;
@@ -1044,7 +1058,7 @@ impl LearningLoop {
         }
     }
 
-    pub fn compute_reward(&self, delta: f64, rouge: f64) -> f64 {
+    pub async fn compute_reward(&self, delta: f64, rouge: f64) -> f64 {
         let base = if rouge > 0.7 && delta < 0.05 {
             1.0
         } else if delta > 0.1 {
@@ -1056,7 +1070,7 @@ impl LearningLoop {
     }
 
     /// Phase 5.1: TCS reward shaping with topological penalties and bonuses
-    pub fn compute_tcs_reward(
+    pub async fn compute_tcs_reward(
         &self,
         base: f64,
         sig: &TopologicalSignature,
@@ -1064,24 +1078,24 @@ impl LearningLoop {
         history_dist: f64,
     ) -> f64 {
         let penalty = sig.knot_complexity * {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_tcs_knot_penalty
         }
             + (sig.betti_numbers[1] as f64) * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_tcs_betti1_penalty
             }
             + sig.persistence_entropy * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_tcs_entropy_penalty
             };
         let weight = if mode == "Discover" {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_tcs_discover_weight
         } else {
             1.0
         };
-        let guard = self.config.read();
+        let guard = self.config.read().await;
         let spectral_gap_threshold = guard.learning_tcs_spectral_gap_threshold;
         let conv_bonus = if sig.spectral_gap < spectral_gap_threshold {
             guard.learning_tcs_convergence_bonus
@@ -1095,6 +1109,43 @@ impl LearningLoop {
             0.0
         };
         base - (penalty * weight) + conv_bonus + novelty_bonus
+    }
+
+    /// Compute reward with code topology metrics for code generation mode
+    ///
+    /// This extends the TCS reward shaping to include code-specific topological metrics
+    /// such as cyclomatic complexity and cognitive complexity.
+    pub async fn compute_code_topology_reward(
+        &self,
+        base: f64,
+        code_topology: &crate::code_topology::CodeTopologySignature,
+        mode: &str,
+    ) -> f64 {
+        // Convert code topology to topological signature
+        let sig = code_topology.to_topological_signature();
+        
+        // Use existing TCS reward computation
+        let tcs_reward = self.compute_tcs_reward(base, &sig, mode, 0.0).await;
+        
+        // Additional code-specific penalties
+        let code_penalty = {
+            let guard = self.config.read().await;
+            // Penalize high cyclomatic complexity (proxy for Betti-1)
+            code_topology.cyclomatic_complexity as f64 * guard.learning_tcs_betti1_penalty
+                // Penalize high cognitive complexity
+                + code_topology.cognitive_complexity as f64 * 0.05
+                // Penalize high nesting depth (proxy for Betti-2)
+                + code_topology.nesting_depth as f64 * 0.03
+        };
+        
+        let weight = if mode == "Discover" {
+            let guard = self.config.read().await;
+            guard.learning_tcs_discover_weight
+        } else {
+            1.0
+        };
+        
+        tcs_reward - weight * code_penalty
     }
 
     fn fallback_action(&self) -> DqnAction {
@@ -1160,7 +1211,7 @@ impl LearningLoop {
 
         // Sample random batch for learning
         let batch_size = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_dqn_batch_size.min(self.replay_buffer.len())
         };
         // Convert VecDeque to Vec for sampling
@@ -1212,32 +1263,32 @@ impl LearningLoop {
         Ok(())
     }
 
-    fn estimate_next_state(&self, state: &DqnState, action: &DqnAction) -> DqnState {
+    async fn estimate_next_state(&self, state: &DqnState, action: &DqnAction) -> DqnState {
         // Estimate metric changes based on action
         let mut new_metrics = state.metrics.clone();
         match action.param.as_str() {
             "temperature" => new_metrics[0] += action.delta * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_dqn_temp_multiplier
             },
             "top_p" => new_metrics[1] += action.delta * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_dqn_top_p_multiplier
             },
             "mcts_c" => new_metrics[3] += action.delta * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_dqn_mcts_c_multiplier
             },
             "retrieval_top_k" => new_metrics[4] += action.delta * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_dqn_retrieval_multiplier
             },
             "novelty_threshold" => new_metrics[1] += action.delta * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_dqn_novelty_multiplier
             },
             "self_awareness_level" => new_metrics[0] += action.delta * {
-                let guard = self.config.read();
+                let guard = self.config.read().await;
                 guard.learning_dqn_awareness_multiplier
             },
             _ => {}
@@ -1336,7 +1387,7 @@ impl LearningLoop {
         let batch_len = batch.len();
         for tuple in batch {
                     let delta = tuple.action.delta * {
-                        let guard = self.config.read();
+                        let guard = self.config.read().await;
                         guard.learning_reptile_inner_gradient_multiplier
                     }; // Inner gradient
             *param_deltas
@@ -1345,7 +1396,7 @@ impl LearningLoop {
         }
 
         // Outer meta-update: average deltas and apply to config
-        let mut config = self.config.write();
+        let mut config = self.config.write().await;
         for (param, total_delta) in &param_deltas {
             let avg_delta = total_delta / batch_len as f64;
             Self::adjust_runtime_param(&mut config, param, avg_delta);
@@ -1359,7 +1410,10 @@ impl LearningLoop {
         {
             // Step 1: Collect low-reward tuples from ERAG for targeted fine-tuning
             let low_tuples = self.erag.query_low_reward_tuples(-0.5, 16).await?;
-            let embedding_dim = self.config.read().qdrant_vector_dim;
+            let embedding_dim = {
+                let guard = self.config.read().await;
+                guard.qdrant_vector_dim
+            };
             let external_replay: Vec<ReplayTuple> = low_tuples
                 .iter()
                 .filter_map(|exp| self.experience_to_replay(exp))
@@ -1394,7 +1448,7 @@ impl LearningLoop {
             }
             
             // Phase 3.2: Use async training for batched replay buffer
-            self.queue_training_batch(training_samples.clone(), 10, 1e-3_f32);
+            self.queue_training_batch(training_samples.clone(), 10, 1e-3_f32).await;
             info!(
                 samples = training_samples.len(),
                 "QLoRA training queued for replay buffer samples"
@@ -1415,7 +1469,7 @@ impl LearningLoop {
                 }
 
                 if !param_deltas.is_empty() {
-                    let mut config = self.config.write();
+                    let mut config = self.config.write().await;
                     let normaliser = external_replay.len() as f64;
                     for (param, total_delta) in param_deltas {
                         let adjustment = (total_delta / normaliser) * self.alpha;
@@ -1626,44 +1680,44 @@ impl LearningLoop {
         distance.min(1.0)
     }
 
-    fn decay_schedules(&mut self) {
+    async fn decay_schedules(&mut self) {
         let episodes = self.episode_count as f64;
         let epsilon_decay_rate = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_epsilon_decay_rate
         };
         self.epsilon = self.initial_epsilon / (1.0 + episodes * epsilon_decay_rate).max(1.0);
         self.epsilon = self.epsilon.max({
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_epsilon_minimum
         });
         let alpha_decay_rate = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_alpha_decay_rate
         };
         self.alpha = self.initial_alpha / (1.0 + episodes * alpha_decay_rate).max(1.0);
         self.alpha = self.alpha.max({
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             guard.learning_alpha_minimum
         });
     }
 
-    pub fn save_lora_adapter<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    pub async fn save_lora_adapter<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path_ref = path.as_ref();
         if let Some(parent) = path_ref.parent() {
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent)?;
             }
         }
-        self.lora_trainer.read().save_adapter(path_ref)?;
+        self.lora_trainer.read().await.save_adapter(path_ref)?;
         info!(adapter = %path_ref.display(), "LoRA adapter saved");
         Ok(())
     }
 
-    pub fn load_lora_adapter<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+    pub async fn load_lora_adapter<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path_ref = path.as_ref();
         let trainer = LoRATrainer::load_adapter(path_ref)?;
-        *self.lora_trainer.write() = trainer;
+        *self.lora_trainer.write().await = trainer;
         info!(adapter = %path_ref.display(), "LoRA adapter loaded");
         Ok(())
     }
@@ -1671,8 +1725,8 @@ impl LearningLoop {
     /// Phase 5.2: Evolution step with topological guidance
     async fn evolution_step(&mut self) -> Result<()> {
         let current = {
-            let guard = self.config.read();
-            guard.clone()
+            let guard = self.config.read().await;
+            (*guard).clone()
         };
         let recent: Vec<(f64, f64)> = self.recent_metrics.iter().cloned().collect();
         if recent.is_empty() {
@@ -1680,7 +1734,7 @@ impl LearningLoop {
         }
         let num_recent = recent.len();
         let num_old = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             let ratio = guard.learning_evolution_old_episodes_ratio;
             let min = guard.learning_evolution_old_episodes_min;
             let max = guard.learning_evolution_old_episodes_max;
@@ -1701,12 +1755,12 @@ impl LearningLoop {
 
         // Phase 5.2: Query tough knots (configurable ratio of episodes for anti-forgetting)
         let num_tough = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             let ratio = guard.learning_tough_knots_ratio;
             (mixed_episodes.len() as f64 * ratio).max(1.0) as usize
         };
         let tough_knots_params = {
-            let guard = self.config.read();
+            let guard = self.config.read().await;
             (
                 guard.tough_knots_multiplier,
                 guard.tough_knots_max_fetch,
@@ -1742,8 +1796,10 @@ impl LearningLoop {
             .evolve_with_topology(&current, mixed_episodes, recent_topologies)
             .await?;
         {
-            let mut guard = self.config.write();
-            *guard = best;
+            {
+                let mut guard = self.config.write().await;
+                *guard = best;
+            }
         }
         info!(
             "Evolved new config applied after {} episodes",
@@ -1752,7 +1808,7 @@ impl LearningLoop {
         Ok(())
     }
 
-    pub fn adjust_on_low_reward(&mut self, reward_signal: f64) {
+    pub async fn adjust_on_low_reward(&mut self, reward_signal: f64) {
         if reward_signal < self.reward_threshold {
             info!(
                 reward_signal,
@@ -1797,7 +1853,7 @@ impl LearningLoop {
             }
             
             // Phase 3.2: Use async training for batched replay buffer
-            self.queue_training_batch(training_samples.clone(), 10, 1e-3_f32);
+            self.queue_training_batch(training_samples.clone(), 10, 1e-3_f32).await;
             info!(
                 samples = training_samples.len(),
                 "LoRA fine-tuning queued for low-reward samples"
@@ -1923,10 +1979,9 @@ impl EvolutionLoop {
         }
 
         // Calculate topology-based fitness modifiers
-        let avg_knot: f64 =
-            topologies.iter().map(|t| t.knot_complexity).sum::<f64>() / topologies.len() as f64;
-        let avg_gap: f64 =
-            topologies.iter().map(|t| t.spectral_gap).sum::<f64>() / topologies.len() as f64;
+        // Guard against division by zero (topologies.is_empty() checked above, but defensive)
+        let avg_knot: f64 = topologies.iter().map(|t| t.knot_complexity).sum::<f64>() / topologies.len() as f64;
+        let avg_gap: f64 = topologies.iter().map(|t| t.spectral_gap).sum::<f64>() / topologies.len() as f64;
 
         // Adjust mutation based on topology stability
         let old_mutation_std = self.mutation_std;

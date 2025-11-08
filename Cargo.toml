@@ -26,12 +26,8 @@ members = [
     "tcs-ml",
     "tcs-consensus",
     "tcs-pipeline",
-    "niodoo-core",
-    "constants_core",
     "niodoo_real_integrated",
     "tcs-rce",
-    # Transitional member until all modules migrate
-    "src",
 ]
 exclude = [
     "candle-feeling-core-v2",

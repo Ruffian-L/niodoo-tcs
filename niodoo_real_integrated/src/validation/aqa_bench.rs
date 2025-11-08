@@ -128,14 +128,20 @@ impl AQARunner {
             }
             // Check if solution contains goal state
             // Safety: solution_path is checked for empty above, so last() is guaranteed Some
-            let last_step = solution_path.last()
-                .expect("solution_path checked for empty above");
+            let last_step = solution_path
+                .last()
+                .unwrap_or_else(|| {
+                    panic!("solution_path should not be empty at this point - this indicates a logic error");
+                });
             last_step.contains(&task.goal_state)
         } else {
             // No expected solution, check if goal is reached
             // Safety: solution_path is checked for empty above, so last() is guaranteed Some
-            let last_step = solution_path.last()
-                .expect("solution_path checked for empty above");
+            let last_step = solution_path
+                .last()
+                .unwrap_or_else(|| {
+                    panic!("solution_path should not be empty at this point - this indicates a logic error");
+                });
             last_step.contains(&task.goal_state)
         }
     }

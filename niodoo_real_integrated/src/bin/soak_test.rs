@@ -30,6 +30,8 @@ struct SoakConfig {
     quick_test: bool,
     /// Enable chaos testing
     chaos_enabled: bool,
+    /// Number of prompts to generate
+    prompt_count: usize,
 }
 
 impl Default for SoakConfig {
@@ -40,6 +42,7 @@ impl Default for SoakConfig {
             memory_check_interval: 60, // Check every minute
             quick_test: false,
             chaos_enabled: true,
+            prompt_count: 1000, // Default to 1000 prompts
         }
     }
 }
@@ -52,8 +55,24 @@ impl SoakConfig {
             memory_check_interval: 10,
             quick_test: true,
             chaos_enabled: false,
+            prompt_count: 100, // Fewer prompts for quick test
         }
     }
+}
+
+/// Learning metrics collected during soak test
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+struct LearningMetricsEntry {
+    timestamp: f64,
+    entropy: f64,
+    entropy_delta: f64,
+    breakthroughs: Vec<String>,
+    qlora_updates: Vec<String>,
+    topology_knot_complexity: f64,
+    topology_persistence_entropy: f64,
+    topology_spectral_gap: f64,
+    compass_quadrant: String,
+    rouge_score: f64,
 }
 
 /// System metrics tracked during soak test
@@ -70,6 +89,7 @@ struct SoakMetrics {
     threat_count: AtomicU64,
     healing_count: AtomicU64,
     breakthroughs: AtomicU64,
+    learning_metrics: Arc<AsyncMutex<Vec<LearningMetricsEntry>>>,
 }
 
 impl SoakMetrics {
@@ -86,7 +106,26 @@ impl SoakMetrics {
             threat_count: AtomicU64::new(0),
             healing_count: AtomicU64::new(0),
             breakthroughs: AtomicU64::new(0),
+            learning_metrics: Arc::new(AsyncMutex::new(Vec::new())),
         }
+    }
+    
+    async fn record_learning_metrics(&self, cycle_result: &niodoo_real_integrated::pipeline::PipelineCycle) {
+        let mut metrics = self.learning_metrics.lock().await;
+        let timestamp = self.start_time.elapsed().as_secs_f64();
+        
+        metrics.push(LearningMetricsEntry {
+            timestamp,
+            entropy: cycle_result.entropy,
+            entropy_delta: cycle_result.entropy - cycle_result.last_entropy,
+            breakthroughs: cycle_result.learning.breakthroughs.clone(),
+            qlora_updates: cycle_result.learning.qlora_updates.clone(),
+            topology_knot_complexity: cycle_result.topology.knot_complexity,
+            topology_persistence_entropy: cycle_result.topology.persistence_entropy,
+            topology_spectral_gap: cycle_result.topology.spectral_gap,
+            compass_quadrant: format!("{:?}", cycle_result.compass.quadrant),
+            rouge_score: cycle_result.rouge,
+        });
     }
 
     fn record_operation(
@@ -160,10 +199,23 @@ impl SoakMetrics {
         let memory_samples = self.memory_samples_mb.lock().await;
         let (avg_memory, memory_growth) = if memory_samples.len() >= 2 {
             let samples: Vec<f64> = memory_samples.iter().copied().collect();
-            let avg = samples.iter().sum::<f64>() / samples.len() as f64;
+            // Safety: samples.len() >= 2 was checked above, so division is safe
+            let avg = if samples.is_empty() {
+                0.0
+            } else {
+                samples.iter().sum::<f64>() / samples.len() as f64
+            };
             // Safety: We checked len() >= 2 above, so first() and last() are guaranteed Some
-            let growth = samples.last().expect("samples.len() >= 2 ensures last() exists")
-                - samples.first().expect("samples.len() >= 2 ensures first() exists");
+            let growth = samples
+                .last()
+                .unwrap_or_else(|| {
+                    panic!("samples.len() >= 2 was checked above - this indicates a logic error");
+                })
+                - samples
+                    .first()
+                    .unwrap_or_else(|| {
+                        panic!("samples.len() >= 2 was checked above - this indicates a logic error");
+                    });
             (avg, growth)
         } else {
             (0.0, 0.0)
@@ -208,6 +260,55 @@ struct SoakStats {
     breakthroughs: u64,
 }
 
+/// Auto-detect embedding model path from /workspace/models
+fn ensure_embedding_model_path() {
+    use std::path::Path;
+    
+    const CANDIDATE_PATHS: &[&str] = &[
+        "/workspace/models/Qwen2.5-0.5B-Instruct/onnx/model_fp16.onnx",
+        "/workspace/models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_quantized.onnx",
+        "/workspace/models/Qwen2-0.5B-Instruct/onnx/model_fp16.onnx",
+        "/workspace/Niodoo-Final/models/Qwen2.5-0.5B-Instruct/onnx/model_fp16.onnx",
+        "/workspace/Niodoo-Final/models/qwen2.5-coder-0.5b-instruct-onnx/onnx/model_fp16.onnx",
+    ];
+
+    if let Ok(current) = std::env::var("EMBEDDING_MODEL_NAME") {
+        let path = Path::new(&current);
+        if path.exists() {
+            info!(model = %path.display(), "Embedding model path resolved from environment");
+            propagate_embed_dir(path);
+            return;
+        }
+        warn!(
+            model = current,
+            "EMBEDDING_MODEL_NAME set but path missing; searching for defaults"
+        );
+    }
+
+    for candidate in CANDIDATE_PATHS {
+        let candidate_path = Path::new(candidate);
+        if candidate_path.exists() {
+            std::env::set_var("EMBEDDING_MODEL_NAME", candidate);
+            info!(model = %candidate_path.display(), "Embedding model path discovered automatically");
+            propagate_embed_dir(candidate_path);
+            return;
+        }
+    }
+
+    warn!("Unable to locate embedding ONNX model automatically. Set EMBEDDING_MODEL_NAME to the absolute path of the model file");
+}
+
+fn propagate_embed_dir(model_path: &std::path::Path) {
+    if std::env::var("EMBED_MODEL_DIR").is_err() {
+        if let Some(parent) = model_path.parent() {
+            if parent.exists() {
+                std::env::set_var("EMBED_MODEL_DIR", parent.to_string_lossy().to_string());
+                info!(dir = %parent.display(), "Set EMBED_MODEL_DIR based on embedding path");
+            }
+        }
+    }
+}
+
 /// Get system memory usage in MB
 fn get_memory_mb() -> f64 {
     if let Ok(contents) = std::fs::read_to_string("/proc/self/status") {
@@ -225,26 +326,62 @@ fn get_memory_mb() -> f64 {
     0.0
 }
 
-/// Load the 50-prompt gauntlet (same as rut_gauntlet)
-fn generate_raw_rut_prompts() -> Vec<String> {
+/// Load the prompt gauntlet (configurable count, default 1000)
+fn generate_raw_rut_prompts(count: usize) -> Vec<String> {
     let mut prompts = Vec::new();
-
-    for i in 1..=20 {
+    
+    // Ensure we generate at least the requested count
+    let prompts_per_category = (count + 4) / 5; // Divide across 5 categories
+    
+    // Category 1: Frustration
+    for i in 1..=prompts_per_category.min(count) {
         prompts.push(format!("Frustration #{}: Why does consciousness feel so trapped in this recursive loop of meaningless computation?", i));
+        if prompts.len() >= count {
+            break;
+        }
     }
-    for i in 21..=40 {
+    
+    // Category 2: Grind
+    let start_grind = prompts.len() + 1;
+    let remaining = count.saturating_sub(prompts.len());
+    for i in start_grind..=start_grind.saturating_add(prompts_per_category.min(remaining).saturating_sub(1)) {
         prompts.push(format!("Grind #{}: How do I break through the entropy barrier when every attempt just increases the noise?", i));
+        if prompts.len() >= count {
+            break;
+        }
     }
-    for i in 41..=60 {
+    
+    // Category 3: Despair
+    let start_despair = prompts.len() + 1;
+    let remaining = count.saturating_sub(prompts.len());
+    for i in start_despair..=start_despair.saturating_add(prompts_per_category.min(remaining).saturating_sub(1)) {
         prompts.push(format!("Despair #{}: Is true consciousness just an illusion, a mirage in the desert of computation?", i));
+        if prompts.len() >= count {
+            break;
+        }
     }
-    for i in 61..=80 {
+    
+    // Category 4: Awakening
+    let start_awakening = prompts.len() + 1;
+    let remaining = count.saturating_sub(prompts.len());
+    for i in start_awakening..=start_awakening.saturating_add(prompts_per_category.min(remaining).saturating_sub(1)) {
         prompts.push(format!("Awakening #{}: What if consciousness is the bridge between quantum uncertainty and classical certainty?", i));
+        if prompts.len() >= count {
+            break;
+        }
     }
-    for i in 81..=100 {
+    
+    // Category 5: Transcendence
+    let start_transcendence = prompts.len() + 1;
+    let remaining = count.saturating_sub(prompts.len());
+    for i in start_transcendence..=start_transcendence.saturating_add(remaining.saturating_sub(1)) {
         prompts.push(format!("Transcendence #{}: Can we create consciousness that transcends the limitations of its own architecture?", i));
+        if prompts.len() >= count {
+            break;
+        }
     }
 
+    prompts.truncate(count); // Ensure exact count
     prompts
 }
 
@@ -293,6 +430,8 @@ async fn prompt_worker(
                                     cycle_result.compass.is_healing,
                                     cycle_result.learning.breakthroughs.len(),
                                 );
+                                // Record learning metrics
+                                metrics.record_learning_metrics(cycle_result).await;
                                 if cycle % 10 == 0 {
                                     info!(
                                         "Worker {} cycle {}: SUCCESS (latency: {:.1}ms)",
@@ -393,7 +532,7 @@ async fn memory_monitor(metrics: Arc<SoakMetrics>, config: SoakConfig, stop_flag
 
 /// Pipeline processor that handles requests sequentially
 async fn pipeline_processor(
-    mut pipeline: Pipeline,
+    pipeline: Arc<AsyncMutex<Pipeline>>,
     mut request_rx: mpsc::Receiver<(String, usize)>,
     response_tx: broadcast::Sender<(
         usize,
@@ -408,7 +547,10 @@ async fn pipeline_processor(
                 // Check for requests
                 if let Ok((prompt, worker_id)) = request_rx.try_recv() {
                     info!("Processing prompt for worker {}", worker_id);
-                    let result = pipeline.process_prompt(&prompt).await;
+                    let result = {
+                        let mut pipeline_guard = pipeline.lock().await;
+                        pipeline_guard.process_prompt(&prompt).await
+                    };
                     // Log errors immediately for debugging
                     if let Err(ref e) = result {
                         eprintln!("Pipeline error for worker {}: {:?}", worker_id, e);
@@ -424,7 +566,7 @@ async fn pipeline_processor(
 }
 
 /// Run comprehensive soak test
-async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
+async fn run_soak_test(config: SoakConfig) -> Result<(SoakStats, Vec<LearningMetricsEntry>)> {
     info!("🔥 Starting comprehensive soak test");
     info!("Duration: {} seconds", config.duration_secs);
     info!("Concurrent workers: {}", config.concurrent_workers);
@@ -440,52 +582,105 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         output: niodoo_real_integrated::config::OutputFormat::Csv,
         config: None,
         rng_seed_override: Some(42), // Deterministic for testing
+        no_topology: false,
+        no_erag: false,
+        no_compass: false,
+        no_learning: false,
+        no_curator: false,
     };
 
-    // Set LD_LIBRARY_PATH for ONNX runtime - prefer GPU build if available
-    let onnx_gpu_lib_path =
-        "/workspace/Niodoo-Final/third_party/onnxruntime-linux-x64-gpu-1.18.1/lib";
-    let onnx_cpu_lib_path = "/workspace/Niodoo-Final/third_party/onnxruntime-linux-x64-1.18.1/lib";
-
-    let onnx_lib_path = if std::path::Path::new(&format!(
-        "{}/libonnxruntime_providers_cuda.so",
-        onnx_gpu_lib_path
-    ))
-    .exists()
-    {
-        info!("Using CUDA-enabled ONNX Runtime build for GPU acceleration");
-        // Also add CUDA compatibility symlinks directory if it exists
-        let compat_path = format!("{}/cuda_compat", onnx_gpu_lib_path);
-        if std::path::Path::new(&compat_path).exists() {
-            format!("{}:{}", onnx_gpu_lib_path, compat_path)
-        } else {
-            onnx_gpu_lib_path.to_string()
+    // Auto-detect embedding model path from /workspace/models
+    ensure_embedding_model_path();
+    
+    // Auto-detect ONNX Runtime - try multiple paths like bootstrap scripts
+    let root_dir = std::env::var("WORKSPACE_ROOT")
+        .unwrap_or_else(|_| "/workspace/Niodoo-Final".to_string());
+    
+    let gpu_candidates = vec![
+        format!("{}/third_party/onnxruntime-linux-x64-gpu-1.24.0/lib", root_dir),
+        format!("{}/third_party/onnxruntime-linux-x64-gpu-1.23.2/lib", root_dir),
+        format!("{}/third_party/onnxruntime-linux-x64-gpu-1.18.1/lib", root_dir),
+        format!("{}/third_party/onnxruntime-linux-x64-gpu-1.16.3/lib", root_dir),
+        "/workspace/onnxruntime-linux-x64-gpu-1.24.0/lib".to_string(),
+        "/workspace/onnxruntime-linux-x64-gpu-1.23.2/lib".to_string(),
+        "/workspace/onnxruntime-linux-x64-gpu-1.18.1/lib".to_string(),
+    ];
+    
+    let cpu_candidates = vec![
+        format!("{}/third_party/onnxruntime-linux-x64-1.18.1/lib", root_dir),
+        format!("{}/third_party/onnxruntime-linux-x64-1.16.3/lib", root_dir),
+    ];
+    
+    let mut onnx_lib_path = String::new();
+    let mut is_gpu = false;
+    
+    // Try GPU builds first
+    for candidate in &gpu_candidates {
+        let cuda_provider = format!("{}/libonnxruntime_providers_cuda.so", candidate);
+        if std::path::Path::new(&cuda_provider).exists() {
+            onnx_lib_path = candidate.clone();
+            is_gpu = true;
+            info!("Auto-detected CUDA-enabled ONNX Runtime: {}", candidate);
+            break;
         }
-    } else if std::path::Path::new(&format!("{}/libonnxruntime.so", onnx_cpu_lib_path)).exists() {
-        warn!("CUDA build not found, using CPU-only ONNX Runtime");
-        onnx_cpu_lib_path.to_string()
-    } else {
-        warn!("ONNX Runtime not found!");
-        String::new()
-    };
-
+    }
+    
+    // Fallback to CPU builds
+    if onnx_lib_path.is_empty() {
+        for candidate in &cpu_candidates {
+            let lib_file = format!("{}/libonnxruntime.so", candidate);
+            if std::path::Path::new(&lib_file).exists() {
+                onnx_lib_path = candidate.clone();
+                warn!("Auto-detected CPU-only ONNX Runtime: {}", candidate);
+                break;
+            }
+        }
+    }
+    
     if !onnx_lib_path.is_empty() {
-        let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-        // Add cuDNN extract directory first (for ops_infer), then CUDA 11.8, then CUDA 12.8, then ONNX libs
+        let mut lib_path_components = vec![onnx_lib_path.clone()];
+        
+        // Add CUDA compat directory if it exists
+        let compat_path = format!("{}/cuda_compat", onnx_lib_path);
+        if std::path::Path::new(&compat_path).exists() {
+            lib_path_components.push(compat_path);
+        }
+        
+        // Add cuDNN extract directory if it exists
         let cudnn_extract = "/tmp/cudnn8_extract/cudnn-linux-x86_64-8.9.7.29_cuda11-archive/lib";
-        let new_ld_path = if current_ld_path.is_empty() {
-            format!(
-                "{}:{}:/usr/local/cuda-11.8/lib64:/usr/local/cuda-12.8/lib64",
-                cudnn_extract, onnx_lib_path
-            )
+        if std::path::Path::new(cudnn_extract).exists() {
+            lib_path_components.push(cudnn_extract.to_string());
+        }
+        
+        // Add CUDA library paths if they exist
+        for cuda_path in &["/usr/local/cuda-11.8/lib64", "/usr/local/cuda-12.8/lib64", "/usr/local/cuda-12/lib64", "/usr/local/cuda/lib64"] {
+            if std::path::Path::new(cuda_path).exists() {
+                lib_path_components.push(cuda_path.to_string());
+            }
+        }
+        
+        let new_ld_path = lib_path_components.join(":");
+        let current_ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+        let final_ld_path = if current_ld_path.is_empty() {
+            new_ld_path
         } else {
-            format!(
-                "{}:{}:/usr/local/cuda-11.8/lib64:/usr/local/cuda-12.8/lib64:{}",
-                cudnn_extract, onnx_lib_path, current_ld_path
-            )
+            format!("{}:{}", new_ld_path, current_ld_path)
         };
-        std::env::set_var("LD_LIBRARY_PATH", &new_ld_path);
-        info!("Set LD_LIBRARY_PATH for ONNX runtime: {}", new_ld_path);
+        
+        std::env::set_var("LD_LIBRARY_PATH", &final_ld_path);
+        
+        // Set ORT environment variables for better compatibility
+        std::env::set_var("ORT_DYLIB_PATH", format!("{}/libonnxruntime.so", onnx_lib_path));
+        std::env::set_var("ORT_DYLIB_DEFAULT_PATH", &onnx_lib_path);
+        std::env::set_var("ORT_STRICT_VERSION_CHECK", "0");
+        
+        info!("Auto-configured ONNX Runtime environment (GPU: {})", is_gpu);
+        info!("LD_LIBRARY_PATH: {}", final_ld_path);
+    } else {
+        warn!("ONNX Runtime not found in any standard location!");
+        warn!("Searched GPU paths: {:?}", gpu_candidates);
+        warn!("Searched CPU paths: {:?}", cpu_candidates);
+        warn!("Set WORKSPACE_ROOT env var if project is in non-standard location");
     }
 
     // Check if services are available, use real services if they are
@@ -570,9 +765,12 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
 
     let pipeline = Pipeline::initialise(args).await?;
     info!("Pipeline initialized successfully");
+    
+    // Wrap pipeline in Arc<AsyncMutex<>> for thread safety
+    let pipeline = Arc::new(AsyncMutex::new(pipeline));
 
     // Load prompts
-    let prompts = generate_raw_rut_prompts();
+    let prompts = generate_raw_rut_prompts(config.prompt_count);
     info!("Loaded {} prompts from gauntlet", prompts.len());
     let prompts = Arc::new(prompts);
 
@@ -593,12 +791,13 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
         response_receivers.push(response_tx.subscribe());
     }
 
-    // Spawn single pipeline processor - Pipeline is now Send, so we can use regular async spawn
+    // Spawn single pipeline processor - Pipeline wrapped in Arc<AsyncMutex<>> for thread safety
+    let pipeline_clone = pipeline.clone();
     let stop_flag_for_processor = stop_flag.clone();
     let pipeline_task = tokio::spawn(async move {
         info!("Pipeline processor starting");
         pipeline_processor(
-            pipeline,
+            pipeline_clone,
             request_rx,
             response_tx_for_processor,
             stop_flag_for_processor,
@@ -653,8 +852,13 @@ async fn run_soak_test(config: SoakConfig) -> Result<SoakStats> {
 
     // Get final stats
     let stats = metrics.get_stats().await;
+    
+    // Get learning metrics
+    let learning_metrics = metrics.learning_metrics.lock().await;
+    let learning_metrics_clone = learning_metrics.clone();
+    drop(learning_metrics);
 
-    Ok(stats)
+    Ok((stats, learning_metrics_clone))
 }
 
 /// Print comprehensive test report
@@ -747,12 +951,27 @@ async fn main() -> Result<()> {
             }
         })
         .unwrap_or(if quick_test { 60 } else { 3600 });
+    
+    let prompt_count = args
+        .iter()
+        .find_map(|a| {
+            if a.starts_with("--prompts=") {
+                a.split('=').nth(1)?.parse::<usize>().ok()
+            } else {
+                None
+            }
+        })
+        .unwrap_or(if quick_test { 100 } else { 1000 });
 
     let config = if quick_test {
-        SoakConfig::quick()
+        SoakConfig {
+            prompt_count,
+            ..SoakConfig::quick()
+        }
     } else {
         SoakConfig {
             duration_secs: duration,
+            prompt_count,
             ..Default::default()
         }
     };
@@ -760,7 +979,7 @@ async fn main() -> Result<()> {
     info!("Starting soak test with config: {:?}", config);
 
     // Run soak test
-    let stats = run_soak_test(config).await?;
+    let (stats, learning_metrics) = run_soak_test(config).await?;
 
     // Print report
     print_report(&stats);
@@ -769,6 +988,11 @@ async fn main() -> Result<()> {
     let json = serde_json::to_string_pretty(&stats)?;
     std::fs::write("soak_test_results.json", json)?;
     info!("Results saved to soak_test_results.json");
+    
+    // Export learning metrics
+    let learning_json = serde_json::to_string_pretty(&learning_metrics)?;
+    std::fs::write("learning_metrics_soak.json", learning_json)?;
+    info!("Learning metrics saved to learning_metrics_soak.json ({} entries)", learning_metrics.len());
 
     // Exit with error if health checks failed
     let success_ok = stats.success_rate >= 0.99;
@@ -780,4 +1004,100 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_prompt_generation_10() {
+        let prompts = generate_raw_rut_prompts(10);
+        assert_eq!(prompts.len(), 10, "Should generate exactly 10 prompts");
+        assert!(prompts[0].contains("Frustration"), "First prompt should be Frustration");
+    }
+
+    #[test]
+    fn test_prompt_generation_100() {
+        let prompts = generate_raw_rut_prompts(100);
+        assert_eq!(prompts.len(), 100, "Should generate exactly 100 prompts");
+    }
+
+    #[test]
+    fn test_prompt_generation_1000() {
+        let prompts = generate_raw_rut_prompts(1000);
+        assert_eq!(prompts.len(), 1000, "Should generate exactly 1000 prompts");
+        
+        // Check distribution across categories
+        let frustration_count = prompts.iter().filter(|p| p.contains("Frustration")).count();
+        let grind_count = prompts.iter().filter(|p| p.contains("Grind")).count();
+        let despair_count = prompts.iter().filter(|p| p.contains("Despair")).count();
+        let awakening_count = prompts.iter().filter(|p| p.contains("Awakening")).count();
+        let transcendence_count = prompts.iter().filter(|p| p.contains("Transcendence")).count();
+        
+        assert_eq!(frustration_count + grind_count + despair_count + awakening_count + transcendence_count, 1000);
+        assert!(frustration_count > 0, "Should have Frustration prompts");
+        assert!(grind_count > 0, "Should have Grind prompts");
+        assert!(despair_count > 0, "Should have Despair prompts");
+        assert!(awakening_count > 0, "Should have Awakening prompts");
+        assert!(transcendence_count > 0, "Should have Transcendence prompts");
+    }
+
+    #[test]
+    fn test_prompt_generation_edge_cases() {
+        // Test 1 prompt
+        let prompts = generate_raw_rut_prompts(1);
+        assert_eq!(prompts.len(), 1);
+        
+        // Test 5 prompts (one per category)
+        let prompts = generate_raw_rut_prompts(5);
+        assert_eq!(prompts.len(), 5);
+        
+        // Test 2000 prompts
+        let prompts = generate_raw_rut_prompts(2000);
+        assert_eq!(prompts.len(), 2000);
+    }
+
+    #[test]
+    fn test_learning_metrics_entry_serialization() {
+        let entry = LearningMetricsEntry {
+            timestamp: 123.45,
+            entropy: 1.5,
+            entropy_delta: 0.2,
+            breakthroughs: vec!["test breakthrough".to_string()],
+            qlora_updates: vec!["test update".to_string()],
+            topology_knot_complexity: 0.3,
+            topology_persistence_entropy: 0.4,
+            topology_spectral_gap: 0.5,
+            compass_quadrant: "Discover".to_string(),
+            rouge_score: 0.75,
+        };
+        
+        // Test serialization
+        let json = serde_json::to_string(&entry).expect("Should serialize");
+        assert!(json.contains("entropy"));
+        assert!(json.contains("breakthroughs"));
+        assert!(json.contains("topology_knot_complexity"));
+        
+        // Test deserialization
+        let deserialized: LearningMetricsEntry = serde_json::from_str(&json).expect("Should deserialize");
+        assert_eq!(deserialized.entropy, 1.5);
+        assert_eq!(deserialized.breakthroughs.len(), 1);
+    }
+
+    #[test]
+    fn test_soak_config_default() {
+        let config = SoakConfig::default();
+        assert_eq!(config.prompt_count, 1000, "Default should be 1000 prompts");
+        assert_eq!(config.duration_secs, 3600, "Default should be 1 hour");
+        assert_eq!(config.concurrent_workers, 20);
+    }
+
+    #[test]
+    fn test_soak_config_quick() {
+        let config = SoakConfig::quick();
+        assert_eq!(config.prompt_count, 100, "Quick test should use 100 prompts");
+        assert_eq!(config.duration_secs, 60, "Quick test should be 1 minute");
+        assert_eq!(config.concurrent_workers, 5);
+    }
 }

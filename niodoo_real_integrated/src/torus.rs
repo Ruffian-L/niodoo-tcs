@@ -15,6 +15,11 @@ pub struct PadGhostState {
 }
 
 /// Differentiable torus projection approximated by a light-weight VAE head.
+/// 
+/// TODO: Add Kalman filter for PAD state smoothing (using linfa crate).
+/// This will smooth noisy user inputs (e.g., sporadic telemetry) without extra compute,
+/// preventing over-reaction to transient user sentiment (like a single frustrated keystroke)
+/// and allowing the GP variance to be a more stable proxy for cognitive load.
 pub struct TorusPadMapper {
     latent_rng: StdRng,
 }

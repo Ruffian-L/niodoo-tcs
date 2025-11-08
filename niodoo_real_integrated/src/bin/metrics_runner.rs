@@ -189,7 +189,9 @@ impl LoadTestMetrics {
     }
 
     fn to_report(&self, duration_secs: f64, concurrent_users: usize) -> MetricsReport {
-        let metrics_text = metrics().gather().unwrap_or_default();
+        let metrics_text = metrics()
+            .and_then(|m| m.gather().ok())
+            .unwrap_or_default();
         
         // Parse Prometheus metrics (simplified - would need proper parser in production)
         let quality_slis = self.extract_quality_slis(&metrics_text);
@@ -401,12 +403,23 @@ pub async fn run_load_test(
         let pipeline_clone = pipeline_mutex.clone();
         let metrics_clone = metrics.clone();
         let prompts_clone = test_prompts.clone();
-        let request_count = metrics_clone.lock().await.request_count.clone();
-        let errors_clone = metrics_clone.lock().await.errors.clone();
+        let end_time_clone = end_time;
+        let concurrent_users_clone = concurrent_users;
+        
+        // Clone Arc-wrapped atomic counters and error list (these are Send)
+        // Lock once, clone, then drop guard before moving into spawn
+        let request_count = {
+            let m = metrics_clone.lock().await;
+            m.request_count.clone()
+        };
+        let errors_clone = {
+            let m = metrics_clone.lock().await;
+            m.errors.clone()
+        };
 
         let handle = tokio::spawn(async move {
             let mut prompt_idx = user_id;
-            while Instant::now() < end_time {
+            while Instant::now() < end_time_clone {
                 let prompt = &prompts_clone[prompt_idx % prompts_clone.len()];
                 let req_start = Instant::now();
 
@@ -444,7 +457,7 @@ pub async fn run_load_test(
                     }
                 }
 
-                prompt_idx += concurrent_users;
+                prompt_idx += concurrent_users_clone;
                 sleep(Duration::from_millis(100)).await; // Small delay between requests
             }
         });

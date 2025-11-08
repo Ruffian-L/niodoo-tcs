@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "git_status",
+        "git_log",
+        "git_diff",
+        "git_diff_unstaged",
+        "git_diff_staged",
+        "git_add",
+        "git_commit",
+        "git_reset",
+        "git_show",
+        "git_branch",
+        "git_create_branch",
+        "git_checkout"
+      ],
+      "disabledTools": []
+    },
+    "local-rag": {
+      "command": "python3",
+      "args": [
+        "mcp_rag_wrapper.py"
+      ],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "query_rag"
+      ],
+      "disabledTools": []
+    }
+  }
+}

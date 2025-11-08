@@ -7,6 +7,9 @@ use tracing::{info, warn};
 
 use crate::compass::{CascadeTransition, CompassOutcome, CompassQuadrant};
 use crate::config::{env_value, TopologyMode};
+use crate::constants::{
+    DEFAULT_CURATOR_QUALITY_SCORE, DEFAULT_ENTROPY_DELTA, DEFAULT_PROCESSING_TIME_MS,
+};
 use crate::consonance::{compute_consonance, ConsonanceMetrics};
 #[cfg(feature = "gpu")]
 use crate::consonance::{compute_topological_consistency, compute_erag_relevance, compute_compass_transition, compute_confidence};
@@ -19,7 +22,7 @@ use crate::signals::FailureSignals;
 use crate::tcs_analysis::{baseline_topological_signature, TopologicalSignature};
 use crate::token_manager::TokenizerOutput;
 use crate::torus::{PadGhostState, TorusPadMapper};
-use crate::util::rouge_l;
+use crate::util::{compute_entropy_score, cosine_similarity_3d, rouge_l};
 use crate::ntoken_client;
 
 use super::cache::cache_key;
@@ -30,10 +33,16 @@ use crate::learning::LearningOutcome;
 
 impl Pipeline {
     pub async fn process_prompt(&mut self, prompt: &str) -> Result<PipelineCycle> {
+        // Route to code mode if enabled
+        if self.config.code_mode.enabled {
+            return self.process_with_code_mode(prompt).await;
+        }
+
         let overall_start = Instant::now();
         let mut timings = StageTimings::default();
         let cache_key = cache_key(prompt);
         let now = Instant::now();
+        let topology_mode = self.config.topology_mode;
 
         // Stage 1: Embedding (with cache)
         let embedding_start = Instant::now();
@@ -156,6 +165,9 @@ impl Pipeline {
         let erag_client = self.erag.clone();
         let retrieval_top_k_increment = self.config.phase2_retrieval_top_k_increment;
         let erag_bypass = self.config.erag_bypass;
+        let base_retrieval_top_k = self.config.base_retrieval_top_k;
+        let pipeline_retrieval_top_k_min = self.config.pipeline_retrieval_top_k_min;
+        let pipeline_retrieval_top_k_max = self.config.pipeline_retrieval_top_k_max;
 
         // Start timing BEFORE the parallel work begins
         let compass_erag_start = Instant::now();
@@ -185,9 +197,9 @@ impl Pipeline {
                     Ok(hit)
                 } else {
                     // Dynamic top_k based on config knobs (reuses retrieval_top_k_increment as delta)
-                    let top_k = (self.config.base_retrieval_top_k + retrieval_top_k_increment).clamp(
-                        self.config.pipeline_retrieval_top_k_min as i32,
-                        self.config.pipeline_retrieval_top_k_max as i32
+                    let top_k = (base_retrieval_top_k + retrieval_top_k_increment).clamp(
+                        pipeline_retrieval_top_k_min as i32,
+                        pipeline_retrieval_top_k_max as i32
                     ) as usize;
                     let collapse = erag_client
                         .collapse_with_limit(&embedding_for_collapse, top_k)
@@ -267,10 +279,12 @@ impl Pipeline {
                             crate::consonance::ConsonanceSource::TopologicalConsistency(topological_consistency),
                             crate::consonance::ConsonanceSource::ERAGRelevance(erag_relevance),
                             crate::consonance::ConsonanceSource::CompassTransition(compass_transition),
-                            crate::consonance::ConsonanceSource::CuratorQuality(0.5), // No curator yet
+                            crate::consonance::ConsonanceSource::CuratorQuality(
+                                DEFAULT_CURATOR_QUALITY_SCORE,
+                            ), // No curator yet
                         ];
                         
-                        let weights = [0.25, 0.20, 0.25, 0.20, 0.10];
+                        let weights = self.config.consonance_weights;
                         let source_scores_array: [f64; 5] = [
                             sources[0].score(),
                             sources[1].score(),
@@ -289,29 +303,30 @@ impl Pipeline {
                                     dissonance_score: (1.0 - score).clamp(0.0, 1.0),
                                 }
                             } else {
-                                compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                                crate::consonance::compute_consonance_with_weights(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref(), &self.config.consonance_weights)
                             }
                         } else {
-                            compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                            crate::consonance::compute_consonance_with_weights(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref(), &self.config.consonance_weights)
                         }
                     } else {
-                        compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                        crate::consonance::compute_consonance_with_weights(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref(), &self.config.consonance_weights)
                     }
                 } else {
-                    compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                    crate::consonance::compute_consonance_with_weights(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref(), &self.config.consonance_weights)
                 }
             } else {
-                compute_consonance(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref())
+                crate::consonance::compute_consonance_with_weights(&pad_state, &compass, &collapse, &topology, None, last_compass.as_ref(), &self.config.consonance_weights)
             }
         };
         #[cfg(not(feature = "gpu"))]
-        let partial_consonance = compute_consonance(
+        let partial_consonance = crate::consonance::compute_consonance_with_weights(
             &pad_state,
             &compass,
             &collapse,
             &topology,
             None, // Curator not available yet
             last_compass.as_ref(),
+            &self.config.consonance_weights,
         );
 
         // Track cascade transition
@@ -391,16 +406,8 @@ impl Pipeline {
                                     m.emotional_vector.anger as f64,
                                     m.emotional_vector.surprise as f64,
                                 ];
-                                let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
-                                let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
-                                let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
-                                let cosine = if n1 > 0.0 && n2 > 0.0 {
-                                    (dot / (n1 * n2)).clamp(-1.0, 1.0)
-                                } else {
-                                    0.0
-                                };
-                                let ent_after = m.entropy_after;
-                                let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
+                                let cosine = cosine_similarity_3d(pad_vec, mem_vec);
+                                let ent_score = compute_entropy_score(topology.persistence_entropy, m.entropy_after);
                                 (self.config.rce_erag_cosine_weight * cosine + self.config.rce_erag_entropy_weight * ent_score) * lambda
                             };
                             score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
@@ -416,16 +423,8 @@ impl Pipeline {
                                 m.emotional_vector.anger as f64,
                                 m.emotional_vector.surprise as f64,
                             ];
-                            let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
-                            let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
-                            let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
-                            let cosine = if n1 > 0.0 && n2 > 0.0 {
-                                (dot / (n1 * n2)).clamp(-1.0, 1.0)
-                            } else {
-                                0.0
-                            };
-                            let ent_after = m.entropy_after;
-                            let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
+                            let cosine = cosine_similarity_3d(pad_vec, mem_vec);
+                            let ent_score = compute_entropy_score(topology.persistence_entropy, m.entropy_after);
                             (self.config.rce_erag_cosine_weight * cosine + self.config.rce_erag_entropy_weight * ent_score) * lambda
                         };
                         score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
@@ -443,16 +442,8 @@ impl Pipeline {
                             m.emotional_vector.anger as f64,
                             m.emotional_vector.surprise as f64,
                         ];
-                        let dot = pad_vec[0] * mem_vec[0] + pad_vec[1] * mem_vec[1] + pad_vec[2] * mem_vec[2];
-                        let n1 = (pad_vec[0] * pad_vec[0] + pad_vec[1] * pad_vec[1] + pad_vec[2] * pad_vec[2]).sqrt();
-                        let n2 = (mem_vec[0] * mem_vec[0] + mem_vec[1] * mem_vec[1] + mem_vec[2] * mem_vec[2]).sqrt();
-                        let cosine = if n1 > 0.0 && n2 > 0.0 {
-                            (dot / (n1 * n2)).clamp(-1.0, 1.0)
-                        } else {
-                            0.0
-                        };
-                        let ent_after = m.entropy_after;
-                        let ent_score = 1.0 - (topology.persistence_entropy - ent_after).abs().min(1.0);
+                        let cosine = cosine_similarity_3d(pad_vec, mem_vec);
+                        let ent_score = compute_entropy_score(topology.persistence_entropy, m.entropy_after);
                         (self.config.rce_erag_cosine_weight * cosine + self.config.rce_erag_entropy_weight * ent_score) * lambda
                     };
                     score(b).partial_cmp(&score(a)).unwrap_or(Ordering::Equal)
@@ -491,7 +482,7 @@ impl Pipeline {
 
         let mut tokenizer_output = self
             .tokenizer
-            .process_with_memories(prompt, &collapse_for_tokenizer, &pad_state, top_hits)
+            .process_with_memories(prompt, &collapse_for_tokenizer, &pad_state, &top_hits)
             .await?;
         timings.tokenizer_ms = tokenizer_start.elapsed().as_secs_f64() * 1000.0;
 
@@ -507,7 +498,7 @@ impl Pipeline {
         }
 
         // Update generation engine with latest config params (before generation)
-        let current_config = self.config_arc.read().clone();
+        let current_config = self.config_arc.read().await.clone();
         // Note: apply_runtime_from_config takes CliArgs, not RuntimeConfig
         // Skip for now - generator params are set at initialization
         self.generator
@@ -521,7 +512,7 @@ impl Pipeline {
         let generation_start = Instant::now();
         // Apply latest runtime parameters before generation
         {
-            let cfg = self.config_arc.read().clone();
+            let cfg = self.config_arc.read().await.clone();
             // Note: apply_runtime_from_config takes CliArgs, not RuntimeConfig - skip for now
             // self.generator.apply_runtime_from_config(&cfg);
             self.recompute_thresholds();
@@ -549,7 +540,7 @@ impl Pipeline {
                 latency_ms: voting.latency_ms,
                 rouge_score: voting.rouge_scores.iter().copied().sum::<f64>()
                     / voting.rouge_scores.len() as f64,
-                entropy_delta: 0.0,
+                entropy_delta: DEFAULT_ENTROPY_DELTA,
                 source: "consistency".to_string(),
                 ucb1_score: Some(
                     compass
@@ -667,7 +658,7 @@ impl Pipeline {
                 // Topology-driven curriculum scheduling
                 if self.config.rce_actions_enabled && !self.config.rce_shadow_mode {
                     let mut guard = self.learning.lock().await;
-                    guard.rce_schedule(beta, self.config.rce_breakthrough_threshold, topology.persistence_entropy);
+                    guard.rce_schedule(beta, self.config.rce_breakthrough_threshold, topology.persistence_entropy).await;
                 }
             }
         }
@@ -680,16 +671,17 @@ impl Pipeline {
                 refined_response: curated_experience.refined_response.clone(),
                 learned: curated_experience.learned,
                 reason: curated_experience.reason.clone(),
-                processing_time_ms: 0.0,
+                processing_time_ms: DEFAULT_PROCESSING_TIME_MS,
                 consonance_score: curated_experience.quality_score as f64,
             };
-            compute_consonance(
+            crate::consonance::compute_consonance_with_weights(
                 &pad_state,
                 &compass_with_cascade,
                 &collapse,
                 &topology,
                 Some(&curator_response),
                 last_compass.as_ref(),
+                &self.config.consonance_weights,
             )
         } else {
             partial_consonance
@@ -834,7 +826,7 @@ impl Pipeline {
                     events: vec!["learning_timeout".to_string()],
                     breakthroughs: vec![],
                     qlora_updates: vec![],
-                    entropy_delta: 0.0,
+                    entropy_delta: DEFAULT_ENTROPY_DELTA,
                     adjusted_params: std::collections::HashMap::new(),
                     last_replay: None,
                 }
@@ -875,7 +867,7 @@ impl Pipeline {
                 failure: final_failure,
                 pad_state: pad_state.clone(),
                 topology: topology.clone(),
-                topology_mode: self.config.topology_mode,
+                topology_mode: topology_mode,
                 consonance: Some(full_consonance),
                 hyperfocus: hyperfocus_event,
                 cascade_transition,
@@ -959,17 +951,19 @@ impl Pipeline {
         }
         info!("After upsert");
 
-        metrics().observe_cycle(
-            pad_state.entropy,
-            final_generation.latency_ms,
-            final_generation.rouge_to_baseline,
-            compass_with_cascade.is_threat,
-            compass_with_cascade.is_healing,
-        );
+        if let Some(m) = crate::metrics::metrics() {
+            m.observe_cycle(
+                pad_state.entropy,
+                final_generation.latency_ms,
+                final_generation.rouge_to_baseline,
+                compass_with_cascade.is_threat,
+                compass_with_cascade.is_healing,
+            );
+        }
 
-        // Emit per-cycle WebSocket event (best-effort)
+        // Emit per-cycle WebSocket event (best-effort, non-blocking)
         if let Some(ws_url) = env_value("NIODOO_WS_ENDPOINT") {
-            let _ = tokio::spawn({
+            tokio::spawn({
                 let ws_url = ws_url.clone();
                 let event = serde_json::json!({
                     "event": "cycle",
@@ -981,11 +975,15 @@ impl Pipeline {
                     "latency_ms": final_generation.latency_ms,
                 });
                 async move {
-                    let _ = reqwest::Client::new()
+                    if let Err(e) = reqwest::Client::new()
                         .post(format!("{}/events", ws_url.trim_end_matches('/')))
                         .json(&event)
                         .send()
-                        .await;
+                        .await
+                    {
+                        // Log error but don't block pipeline - this is best-effort
+                        tracing::debug!(error = %e, "Failed to emit WebSocket event (non-critical)");
+                    }
                 }
             });
         }
@@ -1010,7 +1008,7 @@ impl Pipeline {
             failure: final_failure,
             pad_state,
             topology,
-            topology_mode: self.config.topology_mode,
+            topology_mode: topology_mode,
             consonance: Some(full_consonance),
             hyperfocus: hyperfocus_event,
             cascade_transition,
@@ -1084,7 +1082,7 @@ impl Pipeline {
             return Ok((generation.clone(), "none".to_string(), 0.0));
         }
 
-        let cfg_snapshot = self.config_arc.read().clone();
+        let cfg_snapshot = self.config_arc.read().await.clone();
         let max_retries = cfg_snapshot.phase2_max_retries;
         let base_delay_ms = cfg_snapshot.phase2_retry_base_delay_ms;
         let cot_iterations = cfg_snapshot.phase2_cot_iterations.max(1) as usize;
@@ -1147,7 +1145,7 @@ impl Pipeline {
                 // Compare with baseline and keep the better one
                 // Phase 4.1: Parallel ROUGE scoring
                 let parallel_rouge = {
-                    let config = self.config_arc.read();
+                    let config = self.config_arc.read().await;
                     config.parallel_curator_rouge
                 };
                 let (baseline_rouge, reflexion_rouge) = if parallel_rouge {
@@ -1219,7 +1217,7 @@ impl Pipeline {
             // Create updated generation result with retry
             // Phase 4.1: Parallel ROUGE scoring for rouge_to_baseline and rouge_score
             let parallel_rouge = {
-                let config = self.config_arc.read();
+                let config = self.config_arc.read().await;
                 config.parallel_curator_rouge
             };
             let (rouge_to_baseline, rouge_score_val) = if parallel_rouge {
@@ -1456,7 +1454,7 @@ impl Pipeline {
                         if !candidate.is_empty() {
                             // Phase 4.1: Parallel ROUGE scoring for auto-improvement
                             let parallel_rouge = {
-                                let config = self.config_arc.read();
+                                let config = self.config_arc.read().await;
                                 config.parallel_curator_rouge
                             };
                             let mut auto_improvement = if parallel_rouge {
@@ -1471,7 +1469,7 @@ impl Pipeline {
                             
                             if auto_improvement.is_finite() {
                                 quality_score = (quality_score
-                                    + (auto_improvement.clamp(0.0, 1.0) * self.config.autonomous_refinement_improvement_weight) as f32)
+                                    + (auto_improvement.clamp(0.0, 1.0) * self.config.autonomous_refinement_improvement_weight as f64) as f32)
                                     .min(1.0);
                             }
                             refined = candidate.to_string();
@@ -1504,7 +1502,7 @@ impl Pipeline {
                                         if !second_candidate.is_empty() {
                                             // Phase 4.1: Parallel ROUGE scoring for second pass
                                             let parallel_rouge = {
-                                                let config = self.config_arc.read();
+                                                let config = self.config_arc.read().await;
                                                 config.parallel_curator_rouge
                                             };
                                             let second_improvement = if parallel_rouge {
@@ -1524,7 +1522,7 @@ impl Pipeline {
                                                 auto_improvement = second_improvement;
                                                 learned = learned || auto_improvement > self.config.autonomous_refinement_improvement_threshold;
                                                 quality_score = (quality_score
-                                                    + (second_improvement.clamp(0.0, 1.0) * self.config.autonomous_refinement_improvement_weight)
+                                                    + (second_improvement.clamp(0.0, 1.0) * self.config.autonomous_refinement_improvement_weight as f64)
                                                         as f32)
                                                     .min(1.0);
                                                 reason = format!(
@@ -1618,7 +1616,7 @@ impl Pipeline {
                                 let adjustments = controller.compute_parameter_adjustments();
                                 if !adjustments.is_empty() {
                                     let adjustment_clone = adjustments.clone();
-                                    let mut config = self.config_arc.write();
+                                    let mut config = self.config_arc.write().await;
                                     for (param, delta) in adjustments {
                                         Self::adjust_runtime_param(&mut config, &param, delta);
                                         // Phase 5.2: Record metric for each adjustment
@@ -1675,5 +1673,321 @@ impl Pipeline {
         }
 
         Ok(curated)
+    }
+
+    /// Process prompt with code mode: generate executable code instead of text
+    ///
+    /// Flow:
+    /// 1. DQN/MCTS sets goal → generate_code()
+    /// 2. Code → ConstitutionalAI.critique_and_revise() → approved code
+    /// 3. Approved code → SandboxManager.execute() → execution result
+    /// 4. Execution result + code topology → LearningLoop.update() → reward shaping
+    pub async fn process_with_code_mode(&mut self, prompt: &str) -> Result<PipelineCycle> {
+        use crate::config::CodeLanguage;
+        use crate::generation::CodeGenerationResult;
+        use crate::mcts::{CodeGenerationGoal, MctsAction, MctsNode};
+        use crate::rce::safety::ensemble::ConsensusGate;
+        use crate::sandbox::ExecutionResult;
+        use crate::torus::PadGhostState;
+        use std::sync::Arc;
+        use std::time::Instant;
+
+        let overall_start = Instant::now();
+        let mut timings = StageTimings::default();
+
+        // Check if code mode is enabled
+        // Note: This check is redundant since process_prompt already checks this,
+        // but we keep it for safety. If code mode is disabled, we should not be here.
+        if !self.config.code_mode.enabled {
+            // This should not happen, but if it does, return an error
+            return Err(anyhow::anyhow!("process_with_code_mode called but code_mode is disabled"));
+        }
+
+        info!("Processing prompt in code mode: {}", prompt);
+
+        // Stage 1: Embedding (same as regular pipeline)
+        let embedding_start = Instant::now();
+        let cache_key = cache_key(prompt);
+        let now = Instant::now();
+        let embedding_hit = self.embedding_cache.get(&cache_key, now).await;
+        let embedding = if let Some(hit) = embedding_hit {
+            hit
+        } else {
+            let emb = self.embedder.embed(prompt).await?;
+            self.embedding_cache.insert(cache_key, emb.clone(), now).await;
+            emb
+        };
+        timings.embedding_ms = embedding_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Stage 2: Torus projection
+        let torus_start = Instant::now();
+        let mut torus_mapper = self.next_torus_mapper();
+        let pad_state = torus_mapper.project(&embedding)?;
+        timings.torus_ms = torus_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Stage 2.5: Topology analysis (for Compass and Fused Agent)
+        let tcs_start = Instant::now();
+        let topology = match self.config.topology_mode {
+            TopologyMode::Hybrid => match self.tcs_analyzer.as_mut() {
+                Some(analyzer) => match analyzer.analyze_state(&pad_state) {
+                    Ok(signature) => {
+                        info!("Computed topological signature for code mode");
+                        signature
+                    }
+                    Err(error) => {
+                        warn!(%error, "TCS analyzer failed; using analytic baseline");
+                        baseline_topological_signature(&pad_state, &embedding)
+                    }
+                },
+                None => baseline_topological_signature(&pad_state, &embedding),
+            },
+            TopologyMode::Baseline => baseline_topological_signature(&pad_state, &embedding),
+        };
+        timings.tcs_ms += tcs_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Stage 2.6: Compass evaluation (for TCS strategy)
+        let compass_start = Instant::now();
+        let mut compass_guard = self.compass.lock().await;
+        let mut rng = crate::util::seed_manager().get_rng("compass/code_mode");
+        let compass_outcome = compass_guard.evaluate_with_rng(&pad_state, Some(&topology), &mut rng, None)?;
+        drop(compass_guard);
+        timings.tcs_ms += compass_start.elapsed().as_secs_f64() * 1000.0;
+        info!(
+            quadrant = ?compass_outcome.quadrant,
+            intrinsic_reward = compass_outcome.intrinsic_reward,
+            "Compass evaluated for code generation"
+        );
+
+        // Stage 3: MCTS goal generation
+        let mcts_start = Instant::now();
+        let root_node = MctsNode::new(MctsAction::Retrieve, pad_state.clone(), None);
+        let goal = self.mcts_daydreamer.generate_code_goal(&root_node, prompt);
+        info!(goal = %goal.description, "MCTS generated code generation goal");
+        timings.tcs_ms += mcts_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Stage 4: Code generation with Fused Agent (strategy-modulated)
+        let code_gen_start = Instant::now();
+        let language = self.config.code_mode.language;
+        let code_result = if let Some(ref fused_agent) = self.fused_agent {
+            // Phase 4: Use Fused Agent for strategy-modulated generation
+            // Update strategy from compass outcome
+            fused_agent.update_strategy_from_compass(&compass_outcome).await?;
+            
+            // Generate code with strategy modulation
+            let fused_result = fused_agent
+                .generate_code_with_strategy(&goal.description, language, Some(&pad_state))
+                .await?;
+            
+            // Convert to CodeGenerationResult
+            crate::generation::CodeGenerationResult {
+                code: fused_result.code,
+                language: fused_result.language,
+                latency_ms: fused_result.latency_ms,
+                failure_type: fused_result.failure_type,
+                failure_details: fused_result.failure_details,
+            }
+        } else if let Some(ref revision_loop) = self.revision_loop {
+            // Use revision loop for constitutional compliance
+            revision_loop.generate_and_revise(&goal.description, language).await?
+        } else {
+            // Fallback: direct code generation without revision
+            self.generator.generate_code(&goal.description, language).await?
+        };
+        timings.generation_ms = code_gen_start.elapsed().as_secs_f64() * 1000.0;
+
+        if code_result.code.is_empty() {
+            warn!("Code generation failed, returning error instead of recursing");
+            return Err(anyhow::anyhow!("Code generation failed: empty code result"));
+        }
+
+        // Stage 5: Static analysis for violations
+        let analysis_start = Instant::now();
+        let static_analyzer = crate::constitutional::StaticAnalyzer::new(
+            crate::constitutional::Constitution::default()
+        );
+        let violations = static_analyzer.analyze(&code_result.code, language)?;
+        timings.tcs_ms += analysis_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Stage 6: Code topology analysis
+        let topology_start = Instant::now();
+        let code_topology = self.code_topology_analyzer.analyze(&code_result.code, language).await?;
+        let code_topology_sig = code_topology.to_topological_signature();
+        timings.tcs_ms += topology_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Stage 7: RCE consensus gate approval
+        let rce_start = Instant::now();
+        let mut code_approved = true;
+        if let Some(ref rce_analyzer) = self.rce_analyzer {
+            if self.config.rce_consensus.enabled {
+                let gate = ConsensusGate::new(self.config.rce_consensus.clone());
+                let topological_complexity = Some(code_topology.cyclomatic_complexity as f64);
+                let violations_clone = violations.clone();
+                code_approved = gate.approve_code(&violations_clone, topological_complexity);
+                if !code_approved {
+                    warn!("RCE consensus gate rejected generated code");
+                }
+            }
+        }
+        timings.tcs_ms += rce_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Stage 8: Sandbox execution (if approved)
+        let execution_result = if code_approved {
+            if let Some(ref sandbox_manager) = self.sandbox_manager {
+                let exec_start = Instant::now();
+                let result = sandbox_manager.execute(&code_result.code, language).await?;
+                timings.generation_ms += exec_start.elapsed().as_secs_f64() * 1000.0;
+                Some(result)
+            } else {
+                warn!("Sandbox manager not available, skipping code execution");
+                None
+            }
+        } else {
+            warn!("Code not approved by RCE consensus, skipping execution");
+            None
+        };
+
+        // Stage 9: Learning loop update with code topology reward
+        let learning_start = Instant::now();
+        // Use the compass_outcome from Stage 2.6 (already computed above)
+        
+        // Compute reward with code topology
+        let base_reward = if let Some(ref exec_result) = execution_result {
+            if exec_result.success {
+                1.0
+            } else {
+                -0.5
+            }
+        } else {
+            0.0
+        };
+
+        let mode = match compass_outcome.quadrant {
+            CompassQuadrant::Discover => "Discover",
+            CompassQuadrant::Master => "Master",
+            CompassQuadrant::Persist => "Persist",
+            CompassQuadrant::Panic => "Panic",
+        };
+
+        let mut learning_guard = self.learning.lock().await;
+        let shaped_reward = learning_guard.compute_code_topology_reward(
+            base_reward,
+            &code_topology,
+            mode,
+        ).await;
+        
+        // Update learning loop (simplified - would need full state/action)
+        info!(reward = shaped_reward, "Code topology reward computed");
+        timings.learning_ms = learning_start.elapsed().as_secs_f64() * 1000.0;
+        drop(learning_guard);
+
+        // Stage 10: Build response
+        let response = if let Some(ref exec_result) = execution_result {
+            if exec_result.success {
+                format!("Code executed successfully:\n\n```{}\n{}\n```\n\nOutput:\n{}", 
+                    match language {
+                        CodeLanguage::Python => "python",
+                        CodeLanguage::TypeScript => "typescript",
+                    },
+                    code_result.code,
+                    exec_result.stdout
+                )
+            } else {
+                format!("Code execution failed:\n\n```{}\n{}\n```\n\nError:\n{}", 
+                    match language {
+                        CodeLanguage::Python => "python",
+                        CodeLanguage::TypeScript => "typescript",
+                    },
+                    code_result.code,
+                    exec_result.stderr
+                )
+            }
+        } else {
+            format!("Generated code (not executed):\n\n```{}\n{}\n```", 
+                match language {
+                    CodeLanguage::Python => "python",
+                    CodeLanguage::TypeScript => "typescript",
+                },
+                code_result.code
+            )
+        };
+
+        let total_latency_ms = overall_start.elapsed().as_secs_f64() * 1000.0;
+
+        // Create minimal PipelineCycle for code mode
+        // Note: Code mode doesn't use all pipeline stages, so we create minimal values
+        let baseline_response = response.clone();
+        let hybrid_response = response;
+        
+        // Create minimal GenerationResult for code mode
+        let generation_result = GenerationResult {
+            baseline_response: baseline_response.clone(),
+            hybrid_response: hybrid_response.clone(),
+            echoes: vec![],
+            rouge_to_baseline: 0.0,
+            rouge_score: 0.0,
+            latency_ms: total_latency_ms,
+            ucb1_score: None,
+            source: "code_mode".to_string(),
+            failure_type: if execution_result.as_ref().map(|r| !r.success).unwrap_or(false) {
+                Some("execution_failed".to_string())
+            } else {
+                None
+            },
+            failure_details: execution_result.as_ref().and_then(|r| r.error.clone()),
+            entropy_delta: 0.0,
+            curator_quality: None,
+        };
+
+        // Create minimal TokenizerOutput
+        let tokenizer_output = TokenizerOutput {
+            tokens: vec![],
+            augmented_prompt: prompt.to_string(),
+            promoted_tokens: vec![],
+            vocab_size: 0,
+            oov_rate: 0.0,
+            failure_type: None,
+            failure_details: None,
+        };
+
+        // Create minimal CollapseResult
+        let collapse = CollapseResult {
+            aggregated_context: String::new(),
+            top_hits: vec![],
+            average_similarity: 0.0,
+            curator_quality: None,
+        };
+
+        // Create minimal LearningOutcome
+        let learning_outcome = LearningOutcome {
+            events: vec![],
+            breakthroughs: vec![],
+            qlora_updates: vec![],
+            entropy_delta: 0.0,
+            adjusted_params: std::collections::HashMap::new(),
+            last_replay: None,
+        };
+
+        Ok(PipelineCycle {
+            prompt: prompt.to_string(),
+            baseline_response,
+            hybrid_response,
+            entropy: pad_state.entropy,
+            rouge: 0.0,
+            latency_ms: total_latency_ms,
+            compass: compass_outcome,
+            generation: generation_result,
+            tokenizer: tokenizer_output,
+            collapse,
+            learning: learning_outcome,
+            stage_timings: timings,
+            last_entropy: pad_state.entropy,
+            failure: String::new(),
+            pad_state,
+            topology: code_topology_sig,
+            topology_mode: self.config.topology_mode,
+            consonance: None,
+            hyperfocus: None,
+            cascade_transition: None,
+        })
     }
 }

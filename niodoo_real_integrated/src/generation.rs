@@ -4,15 +4,17 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use reqwest::Client;
+use regex;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 use tracing::{info, instrument, warn};
 
 use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 use crate::compass::CompassOutcome;
-use crate::config::RuntimeConfig;
+use crate::config::{CodeLanguage, RuntimeConfig};
+use crate::constants::DEFAULT_GENERATION_TIMEOUT_SECS;
 use crate::util::rouge_l;
-use parking_lot::RwLock;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
 pub struct GenerationResult {
@@ -36,6 +38,16 @@ pub struct LensEcho {
     pub response: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct CodeGenerationResult {
+    pub code: String,
+    pub language: CodeLanguage,
+    pub latency_ms: f64,
+    pub failure_type: Option<String>,
+    pub failure_details: Option<String>,
+}
+
+#[derive(Clone)]
 pub struct GenerationEngine {
     client: Client,
     endpoint: String,
@@ -52,21 +64,32 @@ pub struct GenerationEngine {
 
 impl GenerationEngine {
     pub fn new(endpoint: impl Into<String>, model: impl Into<String>) -> Result<Self> {
+        let endpoint_str = endpoint.into();
+        let model_str = model.into();
+        
+        // Input validation
+        if endpoint_str.trim().is_empty() {
+            return Err(anyhow::anyhow!("endpoint cannot be empty"));
+        }
+        if model_str.trim().is_empty() {
+            return Err(anyhow::anyhow!("model cannot be empty"));
+        }
+        
         let client = Client::builder()
-            .timeout(Duration::from_secs(60)) // Default timeout - should be configurable
+            .timeout(Duration::from_secs(DEFAULT_GENERATION_TIMEOUT_SECS))
             .build()?;
         let circuit_breaker =
             Arc::new(CircuitBreaker::new("vllm", CircuitBreakerConfig::default()));
         Ok(Self {
             client,
-            endpoint: endpoint.into(),
-            model: model.into(),
+            endpoint: endpoint_str,
+            model: model_str,
             temperature: 0.6,
             top_p: 0.7,
             max_tokens: 16,
             mock_mode: false,
             circuit_breaker,
-            client_timeout_secs: 60, // Default timeout for legacy constructor
+            client_timeout_secs: DEFAULT_GENERATION_TIMEOUT_SECS,
             config: None, // No config for legacy constructor
         })
     }
@@ -142,6 +165,132 @@ impl GenerationEngine {
             entropy_delta: 0.0,
             curator_quality: None,
         })
+    }
+
+    /// Generate executable code (Python or TypeScript) to accomplish a high-level goal.
+    /// This method accepts goals from DQN/MCTS and generates code that can be executed
+    /// in a sandboxed environment with access to NIODOO library functions.
+    #[instrument(skip_all)]
+    pub async fn generate_code(
+        &self,
+        goal: &str,
+        language: CodeLanguage,
+    ) -> Result<CodeGenerationResult> {
+        let start = Instant::now();
+        
+        if self.mock_mode {
+            return Ok(CodeGenerationResult {
+                code: format!("# Mock code for goal: {}", goal.chars().take(50).collect::<String>()),
+                language,
+                latency_ms: 10.0,
+                failure_type: None,
+                failure_details: None,
+            });
+        }
+
+        let lang_str = match language {
+            CodeLanguage::Python => "Python",
+            CodeLanguage::TypeScript => "TypeScript",
+        };
+
+        let system_prompt = format!(
+            "You are a code generation agent that writes executable {} code to accomplish tasks. \
+            You have access to the NIODOO library which provides the following functions:\n\n\
+            - niodoo.embedder.get_embedding(text: str) -> np.ndarray\n\
+            - niodoo.erag.retrieve(embedding: np.ndarray, top_k: int) -> List[Memory]\n\
+            - niodoo.tcs.analyze(matrix: np.ndarray) -> TopologicalSignature\n\
+            - niodoo.compass.evaluate(pad_state: PADState, topology: Topology) -> CompassOutcome\n\
+            - niodoo.generation.generate(prompt: str) -> str\n\n\
+            Your task is to write clean, efficient, and correct {} code that accomplishes the given goal. \
+            Only import from 'niodoo' or standard library modules. Do not use dangerous imports like 'os', \
+            'subprocess', 'socket', etc. Write complete, executable code that can be run directly.",
+            lang_str, lang_str
+        );
+
+        let user_prompt = format!(
+            "Goal: {}\n\nWrite {} code to accomplish this goal. Return only the code, no explanations.",
+            goal, lang_str
+        );
+
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: system_prompt,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: user_prompt,
+            },
+        ];
+
+        let timeout_secs = self.client_timeout_secs;
+        let code = match timeout(Duration::from_secs(timeout_secs), self.send_chat(messages)).await {
+            Ok(Ok(resp)) => {
+                // Extract code from response (may include markdown code blocks)
+                Self::extract_code_from_response(&resp, language)
+            }
+            Ok(Err(error)) => {
+                warn!(?error, "code generation failed");
+                return Ok(CodeGenerationResult {
+                    code: String::new(),
+                    language,
+                    latency_ms: start.elapsed().as_secs_f64() * 1000.0,
+                    failure_type: Some("generation_error".to_string()),
+                    failure_details: Some(format!("Code generation failed: {}", error)),
+                });
+            }
+            Err(_) => {
+                warn!(timeout_secs, "code generation timed out");
+                return Ok(CodeGenerationResult {
+                    code: String::new(),
+                    language,
+                    latency_ms: start.elapsed().as_secs_f64() * 1000.0,
+                    failure_type: Some("timeout".to_string()),
+                    failure_details: Some(format!("Code generation timed out after {}s", timeout_secs)),
+                });
+            }
+        };
+
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        info!(latency_ms, language = ?language, "generated code");
+
+        Ok(CodeGenerationResult {
+            code,
+            language,
+            latency_ms,
+            failure_type: None,
+            failure_details: None,
+        })
+    }
+
+    /// Extract code from LLM response, handling markdown code blocks
+    fn extract_code_from_response(response: &str, language: CodeLanguage) -> String {
+        let lang_str = match language {
+            CodeLanguage::Python => "python",
+            CodeLanguage::TypeScript => "typescript",
+        };
+
+        // Try to find code block
+        let code_block_pattern = format!(r"```{}?\s*\n(.*?)\n```", lang_str);
+        if let Ok(re) = regex::Regex::new(&code_block_pattern) {
+            if let Some(captures) = re.captures(response) {
+                if let Some(code) = captures.get(1) {
+                    return code.as_str().to_string();
+                }
+            }
+        }
+
+        // Fallback: try generic code block
+        if let Ok(re) = regex::Regex::new(r"```\s*\n(.*?)\n```") {
+            if let Some(captures) = re.captures(response) {
+                if let Some(code) = captures.get(1) {
+                    return code.as_str().to_string();
+                }
+            }
+        }
+
+        // Fallback: return response as-is (assume it's already code)
+        response.trim().to_string()
     }
 
     async fn request_text(&self, prompt: &str) -> Result<String> {
@@ -291,8 +440,8 @@ impl GenerationEngine {
             max_tokens: self.max_tokens,
         };
 
-        // DEBUG: Log model ID being sent to vLLM
-        info!("Sending vLLM request with model={}", payload.model);
+        // Log model ID being sent to vLLM (debug level for production)
+        tracing::debug!("Sending vLLM request with model={}", payload.model);
 
         // Use circuit breaker for vLLM request
         let client = self.client.clone();
@@ -476,8 +625,8 @@ impl GenerationEngine {
     ) -> Result<Self> {
         let client = Client::builder().timeout(Duration::from_secs(client_timeout_secs)).build()?;
 
-        // DEBUG: Log input model ID
-        info!("GenerationEngine::new_with_config called with model={}", model);
+        // Log input model ID (debug level for production)
+        tracing::debug!("GenerationEngine::new_with_config called with model={}", model);
 
         // Normalise model identifier: vLLM registers the served model by name, not path.
         let model_id = if model.starts_with("/home/beelink/models/") {
@@ -783,7 +932,7 @@ impl GenerationEngine {
     }
 
     /// Retry generation with reflexion-style prompt repair.
-    pub fn set_config(&mut self, config: Arc<RwLock<RuntimeConfig>>) {
+    pub fn set_config(&mut self, config: Arc<tokio::sync::RwLock<RuntimeConfig>>) {
         self.config = Some(config);
     }
 
@@ -794,21 +943,20 @@ impl GenerationEngine {
         baseline_rouge: f64,
         details: &str,
     ) -> Result<String> {
-        let temp_base_multiplier = self.config.as_ref()
-            .map(|c| c.read().generation_reflexion_temp_base_multiplier)
-            .unwrap_or(0.7);
-        let temp_stability_multiplier = self.config.as_ref()
-            .map(|c| c.read().generation_reflexion_temp_stability_multiplier)
-            .unwrap_or(0.3);
-        let top_p_increment = self.config.as_ref()
-            .map(|c| c.read().generation_reflexion_top_p_increment)
-            .unwrap_or(0.05);
-        let top_p_stability_increment = self.config.as_ref()
-            .map(|c| c.read().generation_reflexion_top_p_stability_increment)
-            .unwrap_or(0.2);
-        let top_p_max = self.config.as_ref()
-            .map(|c| c.read().generation_reflexion_top_p_max)
-            .unwrap_or(0.99);
+        // Read config once
+        let (temp_base_multiplier, temp_stability_multiplier, top_p_increment, top_p_stability_increment, top_p_max) = 
+            if let Some(config) = &self.config {
+                let guard = config.read().await;
+                (
+                    guard.generation_reflexion_temp_base_multiplier,
+                    guard.generation_reflexion_temp_stability_multiplier,
+                    guard.generation_reflexion_top_p_increment,
+                    guard.generation_reflexion_top_p_stability_increment,
+                    guard.generation_reflexion_top_p_max,
+                )
+            } else {
+                (0.7, 0.3, 0.05, 0.2, 0.99)
+            };
         
         let stability = 1.0_f64 - baseline_rouge.clamp(0.0, 1.0);
         let temperature = (self.temperature * temp_base_multiplier) + (temp_stability_multiplier * stability);
@@ -843,14 +991,21 @@ impl GenerationEngine {
             );
         }
 
-        let guard = self.config.as_ref().map(|c| c.read());
-        let temp_base_multiplier = guard.as_ref().map(|g| g.generation_cot_repair_temp_base_multiplier).unwrap_or(1.0);
-        let temp_iteration_increment = guard.as_ref().map(|g| g.generation_cot_repair_temp_iteration_increment).unwrap_or(0.05);
-        let top_p_increment = guard.as_ref().map(|g| g.generation_cot_repair_top_p_increment).unwrap_or(0.05);
-        let top_p_max = guard.as_ref().map(|g| g.generation_cot_repair_top_p_max).unwrap_or(0.95);
-        let temp_min = guard.as_ref().map(|g| g.generation_cot_repair_temp_min).unwrap_or(0.1);
-        let temp_max = guard.as_ref().map(|g| g.generation_cot_repair_temp_max).unwrap_or(1.0);
-        drop(guard);
+        // Read config once - config.read() returns a future, so we need to await it
+        let (temp_base_multiplier, temp_iteration_increment, top_p_increment, top_p_max, temp_min, temp_max) = 
+            if let Some(config) = &self.config {
+                let guard = config.read().await;
+                (
+                    guard.generation_cot_repair_temp_base_multiplier,
+                    guard.generation_cot_repair_temp_iteration_increment,
+                    guard.generation_cot_repair_top_p_increment,
+                    guard.generation_cot_repair_top_p_max,
+                    guard.generation_cot_repair_temp_min,
+                    guard.generation_cot_repair_temp_max,
+                )
+            } else {
+                (1.0, 0.05, 0.05, 0.95, 0.1, 1.0)
+            };
 
         let temperature = (self.temperature * temp_base_multiplier) + (temp_iteration_increment * iteration as f64);
         let top_p = (self.top_p + top_p_increment).min(top_p_max);

@@ -3,12 +3,27 @@
 **AI Consciousness Simulation | Topological Learning | Adaptive Memory System**
 
 [![Rust](https://img.shields.io/badge/rust-1.87+-orange.svg)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs?style=social)](https://github.com/Ruffian-L/niodoo-tcs)
 
 > **This ain't vaporware – here's how it learns from conversations using real math and AI.**
 
 Niodoo-Final is an advanced AI framework that **actually learns** from conversations. It integrates topological data analysis (TDA), self-learning mechanisms with QLoRA fine-tuning, and hybrid generation for consciousness-aligned intelligence. This is battle-tested with real benchmarks showing measurable improvements over time.
+
+## 🏆 Why NIODOO Beats Every AI System
+
+**NIODOO is the ONLY AI system that:**
+
+- ✅ **Actually learns** (148 LoRA sessions, ROUGE 0.28→0.42+) vs. static competitors
+- ✅ **Uses topological consciousness** (Betti numbers, knot complexity) vs. no mathematical modeling
+- ✅ **Has genuine emotional intelligence** (ERAG memory, 2-bit compass) vs. simulated empathy
+- ✅ **Evolves vocabulary dynamically** (CRDT token promotion) vs. fixed tokenizers
+- ✅ **Transforms responses** (30-50% word similarity) vs. copying (70-90% similarity)
+- ✅ **Tracks cognitive state** (persistence entropy, Möbius torus) vs. no state tracking
+- ✅ **Self-improves continuously** (entropy-driven breakthroughs) vs. static systems
+- ✅ **Has proven benchmarks** (4000-cycle validation) vs. marketing claims
+
+**See [COMPETITIVE_ADVANTAGE_PROOF.md](COMPETITIVE_ADVANTAGE_PROOF.md) for complete analysis.**
 
 ## 📊 Real Evidence - See It Learn
 

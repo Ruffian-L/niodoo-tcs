@@ -38,7 +38,15 @@ use tcs_core::topology::PersistenceFeature;
 use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 use tracing::{info, warn};
 
-const DEFAULT_CACHE_CAPACITY: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(256) };
+// Safe alternative to unsafe NonZeroUsize::new_unchecked
+// 256 is a compile-time constant > 0, so this is safe
+const DEFAULT_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(256) {
+    Some(cap) => cap,
+    None => {
+        // This should never happen since 256 > 0, but handle it safely
+        panic!("DEFAULT_CACHE_CAPACITY must be > 0");
+    }
+};
 
 // Proto module - include generated proto code from OUT_DIR during build
 #[allow(dead_code)]
@@ -469,7 +477,7 @@ impl Pipeline {
     pub async fn save_lora_adapter(&self, path: impl AsRef<Path>) -> Result<()> {
         let path_buf = path.as_ref().to_path_buf();
         let guard = self.learning.lock().await;
-        guard.save_lora_adapter(&path_buf)?;
+        guard.save_lora_adapter(&path_buf).await?;
         info!(adapter = %path_buf.display(), "Pipeline persisted LoRA adapter");
         Ok(())
     }
@@ -477,7 +485,7 @@ impl Pipeline {
     pub async fn load_lora_adapter(&self, path: impl AsRef<Path>) -> Result<()> {
         let path_buf = path.as_ref().to_path_buf();
         let mut guard = self.learning.lock().await;
-        guard.load_lora_adapter(&path_buf)?;
+        guard.load_lora_adapter(&path_buf).await?;
         info!(adapter = %path_buf.display(), "Pipeline reloaded LoRA adapter");
         Ok(())
     }

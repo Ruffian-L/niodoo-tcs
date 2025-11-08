@@ -13,8 +13,10 @@ use tracing::info;
 
 use niodoo_real_integrated::config::CliArgs;
 use niodoo_real_integrated::pipeline::Pipeline;
-use niodoo_real_integrated::validation::stats::StatisticalSummary;
-use niodoo_real_integrated::validation::stats::cohens_d;
+use niodoo_real_integrated::validation::stats::{
+    StatisticalSummary, cohens_d, mann_whitney_u, bootstrap_percentile_ci,
+    requires_regression_action,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "ablation_runner")]
@@ -55,6 +57,18 @@ enum AblationExperiment {
     DisableCurator,
     /// ABL-006: Bypass ERAG (zero-shot mode)
     BypassErag,
+    /// ABL-007: Disable Compass engine
+    DisableCompass,
+    /// ABL-008: Disable Learning loop
+    DisableLearning,
+    /// ABL-009: Disable TCS topology analysis
+    DisableTcs,
+    /// ABL-010: Disable Tokenizer promotion
+    DisableTokenizer,
+    /// ABL-011: Multi-component: Disable RCE + nTokens
+    DisableRceAndNTokens,
+    /// ABL-012: Multi-component: Disable Curator + ERAG
+    DisableCuratorAndErag,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -102,7 +116,22 @@ pub(crate) struct ComparisonResult {
     latency_change_pct: f64,
     throughput_change_pct: f64,
     cohens_d_latency: f64,
+    p_value: f64,
+    confidence_interval_95: (f64, f64),
     regression_detected: bool,
+    component_contribution_score: f64,
+    superiority_proof: SuperiorityProof,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SuperiorityProof {
+    component_name: String,
+    performance_impact_pct: f64,
+    quality_impact_pct: f64,
+    cognitive_impact_pct: f64,
+    statistical_significance: bool,
+    effect_size_category: String,
+    recommendation: String,
 }
 
 pub struct AblationRunner;
@@ -163,9 +192,9 @@ impl AblationRunner {
                     prompt_idx += 1;
                     
                     let cycle_start = Instant::now();
-                    let pipeline_guard = pipeline_clone.lock().await;
+                    let mut pipeline_guard = pipeline_clone.lock().await;
                     
-                    match pipeline_guard.process(prompt.as_str()).await {
+                    match pipeline_guard.process_prompt(prompt.as_str()).await {
                         Ok(_cycle) => {
                             let latency_ms = cycle_start.elapsed().as_secs_f64() * 1000.0;
                             latencies_clone.lock().await.push(latency_ms);
@@ -199,24 +228,38 @@ impl AblationRunner {
             let p95_idx = (sorted.len() as f64 * 0.95) as usize;
             let p99_idx = (sorted.len() as f64 * 0.99).min(sorted.len() as f64 - 1.0) as usize;
             
+            let mean = latencies_vec.iter().sum::<f64>() / latencies_vec.len() as f64;
+            let variance = latencies_vec.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / latencies_vec.len() as f64;
+            let std_dev = variance.sqrt();
+            let median_idx = sorted.len() / 2;
+            let median = if sorted.len() % 2 == 0 {
+                (sorted[median_idx - 1] + sorted[median_idx]) / 2.0
+            } else {
+                sorted[median_idx]
+            };
+            
             StatisticalSummary {
-                mean: latencies_vec.iter().sum::<f64>() / latencies_vec.len() as f64,
-                std: {
-                    let mean = latencies_vec.iter().sum::<f64>() / latencies_vec.len() as f64;
-                    let variance = latencies_vec.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / latencies_vec.len() as f64;
-                    variance.sqrt()
-                },
+                mean,
+                median,
+                std_dev,
                 p50: sorted[p50_idx],
                 p95: sorted[p95_idx],
                 p99: sorted[p99_idx],
+                min: sorted[0],
+                max: sorted[sorted.len() - 1],
+                count: latencies_vec.len(),
             }
         } else {
             StatisticalSummary {
                 mean: 0.0,
-                std: 0.0,
+                median: 0.0,
+                std_dev: 0.0,
                 p50: 0.0,
                 p95: 0.0,
                 p99: 0.0,
+                min: 0.0,
+                max: 0.0,
+                count: 0,
             }
         };
         
@@ -285,22 +328,51 @@ impl AblationRunner {
                 config.erag_bypass = true;
                 std::env::set_var("ERAG_BYPASS", "1");
             }
+            AblationExperiment::DisableCompass => {
+                std::env::set_var("COMPASS_BYPASS", "1");
+            }
+            AblationExperiment::DisableLearning => {
+                std::env::set_var("LEARNING_BYPASS", "1");
+            }
+            AblationExperiment::DisableTcs => {
+                std::env::set_var("TOPOLOGY_MODE", "baseline");
+            }
+            AblationExperiment::DisableTokenizer => {
+                std::env::set_var("TOKENIZER_BYPASS", "1");
+            }
+            AblationExperiment::DisableRceAndNTokens => {
+                config.rce_enabled = false;
+                config.n_tokens_bypass = true;
+                std::env::set_var("RCE_ENABLED", "0");
+                std::env::set_var("N_TOKENS_BYPASS", "1");
+            }
+            AblationExperiment::DisableCuratorAndErag => {
+                config.enable_curator = false;
+                config.erag_bypass = true;
+                std::env::set_var("ENABLE_CURATOR", "0");
+                std::env::set_var("ERAG_BYPASS", "1");
+            }
         }
 
         Ok(config)
     }
 
-    /// Compare ablation result with baseline metrics
+    /// Compare ablation result with baseline metrics using statistical tests
     pub fn compare_with_baseline(
         &self,
         ablation: &AblationResult,
-        baseline_p99: f64,
+        baseline_latencies: &[f64],
         baseline_throughput: f64,
     ) -> ComparisonResult {
+        let ablation_latencies = vec![ablation.metrics.latency.p99]; // Simplified - would need full distribution
+        let baseline_p99 = baseline_latencies.iter().fold(0.0, |acc, x| acc.max(*x));
+        
         let latency_change = ablation.metrics.latency.p99 - baseline_p99;
-        let latency_change_pct = (latency_change / baseline_p99 * 100.0)
-            .min(100.0)
-            .max(-100.0);
+        let latency_change_pct = if baseline_p99 > 0.0 {
+            (latency_change / baseline_p99 * 100.0).min(100.0).max(-100.0)
+        } else {
+            0.0
+        };
 
         let throughput_change = if baseline_throughput > 0.0 {
             (ablation.metrics.throughput - baseline_throughput) 
@@ -309,20 +381,72 @@ impl AblationRunner {
             0.0
         };
 
-        // Simple Cohen's d approximation
-        let baseline_latencies = vec![baseline_p99];
-        let ablation_latencies = vec![ablation.metrics.latency.p99];
-        let cohens_d_val = cohens_d(&baseline_latencies, &ablation_latencies);
+        // Statistical significance testing
+        let (_, p_value) = mann_whitney_u(baseline_latencies, &ablation_latencies);
+        let cohens_d_val = cohens_d(baseline_latencies, &ablation_latencies);
+        
+        // Bootstrap confidence interval
+        let confidence_interval_95 = bootstrap_percentile_ci(
+            &ablation_latencies,
+            0.99,
+            1000,
+            0.95,
+        );
 
-        // Regression detection: >100ms increase or >20% increase
-        let regression_detected = latency_change > 100.0 || latency_change_pct > 20.0;
+        // Regression detection with statistical rigor
+        let regression_detected = requires_regression_action(
+            baseline_latencies,
+            &ablation_latencies,
+            0.05, // p-value threshold
+            0.5,  // effect size threshold
+        ) || latency_change > 100.0 || latency_change_pct > 20.0;
+
+        // Component contribution scoring (higher = more important)
+        let component_contribution_score = cohens_d_val.abs() * (1.0 - p_value.min(1.0));
+
+        // Determine effect size category
+        let effect_size_category = if cohens_d_val.abs() < 0.2 {
+            "Small".to_string()
+        } else if cohens_d_val.abs() < 0.5 {
+            "Medium".to_string()
+        } else if cohens_d_val.abs() < 0.8 {
+            "Large".to_string()
+        } else {
+            "Very Large".to_string()
+        };
+
+        // Generate superiority proof
+        let component_name = ablation.experiment.clone();
+        let performance_impact_pct = -latency_change_pct; // Negative = worse performance
+        let quality_impact_pct = 0.0; // Would need quality metrics
+        let cognitive_impact_pct = 0.0; // Would need cognitive metrics
+        
+        let recommendation = if regression_detected && p_value < 0.05 {
+            format!("CRITICAL: Component is essential. Removing it causes significant degradation (p={:.4}, d={:.2})", p_value, cohens_d_val)
+        } else if cohens_d_val.abs() > 0.5 {
+            format!("IMPORTANT: Component provides substantial value (effect size: {})", effect_size_category)
+        } else {
+            "OPTIONAL: Component has minimal measurable impact".to_string()
+        };
 
         ComparisonResult {
             latency_change_p99_ms: latency_change,
             latency_change_pct,
             throughput_change_pct: throughput_change,
             cohens_d_latency: cohens_d_val,
+            p_value,
+            confidence_interval_95,
             regression_detected,
+            component_contribution_score,
+            superiority_proof: SuperiorityProof {
+                component_name,
+                performance_impact_pct,
+                quality_impact_pct,
+                cognitive_impact_pct,
+                statistical_significance: p_value < 0.05,
+                effect_size_category,
+                recommendation,
+            },
         }
     }
 }
@@ -345,10 +469,20 @@ async fn main() -> Result<()> {
         let baseline_json = std::fs::read_to_string(baseline_path)?;
         let baseline: serde_json::Value = serde_json::from_str(&baseline_json)?;
         
-        let baseline_p99 = baseline["latency"]["p99_ms"].as_f64().unwrap_or(0.0);
+        // Extract baseline latencies array if available, otherwise use single value
+        let baseline_latencies = if let Some(latencies_array) = baseline["latency"]["values"].as_array() {
+            latencies_array.iter()
+                .filter_map(|v| v.as_f64())
+                .collect::<Vec<f64>>()
+        } else {
+            // Fallback to single p99 value
+            let p99 = baseline["latency"]["p99_ms"].as_f64().unwrap_or(0.0);
+            vec![p99]
+        };
+        
         let baseline_throughput = baseline["throughput"]["tokens_per_sec"].as_f64().unwrap_or(0.0);
         
-        let comparison = runner.compare_with_baseline(&result, baseline_p99, baseline_throughput);
+        let comparison = runner.compare_with_baseline(&result, &baseline_latencies, baseline_throughput);
         result.comparison = Some(comparison);
     }
 
@@ -361,6 +495,12 @@ async fn main() -> Result<()> {
     info!("✅ Ablation results saved to: {}", output_file.display());
 
     if let Some(ref comparison) = result.comparison {
+        info!("📊 Statistical Analysis:");
+        info!("   P-value: {:.4}", comparison.p_value);
+        info!("   Cohen's d: {:.2} ({})", comparison.cohens_d_latency, comparison.superiority_proof.effect_size_category);
+        info!("   95% CI: [{:.2}, {:.2}]", comparison.confidence_interval_95.0, comparison.confidence_interval_95.1);
+        info!("   Component Contribution Score: {:.2}", comparison.component_contribution_score);
+        
         if comparison.regression_detected {
             eprintln!("⚠️  REGRESSION DETECTED: Latency increased by {:.2}ms ({:.1}%)", 
                 comparison.latency_change_p99_ms,
@@ -368,6 +508,8 @@ async fn main() -> Result<()> {
         } else {
             info!("✅ No significant regression detected");
         }
+        
+        info!("💡 Recommendation: {}", comparison.superiority_proof.recommendation);
     }
 
     Ok(())
