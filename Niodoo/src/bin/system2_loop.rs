@@ -6,12 +6,15 @@ use std::time::Instant;
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
+use niodoo_cli::compass::{CompassConfig, CompassEngine};
 use niodoo_cli::context::augment_prompt_with_memory;
 use niodoo_cli::embedding::LocalEmbedder;
 use niodoo_cli::erag::EragService;
 use niodoo_cli::experience::Experience;
 use niodoo_cli::memory::ExperienceStore;
 use niodoo_cli::security::{PromptSecurityManager, SecurityConfig};
+use niodoo_cli::tcs_analysis::TCSAnalyzer;
+use niodoo_cli::torus::{TorusConfig, TorusProjector};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -49,6 +52,14 @@ struct Args {
     /// Learning loop configuration path
     #[arg(long, default_value = "config/learning_loop.toml")]
     learning_config: String,
+
+    /// Torus projection configuration path
+    #[arg(long, default_value = "config/torus.toml")]
+    torus_config: String,
+
+    /// Compass configuration path
+    #[arg(long, default_value = "config/compass.toml")]
+    compass_config: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -102,6 +113,12 @@ async fn main() -> Result<()> {
     let security = PromptSecurityManager::new(security_config.clone())?;
     security.audit_config_snapshot(&security_config);
 
+    let torus_config = TorusConfig::from_file(&args.torus_config)?;
+    let mut torus_projector = TorusProjector::new(torus_config);
+    let tcs_analyzer = TCSAnalyzer::new()?;
+    let compass_config = CompassConfig::from_file(&args.compass_config)?;
+    let compass_engine = CompassEngine::new(compass_config);
+
     let erag = EragService::initialise(&args.erag_config).await?;
     let experience_store = ExperienceStore::initialise(&args.memory_config).await?;
     let embedder = LocalEmbedder::from_env()?;
@@ -137,10 +154,59 @@ async fn main() -> Result<()> {
             )?;
         }
 
+        // STAGE 2: Embed the prompt (for topology analysis)
+        let prompt_embedding = embedder.embed(&secured_prompt)?;
+
+        // STAGE 3: Project embedding onto k-twisted torus manifold to get PAD state
+        let pad_state = torus_projector.project(&prompt_embedding)?;
+        writeln!(
+            log_file,
+            "[system2] PAD state: P={:.3} A={:.3} D={:.3} entropy={:.3} surface=[{:.2}, {:.2}, {:.2}]",
+            pad_state.pleasure(),
+            pad_state.arousal(),
+            pad_state.dominance(),
+            pad_state.entropy,
+            pad_state.surface_position[0],
+            pad_state.surface_position[1],
+            pad_state.surface_position[2]
+        )?;
+
+        // STAGE 4: Compute topological signature from PAD coordinates
+        let topology = tcs_analyzer.analyze_pad_state(&pad_state.coordinates)?;
+        writeln!(
+            log_file,
+            "[system2] Topology: β₀={} β₁={} β₂={} entropy={:.3} complexity={:.3}",
+            topology.betti_0(),
+            topology.betti_1(),
+            topology.betti_2(),
+            topology.persistence_entropy,
+            topology.complexity()
+        )?;
+
+        // STAGE 5: Compute consciousness compass quadrant
+        let compass_state = compass_engine.compute_quadrant(&pad_state, &topology);
+        writeln!(
+            log_file,
+            "[system2] Compass: {} (confidence={:.2}) - {}",
+            compass_state.quadrant.as_str(),
+            compass_state.confidence,
+            compass_engine.strategic_advice(compass_state.quadrant)
+        )?;
+
+        // STAGE 6: ERAG memory retrieval with computed compass filter
+        let compass_filter = if args.compass == "auto" {
+            // Use computed compass quadrant
+            Some(compass_state.quadrant.as_str())
+        } else {
+            // Use CLI override (for baseline comparison)
+            Some(args.compass.as_str())
+        };
+
         let start = Instant::now();
         let (augmented_prompt, memories) =
-            augment_prompt_with_memory(&erag, &secured_prompt, Some(args.compass.as_str())).await?;
+            augment_prompt_with_memory(&erag, &secured_prompt, compass_filter).await?;
 
+        // STAGE 7: Generate with Granite
         let completion =
             generate_completion(&http_client, &granite_endpoint, &augmented_prompt).await?;
         let latency = start.elapsed().as_millis() as u64;
@@ -158,6 +224,7 @@ async fn main() -> Result<()> {
             .map(|choice| choice.text.trim().to_string())
             .unwrap_or_default();
 
+        // POST-GENERATION: Curator scoring
         let curator = run_curator(&secured_prompt, &text)?;
         writeln!(
             log_file,
@@ -180,11 +247,8 @@ async fn main() -> Result<()> {
                 .to_string()
         };
 
-        let embedding_input = format!(
-            "Prompt:\n{}\n\nResponse:\n{}\n\nFeedback:\n{}",
-            secured_prompt, text, curator.feedback
-        );
-        let mut embedding = embedder.embed(&embedding_input)?;
+        // Store experience with full metadata
+        let mut embedding = prompt_embedding.clone();
         match embedding.len().cmp(&experience_store.vector_size()) {
             std::cmp::Ordering::Less => embedding.resize(experience_store.vector_size(), 0.0),
             std::cmp::Ordering::Greater => embedding.truncate(experience_store.vector_size()),
@@ -206,6 +270,23 @@ async fn main() -> Result<()> {
             Some(json!({
                 "latency_ms": latency,
                 "memory_hits": memories.len(),
+                "pad_state": {
+                    "coordinates": pad_state.coordinates,
+                    "entropy": pad_state.entropy,
+                    "pleasure": pad_state.pleasure(),
+                    "arousal": pad_state.arousal(),
+                    "dominance": pad_state.dominance(),
+                    "surface_position": pad_state.surface_position,
+                },
+                "topology": {
+                    "betti_numbers": topology.betti_numbers,
+                    "persistence_entropy": topology.persistence_entropy,
+                    "complexity": topology.complexity(),
+                },
+                "compass": {
+                    "quadrant": compass_state.quadrant.as_str(),
+                    "confidence": compass_state.confidence,
+                },
             })),
         );
 

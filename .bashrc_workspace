@@ -1,0 +1,2 @@
+# Source Cargo environment if it exists
+[ -f /workspace/Niodoo-Final/.cargo_env.sh ] && source /workspace/Niodoo-Final/.cargo_env.sh
