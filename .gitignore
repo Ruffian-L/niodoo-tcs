@@ -65,12 +65,16 @@ logs/
 data/
 results/
 outputs/
+*.json.backup
+*_ORIGINAL.*
+*_ORIGINAL.md
 
 # Temporary files
 *.tmp
 *.temp
 *.bak
 *.orig
+*.backup
 
 # OS files
 Thumbs.db
@@ -78,6 +82,11 @@ Thumbs.db
 
 # Qdrant stores
 qdrant_data/
+storage/collections/
+storage/aliases/
+*.mmap
+*.dat
+*.sst
 
 # Jupyter
 .ipynb_checkpoints/
