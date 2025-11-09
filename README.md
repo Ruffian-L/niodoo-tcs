@@ -15,6 +15,11 @@ Niodoo-TCS (Topological Cognitive System) is a research project exploring novel 
 - **Adaptive Learning**: Real-time model improvement through reinforcement learning and topology-guided optimization
 - **Hyperfocus Detection**: Convergence detection inspired by ADHD cognitive patterns (40-thread parallel processing model)
 
+## 🏗️ System Architecture
+
+![System Architecture](https://raw.githubusercontent.com/Ruffian-L/niodoo-tcs/main/figures/system_architecture.png)
+*Complete system architecture showing all components and data flow*
+
 ## 📊 Real Evidence - See It Learn
 
 **These visualizations show actual learning from production runs:**
