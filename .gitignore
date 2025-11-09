@@ -38,6 +38,11 @@ build/
 *.key
 *.pem
 
+# Runtime state files
+.qdrant-initialized
+.bootstrap_state/
+*.env.sh
+
 # Model files (large)
 *.onnx
 *.pt
