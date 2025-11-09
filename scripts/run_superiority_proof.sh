@@ -82,3 +82,7 @@ echo "${FINAL_REPORT}" | jq -r '.superiority_claims.critical_components[]? | "  
 echo "${FINAL_REPORT}" | jq -r '.recommendations.essential_components[]? | "   - \(.) is ESSENTIAL"'
 
 
+
+
+
+

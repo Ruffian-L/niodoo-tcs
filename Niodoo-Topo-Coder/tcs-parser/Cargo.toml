@@ -1,0 +1,51 @@
+[package]
+name = "tcs-parser"
+version = "0.1.0"
+edition = "2021"
+authors = ["NIODOO Topology Team <niodoo@dev>"]
+license = "MIT"
+
+[[bin]]
+name = "tcs-parser"
+path = "src/bin/main.rs"
+
+[dependencies]
+# Tree-sitter for AST parsing (0.24 required by tree-sitter-graph)
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-graph = "0.12"
+
+# Graph operations
+petgraph = "0.6"
+
+# Numerical arrays (already in NIODOO workspace)
+ndarray = { version = "0.15", features = ["rayon", "blas", "serde"] }
+
+# NOTE: rust-code-analysis has tree-sitter 0.20 dependency conflict
+# Implementing complexity metrics directly from AST instead
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging (NO PRINTLN!)
+log = "0.4"
+env_logger = "0.11"
+
+# Python FFI for parsing workaround + TDA (Day 2)
+pyo3 = { version = "0.22", features = ["auto-initialize"] }
+numpy = "0.22"
+
+[build-dependencies]
+cc = "1.0"
+
+[dev-dependencies]
+tempfile = "3.10"

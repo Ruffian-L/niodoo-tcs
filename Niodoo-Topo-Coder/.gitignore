@@ -1,0 +1,40 @@
+# Rust build artifacts
+/target/
+*/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Temp files
+*.tmp
+.tmp/
+
+# Models (too large for git)
+models/
+*.onnx
+*.safetensors

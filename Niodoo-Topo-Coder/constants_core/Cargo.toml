@@ -1,0 +1,19 @@
+[package]
+name = "constants_core"
+version = "0.1.0"
+edition = "2021"
+# Core constants management system for Niodoo-BS-MCP
+# Provides mathematical and system-derived constants with zero hardcoding tolerance
+
+# External dependencies for runtime system information
+[dependencies]
+# For detecting available CPU cores to optimize thread pools and parallel processing
+num_cpus = { workspace = true }
+# For gathering system information like memory and CPU usage at runtime
+sysinfo = { workspace = true }
+# For serialization support
+serde = { workspace = true }
+# For lazy static initialization
+once_cell = { workspace = true }
+
+[dev-dependencies]

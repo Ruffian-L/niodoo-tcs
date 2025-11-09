@@ -1,0 +1,9 @@
+# Python dependencies for the Niodoo reverse ablation lab
+vllm==0.3.3
+rouge-score==0.1.2
+pydantic==2.6.4
+requests==2.31.0
+transformers==4.57.1
+peft==0.13.2
+datasets==2.21.0
+accelerate==1.11.0

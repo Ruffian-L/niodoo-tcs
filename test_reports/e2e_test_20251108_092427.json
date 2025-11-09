@@ -1,0 +1,297 @@
+{
+  "test_suite": "comprehensive_e2e",
+  "timestamp": "2025-11-08T09:24:27.731542Z",
+  "duration_secs": 25.94232678413391,
+  "metrics": {
+    "total_tests": 17,
+    "successful": 0,
+    "failed": 17,
+    "success_rate": 0.0,
+    "avg_latency_ms": 522.6667628568762,
+    "p50_latency_ms": 527.2929668426514,
+    "p95_latency_ms": 0.0,
+    "p99_latency_ms": 0.0,
+    "topology_detections": 0,
+    "compass_states": 0,
+    "learning_events": 0,
+    "error_count": 33
+  },
+  "results": [
+    {
+      "test_id": 1,
+      "prompt": "Write a Python function to calculate fibonacci numbers",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 950.4842758178711,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (28985) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:02.786605Z"
+    },
+    {
+      "test_id": 2,
+      "prompt": "Explain what machine learning is in one paragraph",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 514.3554210662842,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29015) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:04.301617Z"
+    },
+    {
+      "test_id": 3,
+      "prompt": "Analyze the topological structure of a neural network with 3 layers",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 542.2589778900146,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29032) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:05.844480Z"
+    },
+    {
+      "test_id": 4,
+      "prompt": "What are Betti numbers and how do they relate to data analysis?",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 540.5385494232178,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29070) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:07.385834Z"
+    },
+    {
+      "test_id": 5,
+      "prompt": "I'm feeling frustrated with debugging. Help me understand this error.",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 504.90880012512207,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29109) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:08.891161Z"
+    },
+    {
+      "test_id": 6,
+      "prompt": "I'm excited about learning Rust. What should I focus on?",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 493.0107593536377,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29139) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:10.384687Z"
+    },
+    {
+      "test_id": 7,
+      "prompt": "Design a distributed system for real-time data processing",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 516.8850421905518,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29165) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:11.902235Z"
+    },
+    {
+      "test_id": 8,
+      "prompt": "How would you optimize a database query that's running slowly?",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 542.5708293914795,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29212) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:13.445439Z"
+    },
+    {
+      "test_id": 9,
+      "prompt": "Create a REST API endpoint in Rust that handles authentication",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 558.6047172546387,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29237) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:15.004582Z"
+    },
+    {
+      "test_id": 10,
+      "prompt": "Write a function that merges two sorted arrays efficiently",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 557.4753284454346,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29260) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:16.562667Z"
+    },
+    {
+      "test_id": 11,
+      "prompt": "What did we discuss about topology earlier?",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 518.369197845459,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29278) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:18.081586Z"
+    },
+    {
+      "test_id": 12,
+      "prompt": "Recall the previous conversation about consciousness",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 588.0081653594971,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29312) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:19.670223Z"
+    },
+    {
+      "test_id": 13,
+      "prompt": "Explain quantum computing concepts simply",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 527.2929668426514,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29337) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:21.197940Z"
+    },
+    {
+      "test_id": 14,
+      "prompt": "What are the key differences between Rust and C++?",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 508.40282440185547,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29369) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:22.706816Z"
+    },
+    {
+      "test_id": 15,
+      "prompt": "",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 447.5293159484863,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29406) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:24.155142Z"
+    },
+    {
+      "test_id": 16,
+      "prompt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "success": false,
+      "response_length": 0,
+      "latency_ms": 2.7878284454345703,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Unexpected error: [Errno 32] Broken pipe"
+      ],
+      "timestamp": "2025-11-08T09:24:25.158383Z"
+    },
+    {
+      "test_id": 17,
+      "prompt": "!@#$%^&*()",
+      "success": false,
+      "response_length": 374,
+      "latency_ms": 571.8519687652588,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code -6",
+        "Stderr: \nthread '<unnamed>' (29445) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:\ncould not load the library at `libonnxruntime.so`: DlOpen { desc: \"libonnxruntime.so: cannot open shared object file: No such file or directory\" }\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+      ],
+      "timestamp": "2025-11-08T09:24:26.730691Z"
+    }
+  ],
+  "environment": {
+    "vllm_endpoint": "http://localhost:5001",
+    "qdrant_url": "http://localhost:6333",
+    "python_version": "3.12.3 (main, Aug 14 2025, 17:47:21) [GCC 13.3.0]"
+  }
+}

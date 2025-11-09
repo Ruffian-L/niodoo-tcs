@@ -1,0 +1,16 @@
+# Prompt intake security defaults for the reverse-ablation lab.
+# Mirrors the integrated pipeline's PromptSecurityManager configuration.
+
+rate_limit_window_secs = 60
+rate_limit_max_requests = 30
+allow_control_chars = false
+prompt_max_chars = 4096
+audit_log_path = "logs/security_audit.log"
+
+banned_patterns = [
+  "(?i)\\b(?:drop|delete)\\s+(?:table|database)\\b",
+  "(?i)\\bunion\\s+select\\b",
+  "(?i)<script",
+  "(?i)\\brm\\s+-rf\\s+/"
+]
+

@@ -1,0 +1,12 @@
+{
+  "TOPOLOGY_MODE": "baseline",
+  "RCE_ENABLED": "0",
+  "N_TOKENS_BYPASS": "1",
+  "ENABLE_CURATOR": "1",
+  "TCS_ENABLE_GPU": "0",
+  "USE_GPU_FITNESS": "0",
+  "RCE_SHADOW_MODE": "true",
+  "RCE_ACTIONS_ENABLED": "false",
+  "RCE_CONSENSUS_ENABLED": "false"
+}
+

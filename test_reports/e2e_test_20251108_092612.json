@@ -1,0 +1,298 @@
+{
+  "test_suite": "comprehensive_e2e",
+  "timestamp": "2025-11-08T09:26:12.372999Z",
+  "duration_secs": 97.85946941375732,
+  "metrics": {
+    "total_tests": 17,
+    "successful": 0,
+    "failed": 17,
+    "success_rate": 0.0,
+    "avg_latency_ms": 4754.870176315308,
+    "p50_latency_ms": 4484.724283218384,
+    "p95_latency_ms": 0.0,
+    "p99_latency_ms": 0.0,
+    "topology_detections": 0,
+    "compass_states": 0,
+    "learning_events": 0,
+    "error_count": 34
+  },
+  "results": [
+    {
+      "test_id": 1,
+      "prompt": "Write a Python function to calculate fibonacci numbers",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 9093.2776927948,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:24:43.621950Z"
+    },
+    {
+      "test_id": 2,
+      "prompt": "Explain what machine learning is in one paragraph",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4868.588209152222,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:24:49.491097Z"
+    },
+    {
+      "test_id": 3,
+      "prompt": "Analyze the topological structure of a neural network with 3 layers",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4262.897968292236,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:24:54.754448Z"
+    },
+    {
+      "test_id": 4,
+      "prompt": "What are Betti numbers and how do they relate to data analysis?",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4617.53249168396,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:00.372474Z"
+    },
+    {
+      "test_id": 5,
+      "prompt": "I'm feeling frustrated with debugging. Help me understand this error.",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4132.21287727356,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:05.505190Z"
+    },
+    {
+      "test_id": 6,
+      "prompt": "I'm excited about learning Rust. What should I focus on?",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4260.509490966797,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:10.766364Z"
+    },
+    {
+      "test_id": 7,
+      "prompt": "Design a distributed system for real-time data processing",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4484.724283218384,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:16.251626Z"
+    },
+    {
+      "test_id": 8,
+      "prompt": "How would you optimize a database query that's running slowly?",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4503.456354141235,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:21.755554Z"
+    },
+    {
+      "test_id": 9,
+      "prompt": "Create a REST API endpoint in Rust that handles authentication",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4758.164644241333,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:27.514305Z"
+    },
+    {
+      "test_id": 10,
+      "prompt": "Write a function that merges two sorted arrays efficiently",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4636.757135391235,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:33.151728Z"
+    },
+    {
+      "test_id": 11,
+      "prompt": "What did we discuss about topology earlier?",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4861.387491226196,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:39.013635Z"
+    },
+    {
+      "test_id": 12,
+      "prompt": "Recall the previous conversation about consciousness",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4457.2107791900635,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:44.471544Z"
+    },
+    {
+      "test_id": 13,
+      "prompt": "Explain quantum computing concepts simply",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4416.7280197143555,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:49.888703Z"
+    },
+    {
+      "test_id": 14,
+      "prompt": "What are the key differences between Rust and C++?",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4550.355672836304,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:25:55.439624Z"
+    },
+    {
+      "test_id": 15,
+      "prompt": "",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4256.410121917725,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: prompt produced no tokens\n"
+      ],
+      "timestamp": "2025-11-08T09:26:00.696681Z"
+    },
+    {
+      "test_id": 16,
+      "prompt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4412.596702575684,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: sequence too long: total context 10000 would exceed max 2048\n"
+      ],
+      "timestamp": "2025-11-08T09:26:06.110065Z"
+    },
+    {
+      "test_id": 17,
+      "prompt": "!@#$%^&*()",
+      "success": false,
+      "response_length": 3626,
+      "latency_ms": 4259.983062744141,
+      "memory_delta_mb": 0.0,
+      "topology_detected": false,
+      "compass_state": null,
+      "learning_event": false,
+      "errors": [
+        "Pipeline exited with code 1",
+        "Stderr: Error: ONNX inference failed\n\nCaused by:\n    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))\n"
+      ],
+      "timestamp": "2025-11-08T09:26:11.370583Z"
+    }
+  ],
+  "environment": {
+    "vllm_endpoint": "http://localhost:5001",
+    "qdrant_url": "http://localhost:6333",
+    "python_version": "3.12.3 (main, Aug 14 2025, 17:47:21) [GCC 13.3.0]"
+  }
+}

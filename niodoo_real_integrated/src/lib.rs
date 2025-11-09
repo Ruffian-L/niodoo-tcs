@@ -18,6 +18,7 @@ pub mod grpc_inference;
 pub mod health;
 pub mod hyperfocus;
 pub mod learning;
+pub mod learning_actor;
 pub mod lora_trainer;
 pub mod mcts;
 pub mod mcts_config;

@@ -1,0 +1,85 @@
+====================================================================================================
+COMPREHENSIVE END-TO-END TEST REPORT
+====================================================================================================
+
+Timestamp: 2025-11-08T09:26:12.372999Z
+Duration: 97.9 seconds
+
+METRICS:
+----------------------------------------------------------------------------------------------------
+Total Tests: 17
+Successful: 0
+Failed: 17
+Success Rate: 0.0%
+Avg Latency: 4754.9ms
+P50 Latency: 4484.7ms
+P95 Latency: 0.0ms
+P99 Latency: 0.0ms
+Topology Detections: 0
+Compass States: 0
+Learning Events: 0
+Errors: 34
+
+ERRORS:
+----------------------------------------------------------------------------------------------------
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+  - Pipeline exited with code 1
+  - Stderr: Error: ONNX inference failed
+
+Caused by:
+    Failed to run inference on model: Unexpected input data type. Actual: (tensor(float16)) , expected: (tensor(int64))
+
+

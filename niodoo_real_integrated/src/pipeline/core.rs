@@ -82,6 +82,8 @@ pub struct Pipeline {
     pub(crate) tokenizer: Arc<DynamicTokenizerManager>,
     pub(crate) generator: GenerationEngine,
     pub(crate) learning: AsyncMutex<LearningLoop>,
+    /// Learning actor handle (Actor Model pattern - decoupled from main pipeline)
+    pub(crate) learning_actor: Option<Arc<crate::learning_actor::LearningActorHandle>>,
     pub(crate) curator: Option<Curator>,
     pub(crate) tcs_analyzer: Option<TCSAnalyzer>,
     pub(crate) rce_analyzer: Option<RceAnalyzer>,
@@ -279,7 +281,7 @@ impl Pipeline {
         let config_arc = Arc::new(AsyncRwLock::new(config.clone()));
 
         let erag = if config.optimized_erag {
-            let mut erag_client = EragClient::new_with_config_and_quantization(
+            let mut erag_client = EragClient::new_with_config_quantization_and_api_key(
                 &config.qdrant_url,
                 &config.qdrant_collection,
                 config.qdrant_vector_dim,
@@ -289,12 +291,15 @@ impl Pipeline {
                 config.erag_batch_flush_ms,
                 config.qdrant_quantization,
                 gpu_fitness_calc.clone(), // Phase 4.3: Pass GPU calculator
+                config.qdrant_api_key.as_deref(), // Pass API key for authentication
             )
             .await?;
             erag_client.set_config(config_arc.clone());
             erag_client
         } else {
-            let mut erag_client = EragClient::new_with_config(
+            // For non-optimized path, we still need to support API key
+            // Create via new_with_config_quantization_and_api_key with None quantization
+            let mut erag_client = EragClient::new_with_config_quantization_and_api_key(
                 &config.qdrant_url,
                 &config.qdrant_collection,
                 config.qdrant_vector_dim,
@@ -302,7 +307,9 @@ impl Pipeline {
                 config.optimized_erag,
                 config.erag_batch_size,
                 config.erag_batch_flush_ms,
+                None, // No quantization for non-optimized path
                 gpu_fitness_calc.clone(), // Phase 4.3: Pass GPU calculator
+                config.qdrant_api_key.as_deref(), // Pass API key for authentication
             )
             .await?;
             erag_client.set_config(config_arc.clone());
@@ -334,6 +341,15 @@ impl Pipeline {
             config.generation_client_timeout_secs,
         )?;
         info!(model = %config.vllm_model, endpoint = %config.vllm_endpoint, "Initialized GenerationEngine with vLLM model");
+        
+        // Discover and update model ID to match what vLLM actually serves
+        // This fixes 404 errors caused by model path/ID mismatches
+        if !config.mock_mode {
+            if let Err(e) = generator.discover_and_update_model().await {
+                warn!(error = %e, "Failed to discover model ID from vLLM; will use configured model (may cause 404 errors)");
+            }
+        }
+        
         generator.set_mock_mode(config.mock_mode);
         generator.set_system_prompt(config.system_prompt.clone());
         generator.set_config(config_arc.clone());
@@ -368,6 +384,46 @@ impl Pipeline {
             tokenizer.clone(),
             config.rng_seed,
         ).await;
+
+        // Spawn learning actor (Actor Model pattern - decouples main pipeline from learning failures)
+        // Note: We keep the learning loop in a mutex for backward compatibility,
+        // but the actor pattern will be used for new updates if enabled
+        let learning_actor = {
+            // Enable actor pattern by default (can be disabled via env var for testing)
+            let use_actor = std::env::var("LEARNING_ACTOR_DISABLED")
+                .map(|v| !matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
+                .unwrap_or(true);
+            
+            if use_actor {
+                info!("Initializing learning actor (Actor Model pattern)");
+                // Create a new learning loop instance for the actor
+                // The actor will own its own copy, preventing mutex contention
+                let learning_for_actor = LearningLoop::new(
+                    config.learning_window,
+                    config.breakthrough_threshold,
+                    config.breakthrough_rouge_min,
+                    config.dqn_epsilon,
+                    config.dqn_gamma,
+                    config.dqn_alpha,
+                    erag_arc.clone(),
+                    config_arc.clone(),
+                    tokenizer.clone(),
+                    config.rng_seed,
+                ).await;
+                
+                let handle = crate::learning_actor::spawn_learning_actor(
+                    learning_for_actor,
+                    erag_arc.clone(),
+                    config_arc.clone(),
+                ).await;
+                
+                info!("Learning actor spawned successfully");
+                Some(Arc::new(handle))
+            } else {
+                warn!("Learning actor disabled via LEARNING_ACTOR_DISABLED - using legacy mutex pattern");
+                None
+            }
+        };
 
         // Initialize TCS analyzer only when topology mode requires it
         let tcs_analyzer = if matches!(config.topology_mode, TopologyMode::Hybrid) {
@@ -505,6 +561,7 @@ impl Pipeline {
             tokenizer: tokenizer.clone(),
             generator,
             learning: AsyncMutex::new(learning),
+            learning_actor,
             curator,
             tcs_analyzer,
             rce_analyzer: None,

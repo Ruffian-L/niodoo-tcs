@@ -432,22 +432,58 @@ check_http_health() {
     local url=$2
     local attempts=${3:-30}
     local delay=${4:-5}
+    local max_timeout=${5:-0}  # Maximum total timeout in seconds (0 = use attempts*delay)
 
     if ! command -v curl >/dev/null 2>&1; then
         log_warn "curl not available; skipping $name health probe ($url)"
         return 0
     fi
 
+    # Special handling for vLLM - needs longer timeout for model loading
+    if [[ "$name" == "vLLM" ]] && [[ $max_timeout -eq 0 ]]; then
+        attempts=120  # 120 attempts × 5 seconds = 600 seconds (10 minutes)
+        delay=5
+        log_info "Using extended timeout for vLLM model loading (up to 10 minutes)"
+    fi
+
+    local start_time=$(date +%s)
     for ((i=1; i<=attempts; i++)); do
         if curl -fsS "$url" >/dev/null 2>&1; then
-            log_info "$name healthy at $url"
+            local elapsed=$(( $(date +%s) - start_time ))
+            log_info "$name healthy at $url (took ${elapsed}s)"
+            
+            # For vLLM, verify model is actually loaded
+            if [[ "$name" == "vLLM" ]]; then
+                local models_response
+                models_response=$(curl -fsS "$url" 2>/dev/null || echo "")
+                if [[ -z "$models_response" ]] || [[ "$models_response" == "null" ]] || [[ "$models_response" == "[]" ]]; then
+                    log_warn "vLLM endpoint responded but no models loaded yet, continuing to wait..."
+                    sleep "$delay"
+                    continue
+                fi
+            fi
+            
             return 0
         fi
-        log_warn "$name not ready yet (attempt $i/$attempts)"
+        
+        # Check if max timeout exceeded
+        if [[ $max_timeout -gt 0 ]]; then
+            local elapsed=$(( $(date +%s) - start_time ))
+            if [[ $elapsed -ge $max_timeout ]]; then
+                log_error "$name failed health checks at $url (timeout after ${elapsed}s)"
+                return 1
+            fi
+        fi
+        
+        if [ $((i % 10)) -eq 0 ]; then
+            local elapsed=$(( $(date +%s) - start_time ))
+            log_warn "$name not ready yet (attempt $i/$attempts, elapsed: ${elapsed}s)"
+        fi
         sleep "$delay"
     done
 
-    log_error "$name failed health checks at $url"
+    local elapsed=$(( $(date +%s) - start_time ))
+    log_error "$name failed health checks at $url after ${elapsed}s ($attempts attempts)"
     return 1
 }
 
@@ -475,10 +511,36 @@ health_check_services() {
     local ollama_url="${OLLAMA_ENDPOINT:-http://127.0.0.1:11434}"
     local metrics_url="${METRICS_ENDPOINT:-http://127.0.0.1:9093/metrics}"
 
-    check_http_health "vLLM" "${vllm_url%/}/v1/models"
-    check_http_health "Qdrant" "${qdrant_url%/}/health"
-    check_http_health "Ollama" "${ollama_url%/}/api/tags"
-    check_http_health "Metrics" "${metrics_url}"
+    log_section "Health Checking Services"
+    
+    # Qdrant health check (quick - should be ready in 10-30 seconds)
+    check_http_health "Qdrant" "${qdrant_url%/}/health" 30 2 || {
+        log_error "Qdrant health check failed - service may not be running"
+        return 1
+    }
+    
+    # vLLM health check (slow - model loading takes 2-5 minutes)
+    check_http_health "vLLM" "${vllm_url%/}/v1/models" 120 5 || {
+        log_error "vLLM health check failed - model may still be loading or service failed"
+        log_info "Check vLLM logs for details: tail -f /tmp/vllm_coder.log"
+        return 1
+    }
+    
+    # Ollama health check (optional - only if using Ollama backend)
+    if [[ "${CURATOR_BACKEND:-vllm}" == "ollama" ]]; then
+        check_http_health "Ollama" "${ollama_url%/}/api/tags" 30 2 || {
+            log_warn "Ollama health check failed (optional service)"
+        }
+    fi
+    
+    # Metrics endpoint (optional)
+    if [[ -n "${METRICS_ENDPOINT:-}" ]]; then
+        check_http_health "Metrics" "${metrics_url}" 10 2 || {
+            log_warn "Metrics endpoint health check failed (optional)"
+        }
+    fi
+    
+    log_info "All critical services are healthy"
 }
 
 log_section "Niodoo RunPod Bootstrap"

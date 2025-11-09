@@ -1,0 +1,16 @@
+# Qdrant connection settings for System 1 (ERAG memory core)
+[qdrant]
+http_url = "http://127.0.0.1:6333"
+grpc_url = "http://127.0.0.1:6334"
+api_key = ""
+collection = "niodoo_erag_memories"
+vector_size = 768
+query_top_k = 8
+
+distance = "Cosine"
+
+# Hyperspherical search parameters
+[hypersphere]
+max_radius = 0.32
+min_score = 0.0
+compass_payload_key = "compass_quadrant"

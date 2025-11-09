@@ -1,0 +1,143 @@
+# Multi-stage Dockerfile for NIODOO RunPod Stateful Pod Architecture
+# This implements Solution Path 1: All-in-One Stateful Pod
+# Fixes all 5 failure patterns identified in the RunPod analysis
+
+# ============================================================================
+# Stage 1: Rust Builder
+# ============================================================================
+FROM rust:1.87-slim as rust-builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    clang \
+    cmake \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY tcs-core ./tcs-core
+COPY tcs-tda ./tcs-tda
+COPY tcs-knot ./tcs-knot
+COPY tcs-tqft ./tcs-tqft
+COPY tcs-ml ./tcs-ml
+COPY tcs-consensus ./tcs-consensus
+COPY tcs-pipeline ./tcs-pipeline
+COPY tcs-rce ./tcs-rce
+COPY niodoo-core ./niodoo-core
+COPY constants_core ./constants_core
+COPY niodoo_real_integrated ./niodoo_real_integrated
+
+# Build in release mode with optimizations
+RUN cargo build --release --bin niodoo_real_integrated --features svc && \
+    strip target/release/niodoo_real_integrated
+
+# ============================================================================
+# Stage 2: Python/vLLM Builder (for model weights)
+# ============================================================================
+FROM runpod/pytorch:2.3.0-cuda12.1.1-devel-ubuntu22.04 as model-builder
+
+WORKDIR /models
+
+# Install HuggingFace Hub
+RUN pip install --no-cache-dir huggingface_hub[hf_transfer]
+
+# Download model weights (bake into image to eliminate 8-second download time)
+# Set HF_TOKEN as build arg if needed for private models
+ARG HF_TOKEN
+ARG VLLM_MODEL_REPO=Qwen/Qwen2.5-7B-Instruct-AWQ
+ARG VLLM_MODEL_PATH=/models/qwen2.5-7b-instruct-awq
+
+ENV HF_TOKEN=${HF_TOKEN}
+ENV VLLM_MODEL_REPO=${VLLM_MODEL_REPO}
+ENV VLLM_MODEL_PATH=${VLLM_MODEL_PATH}
+
+RUN if [ -n "$HF_TOKEN" ]; then \
+        python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='$VLLM_MODEL_REPO', local_dir='$VLLM_MODEL_PATH', token='$HF_TOKEN', local_dir_use_symlinks=False)"; \
+    else \
+        python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='$VLLM_MODEL_REPO', local_dir='$VLLM_MODEL_PATH', local_dir_use_symlinks=False)"; \
+    fi
+
+# ============================================================================
+# Stage 3: Final Runtime Image (All-in-One Stateful Pod)
+# ============================================================================
+FROM runpod/pytorch:2.3.0-cuda12.1.1-runtime-ubuntu22.04
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    wget \
+    supervisor \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for vLLM and Qdrant client
+RUN pip install --no-cache-dir \
+    vllm>=0.6.0 \
+    qdrant-client \
+    fastapi \
+    uvicorn
+
+# Copy model weights from model-builder stage
+COPY --from=model-builder /models /models
+
+# Copy Rust binary from rust-builder stage
+COPY --from=rust-builder /build/target/release/niodoo_real_integrated /usr/local/bin/niodoo_service
+
+# Copy Qdrant binary (download if not available)
+RUN if ! command -v qdrant >/dev/null 2>&1; then \
+        QDRANT_VERSION=1.11.3 && \
+        curl -fL "https://github.com/qdrant/qdrant/releases/download/v${QDRANT_VERSION}/qdrant-v${QDRANT_VERSION}-linux-x86_64.tar.gz" | tar -xz && \
+        mv qdrant /usr/local/bin/qdrant && \
+        chmod +x /usr/local/bin/qdrant; \
+    fi
+
+# Create directories for secrets, logs, and data
+RUN mkdir -p /run/secrets /app/logs /app/data /data/qdrant_storage /data/qdrant_snapshots
+
+# Copy supervisor configuration
+COPY deployment/runpod/supervisord.conf /etc/supervisord.conf
+
+# Copy entrypoint script
+COPY deployment/runpod/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Copy health check script
+COPY deployment/runpod/health_check.sh /app/health_check.sh
+RUN chmod +x /app/health_check.sh
+
+# Copy Qdrant configuration
+COPY deployment/runpod/qdrant_config.yaml /app/qdrant_config.yaml
+
+# Set environment variables for RunPod
+ENV VLLM_MODEL_PATH=/models/qwen2.5-7b-instruct-awq
+ENV VLLM_HOST=0.0.0.0
+ENV VLLM_PORT=5001
+ENV QDRANT_HOST=0.0.0.0
+ENV QDRANT_HTTP_PORT=6333
+ENV QDRANT_GRPC_PORT=6334
+ENV QDRANT_STORAGE_PATH=/data/qdrant_storage
+ENV NIODOO_SERVICE_PORT=9090
+ENV RUST_LOG=info
+
+# Expose ports
+EXPOSE 5001 6333 6334 9090
+
+# Use entrypoint script (handles secrets bridge and startup orchestration)
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Default command (entrypoint.sh will start supervisord)
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf", "-n"]
+
+
+
+
+

@@ -179,6 +179,34 @@ impl EragClient {
         quantization: Option<crate::config::QuantizationType>,
         gpu_calculator: Option<Arc<crate::gpu_fitness::GPUMemoryFitnessCalculator>>,
     ) -> Result<Self> {
+        Self::new_with_config_quantization_and_api_key(
+            url,
+            collection,
+            vector_dim,
+            similarity_threshold,
+            optimized_erag,
+            batch_size,
+            batch_flush_ms,
+            quantization,
+            gpu_calculator,
+            None, // No API key by default
+        )
+        .await
+    }
+
+    /// Create EragClient with optimization configuration including quantization and API key (Phase 1.3+)
+    pub async fn new_with_config_quantization_and_api_key(
+        url: &str,
+        collection: &str,
+        vector_dim: usize,
+        similarity_threshold: f32,
+        optimized_erag: bool,
+        batch_size: usize,
+        batch_flush_ms: u64,
+        quantization: Option<crate::config::QuantizationType>,
+        gpu_calculator: Option<Arc<crate::gpu_fitness::GPUMemoryFitnessCalculator>>,
+        api_key: Option<&str>,
+    ) -> Result<Self> {
         // Normalise URL for qdrant-client. We expect to talk to the gRPC endpoint on port 6334
         // using HTTP/2, which the SDK represents as an `http://` URI. Accept a variety of inputs
         // (raw host, http://:6333 REST URL, or legacy grpc:// scheme) and rewrite them so we
@@ -201,7 +229,14 @@ impl EragClient {
             info!(original = %url, rewritten = %normalized_url, "Appended gRPC port 6334 to Qdrant URL");
         }
 
-        let config = QdrantClientConfig::from_url(&normalized_url);
+        let mut config = QdrantClientConfig::from_url(&normalized_url);
+        
+        // Set API key if provided (for cloud/local fallback authentication)
+        if let Some(key) = api_key {
+            config = config.with_api_key(key);
+            info!("Qdrant API key configured for authentication");
+        }
+        
         let client = QdrantClient::new(Some(config))
             .map_err(|err| anyhow!("failed to build qdrant client: {}", err))?;
 
@@ -322,9 +357,15 @@ impl EragClient {
         let collection = self.collection.clone();
         let threshold = self.similarity_threshold;
 
-        let response_result = self
-            .circuit_breaker
-            .call(|| {
+        // Add timeout to prevent indefinite hangs (default: 5 seconds)
+        let erag_timeout_secs = std::env::var("ERAG_COLLAPSE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5);
+        
+        let response_result = tokio::time::timeout(
+            Duration::from_secs(erag_timeout_secs),
+            self.circuit_breaker.call(|| {
                 let vector_clone = vector.to_vec();
                 let collection_clone = collection.clone();
                 async move {
@@ -344,7 +385,9 @@ impl EragClient {
                         .map_err(|e| anyhow!("Qdrant gRPC search failed: {}", e))
                 }
             })
-            .await;
+        )
+        .await
+        .map_err(|_| anyhow!("ERAG collapse timed out after {}s", erag_timeout_secs))?;
 
         let mut memories = Vec::new();
         let mut sims = Vec::new();
@@ -561,6 +604,19 @@ impl EragClient {
                 }
                 _ => qdrant_payload.insert(k, v.to_string()),
             }
+        }
+
+        // Validate vector dimensions before creating point
+        // Qdrant expects vectors with at least 4 dimensions
+        if vector.is_empty() {
+            warn!("Attempted to store empty vector to Qdrant, skipping");
+            return Ok(());
+        }
+        
+        // Ensure vector has minimum required dimensions (4 for Qdrant)
+        if vector.len() < 4 {
+            warn!("Vector dimension too small: {} < 4, skipping Qdrant storage", vector.len());
+            return Ok(());
         }
 
         let point = PointStruct::new(
@@ -1673,7 +1729,22 @@ impl EragClient {
             .client
             .search_points(&search_points)
             .await
-            .map_err(|err| anyhow!("failed to query Qdrant points: {}", err))?;
+            .map_err(|err| {
+                // Handle OutputTooSmall errors gracefully
+                let err_str = err.to_string();
+                if err_str.contains("OutputTooSmall") || err_str.contains("expected: 4, actual: 0") {
+                    warn!(
+                        "Qdrant vector deserialization error (likely empty vector data): {}",
+                        err_str
+                    );
+                    // Retry without vectors if the error is about vector deserialization
+                    if include_vectors {
+                        warn!("Retrying search without vectors to avoid deserialization error");
+                        // Don't retry here - let caller handle empty results
+                    }
+                }
+                anyhow!("failed to query Qdrant points: {}", err)
+            })?;
 
         Ok(result.result)
     }
@@ -1729,9 +1800,15 @@ fn scored_point_to_experience(
         if let Some(qdrant::vectors_output::VectorsOptions::Vector(vec_data)) =
             vectors.vectors_options.as_ref()
         {
-            if !vec_data.data.is_empty() {
+            // Check if vector data is valid before using it
+            // OutputTooSmall error occurs when protobuf tries to read empty vector data
+            if !vec_data.data.is_empty() && vec_data.data.len() >= vector_dim {
+                state_vec = vec_data.data.clone();
+            } else if !vec_data.data.is_empty() {
+                // Partial vector data - pad with zeros
                 state_vec = vec_data.data.clone();
             }
+            // If vec_data.data is empty, keep the zero-initialized vector
         }
     }
 

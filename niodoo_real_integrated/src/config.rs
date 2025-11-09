@@ -850,6 +850,9 @@ pub struct RuntimeConfig {
     pub qdrant_vector_dim: usize,
     #[serde(default)]
     pub qdrant_embedded: bool,
+    /// Qdrant API key for authentication (optional, used for cloud/local fallback)
+    #[serde(default)]
+    pub qdrant_api_key: Option<String>,
     pub ollama_endpoint: String,
     #[serde(default = "default_embedding_model_name")]
     pub embedding_model_name: String,
@@ -1886,6 +1889,19 @@ impl RuntimeConfig {
     pub fn load(args: &CliArgs) -> Result<Self> {
         prime_environment();
 
+        // Detect RunPod mode - forces localhost endpoints (fixes Failure Pattern 1)
+        let is_runpod_mode = std::env::var("NIODOO_RUNPOD_MODE")
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+            .unwrap_or_else(|_| {
+                // Also check for RunPod-specific environment indicators
+                std::env::var("RUNPOD_POD_ID").is_ok() || 
+                std::env::var("RUNPOD_TPU_ID").is_ok()
+            });
+
+        if is_runpod_mode {
+            info!("RunPod mode detected - using localhost endpoints for all services");
+        }
+
         if let Some(ref config_path) = args.config {
             let file = std::fs::read_to_string(config_path)
                 .with_context(|| format!("unable to read config file {config_path}"))?;
@@ -1902,14 +1918,19 @@ impl RuntimeConfig {
             vllm_keys.push("VLLM_ENDPOINT_TAILSCALE");
         }
         vllm_keys.push("TEST_ENDPOINT_VLLM");
-        let vllm_endpoint = env_with_fallback(&vllm_keys)
-            .or_else(|| {
-                warn!(
-                    "Set VLLM_URL and ensure vLLM service is running (default http://127.0.0.1:5001)"
-                );
-                None
-            })
-            .unwrap_or_else(|| "http://127.0.0.1:5001".to_string())
+        let vllm_endpoint = if is_runpod_mode {
+            // Force localhost in RunPod mode (all services in same pod)
+            "http://localhost:5001".to_string()
+        } else {
+            env_with_fallback(&vllm_keys)
+                .or_else(|| {
+                    warn!(
+                        "Set VLLM_URL and ensure vLLM service is running (default http://127.0.0.1:5001)"
+                    );
+                    None
+                })
+                .unwrap_or_else(|| "http://127.0.0.1:5001".to_string())
+        }
             .trim()
             .trim_end_matches('/')
             // Strip common API paths if present (curator appends its own)
@@ -1938,15 +1959,23 @@ impl RuntimeConfig {
             qdrant_keys.push("QDRANT_URL_TAILSCALE");
         }
         qdrant_keys.push("TEST_ENDPOINT_QDRANT");
-        let qdrant_url = env_with_fallback(&qdrant_keys)
-            .unwrap_or_else(|| "http://127.0.0.1:6333".to_string())
-            .trim()
-            .trim_end_matches('/')
-            .to_string();
+        let qdrant_url = if is_runpod_mode {
+            // Force localhost in RunPod mode (all services in same pod)
+            "http://localhost:6333".to_string()
+        } else {
+            env_with_fallback(&qdrant_keys)
+                .unwrap_or_else(|| "http://127.0.0.1:6333".to_string())
+                .trim()
+                .trim_end_matches('/')
+                .to_string()
+        };
 
         let qdrant_embedded = env_with_fallback(&["QDRANT_EMBEDDED"])
             .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
             .unwrap_or(false);
+
+        let qdrant_api_key = env_with_fallback(&["QDRANT_API_KEY", "QDRANT_API_KEY_LOCAL"])
+            .filter(|v| !v.trim().is_empty());
 
         let qdrant_collection = env_with_fallback(&["QDRANT_COLLECTION", "QDRANT_COLLECTION_NAME"])
             .unwrap_or_else(|| "experiences".to_string());
@@ -2093,7 +2122,7 @@ impl RuntimeConfig {
 
         let generation_max_tokens = env_with_fallback(&["GENERATION_MAX_TOKENS", "MAX_TOKENS"])
             .and_then(|value| value.parse().ok())
-            .unwrap_or(2048); // Default to 2048 (sufficient for complex code generation)
+            .unwrap_or(3000); // Default to 3000 (safe for 4096 context models with input tokens)
 
         let dynamic_token_min = env_with_fallback(&["DYNAMIC_TOKEN_MIN"])
             .and_then(|value| value.parse().ok())
@@ -2280,6 +2309,7 @@ impl RuntimeConfig {
             qdrant_collection,
             qdrant_vector_dim,
             qdrant_embedded,
+            qdrant_api_key,
             ollama_endpoint,
             embedding_model_name,
             embed_with_candle,
@@ -2646,7 +2676,7 @@ impl RuntimeConfig {
                 self.cache_prefetch_top_hits = self.cache_prefetch_top_hits.max(16);
                 self.erag_batch_size = self.erag_batch_size.max(512); // Larger batches for RTX 5090
                 self.erag_batch_flush_ms = self.erag_batch_flush_ms.min(100);
-                self.generation_max_tokens = self.generation_max_tokens.max(8192);
+                self.generation_max_tokens = self.generation_max_tokens.max(2048);
                 self.dynamic_token_max = self.dynamic_token_max.max(2048);
                 self.token_promotion_interval = self.token_promotion_interval.min(20);
                 self.cache_capacity = self.cache_capacity.max(8_192);
@@ -2680,7 +2710,10 @@ impl RuntimeConfig {
                 self.cache_prefetch_top_hits = self.cache_prefetch_top_hits.max(8);
                 self.erag_batch_size = self.erag_batch_size.max(256);
                 self.erag_batch_flush_ms = self.erag_batch_flush_ms.min(150);
-                self.generation_max_tokens = self.generation_max_tokens.max(4096);
+                // Reduced from 4096 to 3000 to account for input tokens
+                // Model has 4096 total context, so with ~376 input tokens, max generation is ~3720
+                // Using 3000 provides safe margin for input tokens
+                self.generation_max_tokens = self.generation_max_tokens.min(3000);
                 self.dynamic_token_max = self.dynamic_token_max.max(1024);
                 self.token_promotion_interval = self.token_promotion_interval.min(30);
                 self.cache_capacity = self.cache_capacity.max(4_096);
@@ -3058,7 +3091,7 @@ fn default_gpu_fitness_refresh_interval_secs() -> u64 {
 }
 
 fn default_learning_timeout_secs() -> u64 {
-    10
+    1  // Temporary: reduced to 1 second for testing to prevent premature timeouts during learning updates
 }
 
 fn default_context_truncation_limit() -> usize {

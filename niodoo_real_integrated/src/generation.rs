@@ -432,12 +432,21 @@ impl GenerationEngine {
             )
         };
 
+        // Calculate max_tokens dynamically based on input token count
+        // Estimate input tokens: ~4 chars per token, add 20% buffer for system messages
+        let total_chars: usize = messages.iter().map(|m| m.content.len()).sum();
+        let estimated_input_tokens = (total_chars / 4) + (total_chars / 20); // ~25% overhead for system messages
+        let context_window: usize = 4096; // Model context window (can be made configurable)
+        let max_available_tokens = context_window.saturating_sub(estimated_input_tokens);
+        // Use configured max_tokens, but cap it at available tokens minus safety margin
+        let dynamic_max_tokens = self.max_tokens.min(max_available_tokens.saturating_sub(100)); // 100 token safety margin
+        
         let payload = ChatCompletionRequest {
             model: self.model.clone(),
             messages,
             temperature: self.temperature,
             top_p: self.top_p,
-            max_tokens: self.max_tokens,
+            max_tokens: dynamic_max_tokens.max(256), // Minimum 256 tokens
         };
 
         // Log model ID being sent to vLLM (debug level for production)
@@ -465,7 +474,28 @@ impl GenerationEngine {
                         String::new()
                     }
                 };
-                warn!(%status, %body, endpoint = %endpoint_url_clone, "vLLM returned error status");
+                
+                // Special handling for 404 - likely model ID mismatch
+                if status == 404 {
+                    warn!(
+                        %status,
+                        model = %payload_clone.model,
+                        %body,
+                        endpoint = %endpoint_url_clone,
+                        "vLLM returned 404 - model not found. Model ID may not match what vLLM is serving."
+                    );
+                    // Try to discover the correct model ID
+                    if let Ok(Some(discovered_id)) = self.discover_model_id().await {
+                        warn!(
+                            configured_model = %payload_clone.model,
+                            discovered_model = %discovered_id,
+                            "Discovered model ID differs from configured model. Consider updating VLLM_MODEL_ID environment variable."
+                        );
+                    }
+                } else {
+                    warn!(%status, %body, endpoint = %endpoint_url_clone, "vLLM returned error status");
+                }
+                
                 anyhow::bail!("vLLM request failed: {status}");
             }
 
@@ -573,17 +603,50 @@ impl GenerationEngine {
 }
 
 fn synthesize_hybrid(baseline: &str, echoes: &[LensEcho]) -> String {
-    let baseline_snippet = snippet(baseline, 70);
-    let focus_echo = echoes
-        .iter()
-        .find(|echo| echo.lens == "Claude")
-        .or_else(|| echoes.first());
+    // Check if baseline is actually a real response (not a fallback message)
+    let baseline_is_valid = !baseline.is_empty() 
+        && !baseline.contains("unavailable")
+        && !baseline.contains("timeout")
+        && baseline != "∅";
+    
+    // Check if we have valid echoes
+    let valid_echoes: Vec<&LensEcho> = echoes.iter()
+        .filter(|echo| {
+            !echo.response.is_empty()
+                && !echo.response.contains("unavailable")
+                && !echo.response.contains("timeout")
+                && echo.response != "∅"
+        })
+        .collect();
+    
+    if baseline_is_valid && !valid_echoes.is_empty() {
+        // We have valid responses - synthesize them properly
+        let baseline_snippet = snippet(baseline, 70);
+        let focus_echo = valid_echoes.iter()
+            .find(|echo| echo.lens == "Claude")
+            .or_else(|| valid_echoes.first());
 
-    let (lens_label, echo_snippet) = focus_echo
-        .map(|echo| (echo.lens.as_str(), snippet(&echo.response, 50)))
-        .unwrap_or(("Echo", "∅".to_string()));
+        let (lens_label, echo_snippet) = focus_echo
+            .map(|echo| (echo.lens.as_str(), snippet(&echo.response, 50)))
+            .unwrap_or(("Echo", "∅".to_string()));
 
-    format!("Baseline: {baseline_snippet}. Echo lift: {lens_label} {echo_snippet}. Pull which?")
+        // Return the actual baseline response instead of asking "Pull which?"
+        // Always return the full baseline response when we have valid data
+        baseline.to_string()
+    } else if baseline_is_valid {
+        // Only baseline is valid - return it directly
+        baseline.to_string()
+    } else if !valid_echoes.is_empty() {
+        // Only echoes are valid - return the best echo
+        let best_echo = valid_echoes.iter()
+            .find(|echo| echo.lens == "Claude")
+            .or_else(|| valid_echoes.first())
+            .unwrap();
+        best_echo.response.clone()
+    } else {
+        // No valid responses - return error message
+        "Generation failed: All responses unavailable. Please check vLLM service and try again.".to_string()
+    }
 }
 
 fn snippet(text: &str, limit: usize) -> String {
@@ -615,6 +678,82 @@ fn snippet(text: &str, limit: usize) -> String {
 }
 
 impl GenerationEngine {
+    /// Discover the actual model ID from vLLM's /v1/models endpoint
+    /// Returns the first available model ID, or None if discovery fails
+    pub async fn discover_model_id(&self) -> Result<Option<String>> {
+        let models_endpoint = format!("{}/v1/models", self.endpoint.trim_end_matches('/'));
+        
+        match self.client.get(&models_endpoint).timeout(Duration::from_secs(5)).send().await {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    warn!(status = %resp.status(), endpoint = %models_endpoint, "vLLM /v1/models returned error");
+                    return Ok(None);
+                }
+                
+                #[derive(serde::Deserialize)]
+                struct ModelList {
+                    data: Vec<ModelInfo>,
+                }
+                
+                #[derive(serde::Deserialize)]
+                struct ModelInfo {
+                    id: String,
+                }
+                
+                match resp.json::<ModelList>().await {
+                    Ok(model_list) => {
+                        if let Some(first_model) = model_list.data.first() {
+                            info!(discovered_model = %first_model.id, "Discovered model ID from vLLM");
+                            Ok(Some(first_model.id.clone()))
+                        } else {
+                            warn!("vLLM /v1/models returned empty model list");
+                            Ok(None)
+                        }
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Failed to parse vLLM /v1/models response");
+                        Ok(None)
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, endpoint = %models_endpoint, "Failed to query vLLM /v1/models endpoint");
+                Ok(None)
+            }
+        }
+    }
+
+    /// Discover and update the model ID from vLLM
+    /// This should be called during initialization to ensure the model ID matches what vLLM actually serves
+    pub async fn discover_and_update_model(&mut self) -> Result<()> {
+        if self.mock_mode {
+            return Ok(());
+        }
+        
+        match self.discover_model_id().await? {
+            Some(discovered_id) => {
+                if discovered_id != self.model {
+                    info!(
+                        old_model = %self.model,
+                        new_model = %discovered_id,
+                        "Updating model ID to match vLLM's actual model"
+                    );
+                    self.model = discovered_id;
+                } else {
+                    info!(model = %self.model, "Model ID matches vLLM's served model");
+                }
+                Ok(())
+            }
+            None => {
+                warn!(
+                    configured_model = %self.model,
+                    "Could not discover model ID from vLLM; using configured model (may cause 404 errors)"
+                );
+                Ok(())
+            }
+        }
+    }
+
     /// Create with config
     pub fn new_with_config(
         endpoint: &str,
@@ -629,6 +768,8 @@ impl GenerationEngine {
         tracing::debug!("GenerationEngine::new_with_config called with model={}", model);
 
         // Normalise model identifier: vLLM registers the served model by name, not path.
+        // NOTE: This normalization is a best-guess. The actual model ID should be discovered
+        // via discover_and_update_model() during initialization.
         let model_id = if model.starts_with("/home/beelink/models/") {
             model.replacen("/home/beelink/models/", "/workspace/models/", 1)
         } else if model.starts_with("/workspace/models/hf_cache/") {
@@ -660,7 +801,7 @@ impl GenerationEngine {
         let circuit_breaker =
             Arc::new(CircuitBreaker::new("vllm", CircuitBreakerConfig::default()));
 
-        info!("After normalization: model_id={}", model_id);
+        info!("After normalization: model_id={} (will be verified against vLLM during initialization)", model_id);
 
         Ok(Self {
             client,

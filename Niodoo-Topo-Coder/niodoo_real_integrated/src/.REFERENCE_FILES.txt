@@ -1,0 +1,5 @@
+# Reference files - DO NOT DELETE
+# These files are reference points for development:
+# - .full files: Full/complete implementations
+# - .backup files: Backup snapshots
+# - .legacy files: Legacy implementations

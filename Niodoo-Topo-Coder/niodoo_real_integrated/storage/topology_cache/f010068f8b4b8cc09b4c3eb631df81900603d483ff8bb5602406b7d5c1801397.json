@@ -1,0 +1,21 @@
+{
+  "id": "907d5eb0-c914-4ff1-a0e0-c4e8e81cc554",
+  "timestamp": "2025-11-01T16:36:18.269697755Z",
+  "betti_numbers": [
+    0,
+    0,
+    0
+  ],
+  "knot_complexity": 0.0,
+  "knot_polynomial": "1",
+  "tqft_dimension": 2,
+  "cobordism_type": "Identity",
+  "persistence_entropy": 4.234876767019874,
+  "spectral_gap": 0.0,
+  "euler_characteristic": 0.0,
+  "total_persistence": 3.256320647895336,
+  "max_persistence": 0.30528005957603455,
+  "mean_persistence": 0.116297165996262,
+  "laplacian_spectral_radius": 54.557656131806986,
+  "computation_time_ms": 1.432275
+}

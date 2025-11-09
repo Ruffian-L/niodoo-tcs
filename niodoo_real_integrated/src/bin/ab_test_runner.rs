@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -73,6 +73,19 @@ struct TestMetrics {
     quality_score: Option<f64>,
     error_rate: f64,
     request_count: u64,
+    // Topology-specific metrics
+    topology_metrics: TopologyMetrics,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct TopologyMetrics {
+    persistence_entropy_mean: Option<f64>,
+    persistence_entropy_std: Option<f64>,
+    beta_meta_current_mean: Option<f64>,
+    beta_meta_peak_mean: Option<f64>,
+    spectral_gap_mean: Option<f64>,
+    quality_score_mean: Option<f64>,
+    quality_score_std: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,6 +104,10 @@ struct Comparison {
     effect_size_latency: String,
     effect_size_throughput: String,
     winner_metrics: Vec<String>,
+    // Topology-specific comparisons
+    persistence_entropy_difference: Option<f64>,
+    beta_meta_difference: Option<f64>,
+    topology_impact: Option<String>, // "positive", "negative", "neutral", "inconclusive"
 }
 
 pub struct ABTestRunner;
@@ -145,6 +162,10 @@ impl ABTestRunner {
         let latencies = Arc::new(AsyncMutex::new(Vec::new()));
         let request_count = Arc::new(AtomicU64::new(0));
         let error_count = Arc::new(AtomicU64::new(0));
+        // Topology metrics collection
+        let persistence_entropies = Arc::new(AsyncMutex::new(Vec::new()));
+        let spectral_gaps = Arc::new(AsyncMutex::new(Vec::new()));
+        let quality_scores = Arc::new(AsyncMutex::new(Vec::new()));
         let start_time = Instant::now();
         let end_time = start_time + Duration::from_secs(duration_secs);
 
@@ -162,6 +183,9 @@ impl ABTestRunner {
             let latencies_clone = latencies.clone();
             let request_count_clone = request_count.clone();
             let error_count_clone = error_count.clone();
+            let persistence_entropies_clone = persistence_entropies.clone();
+            let spectral_gaps_clone = spectral_gaps.clone();
+            let quality_scores_clone = quality_scores.clone();
             let prompts = test_prompts.clone();
 
             let handle = tokio::spawn(async move {
@@ -174,9 +198,21 @@ impl ABTestRunner {
                     let mut pipeline_guard = pipeline_clone.lock().await;
 
                     match pipeline_guard.process_prompt(prompt.as_str()).await {
-                        Ok(_cycle) => {
+                        Ok(cycle) => {
                             let latency_ms = cycle_start.elapsed().as_secs_f64() * 1000.0;
                             latencies_clone.lock().await.push(latency_ms);
+                            
+                            // Extract topology metrics
+                            persistence_entropies_clone.lock().await.push(cycle.topology.persistence_entropy);
+                            spectral_gaps_clone.lock().await.push(cycle.topology.spectral_gap);
+                            
+                            // Try to extract quality score from consonance if available
+                            if let Some(ref consonance) = cycle.consonance {
+                                // Use score field (1.0 - dissonance_score) as quality measure
+                                let quality = 1.0 - consonance.dissonance_score;
+                                quality_scores_clone.lock().await.push(quality);
+                            }
+                            
                             request_count_clone.fetch_add(1, Ordering::Relaxed);
                         }
                         Err(e) => {
@@ -197,6 +233,9 @@ impl ABTestRunner {
 
         let actual_duration = start_time.elapsed().as_secs_f64();
         let latencies_vec = latencies.lock().await.clone();
+        let persistence_entropies_vec = persistence_entropies.lock().await.clone();
+        let spectral_gaps_vec = spectral_gaps.lock().await.clone();
+        let quality_scores_vec = quality_scores.lock().await.clone();
         let requests = request_count.load(Ordering::Relaxed);
         let errors = error_count.load(Ordering::Relaxed);
 
@@ -228,13 +267,93 @@ impl ABTestRunner {
             0.0
         };
 
+        // Compute topology metrics
+        let persistence_entropy_mean = if !persistence_entropies_vec.is_empty() {
+            Some(persistence_entropies_vec.iter().sum::<f64>() / persistence_entropies_vec.len() as f64)
+        } else {
+            None
+        };
+        
+        let persistence_entropy_std = if persistence_entropies_vec.len() > 1 {
+            let mean = persistence_entropy_mean.unwrap_or(0.0);
+            let variance = persistence_entropies_vec.iter()
+                .map(|x| (x - mean).powi(2))
+                .sum::<f64>() / (persistence_entropies_vec.len() - 1) as f64;
+            Some(variance.sqrt())
+        } else {
+            None
+        };
+
+        let spectral_gap_mean = if !spectral_gaps_vec.is_empty() {
+            Some(spectral_gaps_vec.iter().sum::<f64>() / spectral_gaps_vec.len() as f64)
+        } else {
+            None
+        };
+
+        let quality_score_mean = if !quality_scores_vec.is_empty() {
+            Some(quality_scores_vec.iter().sum::<f64>() / quality_scores_vec.len() as f64)
+        } else {
+            None
+        };
+
+        let quality_score_std = if quality_scores_vec.len() > 1 {
+            let mean = quality_score_mean.unwrap_or(0.0);
+            let variance = quality_scores_vec.iter()
+                .map(|x| (x - mean).powi(2))
+                .sum::<f64>() / (quality_scores_vec.len() - 1) as f64;
+            Some(variance.sqrt())
+        } else {
+            None
+        };
+
+        // Try to get β_meta from Prometheus metrics endpoint
+        let (beta_meta_current_mean, beta_meta_peak_mean) = self.fetch_beta_meta_from_metrics().await.unwrap_or((None, None));
+
         Ok(TestMetrics {
             latency: latency_stats,
             throughput,
-            quality_score: None, // Would need quality metrics
+            quality_score: quality_score_mean,
             error_rate,
             request_count: requests,
+            topology_metrics: TopologyMetrics {
+                persistence_entropy_mean,
+                persistence_entropy_std,
+                beta_meta_current_mean,
+                beta_meta_peak_mean,
+                spectral_gap_mean,
+                quality_score_mean,
+                quality_score_std,
+            },
         })
+    }
+
+    /// Fetch β_meta metrics from Prometheus endpoint
+    async fn fetch_beta_meta_from_metrics(&self) -> Result<(Option<f64>, Option<f64>)> {
+        let metrics_url = std::env::var("NIODOO_METRICS_URL")
+            .unwrap_or_else(|_| "http://localhost:9090/metrics".to_string());
+        
+        match reqwest::get(&metrics_url).await {
+            Ok(response) => {
+                let text = response.text().await?;
+                let mut beta_meta_current = None;
+                let mut beta_meta_peak = None;
+                
+                for line in text.lines() {
+                    if line.starts_with("niodoo_rce_beta_meta_current") {
+                        if let Some(value) = line.split_whitespace().last().and_then(|v| v.parse::<f64>().ok()) {
+                            beta_meta_current = Some(value);
+                        }
+                    } else if line.starts_with("niodoo_rce_beta_meta_peak") {
+                        if let Some(value) = line.split_whitespace().last().and_then(|v| v.parse::<f64>().ok()) {
+                            beta_meta_peak = Some(value);
+                        }
+                    }
+                }
+                
+                Ok((beta_meta_current, beta_meta_peak))
+            }
+            Err(_) => Ok((None, None)), // Metrics endpoint not available, continue without β_meta
+        }
     }
 
     /// Compare baseline vs treatment metrics
@@ -266,6 +385,55 @@ impl ABTestRunner {
                 .min(100.0).max(-100.0)
         } else {
             0.0
+        };
+
+        // Quality comparison
+        let quality_diff_pct = if let (Some(baseline_q), Some(treatment_q)) = 
+            (baseline.topology_metrics.quality_score_mean, treatment.topology_metrics.quality_score_mean) {
+            if baseline_q > 0.0 {
+                Some(((treatment_q - baseline_q) / baseline_q * 100.0).min(100.0).max(-100.0))
+            } else {
+                None
+            }
+        } else if let (Some(baseline_q), Some(treatment_q)) = (baseline.quality_score, treatment.quality_score) {
+            if baseline_q > 0.0 {
+                Some(((treatment_q - baseline_q) / baseline_q * 100.0).min(100.0).max(-100.0))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        // Topology metrics comparison
+        let persistence_entropy_diff = if let (Some(baseline_pe), Some(treatment_pe)) = 
+            (baseline.topology_metrics.persistence_entropy_mean, treatment.topology_metrics.persistence_entropy_mean) {
+            Some(treatment_pe - baseline_pe)
+        } else {
+            None
+        };
+        
+        let beta_meta_diff = if let (Some(baseline_bm), Some(treatment_bm)) = 
+            (baseline.topology_metrics.beta_meta_current_mean, treatment.topology_metrics.beta_meta_current_mean) {
+            Some(treatment_bm - baseline_bm)
+        } else {
+            None
+        };
+
+        // Determine topology impact
+        let topology_impact = if let (Some(pe_diff), Some(q_diff)) = (persistence_entropy_diff, quality_diff_pct) {
+            // If topology-enabled has higher persistence entropy AND higher quality, topology helps
+            if pe_diff > 0.0 && q_diff > 0.0 {
+                Some("positive".to_string())
+            } else if pe_diff < 0.0 && q_diff < 0.0 {
+                Some("negative".to_string())
+            } else if pe_diff.abs() < 0.01 && q_diff.abs() < 1.0 {
+                Some("neutral".to_string())
+            } else {
+                Some("inconclusive".to_string())
+            }
+        } else {
+            None
         };
 
         // Statistical tests
@@ -321,7 +489,7 @@ impl ABTestRunner {
             latency_difference_ms: latency_diff,
             latency_difference_pct: latency_diff_pct,
             throughput_difference_pct: throughput_diff_pct,
-            quality_difference_pct: None,
+            quality_difference_pct: quality_diff_pct,
             error_rate_difference_pct: error_rate_diff_pct,
             cohens_d_latency,
             cohens_d_throughput,
@@ -332,6 +500,9 @@ impl ABTestRunner {
             effect_size_latency,
             effect_size_throughput,
             winner_metrics,
+            persistence_entropy_difference: persistence_entropy_diff,
+            beta_meta_difference: beta_meta_diff,
+            topology_impact,
         }
     }
 
@@ -402,6 +573,33 @@ async fn main() -> Result<()> {
         args.significance_threshold,
     );
 
+    // Log results before moving comparison
+    info!("✅ A/B test results:");
+    info!("   Winner: {}", winner);
+    info!("   Statistically Significant: {}", is_significant);
+    info!("   Latency Difference: {:.2}ms ({:.1}%)", comparison.latency_difference_ms, comparison.latency_difference_pct);
+    info!("   Throughput Difference: {:.1}%", comparison.throughput_difference_pct);
+    if let Some(q_diff) = comparison.quality_difference_pct {
+        info!("   Quality Difference: {:.1}%", q_diff);
+    }
+    if let Some(pe_diff) = comparison.persistence_entropy_difference {
+        info!("   Persistence Entropy Difference: {:.4}", pe_diff);
+    }
+    if let Some(bm_diff) = comparison.beta_meta_difference {
+        info!("   β_meta Difference: {:.4}", bm_diff);
+    }
+    if let Some(ref impact) = comparison.topology_impact {
+        info!("   Topology Impact: {}", impact);
+    }
+    info!("   P-value (Latency): {:.4}", comparison.p_value_latency);
+    info!("   P-value (Throughput): {:.4}", comparison.p_value_throughput);
+    info!("   Cohen's d (Latency): {:.2} ({})", comparison.cohens_d_latency, comparison.effect_size_latency);
+    info!("   Cohen's d (Throughput): {:.2} ({})", comparison.cohens_d_throughput, comparison.effect_size_throughput);
+
+    if !comparison.winner_metrics.is_empty() {
+        info!("   Winning Metrics: {}", comparison.winner_metrics.join(", "));
+    }
+
     let result = ABTestResult {
         baseline_name: args.baseline_name.clone(),
         treatment_name: args.treatment_name.clone(),
@@ -420,21 +618,12 @@ async fn main() -> Result<()> {
     std::fs::write(&output_file, json)?;
 
     info!("✅ A/B test results saved to: {}", output_file.display());
-    info!("📊 Results:");
-    info!("   Winner: {}", winner);
-    info!("   Statistically Significant: {}", is_significant);
-    info!("   Latency Difference: {:.2}ms ({:.1}%)", comparison.latency_difference_ms, comparison.latency_difference_pct);
-    info!("   Throughput Difference: {:.1}%", comparison.throughput_difference_pct);
-    info!("   P-value (Latency): {:.4}", comparison.p_value_latency);
-    info!("   P-value (Throughput): {:.4}", comparison.p_value_throughput);
-    info!("   Cohen's d (Latency): {:.2} ({})", comparison.cohens_d_latency, comparison.effect_size_latency);
-    info!("   Cohen's d (Throughput): {:.2} ({})", comparison.cohens_d_throughput, comparison.effect_size_throughput);
-
-    if !comparison.winner_metrics.is_empty() {
-        info!("   Winning Metrics: {}", comparison.winner_metrics.join(", "));
-    }
 
     Ok(())
 }
+
+
+
+
 
 

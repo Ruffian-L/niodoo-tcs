@@ -1,0 +1,12 @@
+{
+  "TOPOLOGY_MODE": "hybrid",
+  "RCE_ENABLED": "1",
+  "N_TOKENS_BYPASS": "0",
+  "ENABLE_CURATOR": "1",
+  "TCS_ENABLE_GPU": "1",
+  "USE_GPU_FITNESS": "1",
+  "RCE_SHADOW_MODE": "false",
+  "RCE_ACTIONS_ENABLED": "false",
+  "RCE_CONSENSUS_ENABLED": "false"
+}
+

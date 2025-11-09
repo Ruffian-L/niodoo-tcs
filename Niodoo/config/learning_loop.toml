@@ -1,0 +1,30 @@
+# QLoRA learning loop configuration for System 2
+
+[learning_loop]
+base_model = "ibm-granite/granite-3b-code-instruct"
+adapter_path = "models/system2_adapters"
+buffer_path = "storage/system2_learning_buffer.jsonl"
+log_path = "logs/learning_loop.log"
+generation_endpoint = "http://127.0.0.1:8000/v1/completions"
+trigger_threshold = 20
+quality_threshold = 6
+max_seq_length = 2048
+train_epochs = 3
+learning_rate = 0.0001
+train_batch_size = 1
+gradient_accumulation = 16
+warmup_steps = 25
+lora_r = 16
+lora_alpha = 16
+lora_dropout = 0.05
+target_modules = [
+  "q_proj",
+  "k_proj",
+  "v_proj",
+  "o_proj",
+  "gate_proj",
+  "up_proj",
+  "down_proj",
+]
+
+

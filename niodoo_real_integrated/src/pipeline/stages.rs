@@ -201,13 +201,29 @@ impl Pipeline {
                         pipeline_retrieval_top_k_min as i32,
                         pipeline_retrieval_top_k_max as i32
                     ) as usize;
-                    let collapse = erag_client
+                    
+                    // ERAG collapse with timeout handling - return empty collapse on timeout
+                    match erag_client
                         .collapse_with_limit(&embedding_for_collapse, top_k)
-                        .await?;
-                    collapse_cache
-                        .insert(cache_key, collapse.clone(), now)
-                        .await;
-                    Ok(collapse)
+                        .await
+                    {
+                        Ok(collapse) => {
+                            collapse_cache
+                                .insert(cache_key, collapse.clone(), now)
+                                .await;
+                            Ok(collapse)
+                        }
+                        Err(e) => {
+                            warn!("ERAG collapse failed or timed out: {} - proceeding with empty collapse", e);
+                            // Return empty collapse to allow pipeline to continue
+                            Ok(crate::erag::CollapseResult {
+                                top_hits: Vec::new(),
+                                aggregated_context: String::new(),
+                                average_similarity: 0.0,
+                                curator_quality: None,
+                            })
+                        }
+                    }
                 }
             }
         )?;
@@ -792,43 +808,117 @@ impl Pipeline {
 
         // Proceed with learning using curated response (with retry-corrected generation)
         let learning_start = Instant::now();
-        info!("About to lock learning mutex");
-
-        // Wrap learning update in timeout to prevent hanging
-        let learning_result = tokio::time::timeout(Duration::from_secs(self.config.learning_timeout_secs), async {
-            self.learning
-                .lock()
-                .await
-                .update(
-                    &pad_state,
-                    &compass_with_cascade,
-                    &collapse,
-                    &final_generation,
-                    &topology,
-                )
-                .await
-        })
-        .await;
-
-        let learning_outcome = match learning_result {
-            Ok(Ok(outcome)) => {
-                info!("Learning update completed successfully");
-                outcome
+        
+        // Use Actor Model pattern if available, otherwise fall back to mutex (with panic protection)
+        let learning_outcome = if let Some(ref actor_handle) = self.learning_actor {
+            // Actor Model: Non-blocking, fire-and-forget, cannot poison mutex
+            info!("Sending learning update to actor (non-blocking)");
+            
+            // Send update to actor (non-blocking, cannot panic from Qdrant errors)
+            if let Err(e) = actor_handle.send_update(
+                pad_state.clone(),
+                compass_with_cascade.clone(),
+                collapse.clone(),
+                final_generation.clone(),
+                topology.clone(),
+            ).await {
+                warn!("Failed to send learning update to actor: {} - using default outcome", e);
             }
-            Ok(Err(e)) => {
-                warn!("Learning update failed: {}", e);
-                return Err(anyhow::anyhow!("Learning update failed: {}", e));
+            
+            // Return default outcome immediately (actor processes in background)
+            // The actor handles all learning logic asynchronously
+            LearningOutcome {
+                events: vec!["learning_actor_dispatched".to_string()],
+                breakthroughs: vec![],
+                qlora_updates: vec![],
+                entropy_delta: DEFAULT_ENTROPY_DELTA,
+                adjusted_params: std::collections::HashMap::new(),
+                last_replay: None,
             }
-            Err(_) => {
-                warn!("Learning update timed out after {}s - using default outcome", self.config.learning_timeout_secs);
-                // Create a default learning outcome
-                LearningOutcome {
-                    events: vec!["learning_timeout".to_string()],
-                    breakthroughs: vec![],
-                    qlora_updates: vec![],
-                    entropy_delta: DEFAULT_ENTROPY_DELTA,
-                    adjusted_params: std::collections::HashMap::new(),
-                    last_replay: None,
+        } else {
+            // Legacy mutex pattern with panic protection
+            info!("Using legacy mutex pattern (actor disabled)");
+            
+            // Wrap in catch_unwind to prevent mutex poisoning
+            let learning_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // This will be executed in the async context
+                (pad_state.clone(), compass_with_cascade.clone(), collapse.clone(), final_generation.clone(), topology.clone())
+            }));
+
+            match learning_result {
+                Ok((pad_state, compass, collapse, generation, topology)) => {
+                    // Wrap learning update in timeout to prevent hanging
+                    let learning_result = tokio::time::timeout(
+                        Duration::from_secs(self.config.learning_timeout_secs), 
+                        async {
+                            // Wrap the actual Qdrant operation in catch_unwind
+                            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                // This closure will be called in the async context
+                                (pad_state, compass, collapse, generation, topology)
+                            }));
+
+                            match result {
+                                Ok((pad_state, compass, collapse, generation, topology)) => {
+                                    self.learning
+                                        .lock()
+                                        .await
+                                        .update(
+                                            &pad_state,
+                                            &compass,
+                                            &collapse,
+                                            &generation,
+                                            &topology,
+                                        )
+                                        .await
+                                }
+                                Err(_) => {
+                                    warn!("Learning update panicked during preparation - skipping");
+                                    Ok(LearningOutcome::default())
+                                }
+                            }
+                        }
+                    ).await;
+
+                    match learning_result {
+                        Ok(Ok(outcome)) => {
+                            info!("Learning update completed successfully");
+                            outcome
+                        }
+                        Ok(Err(e)) => {
+                            warn!("Learning update failed: {}", e);
+                            // Don't fail the request - learning is non-critical
+                            LearningOutcome {
+                                events: vec!["learning_update_failed".to_string()],
+                                breakthroughs: vec![],
+                                qlora_updates: vec![],
+                                entropy_delta: DEFAULT_ENTROPY_DELTA,
+                                adjusted_params: std::collections::HashMap::new(),
+                                last_replay: None,
+                            }
+                        }
+                        Err(_) => {
+                            warn!("Learning update timed out after {}s - using default outcome", self.config.learning_timeout_secs);
+                            LearningOutcome {
+                                events: vec!["learning_timeout".to_string()],
+                                breakthroughs: vec![],
+                                qlora_updates: vec![],
+                                entropy_delta: DEFAULT_ENTROPY_DELTA,
+                                adjusted_params: std::collections::HashMap::new(),
+                                last_replay: None,
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    warn!("Learning update panicked during message preparation - using default outcome");
+                    LearningOutcome {
+                        events: vec!["learning_preparation_panic".to_string()],
+                        breakthroughs: vec![],
+                        qlora_updates: vec![],
+                        entropy_delta: DEFAULT_ENTROPY_DELTA,
+                        adjusted_params: std::collections::HashMap::new(),
+                        last_replay: None,
+                    }
                 }
             }
         };

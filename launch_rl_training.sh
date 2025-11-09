@@ -46,7 +46,7 @@ echo ""
 echo "🐍 Starting Python PPO training..."
 cd /workspace/Niodoo-Final/niodoo-ai
 
-python3 -c "from niodoo_ai.rl_training import CodeGenerationPPOTrainer; trainer = CodeGenerationPPOTrainer('Qwen/Qwen2.5-Coder-7B-Instruct', problem_file='data/rl_training_problems.jsonl'); trainer.train(num_epochs=10, problems_per_epoch=5)"
+python3 -c "from niodoo_ai.rl_training import CodeGenerationPPOTrainer; trainer = CodeGenerationPPOTrainer('Qwen/Qwen3-Coder', problem_file='data/rl_training_problems.jsonl'); trainer.train(num_epochs=10, problems_per_epoch=5)"
 
 echo ""
 echo "✅ Training complete!"

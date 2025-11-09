@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
@@ -30,7 +30,9 @@ pub struct QwenStatefulEmbedder {
 
 impl QwenStatefulEmbedder {
     pub fn new(model_path: impl AsRef<Path>, expected_dim: usize) -> Result<Self> {
-        let model_path = model_path.as_ref();
+        // Try QWEN_MODEL_PATH env var first, fallback to passed path
+        let env_path = std::env::var("QWEN_MODEL_PATH").ok().map(PathBuf::from);
+        let model_path = env_path.as_deref().unwrap_or_else(|| model_path.as_ref());
         
         // Check if MOCK_MODE is enabled (for testing)
         let mock_mode = std::env::var("MOCK_MODE")

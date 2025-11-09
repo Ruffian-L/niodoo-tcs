@@ -1,0 +1,85 @@
+====================================================================================================
+COMPREHENSIVE END-TO-END TEST REPORT
+====================================================================================================
+
+Timestamp: 2025-11-08T09:24:27.731542Z
+Duration: 25.9 seconds
+
+METRICS:
+----------------------------------------------------------------------------------------------------
+Total Tests: 17
+Successful: 0
+Failed: 17
+Success Rate: 0.0%
+Avg Latency: 522.7ms
+P50 Latency: 527.3ms
+P95 Latency: 0.0ms
+P99 Latency: 0.0ms
+Topology Detections: 0
+Compass States: 0
+Learning Events: 0
+Errors: 33
+
+ERRORS:
+----------------------------------------------------------------------------------------------------
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (28985) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29015) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29032) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29070) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29109) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29139) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29165) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29212) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29237) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  - Pipeline exited with code -6
+  - Stderr: 
+thread '<unnamed>' (29260) panicked at /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ort-1.16.3/src/lib.rs:79:83:
+could not load the library at `libonnxruntime.so`: DlOpen { desc: "libonnxruntime.so: cannot open shared object file: No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+

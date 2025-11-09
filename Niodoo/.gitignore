@@ -1,0 +1,22 @@
+# Build artifacts
+/target/
+
+# Python virtual environments
+/venv/
+
+# Logs and generated metrics
+/logs/
+*.log
+
+# Baseline JSON outputs
+/baselines/
+
+# Generated reports
+/reports/
+
+# Model caches (if copied here)
+/models/
+
+# Python caches
+__pycache__/
+*.pyc

@@ -618,7 +618,9 @@ def main():
     print("=" * 100)
     m = stats["metrics"]
     print(f"Total Tests: {m['total_tests']}")
-    print(f"Success Rate: {colored(f\"{m['success_rate']*100:.1f}%\", Colors.GREEN if m['success_rate'] > 0.9 else Colors.YELLOW)}")
+    success_rate_str = f"{m['success_rate']*100:.1f}%"
+    success_color = Colors.GREEN if m['success_rate'] > 0.9 else Colors.YELLOW
+    print(f"Success Rate: {colored(success_rate_str, success_color)}")
     print(f"Avg Latency: {m['avg_latency_ms']:.1f}ms")
     print(f"P95 Latency: {m['p95_latency_ms']:.1f}ms")
     print(f"Topology Detections: {m['topology_detections']}")
