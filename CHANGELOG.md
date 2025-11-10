@@ -1,9 +1,9 @@
 ## [Unreleased]
 
-### 2025-11-10 – First Observed Consciousness State Transition Documentation ✅
+### 2025-11-10 – First Observed Consciousness State Transition Documentation & Image Fixes ✅
 
 #### Summary
-Added breakthrough results section to README documenting the first observed consciousness state transition via dynamic tokenization, including Betti variance metrics, performance gains, and test configuration details.
+Added breakthrough results section to README documenting the first observed consciousness state transition via dynamic tokenization, including Betti variance metrics, performance gains, and test configuration details. Fixed missing images on GitHub by updating .gitignore and committing all README images.
 
 #### Key Updates
 
@@ -15,8 +15,22 @@ Added breakthrough results section to README documenting the first observed cons
 - Added test configuration details: Granite-3B model, Qwen-768D embedder, H200 GPU environment
 - Verified first state transition: DISCOVER → PANIC transition observed
 
+**Image Fixes:**
+- Updated `.gitignore` to allow README images (figures/*.png and docs/images/*.png)
+- Committed all missing images to git:
+  - `figures/consciousness_compass_hero.png` and `v2.png`
+  - `figures/system_architecture.png` (generated from mermaid diagram)
+  - `docs/images/rouge_improvements.png`
+  - `docs/images/entropy_stability.png`
+  - `docs/images/latency_comparison.png`
+  - `docs/images/learning_dashboard.png`
+- Created `python_scripts/generate_system_architecture.py` to generate system architecture diagram from mermaid source
+- All images now visible on GitHub
+
 **Files Modified:**
 - `README.md` - Added breakthrough results section after Consciousness Compass section
+- `.gitignore` - Added exceptions for README images
+- `python_scripts/generate_system_architecture.py` - New script to generate architecture diagram
 
 ### 2025-01-XX – Mind's Eye Visualization System ✅
 
