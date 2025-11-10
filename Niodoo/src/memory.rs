@@ -1,8 +1,10 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+use crate::experience::Experience;
 
 /// Memory layer types in the 6-layer architecture
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -40,7 +42,7 @@ impl Memory {
         Self {
             id: Uuid::new_v4().to_string(),
             content,
-            layer,
+            layer: layer.clone(),
             emotional_weight: 0.5,
             stability: match layer {
                 MemoryLayer::CoreBurned => 0.99,
@@ -101,6 +103,102 @@ impl MemorySystem {
 impl Default for MemorySystem {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ExperienceStore implementation (simplified HTTP REST version for lab, based on legacy EragClient patterns)
+
+/// Experience store configuration
+#[derive(Debug, Deserialize)]
+pub struct ExperienceStoreConfig {
+    pub qdrant_url: String,
+    pub collection: String,
+    pub vector_size: usize,
+}
+
+impl ExperienceStoreConfig {
+    pub fn from_file(path: &str) -> Result<Self> {
+        let content = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read experience store config from {}", path))?;
+        let config: ExperienceStoreConfig = toml::from_str(&content)
+            .with_context(|| format!("failed to parse experience store config from {}", path))?;
+        Ok(config)
+    }
+}
+
+/// Experience store backed by Qdrant
+pub struct ExperienceStore {
+    config: ExperienceStoreConfig,
+    http_client: reqwest::Client,
+}
+
+impl ExperienceStore {
+    /// Initialize experience store from config file
+    pub async fn initialise(config_path: &str) -> Result<Self> {
+        let config = ExperienceStoreConfig::from_file(config_path)?;
+        let http_client = reqwest::Client::new();
+
+        Ok(Self {
+            config,
+            http_client,
+        })
+    }
+
+    /// Get vector size for this store
+    pub fn vector_size(&self) -> usize {
+        self.config.vector_size
+    }
+
+    /// Upsert experience with embedding into Qdrant
+    pub async fn upsert(&self, experience: &Experience, embedding: &[f32]) -> Result<()> {
+        let upsert_url = format!(
+            "{}/collections/{}/points",
+            self.config.qdrant_url,
+            self.config.collection
+        );
+
+        // Convert f32 embedding to f64 for Qdrant
+        let embedding_f64: Vec<f64> = embedding.iter().map(|&x| x as f64).collect();
+
+        // Build payload
+        let payload: Value = json!({
+            "input": experience.input,
+            "output": experience.output,
+            "context": experience.context,
+            "task_type": experience.task_type,
+            "success_score": experience.success_score,
+            "rouge_l": experience.rouge_l,
+            "feedback": experience.feedback,
+            "reward": experience.reward,
+            "metadata": experience.metadata,
+            "timestamp": experience.timestamp.to_rfc3339(),
+        });
+
+        let point = json!({
+            "id": experience.id.to_string(),
+            "vector": embedding_f64,
+            "payload": payload,
+        });
+
+        let request_body = json!({
+            "points": [point]
+        });
+
+        let response = self
+            .http_client
+            .put(&upsert_url)
+            .json(&request_body)
+            .send()
+            .await
+            .with_context(|| format!("failed to upsert experience to Qdrant at {}", upsert_url))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Qdrant upsert failed with status {}: {}", status, text);
+        }
+
+        Ok(())
     }
 }
 

@@ -1,0 +1,29 @@
+[rut_gauntlet]
+# NIODOO Rut Gauntlet Configuration
+default_entropy_high = 2.0
+default_variance_spike = 0.5
+default_similarity_threshold = 0.8
+default_mcts_c = 1.4
+default_mirage_sigma = 0.1
+entropy_stability_threshold = 0.3
+emotional_activation_min_percent = 20.0
+latency_max_ms = 500.0
+breakthroughs_min_percent = 60.0
+
+[qdrant]
+url = "http://localhost:6333"
+collection_name = "niodoo_embeddings"
+vector_size = 768
+
+[apis]
+# Real API endpoints
+openai_api_key = ""  # Set this for real GPT-4 calls
+anthropic_api_key = ""  # Set this for real Claude calls
+wolfram_app_id = ""  # Set this for real Wolfram calls
+use_mock_apis = true  # Set to false for real API calls
+
+[vllm]
+endpoint = "http://localhost:8000/v1/completions"
+model = "Qwen/Qwen2.5-32B-Instruct-AWQ"
+max_tokens = 512
+temperature = 0.7

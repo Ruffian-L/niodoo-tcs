@@ -1,0 +1,34 @@
+# Qdrant Configuration for RunPod Stateful Pod
+# Storage paths point to Network Volume (/data) for persistence
+
+service:
+  api_key_file: /run/secrets/qdrant_api_key
+  http_port: 6333
+  grpc_port: 6334
+  master_key: null
+  enable_tls: false
+  enable_cors: true
+  max_request_size_mb: 32
+  max_workers: 0  # Auto-detect
+
+storage:
+  storage_path: /data/qdrant_storage
+  snapshots_path: /data/qdrant_snapshots
+  wal_path: /data/qdrant_storage/wal
+  on_disk_payload: true
+  create_default_collection: false
+  performance:
+    max_search_threads: 0  # Auto-detect
+    max_optimization_threads: 1
+
+cluster:
+  enabled: false
+
+log:
+  level: INFO
+  file: /app/logs/qdrant.log
+
+
+
+
+

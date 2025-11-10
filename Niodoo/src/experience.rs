@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 /// Experience tuple for learning/replay buffers and curator/executor integration
@@ -10,12 +11,15 @@ pub struct Experience {
     pub timestamp: DateTime<Utc>,
     pub input: String,
     pub output: String,
-    pub context: Vec<String>,
+    pub context: String, // Changed from Vec<String> to String for compatibility
     pub task_type: String,
-    pub success_score: f32,
+    pub success_score: Option<i32>, // Changed to Option<i32> to match curator output
+    pub rouge_l: f32, // Added for curator scoring
+    pub feedback: String, // Added for curator feedback
+    pub reward: f64,
+    pub metadata: Option<Value>, // Added for topology/PAD/compass metadata
     pub state: Vec<f32>,
     pub action: usize,
-    pub reward: f64,
     pub next_state: Vec<f32>,
     pub done: bool,
     pub embedding: Option<Vec<f32>>,
@@ -26,9 +30,13 @@ impl Experience {
     pub fn new(
         input: String,
         output: String,
-        context: Vec<String>,
+        context: String,
         task_type: String,
-        success_score: f32,
+        success_score: Option<i32>,
+        rouge_l: f32,
+        feedback: String,
+        reward: f64,
+        metadata: Option<Value>,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -38,9 +46,12 @@ impl Experience {
             context,
             task_type,
             success_score,
+            rouge_l,
+            feedback,
+            reward,
+            metadata,
             state: Vec::new(),
             action: 0,
-            reward: 0.0,
             next_state: Vec::new(),
             done: false,
             embedding: None,
@@ -61,7 +72,7 @@ impl Experience {
     }
 
     /// Update success score
-    pub fn with_success_score(mut self, score: f32) -> Self {
+    pub fn with_success_score(mut self, score: Option<i32>) -> Self {
         self.success_score = score;
         self
     }

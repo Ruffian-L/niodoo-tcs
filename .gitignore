@@ -191,3 +191,18 @@ docs/validation/
 1{ok+=}
 
 .cargo-tmp/
+
+# Third-party binaries and archives (too large for git)
+third_party/ollama/
+third_party/qdrant/*.tar.gz
+third_party/onnxruntime*.tgz
+*.tar.gz
+!docs/*.tar.gz
+
+# Python pip unpack directories (temporary build artifacts)
+tmp/pip-unpack-*/
+tmp/pip-metadata-*/
+tmp/tmp*
+
+# Large wheel files
+*.whl

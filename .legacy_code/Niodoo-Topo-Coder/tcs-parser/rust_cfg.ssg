@@ -1,0 +1,176 @@
+; rust_cfg.ssg - Control Flow Graph extraction for Rust
+; 
+; This DSL file defines how to convert tree-sitter AST nodes into graph edges
+; for topological analysis. It captures control flow relationships:
+; - Function definitions (nodes)
+; - Function calls (edges: caller -> callee)
+; - Conditional branches (edges: if/match -> branches)
+; - Loop constructs (edges: loop -> body, creating cycles)
+;
+; NO HARD CODING. Real CFG extraction for NIODOO-CODE.
+
+global graph
+
+; =============================================================================
+; FUNCTION DEFINITIONS - Create nodes for each function
+; =============================================================================
+
+(function_item
+  name: (identifier) @fn_name
+) {
+  node fn_node
+  attr (fn_node) type = "function"
+  attr (fn_node) name = (source-text @fn_name)
+  edge graph -> fn_node
+}
+
+; =============================================================================
+; FUNCTION CALLS - Create edges from caller to callee
+; =============================================================================
+
+(call_expression
+  function: [
+    (identifier) @callee_name
+    (field_expression
+      field: (field_identifier) @callee_name)
+    (scoped_identifier
+      name: (identifier) @callee_name)
+  ]
+) {
+  node call_node
+  attr (call_node) type = "call"
+  attr (call_node) target = (source-text @callee_name)
+  edge graph -> call_node
+}
+
+; =============================================================================
+; CONDITIONAL BRANCHES - If expressions create branching paths
+; =============================================================================
+
+(if_expression
+  condition: (_) @condition
+  consequence: (block) @then_branch
+  alternative: [(block) (if_expression)] @else_branch?
+) {
+  node if_node
+  attr (if_node) type = "if"
+  
+  node then_node
+  attr (then_node) type = "then_branch"
+  
+  node else_node
+  attr (else_node) type = "else_branch"
+  
+  edge if_node -> then_node
+  edge if_node -> else_node
+  edge graph -> if_node
+}
+
+; =============================================================================
+; MATCH EXPRESSIONS - Pattern matching creates multiple branches
+; =============================================================================
+
+(match_expression
+  value: (_) @match_value
+  body: (match_block
+    (match_arm) @arm)*
+) {
+  node match_node
+  attr (match_node) type = "match"
+  edge graph -> match_node
+}
+
+(match_arm
+  pattern: (_) @pattern
+) {
+  node arm_node
+  attr (arm_node) type = "match_arm"
+  attr (arm_node) pattern = (source-text @pattern)
+  edge graph -> arm_node
+}
+
+; =============================================================================
+; LOOPS - Create cyclic edges (important for homology!)
+; =============================================================================
+
+(loop_expression
+  body: (block) @loop_body
+) {
+  node loop_node
+  attr (loop_node) type = "loop"
+  
+  node body_node
+  attr (body_node) type = "loop_body"
+  
+  ; Create cycle: loop -> body -> loop (β₁ detection!)
+  edge loop_node -> body_node
+  edge body_node -> loop_node
+  edge graph -> loop_node
+}
+
+(while_expression
+  condition: (_) @condition
+  body: (block) @while_body
+) {
+  node while_node
+  attr (while_node) type = "while"
+  
+  node body_node
+  attr (body_node) type = "while_body"
+  
+  edge while_node -> body_node
+  edge body_node -> while_node
+  edge graph -> while_node
+}
+
+(for_expression
+  pattern: (_) @pattern
+  value: (_) @iterable
+  body: (block) @for_body
+) {
+  node for_node
+  attr (for_node) type = "for"
+  
+  node body_node
+  attr (body_node) type = "for_body"
+  
+  edge for_node -> body_node
+  edge body_node -> for_node
+  edge graph -> for_node
+}
+
+; =============================================================================
+; VARIABLE DEPENDENCIES - Track data flow
+; =============================================================================
+
+(let_declaration
+  pattern: (identifier) @var_name
+  value: (_)? @var_value
+) {
+  node var_node
+  attr (var_node) type = "variable"
+  attr (var_node) name = (source-text @var_name)
+  edge graph -> var_node
+}
+
+; =============================================================================
+; STRUCT/ENUM DEFINITIONS - Module-level topology
+; =============================================================================
+
+(struct_item
+  name: (type_identifier) @struct_name
+) {
+  node struct_node
+  attr (struct_node) type = "struct"
+  attr (struct_node) name = (source-text @struct_name)
+  edge graph -> struct_node
+}
+
+(enum_item
+  name: (type_identifier) @enum_name
+) {
+  node enum_node
+  attr (enum_node) type = "enum"
+  attr (enum_node) name = (source-text @enum_name)
+  edge graph -> enum_node
+}

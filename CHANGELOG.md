@@ -1,5 +1,97 @@
 ## [Unreleased]
 
+### 2025-11-10 – vLLM Multi-Model Setup with Granite and Topological Qwen Curator on Port 8000 ✅
+
+#### Summary
+Set up vLLM serving infrastructure on port 8000 with both Granite and Topological Qwen Curator models accessible through a unified proxy endpoint. Qdrant vector database is running and ready.
+
+#### Services Configured
+
+##### Qdrant Vector Database
+- **Port**: 6333
+- **Status**: Running and healthy
+- **Storage**: `/workspace/Niodoo-Final/qdrant_storage`
+- **Configuration**: Auto-generated config file with proper storage paths
+- **Health Check**: `/health` endpoint responding
+
+##### vLLM Multi-Model Setup
+- **Public Endpoint**: Port 8000 (proxy/router)
+- **Granite Model**: 
+  - Internal port: 8002
+  - Model path: `/workspace/.cache/huggingface/hub/models--ibm-granite--granite-3b-code-instruct/snapshots/7bac3cddc929b4a80e1e3136a5db7a3f21ac431e`
+  - GPU memory utilization: 0.3
+  - Max model length: 2048 (matches model's max_position_embeddings)
+  - Status: Running and responding
+
+- **Topological Qwen Curator Model**:
+  - Internal port: 8003
+  - Model path: `/workspace/Niodoo-AI/outputs/qwen25-coder-topology-20251105/merged`
+  - GPU memory utilization: 0.3
+  - Max model length: 4096
+  - Status: Starting (may take several minutes to load)
+
+##### vLLM Proxy Router
+- **Port**: 8000 (public-facing)
+- **Function**: Routes requests to appropriate vLLM instance based on model name
+- **Features**:
+  - Model name-based routing (granite → port 8002, qwen/curator → port 8003)
+  - Unified `/v1/models` endpoint listing both models
+  - Automatic request forwarding with proper headers
+  - Error handling and logging
+
+#### Files Created
+
+1. **`scripts/start_services_8000.sh`**
+   - Comprehensive startup script for all services
+   - Verifies model paths exist before starting
+   - Starts Qdrant, both vLLM instances, and proxy
+   - Health checks and status reporting
+   - Handles existing services gracefully
+
+2. **`scripts/vllm_proxy.py`**
+   - Python HTTP proxy server for multi-model routing
+   - Routes based on model name in request JSON
+   - Aggregates model lists from both vLLM instances
+   - Proper error handling and logging
+
+3. **`scripts/smoke_test_services.sh`**
+   - Comprehensive smoke test script
+   - Tests Qdrant health and collections
+   - Tests vLLM proxy and both model endpoints
+   - Tests direct vLLM instances
+   - Provides clear status output
+
+#### Configuration Fixes
+
+- **GPU Memory**: Reduced utilization to 0.3 for each model to allow both to run simultaneously
+- **Model Length**: Set Granite max_model_len to 2048 to match model's actual max_position_embeddings
+- **Environment**: Set `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` for Granite model compatibility
+- **Ports**: Configured non-conflicting ports (8000 proxy, 8002 granite, 8003 curator)
+
+#### Usage
+
+```bash
+# Start all services
+bash /workspace/Niodoo-Final/scripts/start_services_8000.sh
+
+# Smoke test services
+bash /workspace/Niodoo-Final/scripts/smoke_test_services.sh
+
+# Access models via proxy
+curl http://127.0.0.1:8000/v1/models
+curl -X POST http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "granite", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+#### Status
+- ✅ Qdrant running on port 6333
+- ✅ vLLM Granite running on port 8002
+- ✅ vLLM Proxy running on port 8000
+- ⏳ vLLM Curator loading (may take 5-10 minutes)
+- ✅ Smoke test script created and tested
+- ✅ All scripts executable and documented
+
 ### 2025-01-XX – Replaced All unimplemented! and Placeholder Code with Real Implementations ✅
 
 #### Summary
