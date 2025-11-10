@@ -1,5 +1,160 @@
 ## [Unreleased]
 
+### 2025-01-XX – Separate Training Service Architecture (Option 3) ✅
+
+#### Summary
+Implemented a production-grade separate training service that decouples QLoRA training from the test loop, enabling non-blocking training requests and parallel execution. The service runs independently, matches the distributed consciousness architecture (40-thread model), and provides versioned adapter storage with hot-swap capability.
+
+#### Architecture Components
+
+**Training Service Module (`niodoo_real_integrated/src/training_service/`):**
+- `job_queue.rs` - File-based job queue with JSON serialization and atomic operations
+- `adapter_storage.rs` - Versioned adapter storage with timestamp-based versioning
+- `worker.rs` - Training worker that polls queue and processes jobs using LoRATrainer
+- `server.rs` - HTTP server using axum with REST endpoints
+- `client.rs` - Client for submitting jobs and checking status
+- `mod.rs` - Module exports
+
+**Service Endpoints:**
+- `POST /training/jobs` - Submit training job (non-blocking)
+- `GET /training/jobs/{job_id}` - Check job status
+- `GET /training/adapters` - List available adapter versions
+- `GET /training/adapters/latest` - Get latest adapter path
+- `GET /health` - Health check
+- `GET /metrics` - Prometheus metrics
+
+**Service Binary:**
+- `training_service.rs` - Standalone service binary with graceful shutdown
+
+#### Configuration
+
+**New Config Fields (`RuntimeConfig`):**
+- `training_service_enabled: bool` (default: false for backward compatibility)
+- `training_service_url: String` (default: "http://localhost:8001")
+- `training_service_use_grpc: bool` (default: false, uses HTTP REST)
+- `adapter_storage_path: String` (default: "models/system2_adapters")
+- `training_queue_path: String` (default: "data/training_queue")
+
+**Environment Variables:**
+- `TRAINING_SERVICE_ENABLED` - Enable training service
+- `TRAINING_SERVICE_URL` - Service URL
+- `TRAINING_SERVICE_USE_GRPC` - Use gRPC instead of HTTP
+- `ADAPTER_STORAGE_PATH` - Adapter storage directory
+- `TRAINING_QUEUE_PATH` - Job queue directory
+
+#### Integration
+
+**Learning Loop Integration:**
+- Added `training_client` field to `LearningLoop` (optional, enabled via config)
+- Modified `queue_training_batch()` to use training service when enabled
+- Service submission is non-blocking - test loop continues immediately
+- Falls back to existing async channel or synchronous training if service disabled
+
+**Backward Compatibility:**
+- Default: `training_service_enabled = false`
+- Existing async channel training continues to work unchanged
+- No breaking changes to existing APIs
+- Service can be enabled via config/env var without code changes
+
+#### File Changes
+
+**New Files:**
+- `niodoo_real_integrated/src/training_service/mod.rs`
+- `niodoo_real_integrated/src/training_service/server.rs`
+- `niodoo_real_integrated/src/training_service/job_queue.rs`
+- `niodoo_real_integrated/src/training_service/worker.rs`
+- `niodoo_real_integrated/src/training_service/adapter_storage.rs`
+- `niodoo_real_integrated/src/training_service/client.rs`
+- `niodoo_real_integrated/src/bin/training_service.rs`
+
+**Modified Files:**
+- `niodoo_real_integrated/src/learning.rs` - Added client integration
+- `niodoo_real_integrated/src/config.rs` - Added training service config fields
+- `niodoo_real_integrated/src/lib.rs` - Exported training_service module
+- `niodoo_real_integrated/Cargo.toml` - Added training_service binary
+
+#### Usage
+
+**Start Training Service:**
+```bash
+cargo run --features svc --bin training_service -- --port 8001
+```
+
+**Enable in Test Loop:**
+```bash
+export TRAINING_SERVICE_ENABLED=true
+export TRAINING_SERVICE_URL=http://localhost:8001
+cargo run --features svc --bin niodoo_real_integrated
+```
+
+#### Impact
+- Enables parallel training execution (matches 40-thread consciousness model)
+- Test loop no longer blocks during training (15+ minute training runs)
+- Production-ready service patterns (health checks, metrics, graceful shutdown)
+- Versioned adapter storage enables hot-swap capability
+- Fully backward compatible - existing code continues to work
+
+#### Python QLoRA Integration (Pivot to Code Analysis)
+
+**Updated Training Workers:**
+- Both `niodoo_real_integrated` and `Niodoo` workers now use Python QLoRA training via `niodoo-ai/scripts/train_from_service.py`
+- Leverages battle-tested QLoRA implementation with proper 4-bit quantization (BitsAndBytes)
+- ~75% memory savings enables larger models or bigger batch sizes
+- Preserves Rust topology infrastructure while using proven Python training
+
+**Training Bridge Script:**
+- `niodoo-ai/scripts/train_from_service.py` - Bridge script for Rust → Python QLoRA
+- Converts Rust training samples to JSONL format
+- Calls `niodoo_ai.training.run_training()` with proper config
+- Handles adapter output and versioning
+
+**Hybrid Architecture:**
+```
+Rust (topology + inference) → Python (QLoRA training) → Rust (deploy adapters)
+```
+
+**Configuration:**
+- `QLORA_BASE_MODEL` - Base model path (default: Qwen/Qwen2.5-Coder-7B-Instruct)
+- `PROJECT_ROOT` - Project root for finding Python scripts
+- Training data automatically converted to JSONL format with topology features
+
+**Benefits:**
+- No need to reimplement quantization in Rust
+- Focus on code analysis pivot instead of low-level ML
+- Memory-efficient training for RTX 6000/5080 hardware
+- Parallel training streams for multi-domain capability (Emotion + Code)
+
+#### Niodoo Folder Implementation
+
+**Python-Based Training Service:**
+- Same architecture adapted for Python `learning_loop.py` integration
+- Worker spawns Python subprocess: `python3 src/learning_loop.py --config <config> train-now`
+- Endpoint `/training/jobs/python` for Python training job submission
+- Client method `submit_python_training_job()` for Python-based training
+- Compatible job queue format with niodoo_real_integrated
+
+**New Files for Niodoo:**
+- `Niodoo/src/training_service/mod.rs`
+- `Niodoo/src/training_service/server.rs` (Python job support)
+- `Niodoo/src/training_service/job_queue.rs` (shared)
+- `Niodoo/src/training_service/worker.rs` (Python subprocess wrapper)
+- `Niodoo/src/training_service/adapter_storage.rs` (shared)
+- `Niodoo/src/training_service/client.rs` (Python job support)
+- `Niodoo/src/bin/training_service.rs`
+
+**Modified Files:**
+- `Niodoo/src/lib.rs` - Exported training_service module
+- `Niodoo/Cargo.toml` - Added axum dependency and training_service binary
+
+**Usage for Niodoo:**
+```bash
+# Start training service
+cargo run --bin training_service -- --port 8001 --python-path python3 --learning-loop-script src/learning_loop.py
+
+# Submit Python training job via client
+# (Integration into system2_loop.rs can be added as needed)
+```
+
 ### 2025-01-XX – Added Project Status Disclaimer to README ✅
 
 #### Summary

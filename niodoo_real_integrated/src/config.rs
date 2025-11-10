@@ -921,6 +921,18 @@ pub struct RuntimeConfig {
     pub fp16_qlora_adapters: bool,
     #[serde(default = "default_parallel_curator_rouge")]
     pub parallel_curator_rouge: bool,
+
+    // Training service configuration
+    #[serde(default = "default_training_service_enabled")]
+    pub training_service_enabled: bool,
+    #[serde(default = "default_training_service_url")]
+    pub training_service_url: String,
+    #[serde(default = "default_training_service_use_grpc")]
+    pub training_service_use_grpc: bool,
+    #[serde(default = "default_adapter_storage_path")]
+    pub adapter_storage_path: String,
+    #[serde(default = "default_training_queue_path")]
+    pub training_queue_path: String,
     #[serde(default)]
     pub use_gpu_fitness: bool,
 
@@ -2211,6 +2223,11 @@ impl RuntimeConfig {
                 .unwrap_or(false),
             fp16_qlora_adapters: default_fp16_qlora_adapters(),
             parallel_curator_rouge: default_parallel_curator_rouge(),
+            training_service_enabled: default_training_service_enabled(),
+            training_service_url: default_training_service_url(),
+            training_service_use_grpc: default_training_service_use_grpc(),
+            adapter_storage_path: default_adapter_storage_path(),
+            training_queue_path: default_training_queue_path(),
             use_gpu_fitness: env_with_fallback(&["USE_GPU_FITNESS"])
                 .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(false),
@@ -2687,6 +2704,33 @@ fn default_fp16_qlora_adapters() -> bool {
     env_with_fallback(&["FP16_QLORA_ADAPTERS"])
         .and_then(|v| v.parse().ok())
         .unwrap_or(true) // Default to true for optimization
+}
+
+fn default_training_service_enabled() -> bool {
+    env_with_fallback(&["TRAINING_SERVICE_ENABLED"])
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(false) // Default to false for backward compatibility
+}
+
+fn default_training_service_url() -> String {
+    env_with_fallback(&["TRAINING_SERVICE_URL"])
+        .unwrap_or_else(|| "http://localhost:8001".to_string())
+}
+
+fn default_training_service_use_grpc() -> bool {
+    env_with_fallback(&["TRAINING_SERVICE_USE_GRPC"])
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(false) // Default to HTTP REST
+}
+
+fn default_adapter_storage_path() -> String {
+    env_with_fallback(&["ADAPTER_STORAGE_PATH"])
+        .unwrap_or_else(|| "models/system2_adapters".to_string())
+}
+
+fn default_training_queue_path() -> String {
+    env_with_fallback(&["TRAINING_QUEUE_PATH"])
+        .unwrap_or_else(|| "data/training_queue".to_string())
 }
 
 fn default_parallel_curator_rouge() -> bool {

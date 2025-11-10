@@ -21,6 +21,201 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 #[allow(unused_imports)]
 use std::f64::consts::PI;
+use std::sync::{Arc, RwLock};
+
+/// Threshold computation mode for adaptive persistence filtering
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ThresholdMode {
+    /// Use only percentile-based threshold
+    PercentileOnly,
+    /// Use only variance-scaled base threshold
+    VarianceOnly,
+    /// Combine percentile threshold scaled by variance
+    Combined,
+}
+
+/// Context identifier for persistence tracking
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ComputationContext {
+    /// Topological Cognitive System analysis
+    TCS,
+    /// Token promotion pattern discovery
+    TokenPromotion,
+    /// Other/unknown context
+    Other,
+}
+
+/// Adaptive persistence threshold system
+/// 
+/// Tracks persistence distributions globally and per-context, computes adaptive
+/// thresholds based on percentile and variance scaling.
+pub struct AdaptivePersistenceThreshold {
+    /// Global persistence value tracking
+    global_persistence_values: Arc<RwLock<Vec<f64>>>,
+    /// Context-specific persistence distributions
+    context_distributions: Arc<RwLock<HashMap<ComputationContext, Vec<f64>>>>,
+    /// Base threshold (fallback when no data available)
+    base_threshold: f64,
+    /// Percentile for percentile-based threshold (e.g., 0.75 for 75th percentile)
+    percentile: f64,
+    /// Variance sensitivity factor
+    variance_sensitivity: f64,
+    /// Threshold computation mode
+    mode: ThresholdMode,
+    /// Maximum number of persistence values to track (prevents unbounded growth)
+    max_tracking_size: usize,
+}
+
+impl AdaptivePersistenceThreshold {
+    /// Create a new adaptive persistence threshold system
+    pub fn new(
+        base_threshold: f64,
+        percentile: f64,
+        variance_sensitivity: f64,
+        mode: ThresholdMode,
+    ) -> Self {
+        Self {
+            global_persistence_values: Arc::new(RwLock::new(Vec::new())),
+            context_distributions: Arc::new(RwLock::new(HashMap::new())),
+            base_threshold,
+            percentile,
+            variance_sensitivity,
+            mode,
+            max_tracking_size: 10000, // Limit to prevent unbounded growth
+        }
+    }
+
+    /// Compute variance from point cloud coordinates
+    pub fn compute_point_cloud_variance(&self, points: &[Vec<f64>]) -> f64 {
+        if points.is_empty() {
+            return 0.0;
+        }
+
+        // Flatten all coordinates and compute variance
+        let mut all_coords = Vec::new();
+        for point in points {
+            all_coords.extend(point.iter());
+        }
+
+        if all_coords.is_empty() {
+            return 0.0;
+        }
+
+        let mean: f64 = all_coords.iter().sum::<f64>() / all_coords.len() as f64;
+        let variance: f64 = all_coords
+            .iter()
+            .map(|&v| (v - mean).powi(2))
+            .sum::<f64>()
+            / all_coords.len() as f64;
+
+        variance.sqrt() // Return standard deviation
+    }
+
+    /// Calculate percentile threshold from persistence distribution
+    fn calculate_percentile_threshold(&self, values: &[f64]) -> f64 {
+        if values.is_empty() {
+            return self.base_threshold;
+        }
+
+        let mut sorted = values.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let index = ((sorted.len() - 1) as f64 * self.percentile).floor() as usize;
+        sorted[index.min(sorted.len() - 1)]
+    }
+
+    /// Calculate adaptive threshold based on mode
+    pub fn calculate_adaptive_threshold(
+        &self,
+        point_variance: f64,
+        context: Option<ComputationContext>,
+    ) -> f64 {
+        let percentile_threshold = if let Some(ctx) = context {
+            // Use context-specific distribution if available
+            let context_values = self
+                .context_distributions
+                .read()
+                .unwrap()
+                .get(&ctx)
+                .cloned()
+                .unwrap_or_default();
+            if !context_values.is_empty() {
+                self.calculate_percentile_threshold(&context_values)
+            } else {
+                // Fall back to global distribution
+                let global_values = self.global_persistence_values.read().unwrap();
+                self.calculate_percentile_threshold(&global_values)
+            }
+        } else {
+            // Use global distribution
+            let global_values = self.global_persistence_values.read().unwrap();
+            self.calculate_percentile_threshold(&global_values)
+        };
+
+        match self.mode {
+            ThresholdMode::PercentileOnly => percentile_threshold.max(self.base_threshold),
+            ThresholdMode::VarianceOnly => {
+                self.base_threshold * (1.0 + point_variance.sqrt() * self.variance_sensitivity)
+            }
+            ThresholdMode::Combined => {
+                percentile_threshold.max(self.base_threshold)
+                    * (1.0 + point_variance.sqrt() * self.variance_sensitivity)
+            }
+        }
+    }
+
+    /// Record persistence values for tracking
+    pub fn record_persistence_values(
+        &self,
+        persistence_values: &[f64],
+        context: Option<ComputationContext>,
+    ) {
+        // Update global distribution
+        {
+            let mut global = self.global_persistence_values.write().unwrap();
+            global.extend_from_slice(persistence_values);
+            // Trim to max size, keeping most recent values
+            if global.len() > self.max_tracking_size {
+                let excess = global.len() - self.max_tracking_size;
+                global.drain(0..excess);
+            }
+        }
+
+        // Update context-specific distribution if provided
+        if let Some(ctx) = context {
+            let mut contexts = self.context_distributions.write().unwrap();
+            let context_values = contexts.entry(ctx).or_insert_with(Vec::new);
+            context_values.extend_from_slice(persistence_values);
+            // Trim to max size
+            if context_values.len() > self.max_tracking_size {
+                let excess = context_values.len() - self.max_tracking_size;
+                context_values.drain(0..excess);
+            }
+        }
+    }
+
+    /// Filter persistence pairs by adaptive threshold
+    /// Used for Niodoo Python path where we receive persistence pairs
+    pub fn filter_persistence_pairs(
+        &self,
+        pairs: &[(f64, f64, usize, f64)], // (birth, death, dimension, persistence)
+        point_variance: f64,
+        context: Option<ComputationContext>,
+    ) -> Vec<(f64, f64, usize, f64)> {
+        let threshold = self.calculate_adaptive_threshold(point_variance, context);
+        
+        // Record all persistence values before filtering
+        let persistence_values: Vec<f64> = pairs.iter().map(|(_, _, _, p)| *p).collect();
+        self.record_persistence_values(&persistence_values, context);
+
+        // Filter by threshold
+        pairs
+            .iter()
+            .filter(|(_, _, _, persistence)| *persistence >= threshold)
+            .copied()
+            .collect()
+    }
+}
 
 /// Represents a topological feature (connected component, loop, void)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -439,6 +634,7 @@ impl PersistentHomologyCalculator {
 pub struct RipserCalculator {
     max_dimension: usize,
     persistence_threshold: f64,
+    adaptive_threshold: Option<Arc<AdaptivePersistenceThreshold>>,
 }
 
 impl RipserCalculator {
@@ -446,6 +642,20 @@ impl RipserCalculator {
         Self {
             max_dimension,
             persistence_threshold,
+            adaptive_threshold: None,
+        }
+    }
+
+    /// Create with adaptive threshold support
+    pub fn with_adaptive_threshold(
+        max_dimension: usize,
+        persistence_threshold: f64,
+        adaptive_threshold: Arc<AdaptivePersistenceThreshold>,
+    ) -> Self {
+        Self {
+            max_dimension,
+            persistence_threshold,
+            adaptive_threshold: Some(adaptive_threshold),
         }
     }
 
@@ -453,8 +663,17 @@ impl RipserCalculator {
         self.persistence_threshold = threshold;
     }
 
+    /// Set adaptive threshold
+    pub fn set_adaptive_threshold(&mut self, adaptive_threshold: Option<Arc<AdaptivePersistenceThreshold>>) {
+        self.adaptive_threshold = adaptive_threshold;
+    }
+
     /// Compute persistent homology from raw point coordinates
-    pub fn compute_from_points(&self, points: &[Vec<f64>]) -> Result<Vec<TopologicalFeature>> {
+    pub fn compute_from_points(
+        &self,
+        points: &[Vec<f64>],
+        context: Option<ComputationContext>,
+    ) -> Result<Vec<TopologicalFeature>> {
         if points.is_empty() {
             return Err(anyhow!("Empty point set"));
         }
@@ -467,11 +686,28 @@ impl RipserCalculator {
         let calculator = PersistentHomologyCalculator::new(config.tda_max_filtration_steps);
         let result = calculator.compute(&point_cloud)?;
 
+        // Determine threshold to use
+        let threshold = if let Some(ref adaptive) = self.adaptive_threshold {
+            // Compute point cloud variance
+            let point_variance = adaptive.compute_point_cloud_variance(points);
+            // Get adaptive threshold
+            let adaptive_threshold = adaptive.calculate_adaptive_threshold(point_variance, context);
+            
+            // Record persistence values for future adaptation
+            let persistence_values: Vec<f64> = result.features.iter().map(|f| f.persistence).collect();
+            adaptive.record_persistence_values(&persistence_values, context);
+            
+            adaptive_threshold
+        } else {
+            // Use fixed threshold
+            self.persistence_threshold
+        };
+
         // Filter features by persistence threshold
         let filtered_features: Vec<TopologicalFeature> = result
             .features
             .into_iter()
-            .filter(|f| f.persistence >= self.persistence_threshold)
+            .filter(|f| f.persistence >= threshold)
             .collect();
 
         Ok(filtered_features)

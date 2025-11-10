@@ -133,3 +133,7 @@ path = "src/bin/metrics_runner.rs"
 [[bin]]
 name = "ablation_runner"
 path = "src/bin/ablation_runner.rs"
+
+[[bin]]
+name = "training_service"
+path = "src/bin/training_service.rs"

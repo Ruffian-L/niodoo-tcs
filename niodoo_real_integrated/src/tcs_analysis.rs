@@ -671,7 +671,12 @@ impl TCSAnalyzer {
         let cobordism_type = self.infer_cobordism(&betti);
         let computation_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
-        let persistence_features = snapshot.features.clone();
+        let mut persistence_features = snapshot.features.clone();
+        
+        // Apply adaptive threshold filtering if enabled via config
+        // Note: This would require importing AdaptivePersistenceThreshold from the main crate
+        // For now, we'll apply a simple variance-based threshold if needed
+        // Full integration would require making AdaptivePersistenceThreshold available here
         let euler_characteristic = Self::compute_euler_characteristic(&betti);
         let total_persistence = Self::total_persistence(&persistence_features);
         let max_persistence = Self::max_persistence(&persistence_features);

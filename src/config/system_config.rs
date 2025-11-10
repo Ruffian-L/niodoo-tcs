@@ -612,6 +612,14 @@ pub struct ConsciousnessConfig {
     pub tda_min_sequence_length: usize,
     /// Maximum byte sequence length for pattern discovery
     pub tda_max_sequence_length: usize,
+    /// Enable adaptive persistence threshold based on variance and percentile
+    pub tda_adaptive_threshold_enabled: bool,
+    /// Percentile for percentile-based threshold (e.g., 0.75 for 75th percentile)
+    pub tda_percentile_threshold: f64,
+    /// Variance sensitivity factor for adaptive threshold scaling
+    pub tda_variance_sensitivity: f64,
+    /// Threshold computation mode (PercentileOnly, VarianceOnly, Combined)
+    pub tda_threshold_mode: crate::topology::persistent_homology::ThresholdMode,
 }
 
 /// Emotional processing configuration
@@ -1400,6 +1408,11 @@ impl Default for ConsciousnessConfig {
             tda_point_dimension: 16,
             tda_min_sequence_length: 4,
             tda_max_sequence_length: 20,
+            // Adaptive threshold defaults (disabled by default for backward compatibility)
+            tda_adaptive_threshold_enabled: false,
+            tda_percentile_threshold: 0.75,
+            tda_variance_sensitivity: 1.0,
+            tda_threshold_mode: crate::topology::persistent_homology::ThresholdMode::Combined,
         }
     }
 }

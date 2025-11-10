@@ -66,3 +66,5 @@ pub mod vector_store;
 pub mod weight_evolution;
 pub mod weighted_episodic_mem;
 pub mod ntoken_client;
+#[cfg(feature = "svc")]
+pub mod training_service;

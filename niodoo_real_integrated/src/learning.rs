@@ -162,6 +162,9 @@ pub struct LearningLoop {
     executor_distill_threshold: usize,
     // Phase 3.2: Async training channel for batched replay buffer processing
     training_tx: Option<mpsc::UnboundedSender<TrainingBatch>>,
+    // Training service client (Option 3: Separate training service)
+    #[cfg(feature = "svc")]
+    training_client: Option<Arc<crate::training_service::TrainingServiceClient>>,
 }
 
 impl LearningLoop {
@@ -222,6 +225,18 @@ impl LearningLoop {
 
         let lora_trainer = Arc::new(RwLock::new(lora_trainer));
 
+        // Initialize training service client if enabled
+        #[cfg(feature = "svc")]
+        let training_client = {
+            let guard = config.read();
+            if guard.training_service_enabled {
+                let client = crate::training_service::TrainingServiceClient::new(&guard.training_service_url);
+                Some(Arc::new(client))
+            } else {
+                None
+            }
+        };
+
         Self {
             entropy_history: VecDeque::with_capacity(window),
             window,
@@ -255,6 +270,8 @@ impl LearningLoop {
             executor_memory: VecDeque::new(),
             executor_distill_threshold: 32,
             training_tx: None, // Phase 3.2: Will be initialized with spawn_async_trainer
+            #[cfg(feature = "svc")]
+            training_client, // Option 3: Training service client (if enabled)
         }
     }
 
@@ -311,7 +328,29 @@ impl LearningLoop {
     }
 
     /// Phase 3.2: Queue training batch for async processing
+    /// Option 3: If training service is enabled, submit job to service instead
     fn queue_training_batch(&mut self, samples: Vec<(Vec<f32>, Vec<f32>)>, epochs: usize, learning_rate: f32) {
+        #[cfg(feature = "svc")]
+        {
+            // Option 3: Use training service if enabled
+            if let Some(client) = &self.training_client {
+                let client_clone = Arc::clone(client);
+                let samples_clone = samples.clone();
+                tokio::spawn(async move {
+                    match client_clone.submit_training_job(samples_clone, epochs, learning_rate).await {
+                        Ok(job_id) => {
+                            tracing::info!(job_id = %job_id, "Training job submitted to service");
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Failed to submit training job to service");
+                        }
+                    }
+                });
+                return; // Service handles training, return immediately
+            }
+        }
+
+        // Fallback to existing async channel or synchronous training
         if let Some(tx) = &self.training_tx {
             let batch = TrainingBatch {
                 samples,

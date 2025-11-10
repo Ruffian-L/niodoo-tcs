@@ -1,7 +1,7 @@
 # QLoRA learning loop configuration for System 2
 
 [learning_loop]
-base_model = "ibm-granite/granite-3b-code-instruct"
+base_model = "/workspace/.cache/huggingface/hub/models--ibm-granite--granite-3b-code-instruct/snapshots/7bac3cddc929b4a80e1e3136a5db7a3f21ac431e"
 adapter_path = "models/system2_adapters"
 buffer_path = "storage/system2_learning_buffer.jsonl"
 log_path = "logs/learning_loop.log"

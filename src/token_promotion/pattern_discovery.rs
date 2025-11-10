@@ -14,8 +14,10 @@ use tokio::sync::RwLock;
 use crate::config::system_config::{ConsciousnessConfig, PathConfig};
 use crate::memory::guessing_spheres::{EmotionalVector, GuessingMemorySystem};
 use crate::topology::persistent_homology::{
-    PersistentHomologyCalculator, PointCloud, RipserCalculator, TopologicalFeature,
+    AdaptivePersistenceThreshold, ComputationContext, PersistentHomologyCalculator, PointCloud,
+    RipserCalculator, ThresholdMode, TopologicalFeature,
 };
+use std::sync::Arc;
 
 use super::spatial::SpatialHash;
 use super::TokenCandidate;
@@ -32,6 +34,7 @@ pub struct PatternDiscoveryEngine {
     min_sequence_length: usize,
     max_sequence_length: usize,
     persistence_threshold: f64,
+    adaptive_threshold: Option<Arc<AdaptivePersistenceThreshold>>,
 }
 
 impl PatternDiscoveryEngine {
@@ -45,8 +48,27 @@ impl PatternDiscoveryEngine {
         let persistence_threshold =
             Self::load_persistence_threshold().unwrap_or(config.tda_persistence_threshold);
 
-        let ripser_calculator =
-            RipserCalculator::new(config.tda_max_dimension, persistence_threshold);
+        // Create adaptive threshold if enabled
+        let adaptive_threshold = if config.tda_adaptive_threshold_enabled {
+            Some(Arc::new(AdaptivePersistenceThreshold::new(
+                persistence_threshold,
+                config.tda_percentile_threshold,
+                config.tda_variance_sensitivity,
+                config.tda_threshold_mode,
+            )))
+        } else {
+            None
+        };
+
+        let ripser_calculator = if let Some(ref adaptive) = adaptive_threshold {
+            RipserCalculator::with_adaptive_threshold(
+                config.tda_max_dimension,
+                persistence_threshold,
+                adaptive.clone(),
+            )
+        } else {
+            RipserCalculator::new(config.tda_max_dimension, persistence_threshold)
+        };
 
         Self {
             tda_calculator,
@@ -55,6 +77,7 @@ impl PatternDiscoveryEngine {
             min_sequence_length: config.tda_min_sequence_length,
             max_sequence_length: config.tda_max_sequence_length,
             persistence_threshold,
+            adaptive_threshold,
         }
     }
 
@@ -88,7 +111,7 @@ impl PatternDiscoveryEngine {
 
         let ripser_features = match self
             .ripser_calculator
-            .compute_from_points(&point_cloud.points)
+            .compute_from_points(&point_cloud.points, Some(ComputationContext::TokenPromotion))
         {
             Ok(features) => features,
             Err(err) => {
