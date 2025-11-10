@@ -580,6 +580,199 @@ impl Default for LoRATrainer {
 
 /// Real SGD training implementation for LoRA
 impl LoRATrainer {
+    /// Train a single batch and return loss
+    /// PHASE 0: Diagnostic function for weight update validation
+    pub fn train_batch(
+        &mut self,
+        batch: &[(Vec<f32>, Vec<f32>)],
+        learning_rate: f32,
+    ) -> Result<f32> {
+        if batch.is_empty() {
+            return Ok(0.0);
+        }
+
+        let device = self.adapter.device().clone();
+        let batch_size = batch.len();
+
+        // Prepare batched inputs and targets
+        let (batched_inputs, batched_targets): (Vec<Vec<f32>>, Vec<Vec<f32>>) = batch
+            .par_iter()
+            .map(|(input_vec, target_vec)| {
+                let mut input_values = input_vec.clone();
+                if input_values.len() < self.config.input_dim {
+                    input_values.resize(self.config.input_dim, 0.0);
+                } else if input_values.len() > self.config.input_dim {
+                    input_values.truncate(self.config.input_dim);
+                }
+
+                let mut target_values = target_vec.clone();
+                if target_values.len() < self.config.output_dim {
+                    target_values.resize(self.config.output_dim, 0.0);
+                } else if target_values.len() > self.config.output_dim {
+                    target_values.truncate(self.config.output_dim);
+                }
+                (input_values, target_values)
+            })
+            .unzip();
+
+        let batched_input = Tensor::from_vec(
+            batched_inputs.into_iter().flatten().collect(),
+            Shape::from((batch_size, self.config.input_dim)),
+            &device,
+        )?;
+        let batched_target = Tensor::from_vec(
+            batched_targets.into_iter().flatten().collect(),
+            Shape::from((batch_size, self.config.output_dim)),
+            &device,
+        )?;
+
+        // Forward pass
+        let batched_output = self.adapter.forward(&batched_input)?;
+        let diff = batched_output.sub(&batched_target)?;
+        let loss = diff.sqr()?.mean_all()?;
+        let loss_val = loss.to_scalar::<f32>()?;
+
+        // Compute gradients if loss is significant
+        if loss_val > 0.001 {
+            let scaling = self.config.alpha / self.config.rank as f32;
+            let grad_output = diff.broadcast_mul(&Tensor::new(&[2.0f32], &device)?)?;
+            let grad_output_scaled =
+                grad_output.broadcast_mul(&Tensor::new(&[scaling], &device)?)?;
+
+            let intermediate = batched_input.matmul(self.adapter.lora_a())?;
+            let grad_b = intermediate.transpose(0, 1)?.matmul(&grad_output_scaled)?;
+            let grad_a_intermediate =
+                batched_input.transpose(0, 1)?.matmul(&grad_output_scaled)?;
+            let grad_a =
+                grad_a_intermediate.matmul(&self.adapter.lora_b().transpose(0, 1)?)?;
+
+            // Apply gradient clipping
+            let grad_a_clipped = self.clip_gradients(grad_a, 1.0)?;
+            let grad_b_clipped = self.clip_gradients(grad_b, 1.0)?;
+
+            // Compute gradient norms for diagnostics
+            let grad_a_norm = grad_a_clipped.sqr()?.sum_all()?.to_scalar::<f32>()?.sqrt();
+            let grad_b_norm = grad_b_clipped.sqr()?.sum_all()?.to_scalar::<f32>()?.sqrt();
+
+            tracing::debug!(
+                "Batch gradients computed: grad_a_norm={:.6}, grad_b_norm={:.6}",
+                grad_a_norm,
+                grad_b_norm
+            );
+
+            // Apply updates directly (no momentum for single batch)
+            let lr_tensor = Tensor::new(&[learning_rate], &device)?;
+            let update_a = grad_a_clipped.broadcast_mul(&lr_tensor)?;
+            let update_b = grad_b_clipped.broadcast_mul(&lr_tensor)?;
+
+            // Apply gradient updates
+            let new_lora_a = self.adapter.lora_a().sub(&update_a)?;
+            let new_lora_b = self.adapter.lora_b().sub(&update_b)?;
+
+            // Update the adapter
+            *self.adapter_mut() = LoRAAdapter {
+                config: self.config.clone(),
+                lora_a: new_lora_a,
+                lora_b: new_lora_b,
+                device: self.adapter.device().clone(),
+            };
+        }
+
+        Ok(loss_val)
+    }
+
+    /// Train for a single epoch using train_batch
+    /// PHASE 0: Diagnostic wrapper for epoch-level training
+    pub fn train_epoch(
+        &mut self,
+        data: &[(Vec<f32>, Vec<f32>)],
+        learning_rate: f32,
+        epoch: usize,
+    ) -> Result<f32> {
+        tracing::info!("🔍 DIAGNOSTIC: train_epoch called for epoch {}", epoch);
+
+        if data.is_empty() {
+            tracing::error!("❌ TRAINING BUG: No data provided for epoch {}", epoch);
+            return Err(anyhow::anyhow!("Training loop executed but no data provided"));
+        }
+
+        let device = self.adapter.device().clone();
+        let hardware_batch_size = std::env::var("HARDWARE")
+            .ok()
+            .map(|v| match v.to_lowercase().as_str() {
+                v if v.contains("5090") || v.contains("rtx5090") => 64,
+                v if v.contains("h200") => 32,
+                v if v.contains("5080") => 16,
+                _ => 8,
+            })
+            .unwrap_or(8);
+        let batch_size = data.len().min(hardware_batch_size);
+
+        let mut total_loss = 0.0;
+        let mut batch_count = 0;
+
+        // Capture initial weights for diagnostics
+        let initial_weight_a = self.adapter.lora_a().to_vec2::<f32>()?;
+        let initial_weight_b = self.adapter.lora_b().to_vec2::<f32>()?;
+
+        for batch_start in (0..data.len()).step_by(batch_size) {
+            let batch_end = (batch_start + batch_size).min(data.len());
+            let batch = &data[batch_start..batch_end];
+
+            tracing::debug!(
+                "Processing batch {}/{}",
+                batch_count + 1,
+                (data.len() + batch_size - 1) / batch_size
+            );
+
+            let loss = self.train_batch(batch, learning_rate)?;
+            tracing::info!("Batch {} loss: {:.6}", batch_count, loss);
+
+            total_loss += loss * batch.len() as f32;
+            batch_count += 1;
+        }
+
+        if batch_count == 0 {
+            tracing::error!("❌ TRAINING BUG: No batches processed!");
+            return Err(anyhow::anyhow!("Training loop executed but no batches processed"));
+        }
+
+        // Capture final weights and compute weight update magnitude
+        let final_weight_a = self.adapter.lora_a().to_vec2::<f32>()?;
+        let final_weight_b = self.adapter.lora_b().to_vec2::<f32>()?;
+
+        let weight_diff_a: f64 = initial_weight_a
+            .iter()
+            .zip(final_weight_a.iter())
+            .map(|(init, fin)| ((init - fin) as f64).abs())
+            .sum();
+        let weight_diff_b: f64 = initial_weight_b
+            .iter()
+            .zip(final_weight_b.iter())
+            .map(|(init, fin)| ((init - fin) as f64).abs())
+            .sum();
+
+        let total_weight_diff = weight_diff_a + weight_diff_b;
+        let avg_loss = total_loss / data.len() as f32;
+
+        tracing::info!(
+            "Epoch {} complete: batches={}, avg_loss={:.6}, weight_diff={:.9}",
+            epoch,
+            batch_count,
+            avg_loss,
+            total_weight_diff
+        );
+
+        if total_weight_diff < 1e-6 {
+            tracing::warn!(
+                "⚠️  WARNING: Weight update magnitude very small ({:.9}), weights may not be updating!",
+                total_weight_diff
+            );
+        }
+
+        Ok(avg_loss)
+    }
+
     /// Train the LoRA adapter with SGD on topological data
     pub fn train(
         &mut self,
@@ -619,19 +812,26 @@ impl LoRATrainer {
         let momentum_factor = 0.9f32;
 
         let training_start = Instant::now();
+        tracing::info!("🔍 DIAGNOSTIC: Starting training with {} epochs, {} samples", epochs, data.len());
+        
         for epoch in 0..epochs {
             let mut total_loss = 0.0;
             let mut sample_count = 0;
+            let mut batch_count = 0;
 
             // Adaptive learning rate with cosine annealing
             let current_lr = learning_rate
                 * (1.0 + (epoch as f32 * std::f32::consts::PI / epochs as f32).cos())
                 / 2.0;
 
+            tracing::info!("🔍 DIAGNOSTIC: train_epoch called for epoch {} (lr: {:.6})", epoch, current_lr);
+
             // Batched processing: stack all samples in batch into single tensor operation
             for batch_start in (0..data.len()).step_by(batch_size) {
                 let batch_end = (batch_start + batch_size).min(data.len());
                 let batch = &data[batch_start..batch_end];
+                
+                tracing::debug!("Processing batch {}/{}", batch_count + 1, (data.len() + batch_size - 1) / batch_size);
 
                 // Parallelize input/target preparation on CPU with rayon
                 let (batched_inputs, batched_targets): (Vec<Vec<f32>>, Vec<Vec<f32>>) = batch
@@ -675,15 +875,29 @@ impl LoRATrainer {
 
                 total_loss += loss_val * batch_size_actual as f32;
                 sample_count += batch_size_actual;
+                batch_count += 1;
+                
+                tracing::debug!("Batch {} loss: {:.6}", batch_count, loss_val);
+            }
+            
+            if batch_count == 0 {
+                tracing::error!("❌ TRAINING BUG: No batches processed in epoch {}!", epoch);
+                return Err(anyhow::anyhow!("Training loop executed but no batches processed in epoch {}", epoch));
             }
 
             // Batched gradient updates for efficiency with parallel processing
-            if epoch > 0 && total_loss > 0.001 {
+            // PHASE 0 FIX: Removed epoch > 0 check - gradients should update from epoch 0
+            if total_loss > 0.001 {
+                // Capture initial weights for diagnostics
+                let initial_weight_a = self.adapter.lora_a().to_vec2::<f32>()?;
+                let initial_weight_b = self.adapter.lora_b().to_vec2::<f32>()?;
+                
                 let batch_ranges: Vec<(usize, usize)> = (0..data.len())
                     .step_by(batch_size)
                     .map(|start| (start, (start + batch_size).min(data.len())))
                     .collect();
 
+                let mut gradient_update_count = 0;
                 for (batch_start, batch_end) in batch_ranges {
                     let batch = &data[batch_start..batch_end];
 
@@ -759,8 +973,42 @@ impl LoRATrainer {
 
                         // Apply gradient updates
                         self.apply_gradient_updates(momentum_a.clone(), momentum_b.clone())?;
+                        gradient_update_count += 1;
                     }
                 }
+                
+                // Compute weight update magnitude for diagnostics
+                let final_weight_a = self.adapter.lora_a().to_vec2::<f32>()?;
+                let final_weight_b = self.adapter.lora_b().to_vec2::<f32>()?;
+                
+                let weight_diff_a: f64 = initial_weight_a
+                    .iter()
+                    .zip(final_weight_a.iter())
+                    .map(|(init, fin)| ((init - fin) as f64).abs())
+                    .sum();
+                let weight_diff_b: f64 = initial_weight_b
+                    .iter()
+                    .zip(final_weight_b.iter())
+                    .map(|(init, fin)| ((init - fin) as f64).abs())
+                    .sum();
+                
+                let total_weight_diff = weight_diff_a + weight_diff_b;
+                
+                tracing::info!(
+                    "Epoch {} gradient updates: {} batches updated, weight_diff={:.9}",
+                    epoch,
+                    gradient_update_count,
+                    total_weight_diff
+                );
+                
+                if total_weight_diff < 1e-6 {
+                    tracing::warn!(
+                        "⚠️  WARNING: Weight update magnitude very small ({:.9}), weights may not be updating!",
+                        total_weight_diff
+                    );
+                }
+            } else {
+                tracing::warn!("Skipping gradient updates: total_loss ({:.6}) <= 0.001", total_loss);
             }
 
             if sample_count > 0 {

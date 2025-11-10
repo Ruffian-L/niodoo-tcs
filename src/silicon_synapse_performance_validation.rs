@@ -22,7 +22,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH, Duration};
 use tracing::{info, warn, debug, error};
 
 use crate::consciousness::{ConsciousnessState, EmotionalState, EmotionType};
-use niodoo_core::qwen_integration::PerformanceMetrics;
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) PerformanceMetrics;
 use crate::consciousness_safetensors::LoadingMetrics;
 use crate::feeling_safetensors_bridge::BridgeMetrics;
 use crate::config::ConsciousnessConfig;

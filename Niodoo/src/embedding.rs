@@ -21,7 +21,7 @@ impl LocalEmbedder {
     /// 
     /// Environment variables:
     /// - `NIODOO_EMBED_MODEL`: Path to Qwen ONNX model (required)
-    /// - `NIODOO_EMBED_DIM`: Expected embedding dimension (default: 896)
+    /// - `NIODOO_EMBED_DIM`: Expected embedding dimension (default: 768 - Qwen MRL output)
     /// - `MOCK_MODE`: Set to "true" for mock mode (for testing)
     /// - `QWEN_INIT_TIMEOUT_SECS`: Timeout for initialization (default: 30)
     pub fn from_env() -> Result<Self> {
@@ -31,7 +31,7 @@ impl LocalEmbedder {
         let expected_dim = std::env::var("NIODOO_EMBED_DIM")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(896);
+            .unwrap_or(768);  // Qwen model configured to output 768 dimensions via MRL
         
         Self::new(&model_path, expected_dim)
     }

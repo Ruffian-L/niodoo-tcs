@@ -29,9 +29,9 @@ use crate::learning_analytics::LearningAnalyticsEngine;
 use crate::personal_memory::PersonalMemoryEngine;
 use crate::phase6_config::Phase6Config;
 use crate::phase6_integration::Phase6IntegrationBuilder;
-use niodoo_core::config::system_config::AppConfig;
+use crate::config::AppConfig;
 // TODO: Re-enable after qwen_integration is properly implemented
-// use niodoo_core::qwen_integration::QwenModelInterface;
+// use // niodoo_core::qwen_integration:: (MOVED TO .legacy) QwenModelInterface;
 use tracing::{debug, info, warn};
 
 use crate::brain::{Brain, BrainType, EfficiencyBrain, LcarsBrain, MotorBrain};
@@ -280,7 +280,7 @@ pub struct PersonalNiodooConsciousness {
 
     // TODO: Re-enable after qwen_integration is properly implemented
     // Real Qwen model integrator
-    // qwen_integrator: Option<niodoo_core::qwen_integration::QwenIntegrator>,
+    // qwen_integrator: Option<// niodoo_core::qwen_integration:: (MOVED TO .legacy) QwenIntegrator>,
 
     // Token promotion system for evolving vocabulary through topology
     token_promotion_engine: Option<Arc<RwLock<TokenPromotionEngine>>>,
@@ -382,7 +382,7 @@ impl PersonalNiodooConsciousness {
 
         // TODO: Re-enable after qwen_integration is properly implemented
         // Initialize real Qwen model integrator
-        // let qwen_integrator = match niodoo_core::qwen_integration::QwenIntegrator::new(
+        // let qwen_integrator = match // niodoo_core::qwen_integration:: (MOVED TO .legacy) QwenIntegrator::new(
         //     &AppConfig::default(),
         // ) {
         //     Ok(integrator) => {
@@ -1284,7 +1284,7 @@ impl PersonalNiodooConsciousness {
     #[allow(dead_code)]
     async fn generate_qwen_response(
         &self,
-        // qwen_integrator: &mut niodoo_core::qwen_integration::QwenIntegrator,
+        // qwen_integrator: &mut // niodoo_core::qwen_integration:: (MOVED TO .legacy) QwenIntegrator,
         original_input: &str,
         response_parts: &[String],
         current_emotion: &EmotionType,

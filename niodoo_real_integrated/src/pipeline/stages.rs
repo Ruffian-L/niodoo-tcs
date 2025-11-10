@@ -21,6 +21,8 @@ use crate::token_manager::TokenizerOutput;
 use crate::torus::{PadGhostState, TorusPadMapper};
 use crate::util::rouge_l;
 use crate::ntoken_client;
+use chrono;
+use blake3;
 
 use super::cache::cache_key;
 use super::core::Pipeline;
@@ -991,6 +993,85 @@ impl Pipeline {
         }
 
         // learning_ms already set above
+
+        // Broadcast telemetry if enabled
+        if let Some(ref tx) = self.telemetry_tx {
+            let iteration = self.iteration_count.fetch_add(1, AtomicOrdering::Relaxed) + 1;
+            
+            // Extract pad_state first 3 dimensions
+            let pad_state_3d = [
+                pad_state.pad[0] as f32,
+                pad_state.pad[1] as f32,
+                pad_state.pad[2] as f32,
+            ];
+            
+            // Compute torus projection using parametric equations
+            // Use pad_state values as angles (u, v) for torus mapping
+            // Default torus parameters: major_radius=5.0, strip_width=1.0, twists=1
+            let major_radius = 5.0f32;
+            let strip_width = 1.0f32;
+            let twists = 1i32;
+            let k = twists as f32;
+            
+            // Map pad_state[0] and pad_state[1] to u and v parameters
+            // Normalize pad values (which are in [-1, 1] after tanh) to [0, 2π] for u and [-0.5, 0.5] for v
+            let u = (pad_state.pad[0] as f32 + 1.0) * std::f32::consts::PI; // Map [-1,1] -> [0, 2π]
+            let v_norm = pad_state.pad[1] as f32; // Already in [-1, 1]
+            let v = v_norm * strip_width * 0.5; // Scale to [-0.5, 0.5]
+            
+            // Apply parametric equations: x(u,v) = (R + v*cos(2ku)) * cos(u)
+            let twist_factor = 2.0 * k * u;
+            let radius_at_u = major_radius + v * twist_factor.cos();
+            let torus_projection = [
+                radius_at_u * u.cos(),
+                radius_at_u * u.sin(),
+                v * twist_factor.sin(),
+            ];
+            
+            // Extract Betti numbers
+            let betti_numbers = (
+                topology.betti[0],
+                topology.betti[1],
+                topology.betti[2],
+            );
+            
+            // Get persistence entropy
+            let persistence_entropy = topology.persistence_entropy;
+            
+            // Get compass quadrant and confidence
+            let compass_quadrant = format!("{:?}", compass_with_cascade.quadrant);
+            let compass_confidence = compass_with_cascade.intrinsic_reward.max(0.0).min(1.0) as f32;
+            
+            // Extract memory IDs from collapse.top_hits
+            let retrieved_memory_ids: Vec<String> = collapse
+                .top_hits
+                .iter()
+                .map(|mem| {
+                    // Try to extract ID from memory content hash or use index
+                    blake3::hash(format!("{}{}", mem.input, mem.output).as_bytes())
+                        .to_hex()
+                        .chars()
+                        .take(16)
+                        .collect()
+                })
+                .collect();
+            
+            // Build and send telemetry packet
+            let packet = crate::telemetry::CognitiveStatePacket {
+                pad_state: pad_state_3d,
+                torus_projection,
+                betti_numbers,
+                persistence_entropy,
+                compass_quadrant,
+                compass_confidence,
+                retrieved_memory_ids,
+                iteration: Some(iteration),
+                prompt_text: Some(prompt.chars().take(100).collect()), // Truncate to 100 chars
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+            
+            let _ = tx.send(packet); // Non-blocking, ignore errors
+        }
 
         info!("About to return PipelineCycle");
         Ok(PipelineCycle {

@@ -8,7 +8,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use niodoo_core::memory::{EmotionalVector, GuessingMemorySystem};
+use niodoo_core::memory::{EmotionalVector, GuessingMemorySystem, SphereId};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
@@ -345,7 +345,7 @@ fn xml_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use niodoo_core::memory::SphereId;
+    // use niodoo_core::memory::SphereId;  // Already imported at top
 
     #[test]
     fn test_build_export() {

@@ -5,13 +5,17 @@
 //! - Persistent homology computation
 //! - Community detection via Leiden algorithm
 //! - Consonance calculation (graph-theoretic coherence)
+//! - H1/H2 persistence computation for trust analysis
 
 use crate::erag::EragMemory;
+use crate::behavior_trajectory::{PointCloud, BehaviorTrajectory};
+use crate::torus::PadGhostState;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::Dfs;
 use petgraph::{Graph, Undirected};
 use std::collections::{HashMap, HashSet};
 use tracing::info;
+use anyhow::Result;
 
 /// Memory graph node
 #[derive(Debug, Clone)]
@@ -478,6 +482,196 @@ impl TopologyMemoryAnalyzer {
                 }
             }
         }
+    }
+
+    /// Compute H1 persistence (loops) from point cloud
+    ///
+    /// Returns barcodes as (birth, death) pairs for H1 features
+    /// Uses simplified persistent homology computation via Vietoris-Rips filtration
+    pub fn compute_h1_persistence(
+        &self,
+        point_cloud: &PointCloud,
+    ) -> Result<Vec<(f64, f64)>> {
+        // Use simplified Vietoris-Rips filtration to compute H1 persistence
+        // This is a simplified version - in production, use full persistent homology library
+        let distances = point_cloud.pairwise_distances();
+        let n = point_cloud.points.len();
+        
+        if n < 3 {
+            return Ok(vec![]);
+        }
+        
+        // Find distance range for filtration
+        let mut all_distances: Vec<f64> = distances
+            .iter()
+            .flat_map(|row| row.iter())
+            .filter(|&&d| d > 0.0)
+            .copied()
+            .collect();
+        all_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        let min_distance = all_distances.first().copied().unwrap_or(0.0);
+        let max_distance = all_distances.last().copied().unwrap_or(1.0);
+        
+        // Simplified H1 detection: look for loops in the Vietoris-Rips complex
+        // A loop exists when we have at least 3 edges forming a cycle
+        let mut h1_barcodes = Vec::new();
+        let num_filtration_steps = 20;
+        
+        for step in 0..num_filtration_steps {
+            let epsilon = min_distance + (max_distance - min_distance) * (step as f64) / (num_filtration_steps as f64 - 1.0);
+            
+            // Count edges (1-simplices) where distance <= epsilon
+            let mut edges = 0;
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    if distances[i][j] <= epsilon {
+                        edges += 1;
+                    }
+                }
+            }
+            
+            // Simplified H1 detection: loops appear when edges > vertices - components
+            // For a connected graph: β₁ = edges - vertices + 1
+            if edges > 0 && n > 2 {
+                let beta_1_approx = (edges as f64 - n as f64 + 1.0).max(0.0);
+                if beta_1_approx > 0.0 {
+                    h1_barcodes.push((epsilon, epsilon + 0.1)); // Simplified: birth = epsilon, death = epsilon + small offset
+                }
+            }
+        }
+        
+        Ok(h1_barcodes)
+    }
+
+    /// Compute H2 persistence (voids) from point cloud
+    ///
+    /// Returns barcodes as (birth, death) pairs for H2 features
+    /// Uses simplified persistent homology computation via Vietoris-Rips filtration
+    pub fn compute_h2_persistence(
+        &self,
+        point_cloud: &PointCloud,
+    ) -> Result<Vec<(f64, f64)>> {
+        // Use simplified Vietoris-Rips filtration to compute H2 persistence
+        // H2 features (voids) require at least 4 points forming a tetrahedron
+        let distances = point_cloud.pairwise_distances();
+        let n = point_cloud.points.len();
+        
+        if n < 4 {
+            return Ok(vec![]);
+        }
+        
+        // Find distance range for filtration
+        let mut all_distances: Vec<f64> = distances
+            .iter()
+            .flat_map(|row| row.iter())
+            .filter(|&&d| d > 0.0)
+            .copied()
+            .collect();
+        all_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        let min_distance = all_distances.first().copied().unwrap_or(0.0);
+        let max_distance = all_distances.last().copied().unwrap_or(1.0);
+        
+        // Simplified H2 detection: look for voids (tetrahedra) in the Vietoris-Rips complex
+        let mut h2_barcodes = Vec::new();
+        let num_filtration_steps = 20;
+        
+        for step in 0..num_filtration_steps {
+            let epsilon = min_distance + (max_distance - min_distance) * (step as f64) / (num_filtration_steps as f64 - 1.0);
+            
+            // Count tetrahedra (3-simplices) where all pairwise distances <= epsilon
+            let mut tetrahedra = 0;
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    for k in (j + 1)..n {
+                        for l in (k + 1)..n {
+                            if distances[i][j] <= epsilon
+                                && distances[i][k] <= epsilon
+                                && distances[i][l] <= epsilon
+                                && distances[j][k] <= epsilon
+                                && distances[j][l] <= epsilon
+                                && distances[k][l] <= epsilon
+                            {
+                                tetrahedra += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Simplified H2 detection: voids appear when we have tetrahedra
+            if tetrahedra > 0 {
+                h2_barcodes.push((epsilon, epsilon + 0.1)); // Simplified: birth = epsilon, death = epsilon + small offset
+            }
+        }
+        
+        Ok(h2_barcodes)
+    }
+
+    /// Calculate persistence entropy from barcodes
+    ///
+    /// Entropy = -Σ(p_i * log(p_i)) where p_i = persistence_i / total_persistence
+    pub fn calculate_persistence_entropy(barcodes: &[(f64, f64)]) -> f64 {
+        if barcodes.is_empty() {
+            return 0.0;
+        }
+
+        let persistences: Vec<f64> = barcodes
+            .iter()
+            .map(|(birth, death)| (death - birth).max(0.0))
+            .collect();
+
+        let total_persistence: f64 = persistences.iter().sum();
+        if total_persistence == 0.0 {
+            return 0.0;
+        }
+
+        let mut entropy = 0.0;
+        for &p in &persistences {
+            if p > 0.0 {
+                let prob = p / total_persistence;
+                entropy -= prob * prob.ln();
+            }
+        }
+
+        entropy
+    }
+
+    /// Calculate β₁ connectivity from persistent homology trajectory
+    ///
+    /// Uses H1 persistence (loops) as β₁ connectivity score instead of graph-based calculation
+    pub fn calculate_beta_1_from_persistence(
+        &self,
+        trajectory: &BehaviorTrajectory,
+    ) -> Result<f32> {
+        use crate::behavior_trajectory::TrajectoryAnalyzer;
+        
+        let analyzer = TrajectoryAnalyzer::default();
+        let point_cloud = analyzer.to_point_cloud(trajectory);
+        
+        if point_cloud.points.len() < 3 {
+            // Need at least 3 points for loops
+            return Ok(0.0);
+        }
+        
+        let h1_barcodes = self.compute_h1_persistence(&point_cloud)?;
+        
+        if h1_barcodes.is_empty() {
+            return Ok(0.0);
+        }
+        
+        // Calculate average H1 persistence as β₁ score
+        let avg_persistence: f64 = h1_barcodes
+            .iter()
+            .map(|(birth, death)| death - birth)
+            .sum::<f64>()
+            / h1_barcodes.len() as f64;
+        
+        // Normalize to [0, 1] range (assume max persistence around 2.0)
+        let beta_1 = (avg_persistence / 2.0).min(1.0) as f32;
+        
+        Ok(beta_1)
     }
 }
 

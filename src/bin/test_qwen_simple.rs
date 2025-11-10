@@ -3,8 +3,8 @@
 
 // Simple test for Qwen integration - just test the basic functionality
 
-use niodoo_core::config::system_config::AppConfig;
-use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
+use crate::config::AppConfig;
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenConfig, QwenIntegrator, QwenModelInterface};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

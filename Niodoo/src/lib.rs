@@ -8,4 +8,6 @@ pub mod memory;
 pub mod ntoken_client;
 pub mod security;
 pub mod tcs_analysis;
+pub mod telemetry;
 pub mod torus;
+pub mod training_service;

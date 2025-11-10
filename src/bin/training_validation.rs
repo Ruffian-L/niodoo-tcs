@@ -7,8 +7,8 @@
 //! Proves that QLoRA training actually improved the model's performance
 
 use anyhow::Result;
-use niodoo_core::config::system_config::AppConfig;
-use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
+use crate::config::AppConfig;
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenConfig, QwenIntegrator, QwenModelInterface};
 use std::path::PathBuf;
 use tracing::{info, warn};
 

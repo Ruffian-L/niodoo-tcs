@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIODOO Mind's Eye - Real-time Cognitive Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0a;
+            color: white;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        #info-panel {
+            width: 300px;
+            background: rgba(20, 20, 20, 0.95);
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .metric {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+        .metric-label {
+            font-size: 0.8em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        .compass-indicator {
+            width: 100%;
+            height: 40px;
+            border-radius: 20px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .compass-panic { background: #ff4444; }
+        .compass-discover { background: #44ff44; }
+        .compass-persist { background: #4444ff; }
+        .compass-master { background: #ffaa00; }
+        #status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .status-connected { color: #4f4; }
+        .status-disconnected { color: #f44; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container">
+            <div id="status" class="status-disconnected">Disconnected</div>
+        </div>
+        <div id="info-panel">
+            <h2>🧠 Mind's Eye</h2>
+            <div class="metric">
+                <div class="metric-label">Iteration</div>
+                <div class="metric-value" id="iteration">-</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Compass Quadrant</div>
+                <div class="compass-indicator compass-panic" id="compass">Waiting...</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Confidence</div>
+                <div class="metric-value" id="confidence">0.00</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Betti Numbers</div>
+                <div class="metric-value">β₀: <span id="b0">0</span></div>
+                <div class="metric-value">β₁: <span id="b1">0</span></div>
+                <div class="metric-value">β₂: <span id="b2">0</span></div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Persistence Entropy</div>
+                <div class="metric-value" id="entropy">0.00</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">PAD State</div>
+                <div class="metric-value" id="pad">[0, 0, 0]</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Position</div>
+                <div class="metric-value" id="position">[0, 0, 0]</div>
+            </div>
+            <div class="metric">
+                <div class="metric-label">Memories Retrieved</div>
+                <div class="metric-value" id="memories">0</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, torus, consciousnessPoint;
+        let ws = null;
+        let currentState = null;
+
+        // Initialize Three.js scene
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight - 300), 0.1, 1000);
+            camera.position.set(0, 0, 15);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth - 300, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+
+            // Create torus (placeholder - will be replaced with parametric mesh)
+            const torusGeometry = new THREE.TorusGeometry(5, 1, 16, 100);
+            const torusMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                wireframe: true,
+                opacity: 0.5,
+                transparent: true
+            });
+            torus = new THREE.Mesh(torusGeometry, torusMaterial);
+            scene.add(torus);
+
+            // Create consciousness point (spark)
+            const pointGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+            const pointMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffff00,
+                emissive: 0xffff00,
+                emissiveIntensity: 2.0
+            });
+            consciousnessPoint = new THREE.Mesh(pointGeometry, pointMaterial);
+            scene.add(consciousnessPoint);
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = (window.innerWidth - 300) / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth - 300, window.innerHeight);
+            });
+        }
+
+        // Connect to WebSocket
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('Connected to telemetry stream');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'status-connected';
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const packet = JSON.parse(event.data);
+                    currentState = packet;
+                    updateVisualization(packet);
+                } catch (e) {
+                    console.error('Error parsing packet:', e);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('Disconnected, reconnecting...');
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status-disconnected';
+                setTimeout(connect, 2000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Update visualization based on packet
+        function updateVisualization(packet) {
+            // Update info panel
+            document.getElementById('iteration').textContent = packet.iteration || '-';
+            document.getElementById('confidence').textContent = packet.compass_confidence.toFixed(2);
+            document.getElementById('b0').textContent = packet.betti_numbers[0];
+            document.getElementById('b1').textContent = packet.betti_numbers[1];
+            document.getElementById('b2').textContent = packet.betti_numbers[2];
+            document.getElementById('entropy').textContent = packet.persistence_entropy.toFixed(3);
+            document.getElementById('pad').textContent = `[${packet.pad_state.map(v => v.toFixed(2)).join(', ')}]`;
+            document.getElementById('position').textContent = `[${packet.torus_projection.map(v => v.toFixed(2)).join(', ')}]`;
+            document.getElementById('memories').textContent = packet.retrieved_memory_ids.length;
+
+            // Update compass indicator
+            const compassEl = document.getElementById('compass');
+            compassEl.textContent = packet.compass_quadrant;
+            compassEl.className = `compass-indicator compass-${packet.compass_quadrant.toLowerCase()}`;
+
+            // Update consciousness point position
+            const [x, y, z] = packet.torus_projection;
+            consciousnessPoint.position.set(x, y, z);
+
+            // Update point scale based on β₀ (fragmentation)
+            const b0 = packet.betti_numbers[0];
+            const scale = 1.0 + (b0 / 10.0);
+            consciousnessPoint.scale.set(scale, scale, scale);
+
+            // Update ambient light color based on compass quadrant
+            const compassColors = {
+                'Panic': 0xff4444,
+                'Discover': 0x44ff44,
+                'Persist': 0x4444ff,
+                'Master': 0xffaa00
+            };
+            const color = compassColors[packet.compass_quadrant] || 0x404040;
+            scene.background = new THREE.Color(color).multiplyScalar(0.1);
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotate torus slowly
+            if (torus) {
+                torus.rotation.y += 0.005;
+            }
+            
+            // Rotate camera around scene
+            if (camera && currentState) {
+                const time = Date.now() * 0.0005;
+                camera.position.x = Math.cos(time) * 15;
+                camera.position.z = Math.sin(time) * 15;
+                camera.lookAt(0, 0, 0);
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // Initialize
+        initScene();
+        connect();
+        animate();
+    </script>
+</body>
+</html>
+

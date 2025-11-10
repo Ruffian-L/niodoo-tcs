@@ -251,7 +251,7 @@ impl MemoryArchitect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use niodoo_core::rag::RetrievalEngine;
+    // use niodoo_core::rag::RetrievalEngine;  // Already imported at top
 
     fn create_test_config() -> AppConfig {
         AppConfig::default()

@@ -645,6 +645,18 @@ fn default_rce_breakthrough_threshold() -> f64 { 0.5 }
 fn default_rce_erag_lambda() -> f64 { 0.0 }
 fn default_rce_archive_backend() -> String { "Qdrant".to_string() }
 
+fn default_telemetry_enabled() -> bool {
+    env_value("NIODOO_TELEMETRY_ENABLED")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(false)
+}
+
+fn default_telemetry_port() -> u16 {
+    env_value("NIODOO_TELEMETRY_PORT")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9999)
+}
+
 fn default_dqn_epsilon() -> f64 {
     0.9
 }
@@ -759,6 +771,12 @@ pub struct RuntimeConfig {
     pub rce_erag_lambda: f64,
     #[serde(default = "default_rce_archive_backend")]
     pub rce_archive_backend: String,
+
+    // Telemetry configuration
+    #[serde(default = "default_telemetry_enabled")]
+    pub telemetry_enabled: bool,
+    #[serde(default = "default_telemetry_port")]
+    pub telemetry_port: u16,
 
     // Phase 2 retry configuration
     #[serde(default = "default_max_retries")]
@@ -2137,6 +2155,8 @@ impl RuntimeConfig {
             rce_consensus: RceConsensusConfig::default(),
             rce_erag_lambda: default_rce_erag_lambda(),
             rce_archive_backend: default_rce_archive_backend(),
+            telemetry_enabled: default_telemetry_enabled(),
+            telemetry_port: default_telemetry_port(),
             phase2_max_retries,
             phase2_retry_base_delay_ms,
             phase2_cot_iterations,

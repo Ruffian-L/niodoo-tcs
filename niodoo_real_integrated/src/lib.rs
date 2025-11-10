@@ -21,9 +21,13 @@ pub mod lora_trainer;
 pub mod mcts;
 pub mod mcts_config;
 pub mod metrics;
+pub mod models;
+pub mod topology;
+pub mod training;
+pub mod integration;
 pub mod rce;
-pub mod mock_qdrant;
-pub mod mock_vllm;
+// pub mod mock_qdrant;  // File not found - commented out
+// pub mod mock_vllm;  // File not found - commented out
 // Legacy pipeline module - commented out as we're using the new pipeline/ structure
 // #[path = "pipeline_legacy.rs"]
 // pub mod pipeline;
@@ -65,6 +69,8 @@ pub mod validation;
 pub mod vector_store;
 pub mod weight_evolution;
 pub mod weighted_episodic_mem;
+pub mod behavior_trajectory;
 pub mod ntoken_client;
+pub mod telemetry;
 #[cfg(feature = "svc")]
 pub mod training_service;

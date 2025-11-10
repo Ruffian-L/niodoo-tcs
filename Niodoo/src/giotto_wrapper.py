@@ -128,7 +128,7 @@ def main():
     """CLI entry point."""
     if len(sys.argv) < 2:
         print(json.dumps({
-            "error": "Usage: giotto_wrapper.py <input_json>",
+            "error": "Usage: giotto_wrapper.py [--file <file_path>] | <input_json>",
             "betti_numbers": [0, 0, 0],
             "persistence_pairs": [],
             "persistence_entropy": 0.0
@@ -136,8 +136,15 @@ def main():
         sys.exit(1)
     
     try:
-        # Parse input JSON
-        input_data = json.loads(sys.argv[1])
+        # Check if --file flag is used (for large inputs)
+        if len(sys.argv) >= 3 and sys.argv[1] == "--file":
+            file_path = sys.argv[2]
+            with open(file_path, 'r') as f:
+                input_data = json.load(f)
+        else:
+            # Parse input JSON from command line argument
+            input_data = json.loads(sys.argv[1])
+        
         points = input_data.get("points", [])
         max_filtration = input_data.get("max_filtration", 2.0)
         

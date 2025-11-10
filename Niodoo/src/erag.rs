@@ -57,9 +57,8 @@ impl EragService {
         prompt: &str,
         compass_filter: Option<&str>,
     ) -> Result<Vec<SearchResult>> {
-        // Embed the prompt (returns Vec<f32>, convert to Vec<f64> for Qdrant)
-        let embedding_f32 = self.embedder.embed(prompt)?;
-        let embedding: Vec<f64> = embedding_f32.iter().map(|&x| x as f64).collect();
+        // Embed the prompt (returns Vec<f32> - keep as f32 for Qdrant)
+        let embedding = self.embedder.embed(prompt)?;
 
         // Build Qdrant search request
         let search_url = format!(
@@ -91,12 +90,12 @@ impl EragService {
             "with_vectors": false,
         });
 
-        // Add filter if present
-        let mut request_body = search_request;
+        // Try search with filter first (if provided)
+        let mut request_body = search_request.clone();
         if let Some(ref f) = filter {
             request_body["filter"] = f.clone();
         }
-
+        
         // Execute search
         let response = self
             .http_client
@@ -139,6 +138,56 @@ impl EragService {
                     score,
                     payload,
                 });
+            }
+        }
+
+        // If filter was applied but no results, fall back to search without filter
+        if filter.is_some() && results.is_empty() {
+            let fallback_request = json!({
+                "vector": embedding,
+                "limit": self.config.limit,
+                "score_threshold": self.config.similarity_threshold,
+                "with_payload": true,
+                "with_vectors": false,
+            });
+            
+            let fallback_response = self
+                .http_client
+                .post(&search_url)
+                .json(&fallback_request)
+                .send()
+                .await
+                .with_context(|| format!("failed to search Qdrant (fallback) at {}", search_url))?;
+
+            if fallback_response.status().is_success() {
+                let fallback_data: Value = fallback_response
+                    .json()
+                    .await
+                    .context("failed to parse Qdrant fallback response")?;
+
+                if let Some(result_array) = fallback_data.get("result").and_then(|r| r.as_array()) {
+                    results.clear();
+                    for hit in result_array {
+                        let id = hit.get("id").and_then(|id| {
+                            id.as_str().map(|s| s.to_string())
+                                .or_else(|| id.as_u64().map(|n| n.to_string()))
+                        });
+                        let score = hit
+                            .get("score")
+                            .and_then(|s| s.as_f64())
+                            .unwrap_or(0.0);
+                        let payload = hit
+                            .get("payload")
+                            .cloned()
+                            .unwrap_or_else(|| json!({}));
+
+                        results.push(SearchResult {
+                            id,
+                            score,
+                            payload,
+                        });
+                    }
+                }
             }
         }
 

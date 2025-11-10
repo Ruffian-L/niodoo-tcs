@@ -12,7 +12,7 @@ use crate::rag::RetrievalEngine;
 /// Triple-Threat Learning Routine for Persistent Harness
 /// Runs continuous hallucination detection tests and generates healing curve data
 use anyhow::Result;
-use niodoo_core::qwen_curator::{QloraCurator, QloraCuratorConfig};
+use // niodoo_core::qwen_curator:: (MOVED TO .legacy) {QloraCurator, QloraCuratorConfig};
 use std::sync::{Arc, Mutex};
 
 /// Learning routine that cycles through triple-threat trigger scenarios
@@ -61,7 +61,7 @@ impl TripleThreatRoutine {
         );
 
         // Get app config for curator initialization
-        let config = niodoo_core::config::AppConfig::default();
+        let config = crate::config::AppConfig::default();
 
         // Create curator configuration
         let curator_config = QloraCuratorConfig::from_app_config(&config)?;

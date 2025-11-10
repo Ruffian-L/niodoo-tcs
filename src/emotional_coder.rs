@@ -18,8 +18,8 @@ use crate::ai_inference::AIInferenceEngine;
 use crate::config;
 use crate::config::ConsciousnessConfig;
 use crate::consciousness::EmotionType;
-use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
-use niodoo_core::config::system_config::AppConfig;
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenConfig, QwenIntegrator, QwenModelInterface};
+use crate::config::AppConfig;
 
 /// Emotional evaluation of generated code
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -24,6 +24,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
     Trainer,
     TrainingArguments,
+    TrainerCallback,
 )
 
 from peft import AutoPeftModelForCausalLM, LoraConfig, get_peft_model
@@ -45,14 +46,101 @@ DEFAULT_TARGET_MODULES = [
 ]
 
 
+class WeightUpdateCallback(TrainerCallback):
+    """PHASE 0: Diagnostic callback to track weight updates during training.
+    
+    This callback captures model weights before and after training steps
+    to verify that Trainer.train() actually updates model weights.
+    """
+    
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+        self.initial_weights: Optional[Dict[str, torch.Tensor]] = None
+        self.weight_updates: List[float] = []
+        self.step_count = 0
+    
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        """Capture initial weights at training start."""
+        if model is None:
+            return
+        
+        self.logger.info("🔍 DIAGNOSTIC: WeightUpdateCallback initialized")
+        self.initial_weights = {}
+        
+        # Capture initial weights from LoRA adapters
+        for name, param in model.named_parameters():
+            if param.requires_grad and "lora" in name.lower():
+                self.initial_weights[name] = param.data.clone().detach()
+                self.logger.debug(f"Captured initial weight: {name}, shape={param.shape}")
+        
+        if not self.initial_weights:
+            self.logger.warning("⚠️  No trainable LoRA parameters found!")
+        else:
+            self.logger.info(f"Captured {len(self.initial_weights)} initial weight tensors")
+    
+    def on_step_end(self, args, state, control, model=None, **kwargs):
+        """Track weight updates after each training step."""
+        if model is None or self.initial_weights is None:
+            return
+        
+        self.step_count += 1
+        
+        # Compute weight differences for LoRA parameters
+        total_diff = 0.0
+        param_count = 0
+        
+        for name, param in model.named_parameters():
+            if param.requires_grad and "lora" in name.lower() and name in self.initial_weights:
+                initial = self.initial_weights[name]
+                current = param.data.clone().detach()
+                
+                # Compute absolute difference
+                diff = torch.abs(current - initial).sum().item()
+                total_diff += diff
+                param_count += 1
+        
+        if param_count > 0:
+            avg_diff = total_diff / param_count
+            self.weight_updates.append(avg_diff)
+            
+            if self.step_count % 10 == 0:
+                self.logger.info(
+                    f"Step {self.step_count}: avg_weight_diff={avg_diff:.9f}, "
+                    f"total_params_tracked={param_count}"
+                )
+    
+    def on_train_end(self, args, state, control, model=None, **kwargs):
+        """Report final weight update statistics."""
+        if model is None or not self.weight_updates:
+            return
+        
+        final_diff = self.weight_updates[-1] if self.weight_updates else 0.0
+        max_diff = max(self.weight_updates) if self.weight_updates else 0.0
+        
+        self.logger.info(
+            f"🔍 DIAGNOSTIC: Training complete - "
+            f"steps={self.step_count}, "
+            f"final_weight_diff={final_diff:.9f}, "
+            f"max_weight_diff={max_diff:.9f}"
+        )
+        
+        if final_diff < 1e-6:
+            self.logger.warning(
+                f"⚠️  WARNING: Weight update magnitude very small ({final_diff:.9f}), "
+                "weights may not be updating!"
+            )
+        else:
+            self.logger.info("✅ Weight updates confirmed - training is working correctly")
+
+
 @dataclass
 class LearningLoopConfig:
     base_model: str
     adapter_path: pathlib.Path
     buffer_path: pathlib.Path
     log_path: pathlib.Path
-    trigger_threshold: int = 20
-    quality_threshold: int = 6
+    trigger_threshold: int = 1  # Persistent training: train on every sample (curator is the gate)
+    quality_threshold: int = 6  # Curator gate: only samples below this score enter training
     generation_endpoint: str = "http://127.0.0.1:8000/v1/completions"
     max_seq_length: int = 2048
     train_epochs: int = 3
@@ -76,7 +164,7 @@ class LearningLoopConfig:
             "adapter_path": pathlib.Path(base.get("adapter_path", "models/system2_adapters")),
             "buffer_path": pathlib.Path(base.get("buffer_path", "storage/system2_learning_buffer.jsonl")),
             "log_path": pathlib.Path(base.get("log_path", "logs/learning_loop.log")),
-            "trigger_threshold": int(base.get("trigger_threshold", 20)),
+            "trigger_threshold": int(base.get("trigger_threshold", 1)),  # Default: persistent training
             "quality_threshold": int(base.get("quality_threshold", 6)),
             "generation_endpoint": base.get("generation_endpoint", "http://127.0.0.1:8000/v1/completions"),
             "max_seq_length": int(base.get("max_seq_length", 2048)),
@@ -147,18 +235,59 @@ class LearningLoop:
         }
         self.buffer.append(record)
         self._persist_buffer()
-        self._logger.info(
-            "queued sample; buffer length now %d (threshold %d)",
-            len(self.buffer),
-            self.config.trigger_threshold,
-        )
-
+        
+        # Persistent training mode: train immediately on every sample that passes curator gate
+        # The curator (quality_threshold) is the gate, so we train persistently
         triggered = False
         training_summary: Optional[Dict[str, Any]] = None
+        
+        # Check if we should trigger training (persistent mode: trigger_threshold=1)
         if len(self.buffer) >= self.config.trigger_threshold:
-            self._logger.info("triggering QLoRA fine-tune (%d buffered)", len(self.buffer))
-            training_summary = self.trigger_qlora_finetune(force=True)
-            triggered = training_summary.get("status") == "trained" if training_summary else False
+            self._logger.info(
+                "persistent training: triggering QLoRA fine-tune (%d buffered, threshold=%d)",
+                len(self.buffer),
+                self.config.trigger_threshold,
+            )
+            # Persistent training: submit to async training service if available
+            # This allows training to happen in background without blocking the main loop
+            training_service_endpoint = os.getenv("TRAINING_SERVICE_ENDPOINT")
+            if training_service_endpoint:
+                self._logger.info("persistent training: submitting QLoRA job to service (%d sample(s))", len(self.buffer))
+                try:
+                    import requests
+                    job_response = requests.post(
+                        f"{training_service_endpoint}/training/jobs/python",
+                        json={
+                            "buffer_path": str(self.config.buffer_path),
+                            "config_path": str(self.config.adapter_path.parent / "learning_loop.toml") if self.config.adapter_path.parent.exists() else "config/learning_loop.toml",
+                            "adapter_path": str(self.config.adapter_path),
+                        },
+                        timeout=10,
+                    )
+                    job_response.raise_for_status()
+                    job_data = job_response.json()
+                    training_summary = {
+                        "status": "submitted",
+                        "job_id": job_data.get("job_id"),
+                        "message": "Persistent training job submitted to training service",
+                        "buffer_consumed": len(self.buffer),
+                        "mode": "persistent",
+                    }
+                    triggered = True
+                    # Clear buffer after successful submission (persistent mode: train immediately, don't accumulate)
+                    self.buffer.clear()
+                    self._persist_buffer()
+                    self._logger.info("persistent training: job submitted, buffer cleared")
+                except Exception as e:
+                    self._logger.warning("Failed to submit to training service: %s. Falling back to sync training.", e)
+                    # Fall back to synchronous training (will block, but ensures training happens)
+                    training_summary = self.trigger_qlora_finetune(force=True)
+                    triggered = training_summary.get("status") == "trained" if training_summary else False
+            else:
+                # No training service - use synchronous training (will block main loop)
+                self._logger.info("persistent training: triggering QLoRA fine-tune synchronously (%d sample(s))", len(self.buffer))
+                training_summary = self.trigger_qlora_finetune(force=True)
+                triggered = training_summary.get("status") == "trained" if training_summary else False
 
         return {
             "status": "queued",
@@ -221,11 +350,15 @@ class LearningLoop:
             **precision_kwargs,
         )
 
+        # PHASE 0: Add weight update callback for diagnostics
+        weight_callback = WeightUpdateCallback(self._logger)
+        
         trainer = Trainer(
             model=model,
             args=training_args,
             train_dataset=dataset,
             data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
+            callbacks=[weight_callback],
         )
         trainer.train()
 
@@ -293,6 +426,10 @@ class LearningLoop:
                 dtype=target_dtype,
             )
             tokenizer = AutoTokenizer.from_pretrained(self.config.adapter_path, use_fast=True)
+            # Enable training mode and gradients for LoRA layers
+            model.train()
+            # Enable gradient computation for input embeddings (required for LoRA)
+            model.enable_input_require_grads()
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
             return tokenizer, model
@@ -315,6 +452,10 @@ class LearningLoop:
             task_type="CAUSAL_LM",
         )
         model = get_peft_model(base_model, lora_config)
+        # Enable training mode
+        model.train()
+        # Enable gradient computation for input embeddings
+        model.enable_input_require_grads()
         return tokenizer, model
 
     def _build_dataset(self, tokenizer: AutoTokenizer) -> Dataset:

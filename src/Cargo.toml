@@ -14,7 +14,7 @@ lazy_static = "1.4.0"
 parking_lot = "0.12"
 
 # Workspace dependencies (member package)
-niodoo-core = { path = "../niodoo-core" }
+# niodoo-core = { path = "../niodoo-core" }  # MOVED TO .legacy - missing Cargo.toml
 niodoo_real_integrated = { path = "../niodoo_real_integrated" }
 
 # Data structures and serialization

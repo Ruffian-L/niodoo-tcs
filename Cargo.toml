@@ -26,10 +26,11 @@ members = [
     "tcs-ml",
     "tcs-consensus",
     "tcs-pipeline",
-    "niodoo-core",
-    "constants_core",
+    "niodoo-core",  # Re-export crate for src/ types
+    # "constants_core",  # MOVED TO .legacy - missing Cargo.toml
     "niodoo_real_integrated",
     "tcs-rce",
+    "niodoo-visualizer",
     # Transitional member until all modules migrate
     "src",
 ]

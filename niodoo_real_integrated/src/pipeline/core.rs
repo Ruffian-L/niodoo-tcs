@@ -98,6 +98,10 @@ pub struct Pipeline {
     pub(crate) curator_feedback: Option<Arc<AsyncMutex<CuratorFeedbackController>>>,
     // RCE: spike circuit breaker streak counter
     pub(crate) rce_spike_streak: Arc<AtomicU32>,
+    // Telemetry: broadcast channel for cognitive state
+    pub(crate) telemetry_tx: Option<tokio::sync::broadcast::Sender<crate::telemetry::CognitiveStatePacket>>,
+    // Telemetry: iteration counter
+    pub(crate) iteration_count: Arc<AtomicU64>,
 }
 
 impl Pipeline {
@@ -464,6 +468,21 @@ impl Pipeline {
         let _ = crate::metrics::metrics();
         let _ = crate::metrics::weighted_memory_metrics();
 
+        // Initialize telemetry if enabled
+        let (telemetry_tx, telemetry_rx) = if config.telemetry_enabled {
+            let (tx, rx) = tokio::sync::broadcast::channel::<crate::telemetry::CognitiveStatePacket>(16);
+            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], config.telemetry_port));
+            tokio::spawn(async move {
+                if let Err(e) = crate::telemetry::server::start_telemetry_server(addr, rx).await {
+                    warn!(error = %e, "Telemetry server error");
+                }
+            });
+            (Some(tx), ())
+        } else {
+            (None, ())
+        };
+        let iteration_count = Arc::new(AtomicU64::new(0));
+
         Ok(Self {
             config: config.clone(),
             config_arc: config_arc.clone(),
@@ -498,6 +517,8 @@ impl Pipeline {
             security: security_manager,
             curator_feedback: Some(curator_feedback), // Phase 4.2: Curator feedback controller
             rce_spike_streak: Arc::new(AtomicU32::new(0)),
+            telemetry_tx,
+            iteration_count,
         })
     }
 

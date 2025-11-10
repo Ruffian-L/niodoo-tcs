@@ -40,7 +40,7 @@ impl QwenConfig {
             head_dim: 64,          // Head dimension per KV head (model expects 64, not 896)
             max_seq_len: 2048,
             cache_window: 2048,
-            embed_dim: 512,
+            embed_dim: 768,        // Configured for 768D output via MRL (Multiple Representation Learning)
             vocab_size: 151936,
         }
     }

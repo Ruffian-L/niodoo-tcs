@@ -27,6 +27,9 @@ pub struct TemporalDecayConfig {
     pub phase2_tau: f64, // 5.0 days
     /// Phase 3 (9+ days): Schema-dependent neocortical storage
     pub phase3_tau: f64, // 2.0 days
+    /// Persistence entropy scaling factor for adaptive decay
+    /// Higher values = more impact of entropy on decay rate
+    pub persistence_entropy_alpha: f64, // 0.3 default
 }
 
 impl Default for TemporalDecayConfig {
@@ -35,6 +38,7 @@ impl Default for TemporalDecayConfig {
             phase1_tau: 0.3,
             phase2_tau: 5.0,
             phase3_tau: 2.0,
+            persistence_entropy_alpha: 0.3,
         }
     }
 }
@@ -56,6 +60,15 @@ pub struct WeightedMemoryMetadata {
     pub consonance_score: f32,
     /// Community ID from graph clustering
     pub community_id: Option<u32>,
+    /// H1 trust score from persistent homology (loops indicate consistency)
+    #[serde(default)]
+    pub h1_trust_score: f32,
+    /// H2 anomaly score from persistent homology (voids indicate gaps)
+    #[serde(default)]
+    pub h2_anomaly_score: f32,
+    /// Persistence entropy for adaptive decay
+    #[serde(default)]
+    pub persistence_entropy: f64,
 }
 
 impl Default for WeightedMemoryMetadata {
@@ -68,6 +81,9 @@ impl Default for WeightedMemoryMetadata {
             beta_1_connectivity: 0.0,
             consonance_score: 0.0,
             community_id: None,
+            h1_trust_score: 0.5,
+            h2_anomaly_score: 0.0,
+            persistence_entropy: 0.0,
         }
     }
 }
@@ -95,6 +111,18 @@ pub fn calculate_pad_salience(pad_state: &PadGhostState) -> f32 {
     salience.clamp(0.0, 1.0)
 }
 
+/// Calculate adaptive decay factor from persistence entropy
+///
+/// Low entropy (stable agents) = slower decay
+/// Formula: factor = 1 + alpha * (1 - normalized_entropy)
+/// where normalized_entropy is clamped to [0, 1]
+pub fn calculate_adaptive_decay_factor(entropy: f64) -> f64 {
+    // Normalize entropy: assume max entropy around 5.0 (log of reasonable number of features)
+    let normalized_entropy = (entropy / 5.0).min(1.0).max(0.0);
+    // Low entropy = stable = slower decay
+    1.0 + 0.3 * (1.0 - normalized_entropy)
+}
+
 /// Calculate temporal decay component with three-phase dynamics
 ///
 /// Phase 1 (0-1 days): τ = 0.3 for rapid initial forgetting
@@ -102,10 +130,12 @@ pub fn calculate_pad_salience(pad_state: &PadGhostState) -> f32 {
 /// Phase 3 (9+ days): τ = 2.0 for schema-dependent storage
 ///
 /// Consolidation extends time constants: τ_effective = τ × (1 + 0.5 × consolidation_level)
+/// Persistence entropy extends time constants: τ_effective = τ × (1 + alpha × (1 - normalized_entropy))
 pub fn calculate_temporal_decay(
     age_days: f64,
     consolidation_level: f32,
     config: &TemporalDecayConfig,
+    persistence_entropy: Option<f64>,
 ) -> f32 {
     let tau = if age_days < 1.0 {
         config.phase1_tau
@@ -116,7 +146,13 @@ pub fn calculate_temporal_decay(
     };
 
     // Apply consolidation extension
-    let tau_effective = tau * (1.0 + 0.5 * consolidation_level as f64);
+    let mut tau_effective = tau * (1.0 + 0.5 * consolidation_level as f64);
+
+    // Apply persistence entropy extension (stable agents decay slower)
+    if let Some(entropy) = persistence_entropy {
+        let entropy_factor = calculate_adaptive_decay_factor(entropy);
+        tau_effective *= entropy_factor;
+    }
 
     // Exponential decay: e^(-age/tau)
     let decay = (-age_days / tau_effective).exp();
@@ -163,9 +199,9 @@ pub fn calculate_resource_penalty(
 /// Formula: F(m) = w₁·T(m) + w₂·PAD(m) + w₃·β₁(m) + w₄·R(m) + w₅·C(m) - w₆·Res(m)
 ///
 /// Where:
-/// - T(m): Temporal decay
+/// - T(m): Temporal decay (with adaptive persistence entropy scaling)
 /// - PAD(m): Emotional salience
-/// - β₁(m): Topological connectivity
+/// - β₁(m): Topological connectivity (uses H1 trust score if available, else graph-based β₁)
 /// - R(m): Retrieval frequency
 /// - C(m): Consonance
 /// - Res(m): Resource penalty (0.0 = no penalty, 1.0 = max penalty)
@@ -181,25 +217,39 @@ pub fn calculate_fitness_score(
     weights: &[f32; 6],
     temporal_config: &TemporalDecayConfig,
     resource_availability: Option<&crate::resource_budget::ResourceAvailability>,
+    persistence_entropy: Option<f64>,
+    h1_trust_score: Option<f32>,
+    h2_anomaly_score: Option<f32>,
 ) -> f32 {
-    let temporal = calculate_temporal_decay(age_days, consolidation_level, temporal_config);
+    // Use adaptive temporal decay with persistence entropy
+    let temporal = calculate_temporal_decay(age_days, consolidation_level, temporal_config, persistence_entropy);
     let pad_salience = calculate_pad_salience(pad_state);
     let retrieval_weight = normalized_retrieval_weight(retrieval_count);
 
-    // Normalize beta_1 and consonance to [0, 1] range (assuming they're already normalized)
-    let beta1_normalized = beta_1_connectivity.clamp(0.0, 1.0);
+    // Use H1 trust score if available, otherwise fall back to graph-based β₁
+    let beta1_normalized = if let Some(h1_score) = h1_trust_score {
+        h1_score.clamp(0.0, 1.0)
+    } else {
+        beta_1_connectivity.clamp(0.0, 1.0)
+    };
+    
     let consonance_normalized = consonance_score.clamp(0.0, 1.0);
 
     // Calculate resource penalty
     let resource_penalty = calculate_resource_penalty(resource_availability);
 
     // Weighted combination: positive terms - resource penalty
-    let fitness = weights[0] * temporal
+    let mut fitness = weights[0] * temporal
         + weights[1] * pad_salience
         + weights[2] * beta1_normalized
         + weights[3] * retrieval_weight
         + weights[4] * consonance_normalized
         - weights[5] * resource_penalty;
+
+    // Subtract H2 anomaly score as penalty if available
+    if let Some(h2_score) = h2_anomaly_score {
+        fitness -= 0.1 * h2_score; // Small penalty for anomalies
+    }
 
     fitness.clamp(0.0, 1.0)
 }
@@ -228,7 +278,10 @@ pub fn calculate_fitness_score_legacy(
         consolidation_level,
         &weights_6,
         temporal_config,
-        None,
+        None, // resource_availability
+        None, // persistence_entropy
+        None, // h1_trust_score
+        None, // h2_anomaly_score
     )
 }
 
@@ -258,6 +311,9 @@ pub fn initialize_memory_metadata(
         beta_1_connectivity: 0.0, // Will be computed later
         consonance_score: 0.0,    // Will be computed later
         community_id: None,
+        h1_trust_score: 0.5,       // Initial neutral trust
+        h2_anomaly_score: 0.0,     // No anomalies initially
+        persistence_entropy: 0.0,   // Will be computed later
     }
 }
 
@@ -286,7 +342,7 @@ mod tests {
     #[test]
     fn test_temporal_decay_phase1() {
         let config = TemporalDecayConfig::default();
-        let decay = calculate_temporal_decay(0.5, 0.0, &config); // 0.5 days, no consolidation
+        let decay = calculate_temporal_decay(0.5, 0.0, &config, None); // 0.5 days, no consolidation
                                                                  // Should decay significantly in phase 1
         assert!(decay < 0.5);
     }
@@ -294,10 +350,19 @@ mod tests {
     #[test]
     fn test_temporal_decay_consolidation() {
         let config = TemporalDecayConfig::default();
-        let decay_no_consolidation = calculate_temporal_decay(1.0, 0.0, &config);
-        let decay_with_consolidation = calculate_temporal_decay(1.0, 0.5, &config);
+        let decay_no_consolidation = calculate_temporal_decay(1.0, 0.0, &config, None);
+        let decay_with_consolidation = calculate_temporal_decay(1.0, 0.5, &config, None);
         // Consolidation should slow decay
         assert!(decay_with_consolidation > decay_no_consolidation);
+    }
+
+    #[test]
+    fn test_temporal_decay_persistence_entropy() {
+        let config = TemporalDecayConfig::default();
+        let decay_no_entropy = calculate_temporal_decay(1.0, 0.0, &config, None);
+        let decay_low_entropy = calculate_temporal_decay(1.0, 0.0, &config, Some(0.5)); // Low entropy = stable
+        // Low entropy should slow decay (stable agents decay slower)
+        assert!(decay_low_entropy > decay_no_entropy);
     }
 
     #[test]
@@ -321,6 +386,9 @@ mod tests {
             0.7, // consonance
             0.2, // consolidation level
             &weights, &config, None, // resource_availability
+            None, // persistence_entropy
+            None, // h1_trust_score
+            None, // h2_anomaly_score
         );
 
         assert!(fitness >= 0.0 && fitness <= 1.0);

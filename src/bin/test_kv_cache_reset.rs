@@ -6,7 +6,7 @@
 //! This test verifies that the KV cache is properly cleared between
 //! successive inference calls, preventing shape mismatch errors.
 
-use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator};
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenConfig, QwenIntegrator};
 use tracing::{error, info};
 
 #[tokio::main]

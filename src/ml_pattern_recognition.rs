@@ -17,7 +17,7 @@ use tracing::{debug, info, warn};
 use crate::consciousness::{ConsciousnessState, EmotionType, ReasoningMode};
 use crate::config::ConsciousnessConfig;
 use crate::memory::consolidation::{ConsolidatedMemory, MemoryConsolidationEngine};
-use niodoo_core::qwen_integration::{QwenIntegrator, QwenConfig};
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenIntegrator, QwenConfig};
 
 /// Pattern recognition configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

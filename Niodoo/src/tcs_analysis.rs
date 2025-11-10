@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::process::Command;
+use std::fs;
+use std::path::PathBuf;
 use tracing::warn;
 
 use crate::embedding::LocalEmbedder;
@@ -366,12 +368,17 @@ impl TCSAnalyzer {
             "max_filtration": max_filtration,
         });
 
-        let input_str = serde_json::to_string(&input)?;
+        // Write to temporary file to avoid "Argument list too long" error
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!("giotto_input_{}.json", std::process::id()));
+        fs::write(&temp_file, serde_json::to_string(&input)?)
+            .with_context(|| format!("failed to write temp file: {:?}", temp_file))?;
 
-        // Call Python wrapper via subprocess
+        // Call Python wrapper via subprocess with file path
         let output = Command::new(&self.python_path)
             .arg(&self.wrapper_path)
-            .arg(&input_str)
+            .arg("--file")
+            .arg(&temp_file)
             .output()
             .with_context(|| {
                 format!(
@@ -379,6 +386,9 @@ impl TCSAnalyzer {
                     self.python_path, self.wrapper_path
                 )
             })?;
+
+        // Clean up temp file
+        let _ = fs::remove_file(&temp_file);
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

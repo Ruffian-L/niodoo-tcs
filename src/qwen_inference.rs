@@ -6,7 +6,7 @@
 //! This module provides a simplified interface to the real QwenIntegrator
 //! NO STUBS - All inference goes through real Candle-based model
 
-use niodoo_core::qwen_integration::{QwenConfig, QwenIntegrator, QwenModelInterface};
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenConfig, QwenIntegrator, QwenModelInterface};
 use niodoo_core::config::system_config::{AppConfig, ModelConfig, EthicsConfig};
 use anyhow::Result;
 use candle_core::Device;

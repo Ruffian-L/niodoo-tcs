@@ -7,8 +7,8 @@
 //! without the full consciousness engine complexity.
 
 use anyhow::Result;
-use niodoo_core::config::system_config::AppConfig;
-use niodoo_core::qwen_integration::{QwenIntegrator, QwenModelInterface};
+use crate::config::AppConfig;
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenIntegrator, QwenModelInterface};
 use tracing::{info, warn};
 
 #[tokio::main]

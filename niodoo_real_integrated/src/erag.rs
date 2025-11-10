@@ -17,7 +17,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
-use tracing::{info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
@@ -306,19 +306,21 @@ impl EragClient {
         // Use gRPC search via qdrant-client
         let client = &self.client;
         let collection = self.collection.clone();
-        let threshold = self.similarity_threshold;
+        let mut threshold = self.similarity_threshold;
 
+        // Try with initial threshold, fallback to lower threshold if not enough results
         let response_result = self
             .circuit_breaker
             .call(|| {
                 let vector_clone = vector.to_vec();
                 let collection_clone = collection.clone();
+                let threshold_clone = threshold;
                 async move {
                     let search_points = SearchPoints {
                         collection_name: collection_clone,
                         vector: vector_clone,
-                        limit: limit as u64,
-                        score_threshold: Some(threshold),
+                        limit: (limit * 2) as u64, // Request more to account for deduplication
+                        score_threshold: Some(threshold_clone),
                         with_payload: Some(true.into()),
                         with_vectors: Some(false.into()),
                         ..Default::default()
@@ -332,13 +334,60 @@ impl EragClient {
             })
             .await;
 
+        // If we got fewer results than requested, try with a lower threshold
+        let mut final_result = response_result;
+        if let Ok(ref search_result) = final_result {
+            if search_result.result.len() < limit && threshold > 0.0 {
+                let lower_threshold = (threshold * 0.5).max(0.0);
+                info!(
+                    initial_results = search_result.result.len(),
+                    requested_limit = limit,
+                    retrying_with_lower_threshold = lower_threshold,
+                    "ERAG retrying search with lower similarity threshold"
+                );
+                threshold = lower_threshold;
+                final_result = self
+                    .circuit_breaker
+                    .call(|| {
+                        let vector_clone = vector.to_vec();
+                        let collection_clone = collection.clone();
+                        let threshold_clone = threshold;
+                        async move {
+                            let search_points = SearchPoints {
+                                collection_name: collection_clone,
+                                vector: vector_clone,
+                                limit: (limit * 2) as u64,
+                                score_threshold: Some(threshold_clone),
+                                with_payload: Some(true.into()),
+                                with_vectors: Some(false.into()),
+                                ..Default::default()
+                            };
+
+                            client
+                                .search_points(&search_points)
+                                .await
+                                .map_err(|e| anyhow!("Qdrant gRPC search failed: {}", e))
+                        }
+                    })
+                    .await;
+            }
+        }
+
         let mut memories = Vec::new();
         let mut sims = Vec::new();
-        match response_result {
+        let mut seen_inputs = std::collections::HashSet::new();
+        match final_result {
             Ok(search_result) => {
-                for hit in search_result.result {
+                info!(
+                    requested_limit = limit,
+                    similarity_threshold = threshold,
+                    qdrant_results = search_result.result.len(),
+                    "ERAG Qdrant search completed"
+                );
+                for (idx, hit) in search_result.result.iter().enumerate() {
                     let payload_json: JsonMap<String, JsonValue> = hit
                         .payload
+                        .clone()
                         .into_iter()
                         .map(|(k, v)| {
                             // Convert Qdrant Value to JsonValue
@@ -363,9 +412,39 @@ impl EragClient {
                             (k, json_val)
                         })
                         .collect();
-                    memories.push(deserialize_memory(&payload_json));
+                    let memory = deserialize_memory(&payload_json);
+                    
+                    // Deduplicate by input text to avoid returning the same memory multiple times
+                    let input_key = format!("{}|{}", memory.input, memory.timestamp);
+                    if seen_inputs.contains(&input_key) {
+                        debug!(
+                            memory_idx = idx,
+                            score = hit.score,
+                            "ERAG skipping duplicate memory (same input and timestamp)"
+                        );
+                        continue;
+                    }
+                    seen_inputs.insert(input_key);
+                    
+                    debug!(
+                        memory_idx = idx,
+                        score = hit.score,
+                        input_preview = memory.input.chars().take(50).collect::<String>(),
+                        "ERAG retrieved memory"
+                    );
+                    memories.push(memory);
                     sims.push(hit.score);
+                    
+                    // Stop if we have enough unique memories
+                    if memories.len() >= limit {
+                        break;
+                    }
                 }
+                info!(
+                    total_memories_retrieved = memories.len(),
+                    unique_memories = memories.len(),
+                    "ERAG memory retrieval complete"
+                );
             }
             Err(err) => {
                 warn!(%err, "qdrant gRPC search failed - proceeding without hits");
@@ -380,6 +459,44 @@ impl EragClient {
         for memory in &mut memories {
             if let Some(ref mut metadata) = memory.weighted_metadata {
                 update_retrieval_stats(metadata);
+            }
+        }
+
+        // Compute trust metrics from trajectory analysis if we have enough memories
+        if memories.len() >= 10 {
+            use crate::behavior_trajectory::{TrajectoryAnalyzer, TrustMetrics};
+            use crate::topology_memory::TopologyMemoryAnalyzer;
+            
+            let trajectory_analyzer = TrajectoryAnalyzer::default();
+            let trajectory = trajectory_analyzer.collect_trajectory(&memories);
+            
+            if trajectory.len() >= 10 {
+                let topology_analyzer = TopologyMemoryAnalyzer::default();
+                let point_cloud = trajectory_analyzer.to_point_cloud(&trajectory);
+                
+                // Compute H1 and H2 persistence
+                if let (Ok(h1_barcodes), Ok(h2_barcodes)) = (
+                    topology_analyzer.compute_h1_persistence(&point_cloud),
+                    topology_analyzer.compute_h2_persistence(&point_cloud),
+                ) {
+                    let trust_metrics = trajectory_analyzer.compute_trust_metrics(
+                        &trajectory,
+                        &h1_barcodes,
+                        &h2_barcodes,
+                    );
+                    
+                    // Update memory metadata with trust metrics
+                    for memory in &mut memories {
+                        if let Some(ref mut metadata) = memory.weighted_metadata {
+                            metadata.h1_trust_score = trust_metrics.h1_trust_score;
+                            metadata.h2_anomaly_score = trust_metrics.h2_anomaly_score;
+                            metadata.persistence_entropy = trust_metrics.persistence_entropy;
+                            
+                            // Update beta_1_connectivity with H1 trust score
+                            metadata.beta_1_connectivity = trust_metrics.h1_trust_score;
+                        }
+                    }
+                }
             }
         }
 
@@ -442,6 +559,27 @@ impl EragClient {
         } else {
             sims.iter().copied().sum::<f32>() / sims.len() as f32
         };
+
+        // Log final memory count before returning
+        info!(
+            final_memory_count = memories.len(),
+            requested_limit = limit,
+            average_similarity = average_similarity,
+            "ERAG collapse complete"
+        );
+
+        // Debug: Log unique memory inputs to detect duplicates
+        let unique_inputs: std::collections::HashSet<String> = memories
+            .iter()
+            .map(|m| m.input.clone())
+            .collect();
+        if unique_inputs.len() < memories.len() {
+            warn!(
+                unique_memories = unique_inputs.len(),
+                total_memories = memories.len(),
+                "ERAG detected duplicate memories - some memories have identical inputs"
+            );
+        }
 
         let mut aggregated_context = memories
             .iter()
@@ -1483,6 +1621,9 @@ impl EragClient {
             &self.fitness_weights,
             &self.temporal_config,
             resource_availability.as_ref(),
+            Some(metadata.persistence_entropy),
+            Some(metadata.h1_trust_score),
+            Some(metadata.h2_anomaly_score),
         )
     }
 

@@ -36,7 +36,7 @@ pub struct RustTrainingPayload {
 pub struct PythonTrainingPayload {
     pub buffer_path: String,
     pub config_path: String,
-    pub adapter_path: String,
+    pub base_adapter_path: String,
 }
 
 /// Training job type
@@ -82,13 +82,13 @@ impl TrainingJob {
         }
     }
 
-    pub fn new_python(buffer_path: String, config_path: String, adapter_path: String) -> Self {
+    pub fn new_python(buffer_path: String, config_path: String, base_adapter_path: String) -> Self {
         Self {
             job_id: Uuid::new_v4().to_string(),
             job_type: JobType::Python(PythonTrainingPayload {
                 buffer_path,
                 config_path,
-                adapter_path,
+                base_adapter_path,
             }),
             status: JobStatus::Pending,
             created_at: Utc::now(),

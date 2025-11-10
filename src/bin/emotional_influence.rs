@@ -15,7 +15,7 @@ use niodoo_consciousness::{
     consciousness::{ConsciousnessState, EmotionType},
     vllm_bridge::VLLMBridge,
 };
-use niodoo_core::qwen_integration::QwenIntegrator;
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) QwenIntegrator;
 use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

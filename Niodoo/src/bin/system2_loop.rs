@@ -15,8 +15,11 @@ use niodoo_cli::memory::ExperienceStore;
 use niodoo_cli::security::{PromptSecurityManager, SecurityConfig};
 use niodoo_cli::tcs_analysis::TCSAnalyzer;
 use niodoo_cli::torus::{TorusConfig, TorusProjector};
+use niodoo_cli::training_service::TrainingServiceClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use chrono;
+use blake3;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Niodoo System 2 loop (Curator + Learning)")]
@@ -126,6 +129,29 @@ async fn main() -> Result<()> {
     let granite_endpoint = resolve_endpoint(None)?;
     let http_client = reqwest::Client::new();
 
+    // Initialize telemetry if enabled
+    let telemetry_enabled = std::env::var("NIODOO_TELEMETRY_ENABLED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(false);
+    let telemetry_port = std::env::var("NIODOO_TELEMETRY_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9999);
+    
+    let (telemetry_tx, _telemetry_rx) = if telemetry_enabled {
+        let (tx, rx) = tokio::sync::broadcast::channel::<niodoo_cli::telemetry::CognitiveStatePacket>(16);
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], telemetry_port));
+        tokio::spawn(async move {
+            if let Err(e) = niodoo_cli::telemetry::server::start_telemetry_server(addr, rx).await {
+                tracing::warn!(error = %e, "Telemetry server error");
+            }
+        });
+        (Some(tx), ())
+    } else {
+        (None, ())
+    };
+
     let tasks = default_tasks();
 
     let mut latency_ms = Vec::new();
@@ -211,6 +237,83 @@ async fn main() -> Result<()> {
         let start = Instant::now();
         let (augmented_prompt, memories) =
             augment_prompt_with_memory(&erag, &secured_prompt, compass_filter).await?;
+
+        // Broadcast telemetry if enabled
+        if let Some(ref tx) = telemetry_tx {
+            // Extract pad_state first 3 dimensions
+            let pad_state_3d = [
+                pad_state.coordinates[0] as f32,
+                pad_state.coordinates[1] as f32,
+                pad_state.coordinates[2] as f32,
+            ];
+            
+            // Compute torus projection using parametric equations
+            let major_radius = 5.0f32;
+            let strip_width = 1.0f32;
+            let twists = 1i32;
+            let k = twists as f32;
+            
+            // Map pad_state coordinates to u and v parameters
+            let u = (pad_state.coordinates[0] as f32 + 1.0) * std::f32::consts::PI;
+            let v_norm = pad_state.coordinates[1] as f32;
+            let v = v_norm * strip_width * 0.5;
+            
+            // Apply parametric equations
+            let twist_factor = 2.0 * k * u;
+            let radius_at_u = major_radius + v * twist_factor.cos();
+            let torus_projection = [
+                radius_at_u * u.cos(),
+                radius_at_u * u.sin(),
+                v * twist_factor.sin(),
+            ];
+            
+            // Extract Betti numbers
+            let betti_numbers = (
+                topology.betti_0(),
+                topology.betti_1(),
+                topology.betti_2(),
+            );
+            
+            // Get persistence entropy
+            let persistence_entropy = topology.persistence_entropy;
+            
+            // Get compass quadrant and confidence
+            let compass_quadrant = compass_state.quadrant.as_str().to_string();
+            let compass_confidence = compass_state.confidence as f32;
+            
+            // Extract memory IDs from memories
+            let retrieved_memory_ids: Vec<String> = memories
+                .iter()
+                .map(|mem| {
+                    // Use memory ID if available, otherwise hash the payload
+                    if let Some(id) = &mem.id {
+                        id.clone()
+                    } else {
+                        blake3::hash(serde_json::to_string(&mem.payload).unwrap_or_default().as_bytes())
+                            .to_hex()
+                            .chars()
+                            .take(16)
+                            .collect()
+                    }
+                })
+                .collect();
+            
+            // Build and send telemetry packet
+            let packet = niodoo_cli::telemetry::CognitiveStatePacket {
+                pad_state: pad_state_3d,
+                torus_projection,
+                betti_numbers,
+                persistence_entropy,
+                compass_quadrant,
+                compass_confidence,
+                retrieved_memory_ids,
+                iteration: Some((iteration + 1) as u64),
+                prompt_text: Some(secured_prompt.chars().take(100).collect()),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+            
+            let _ = tx.send(packet); // Non-blocking, ignore errors
+        }
 
         // STAGE 7: Generate with Granite
         let completion =
@@ -306,7 +409,7 @@ async fn main() -> Result<()> {
             "quality_score": curator.quality_score,
             "rouge_l": curator.rouge_l,
         });
-        let learning = run_learning_loop(&args.learning_config, &sample_payload)?;
+        let learning = run_learning_loop_async(&args.learning_config, &sample_payload).await?;
         writeln!(
             log_file,
             "[system2] learning status {} buffer {} reason {}",
@@ -421,7 +524,7 @@ async fn generate_completion(
     prompt: &str,
 ) -> Result<CompletionResponse> {
     let payload = CompletionRequest {
-        model: "ibm-granite/granite-3b-code-instruct",
+        model: "/workspace/.cache/huggingface/hub/models--ibm-granite--granite-3b-code-instruct/snapshots/7bac3cddc929b4a80e1e3136a5db7a3f21ac431e",
         prompt,
         max_tokens: 256,
         temperature: 0.1,
@@ -469,15 +572,89 @@ fn run_curator(prompt: &str, response: &str) -> Result<CuratorOutput> {
     Ok(result)
 }
 
-fn run_learning_loop(config_path: &str, sample: &Value) -> Result<LearningLoopOutput> {
-    let output = Command::new("python3")
-        .arg("src/learning_loop.py")
+async fn run_learning_loop_async(config_path: &str, sample: &Value) -> Result<LearningLoopOutput> {
+    // Check if training service endpoint is set - use async training service if available
+    if let Ok(training_service_endpoint) = std::env::var("TRAINING_SERVICE_ENDPOINT") {
+        // Use training service for async training
+        let client = TrainingServiceClient::new(&training_service_endpoint);
+        
+        // First, process the sample using learning_loop.py to queue it
+        // Pass TRAINING_SERVICE_ENDPOINT to the subprocess
+        let mut cmd = Command::new("python3");
+        cmd.arg("src/learning_loop.py")
+            .arg("--config")
+            .arg(config_path)
+            .arg("process-sample")
+            .arg("--sample")
+            .arg(sample.to_string())
+            .env("TRAINING_SERVICE_ENDPOINT", &training_service_endpoint);
+        
+        let output = cmd.output()
+            .context("failed to launch learning loop controller")?;
+
+        if !output.status.success() {
+            return Err(anyhow!(
+                "learning loop controller failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        let mut result: LearningLoopOutput = serde_json::from_slice(&output.stdout)
+            .context("failed to parse learning loop output")?;
+
+        // If training was triggered, submit it to the training service asynchronously
+        if result.triggered_training {
+            let config_path_buf = std::path::PathBuf::from(config_path);
+            let buffer_path = config_path_buf.parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("storage/system2_learning_buffer.jsonl");
+            let adapter_path = config_path_buf.parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("models/system2_adapters");
+
+            match client.submit_python_training_job(
+                buffer_path.to_string_lossy().to_string(),
+                config_path.to_string(),
+                adapter_path.to_string_lossy().to_string(),
+            ).await {
+                Ok(job_id) => {
+                    // Update result to indicate training was submitted asynchronously
+                    result.training_summary = Some(json!({
+                        "status": "submitted",
+                        "job_id": job_id,
+                        "message": "Training job submitted to training service"
+                    }));
+                }
+                Err(e) => {
+                    // Fall back to synchronous training if service fails
+                    eprintln!("Warning: Failed to submit to training service: {}. Falling back to sync training.", e);
+                }
+            }
+        }
+
+        Ok(result)
+    } else {
+        // Fall back to synchronous Python call if no training service
+        run_learning_loop_sync(config_path, sample)
+    }
+}
+
+fn run_learning_loop_sync(config_path: &str, sample: &Value) -> Result<LearningLoopOutput> {
+    // Pass TRAINING_SERVICE_ENDPOINT if available
+    let mut cmd = Command::new("python3");
+    cmd.arg("src/learning_loop.py")
         .arg("--config")
         .arg(config_path)
         .arg("process-sample")
         .arg("--sample")
-        .arg(sample.to_string())
-        .output()
+        .arg(sample.to_string());
+    
+    // Inherit TRAINING_SERVICE_ENDPOINT from environment if set
+    if let Ok(endpoint) = std::env::var("TRAINING_SERVICE_ENDPOINT") {
+        cmd.env("TRAINING_SERVICE_ENDPOINT", endpoint);
+    }
+    
+    let output = cmd.output()
         .context("failed to launch learning loop controller")?;
 
     if !output.status.success() {

@@ -51,8 +51,8 @@
 //! - Maintaining transparency about emotional simulation vs. authentic caring
 
 use crate::config::ConsciousnessConfig;
-use niodoo_core::config::system_config::AppConfig;
-use niodoo_core::qwen_integration::{QwenIntegrator, QwenModelInterface};
+use crate::config::AppConfig;
+use // niodoo_core::qwen_integration:: (MOVED TO .legacy) {QwenIntegrator, QwenModelInterface};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
