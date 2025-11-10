@@ -341,6 +341,18 @@ Thumbs.db
 .kiro/
 
 # ============================================================================
+# IMPORTANT: These files MUST remain public (DO NOT IGNORE)
+# ============================================================================
+# Cargo.toml - Rust project configuration (PUBLIC)
+# .github/ - CI/CD workflows (PUBLIC)
+# .gitmodules - Git submodule configuration (PUBLIC)
+# .coderabbit.yaml - Code review configuration (PUBLIC)
+# LICENSE - License file (PUBLIC)
+# README.md - Project documentation (PUBLIC)
+# CHANGELOG.md - Change log (PUBLIC)
+# CONTRIBUTING.md - Contribution guidelines (PUBLIC)
+
+# ============================================================================
 # Temporary Patterns
 # ============================================================================
 {ok+=}
