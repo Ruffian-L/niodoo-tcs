@@ -1,5 +1,169 @@
 ## [Unreleased]
 
+### 2025-01-XX – Added Project Status Disclaimer to README ✅
+
+#### Summary
+Added a professional disclaimer at the top of README.md to clearly communicate the project's development status, origin, and mission. The disclaimer informs users that this is an active development project with no official release, created by someone with ADHD and no formal technical background, with a mission to democratize intelligence and create more helpful AI systems.
+
+#### Changes
+- Added prominent disclaimer section at the top of README.md
+- Clearly states project is in active development with no official release
+- Explains the project's origin and mission
+- Sets appropriate expectations for users and contributors
+- Encourages community collaboration and feedback
+
+#### Impact
+- Provides transparency about project status and development stage
+- Sets clear expectations for potential users and contributors
+- Highlights the project's mission-driven approach
+- Professional presentation while maintaining authenticity
+
+### 2025-01-XX – Comprehensive .gitignore Cleanup ✅
+
+#### Summary
+Completely reorganized and expanded `.gitignore` to properly exclude all unnecessary files, directories, and artifacts from version control. Repository is now properly organized with clear ignore patterns for build artifacts, temporary files, backups, test outputs, and legacy directories. **Removed all personal/server-specific files from git tracking** (Beelink server configs, SSH scripts, personal environment files) while preserving them on disk. Systematically went through every `.md` file and script to ensure proper gitignore coverage.
+
+#### Changes
+
+##### Ignored Directories
+- **Legacy/Archive**: `.archive_old/`, `.bootstrap_state/`, `.legacy_code/`, `.zencoder/`, `archive/`, `backupversions/`, `backups/`
+- **Temporary/Output**: `tmp/`, `logs/`, `outputs/`, `results/`, `storage/`, `snapshots/`, `validation_results/`
+- **Test Results**: `e2e_test_results_*/`, `e2e_validation_results_*/`, `quick_ab_proof_*/`, `real_ablation_*/`, `sweep_*/`, `ablation_results/`
+- **Database/Storage**: `qdrant_data/`, `qdrant_storage/`, `data/`
+- **Legacy Code**: `EchoMemoria/`, `GOLDEN_NUGGETS/`, `cpp-qt-brain-integration/`, `curator_executor/`, `niodoo-tcs-bridge/`, `Niodoo-Topo-Coder/`
+- **Build/Bench**: `baselines/`, `benches/`, `models_backup_*/`
+- **Third-Party Binaries**: `onnxruntime-linux-x64-*/`, `third_party/ollama/`
+
+##### Ignored File Patterns
+- **Build Artifacts**: All Rust `target/` directories, Python `__pycache__/`, compiled binaries
+- **Temporary Files**: `*.log`, `*.tmp`, `*.bak`, `*.backup`, `*.orig`
+- **Model Files**: `*.onnx`, `*.pt`, `*.pth`, `*.safetensors`, `*.gguf`, `*.ggml`, `tokenizer.json`
+- **Archives**: `*.tar.gz`, `*.tgz`, `onnx.tgz`
+- **Test Files**: `test_*`, `*_test`, `*_demo`, `quick_test*`, `minimal_*`, `debug_*`
+- **Documentation**: All `*.md` files except `README.md`, `CHANGELOG.md`, `LICENSE`, `CONTRIBUTING.md`, `docs/H200_PRIMING_GUIDE.md`, `docs/README.md`, and essential subdirectory READMEs
+- **Scripts**: Temporary shell scripts (`FIX_*.sh`, `CONNECT_*.sh`, `SSH_*.sh`, `sync-*.sh`, `audio-*.service`, `deploy_*.sh`, `debug_*.sh`, `generate_*.sh`)
+- **Python Scripts**: `create_latex.py`, `generate_pdf.py`, `visualize_architecture.py`
+- **Data Files**: `*.json` (except configs), `*.csv`, `learning_events.json`, `emotion_training_data_mock.json`
+- **Images**: All `*.png`, `*.jpg`, etc. except `niodoo_tcs_architecture.png`
+- **Environment Files**: `.env*`, `tcs_runtime.env`, `.bashrc_workspace`, `.env.cursor`
+- **Personal/Server Files**: `*BEELINK*`, `BEELINK_INFRASTRUCTURE_REPORT.md`, `CONNECT_TO_BEELINK.sh`, all `.kiro/`, `.zencoder/`, `.archive_old/`, `.legacy_code/` directories
+
+##### Preserved Files
+- Essential documentation: `README.md`, `CHANGELOG.md`, `LICENSE`, `CONTRIBUTING.md`
+- Essential scripts: `run_*.sh`, `start_*.sh`, `check_*.sh`, `verify_*.sh`, `dashboard.sh`
+- Configuration files: `config/*.env`, `qdrant_config.yaml`
+- Architecture diagram: `niodoo_tcs_architecture.png`
+
+#### Actions Taken
+- **Removed from git tracking** (files preserved on disk):
+  - All `.kiro/`, `.zencoder/`, `.archive_old/`, `.legacy_code/`, `.bootstrap_state/` directories
+  - All personal/server files: `BEELINK_INFRASTRUCTURE_REPORT.md`, `CONNECT_TO_BEELINK.sh`, `.env.production`, `.bashrc_workspace`, `.env.cursor`
+  - All temporary docs: `ARCHITECTURE_ALIGNMENT_REPORT.md`, `QWEN_*.md`, `INTEGRATION_*.md`, `CODE_*.md`, etc.
+  - All non-essential scripts: `generate_md.sh`, `deploy_integrated.sh`, `check_all_services.sh`, scripts in `scripts/` directory
+  - All docs in `docs/` except `H200_PRIMING_GUIDE.md` and `README.md`
+- **Kept in git tracking**: Essential files like `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`, `dashboard.sh`, `start_all_services.sh`, `run_*.sh`, `start_*.sh`
+
+#### Impact
+- Repository is now properly organized with clear separation between tracked and ignored files
+- Reduces repository size by excluding large binaries, models, and temporary files
+- **Prevents accidental commits of personal server configs and sensitive environment files**
+- Makes git status cleaner and easier to navigate
+- All removed files remain on disk - only removed from git tracking
+
+### 2025-01-XX – Adaptive Persistence Threshold System ✅
+
+#### Summary
+Implemented adaptive persistence threshold system that replaces fixed threshold (0.5) with variance-aware, percentile-based adaptive filtering for improved noise reduction in topological feature detection.
+
+#### Features
+
+##### Core Infrastructure
+- **AdaptivePersistenceThreshold struct**: Tracks persistence distributions globally and per-context
+- **ThresholdMode enum**: Supports three modes:
+  - `PercentileOnly`: Uses percentile-based threshold from tracked distribution
+  - `VarianceOnly`: Scales base threshold by point cloud variance
+  - `Combined`: Combines percentile threshold scaled by variance (default)
+- **ComputationContext enum**: Identifies computation contexts (TCS, TokenPromotion, Other) for context-specific tracking
+
+##### Configuration Parameters
+Added to `ConsciousnessConfig`:
+- `tda_adaptive_threshold_enabled: bool` (default: `false` for backward compatibility)
+- `tda_percentile_threshold: f64` (default: `0.75` for 75th percentile)
+- `tda_variance_sensitivity: f64` (default: `1.0`)
+- `tda_threshold_mode: ThresholdMode` (default: `Combined`)
+
+##### Integration Points
+
+1. **RipserCalculator** (`src/topology/persistent_homology.rs`):
+   - Added optional `adaptive_threshold` field
+   - Modified `compute_from_points()` to compute point cloud variance and use adaptive threshold
+   - Records persistence values for future adaptation
+   - Maintains backward compatibility with fixed threshold
+
+2. **PatternDiscoveryEngine** (`src/token_promotion/pattern_discovery.rs`):
+   - Creates `AdaptivePersistenceThreshold` instance if enabled in config
+   - Uses `ComputationContext::TokenPromotion` for context-specific tracking
+   - Applies adaptive filtering to topological features
+
+3. **TCSAnalyzer - Niodoo Python path** (`Niodoo/src/tcs_analysis.rs`):
+   - Added simplified `AdaptiveThresholdTracker` for Python giotto-tda integration
+   - Filters persistence pairs after receiving results from Python wrapper
+   - Configurable via environment variables:
+     - `TDA_ADAPTIVE_THRESHOLD_ENABLED` (enable/disable)
+     - `TDA_PERSISTENCE_THRESHOLD` (base threshold, default: 0.5)
+     - `TDA_PERCENTILE_THRESHOLD` (percentile, default: 0.75)
+     - `TDA_VARIANCE_SENSITIVITY` (sensitivity factor, default: 1.0)
+
+#### Implementation Details
+
+##### Variance Computation
+- Computes standard deviation from all point cloud coordinates
+- Formula: `variance = sqrt(mean((x_i - mean)^2))`
+
+##### Adaptive Threshold Formula
+```rust
+adaptive_threshold = match mode {
+    PercentileOnly => percentile_threshold.max(base_threshold),
+    VarianceOnly => base_threshold * (1.0 + variance.sqrt() * sensitivity),
+    Combined => percentile_threshold.max(base_threshold) * (1.0 + variance.sqrt() * sensitivity),
+}
+```
+
+##### Persistence Tracking
+- Global tracking: All persistence values across all computations
+- Context-specific tracking: Separate distributions per computation context
+- Sliding window: Maximum 10,000 values tracked to prevent unbounded growth
+- Thread-safe: Uses `Arc<RwLock<>>` for concurrent access
+
+#### Backward Compatibility
+- **Default behavior unchanged**: `tda_adaptive_threshold_enabled = false` maintains existing fixed threshold behavior
+- **Manual override**: `set_threshold()` method still works for fixed threshold
+- **Existing code paths**: Unchanged unless adaptive threshold explicitly enabled
+
+#### Files Modified
+- `src/topology/persistent_homology.rs`: Core adaptive threshold infrastructure
+- `src/config/system_config.rs`: Configuration parameters
+- `src/token_promotion/pattern_discovery.rs`: Pattern discovery integration
+- `Niodoo/src/tcs_analysis.rs`: Niodoo Python path integration
+
+#### Usage
+
+Enable adaptive threshold in config:
+```toml
+[tda]
+adaptive_threshold_enabled = true
+percentile_threshold = 0.75
+variance_sensitivity = 1.0
+threshold_mode = "Combined"
+```
+
+Or via environment variables (Niodoo):
+```bash
+export TDA_ADAPTIVE_THRESHOLD_ENABLED=true
+export TDA_PERCENTILE_THRESHOLD=0.75
+export TDA_VARIANCE_SENSITIVITY=1.0
+```
+
 ### 2025-11-10 – vLLM Multi-Model Setup with Granite and Topological Qwen Curator on Port 8000 ✅
 
 #### Summary

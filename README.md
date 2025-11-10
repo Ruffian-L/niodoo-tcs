@@ -4,6 +4,16 @@
 [![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/github/stars/Ruffian-L/niodoo-tcs?style=social)](https://github.com/Ruffian-L/niodoo-tcs)
 
+> **⚠️ Project Status Disclaimer**
+> 
+> This repository is currently in **active development** with **no official release** available yet. The project is experimental and under continuous iteration. 
+> 
+> This work was initiated by an individual with ADHD and no formal technical background, driven by a mission to **democratize intelligence** and create more **helpful, accessible AI systems**. As such, the codebase may contain unconventional approaches, rapid iterations, and areas that require refinement. Contributions, feedback, and collaboration from the community are welcomed and encouraged.
+> 
+> Please use this project at your own discretion and understand that it represents ongoing research rather than production-ready software.
+
+---
+
 An experimental AI framework implementing consciousness simulation through topological mathematics and adaptive learning systems.
 
 ## Overview
