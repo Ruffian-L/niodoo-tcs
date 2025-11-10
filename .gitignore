@@ -322,6 +322,14 @@ visualize_architecture.py
 *.gif
 *.svg
 !niodoo_tcs_architecture.png
+# README images
+!figures/consciousness_compass_hero.png
+!figures/consciousness_compass_hero_v2.png
+!figures/system_architecture.png
+!docs/images/rouge_improvements.png
+!docs/images/entropy_stability.png
+!docs/images/latency_comparison.png
+!docs/images/learning_dashboard.png
 
 # ============================================================================
 # Docker and Monitoring Configs (local)
