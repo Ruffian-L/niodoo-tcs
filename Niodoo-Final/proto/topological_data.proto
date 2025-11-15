@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package niodoo.rce;
+
+// Topological Data Exchange for Recursive Connectome Engine
+// Handles Persistent Laplacians, homology, and topological analysis
+
+import "google/protobuf/timestamp.proto";
+import "onnx_inference.proto";
+
+// Persistent homology barcode
+message Barcode {
+    int32 dimension = 1;  // Homology dimension (0, 1, 2, ...)
+    double birth = 2;  // Birth time
+    double death = 3;  // Death time
+    double persistence = 4;  // death - birth
+}
+
+// Persistent homology diagram
+message PersistenceDiagram {
+    repeated Barcode barcodes = 1;
+    int32 max_dimension = 2;
+}
+
+// Betti numbers (rank of homology groups)
+message BettiNumbers {
+    int32 beta_0 = 1;  // Connected components
+    int32 beta_1 = 2;  // Holes
+    int32 beta_2 = 3;  // Voids
+    repeated int32 higher_betti = 4;  // Higher dimensions
+}
+
+// Persistent Laplacian spectrum
+message LaplacianSpectrum {
+    repeated double eigenvalues = 1;
+    repeated double eigenvectors = 2;  // Flattened eigenvectors
+    repeated int32 eigenvector_shape = 3;  // Shape for reshaping
+}
+
+// Topological signature (for vector storage in Qdrant)
+message TopologicalSignature {
+    repeated double persistent_homology_features = 1;  // Flattened PH features
+    BettiNumbers betti_numbers = 2;
+    double topological_entropy = 3;
+    repeated double laplacian_features = 4;  // Top eigenvectors
+    int32 embedding_dimension = 5;  // Dimension for Qdrant storage
+}
+
+// Topological data request
+message TopologicalDataRequest {
+    string data_id = 1;  // Identifier for the data
+    TopologicalData data = 2;
+    TopologyOptions options = 3;
+}
+
+// Topological data
+message TopologicalData {
+    repeated float point_cloud = 1;  // Flattened point cloud [n_points, dim]
+    repeated int32 point_cloud_shape = 2;  // [n_points, dim]
+    repeated float distance_matrix = 3;  // Distance matrix (if precomputed)
+    repeated int32 distance_matrix_shape = 4;
+    double epsilon = 5;  // Threshold for persistent homology
+    int32 max_dimension = 6;  // Maximum homology dimension
+}
+
+// Topology computation options
+message TopologyOptions {
+    bool compute_persistence = 1;  // Compute persistent homology
+    bool compute_betti = 2;  // Compute Betti numbers
+    bool compute_laplacian = 3;  // Compute Laplacian spectrum
+    bool approximate = 4;  // Use approximate TDA
+    int32 max_features = 5;  // Maximum features to extract
+    bool normalize = 6;  // Normalize features
+}
+
+// Topological data response
+message TopologicalDataResponse {
+    PersistenceDiagram persistence_diagram = 1;
+    BettiNumbers betti_numbers = 2;
+    LaplacianSpectrum laplacian_spectrum = 3;
+    TopologicalSignature signature = 4;
+    ComputationMetadata metadata = 5;
+}
+
+// Computation metadata
+message ComputationMetadata {
+    double computation_time_ms = 1;
+    int64 memory_used_bytes = 2;
+    string algorithm = 3;  // Algorithm used (e.g., "Ripser++", "PersistentLaplacian")
+    bool used_approximation = 4;
+    google.protobuf.Timestamp timestamp = 5;
+}
+
+// Recursive topology request (for recursive connectome loops)
+message RecursiveTopologyRequest {
+    string iteration_id = 1;
+    TopologicalData initial_data = 2;
+    int32 recursion_depth = 3;  // How many recursive iterations
+    TopologyOptions options = 4;
+}
+
+// Recursive topology response
+message RecursiveTopologyResponse {
+    repeated TopologicalDataResponse iterations = 1;
+    repeated TopologicalSignature evolution = 2;  // Evolution of signatures
+    double total_computation_time_ms = 3;
+}
+
+// Topological Analysis Service
+service TopologicalAnalysisService {
+    // Compute topological features
+    rpc ComputeTopology(TopologicalDataRequest) returns (TopologicalDataResponse);
+    
+    // Recursive topology computation
+    rpc ComputeRecursiveTopology(RecursiveTopologyRequest) returns (RecursiveTopologyResponse);
+    
+    // Stream topological computations
+    rpc StreamTopology(stream TopologicalDataRequest) returns (stream TopologicalDataResponse);
+    
+    // Convert topological signature to ONNX-compatible format
+    rpc SignatureToTensor(TopologicalSignature) returns (Tensor);  // Tensor from onnx_inference.proto
+}
+

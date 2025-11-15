@@ -1,0 +1,403 @@
+# ============================================================================
+# Rust Build Artifacts
+# ============================================================================
+/target/
+**/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+.cargo-target/
+.cargo-tmp/
+target-ci/
+target-cursor/
+target_old_*/
+target_local/
+
+# ============================================================================
+# Binary Outputs
+# ============================================================================
+/binaries/
+*.exe
+*.dll
+*.so
+*.dylib
+simple_tcs_sync
+torque_test
+
+# ============================================================================
+# Python Artifacts
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+venv/
+venv_new/
+env/
+.venv/
+*.pyc
+*.whl
+
+# ============================================================================
+# IDE and Editor Files
+# ============================================================================
+.vscode/
+.vscode-server/
+.idea/
+.grok/
+*.swp
+*.swo
+*~
+.DS_Store
+.env.cursor
+.bashrc_workspace
+settings.json.FIXED
+
+# ============================================================================
+# Build and Output Directories
+# ============================================================================
+/build/
+/dist/
+/out/
+/outputs/
+/results/
+/storage/
+/snapshots/
+/validation_results/
+
+# ============================================================================
+# Temporary Files and Directories
+# ============================================================================
+*.tmp
+*.temp
+*.log
+*.bak
+*.orig
+*.backup
+Cargo.toml.backup
+CHANGELOG.md.backup
+tmp/
+tmp/pip-unpack-*/
+tmp/pip-metadata-*/
+tmp/tmp*
+logs/
+*.out
+*.pid
+*.prom
+
+# ============================================================================
+# CUDA/GPU Artifacts
+# ============================================================================
+*.ptx
+*.cubin
+
+# ============================================================================
+# Documentation Build
+# ============================================================================
+/docs/_build/
+/docs/site/
+/docs/working/
+/docs/archive/
+/docs/validation/
+
+# ============================================================================
+# Test Artifacts and Results
+# ============================================================================
+/test-results/
+/coverage/
+*.gcda
+*.gcno
+test_*
+*_test
+*_demo
+quick_test*
+minimal_*
+debug_*
+e2e_test_results_*/
+e2e_test_output.log
+e2e_test_run.log
+e2e_validation_results_*/
+quick_ab_proof_*/
+real_ablation_*/
+sweep_*/
+soak_test_*.log
+ablation_results/
+
+# ============================================================================
+# Environment Files (may contain secrets)
+# ============================================================================
+.env
+.env.local
+.env.production
+tcs_runtime.env
+*.env
+!config/*.env
+
+# ============================================================================
+# Large Model Files and Archives
+# ============================================================================
+*.onnx
+*.pt
+*.pth
+*.safetensors
+*.gguf
+*.ggml
+models/
+models_backup_*/
+*.tar.gz
+*.tgz
+onnx.tgz
+!docs/*.tar.gz
+tokenizer.json
+
+# ============================================================================
+# Legacy, Archive, and Backup Directories
+# ============================================================================
+.archive_old/
+.bootstrap_state/
+.legacy_code/
+.zencoder/
+archive/
+backupversions/
+backups/
+*-backup/
+*-old/
+BULLSHIT_QUARANTINE/
+EchoMemoria/
+GOLDEN_NUGGETS/
+cpp-qt-brain-integration/
+curator_executor/
+niodoo-tcs-bridge/
+Niodoo-Topo-Coder/
+baselines/
+benches/
+
+# ============================================================================
+# Personal/Server-Specific Files (DO NOT COMMIT)
+# ============================================================================
+*BEELINK*
+*beelink*
+CONNECT_TO_BEELINK.sh
+BEELINK_INFRASTRUCTURE_REPORT.md
+SSH_CHEATSHEET.sh
+FIX_VSCODE_*.sh
+CONNECT_*.sh
+*.service
+sync-*.sh
+
+# ============================================================================
+# Third-Party Binaries and Libraries
+# ============================================================================
+third_party/ollama/
+third_party/qdrant/*.tar.gz
+third_party/onnxruntime*.tgz
+onnxruntime-linux-x64-*/
+
+# ============================================================================
+# Database and Storage Directories
+# ============================================================================
+qdrant_data/
+qdrant_storage/
+data/
+.qdrant-initialized
+
+# ============================================================================
+# Local Working Directories
+# ============================================================================
+vendor/
+constants_core/
+niodoo-core/
+Niodoo-TCS-Release/
+Niodoo/
+niodoo_integrated/
+niodoo_real_integrated/logs/
+niodoo_real_integrated/results/
+niodoo_real_integrated/target_local/
+
+# ============================================================================
+# Working/Scratch Files
+# ============================================================================
+*.rs.working
+mock_*.rs
+standalone_*
+simple_*
+
+# ============================================================================
+# Learning and Training Data
+# ============================================================================
+learning_curve_*.csv
+learning_events.json
+learning_events.csv
+learning_log.txt
+continual_learning*.out
+emotion_training_data_mock.json
+
+# ============================================================================
+# Sync Folders
+# ============================================================================
+.stfolder/
+.stversions/
+
+# ============================================================================
+# Documentation Files (keep only essential ones)
+# ============================================================================
+*.md
+!README.md
+!CHANGELOG.md
+!LICENSE
+!CONTRIBUTING.md
+!docs/H200_PRIMING_GUIDE.md
+!docs/README.md
+!niodoo_real_integrated/README.md
+!examples/README.md
+!baselines/README.md
+!archive/README.md
+# Keep submodule READMEs
+!**/llama.cpp/**/*.md
+!**/deployment/**/*.md
+
+# ============================================================================
+# Text Files (keep only essential ones)
+# ============================================================================
+*.txt
+!LICENSE.txt
+COMMANDS_FOR_YOU.txt
+VSCODE_SSH_FIX.txt
+custom_rust_files.txt
+rust_files.txt
+
+# ============================================================================
+# Shell Scripts (keep only essential ones)
+# ============================================================================
+*.sh
+!run_*.sh
+!start_*.sh
+!check_*.sh
+!verify_*.sh
+!dashboard.sh
+!scripts/start_h200_bootstrap.sh
+# Explicitly ignore personal/server scripts
+FIX_*.sh
+CONNECT_*.sh
+SSH_*.sh
+sync-*.sh
+generate_*.sh
+audio-*.service
+deploy_*.sh
+debug_*.sh
+
+# ============================================================================
+# Python Scripts (temporary/generated)
+# ============================================================================
+create_latex.py
+generate_pdf.py
+generate_md.sh
+visualize_architecture.py
+
+# ============================================================================
+# Jupyter Notebooks
+# ============================================================================
+*.ipynb
+
+# ============================================================================
+# JSON Files (keep only essential configs)
+# ============================================================================
+*.json
+!package.json
+!tsconfig.json
+# Note: qdrant_config.yaml is YAML, not JSON
+
+# ============================================================================
+# CSV Files
+# ============================================================================
+*.csv
+
+# ============================================================================
+# Image Files (keep only essential ones)
+# ============================================================================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+!niodoo_tcs_architecture.png
+# README images
+!figures/consciousness_compass_hero.png
+!figures/consciousness_compass_hero_v2.png
+!figures/system_architecture.png
+!docs/images/rouge_improvements.png
+!docs/images/entropy_stability.png
+!docs/images/latency_comparison.png
+!docs/images/learning_dashboard.png
+
+# ============================================================================
+# Docker and Monitoring Configs (local)
+# ============================================================================
+docker-compose.monitoring.yml
+prometheus.yml
+prometheus-alerts.yml
+grafana-*.json
+grafana-provisioning/
+
+# ============================================================================
+# System Files
+# ============================================================================
+Thumbs.db
+.directory
+.claude/
+.kiro/
+
+# ============================================================================
+# IMPORTANT: These files MUST remain public (DO NOT IGNORE)
+# ============================================================================
+# Cargo.toml - Rust project configuration (PUBLIC)
+# .github/ - CI/CD workflows (PUBLIC)
+# .gitmodules - Git submodule configuration (PUBLIC)
+# .coderabbit.yaml - Code review configuration (PUBLIC)
+# LICENSE - License file (PUBLIC)
+# README.md - Project documentation (PUBLIC)
+# CHANGELOG.md - Change log (PUBLIC)
+# CONTRIBUTING.md - Contribution guidelines (PUBLIC)
+
+# ============================================================================
+# Temporary Patterns
+# ============================================================================
+{ok+=}
+1{ok+=}
+
+# ============================================================================
+# Submodules (handled separately)
+# ============================================================================
+# Note: Submodules are tracked via .gitmodules
+# Niodoo-TCT/
+# niodoo-ai/
+
+# API Keys and Secrets
+*.env
+*.env.local
+*.env.*.local
+.env
+.env.local
+**/secrets/
+**/*secret*
+**/*token*
+**/*.key
+**/*.pem
+**/*credentials*
+**/config/secrets.*
+**/config/*.key
+
+# API Keys in config files
+**/config/*api*
+**/config/*token*
+
+# HuggingFace tokens
+**/.hf_token
+**/huggingface_token
+
+# GitHub tokens
+**/.github_token
+
+# Exclude all .env config files (may contain API keys)
+config/*.env

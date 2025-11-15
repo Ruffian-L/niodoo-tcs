@@ -1,5 +1,167 @@
 ## [Unreleased]
 
+### 2025-11-15 – Folder Structure Cleanup Plan Created ✅
+
+#### Summary
+Created comprehensive cleanup plan and automated script to archive old duplicate folders, eliminating confusion for future AI assistants and developers.
+
+#### Problem Identified
+- **Niodoo-Final/** = Active codebase (51GB, Nov 15, 2025)
+- **Root-level old folders** = Confusing duplicates (Nov 11, 2025):
+  - `Niodoo/`, `niodoo_integrated/`, `niodoo_real_integrated/`, `Niodoo-TCT/`, `niodoo-ai/`, `niodoo-tcs-bridge/`, `niodoo-visualizer/`
+
+#### Solution Implemented
+- **Option A (Recommended)**: Archive old folders to `archive/old_versions_*/` directory
+- **Option B (Risky)**: Flatten structure by moving Niodoo-Final contents to root (not recommended)
+
+#### Files Created
+- `FOLDER_CLEANUP_PLAN.md` - Complete cleanup plan with step-by-step instructions
+- `scripts/cleanup_old_folders.sh` - Automated script to safely archive old folders
+- `README_STRUCTURE.md` - Clear documentation for future reference (will be created by script)
+
+#### Script Features
+- Safely moves old folders to archive directory
+- Preserves history (no deletion, only archiving)
+- Creates clear documentation
+- Creates convenience symlink (`niodoo-active -> Niodoo-Final`)
+- Includes rollback instructions
+
+#### Execution
+✅ **COMPLETED** - Cleanup script executed successfully on 2025-11-15
+
+#### Results
+- ✅ Moved 7 old folders to `archive/old_versions_2025-11-15/`:
+  - `Niodoo/`, `niodoo_integrated/`, `niodoo_real_integrated/`, `Niodoo-TCT/`, `niodoo-ai/`, `niodoo-tcs-bridge/`, `niodoo-visualizer/`
+- ✅ Archived old `Cargo.toml` (older than Niodoo-Final version)
+- ✅ Created `README_STRUCTURE.md` at root with clear instructions
+- ✅ Created convenience symlink `niodoo-active -> Niodoo-Final`
+- ✅ Created archive README with restore instructions
+- ✅ Root level now clean - only `Niodoo-Final/` remains as active codebase
+
+### 2025-11-15 – Folder Structure Analysis and Documentation ✅
+
+#### Summary
+Analyzed nested folder structure to identify which directory contains the most recent code. Confirmed that `Niodoo-Final/` is the active codebase with the latest updates.
+
+#### Findings
+- **Niodoo-Final** contains the most recent code (last modified Nov 15, 2025)
+  - CHANGELOG.md: Nov 15, 09:09 (vs root: Nov 12, 15:20)
+  - Cargo.toml: Nov 15, 08:28 (vs root: Nov 11, 12:43)
+  - Directory size: 51GB with 377 Rust source files
+  - Contains comprehensive codebase including nested copies of other folders
+
+- **Root-level folders** are older versions (last modified Nov 11-12, 2025)
+  - `/Niodoo/`: 228KB, 29 files (archived)
+  - `/niodoo_integrated/`: 320KB (archived)
+  - `/niodoo_real_integrated/`: 1.8MB (archived)
+
+#### Documentation Created
+- `FOLDER_STRUCTURE_EXPLAINED.md` - Complete analysis of folder structure with evidence and recommendations
+
+#### Recommendation
+**Work in `/home/beelink/niodoo-tcs/Niodoo-Final/`** for all development. Root-level folders can be ignored or archived.
+
+### 2025-11-12 – Syncthing Resync After RunPod Instance Change ✅
+
+#### Summary
+Reconfigured Syncthing after RunPod instance changed (new SSH credentials and device ID). Updated device pairing and folder configurations on both local and RunPod instances.
+
+#### Changes
+- **New RunPod Device ID**: `HFVY4E3-B3VTMAX-PKL7FKW-MWYXT3M-EZJVETT-S3HU3LT-3N5FAGD-DTBMHQQ` (replaced old device `WJHFRVE-6FGGCZW-TOJ4Q3N-6WBSJSQ-DTFO6XC-ZXC3DZ6-OBEFSTL-YOMC4Q4`)
+- **New RunPod SSH**: `root@38.80.152.72 -p 30868`
+- Updated local Syncthing config to reference new RunPod device ID
+- Configured RunPod Syncthing with local device and folders (models, Niodoo-Final)
+- Both instances restarted to apply changes
+
+#### Scripts Created
+- `scripts/resync_syncthing.py` - Automated resync script for updating device IDs and folder configurations
+
+#### Status
+- ✓ Syncthing installed and running on new RunPod instance
+- ✓ Device pairing configured
+- ✓ Folders configured (models, Niodoo-Final)
+- ✓ `.stignore` files preserved from previous setup
+- ✓ Two-way sync active
+
+### 2025-01-XX – Syncthing Two-Way Sync Setup for RunPod ✅
+
+#### Summary
+Set up Syncthing for live two-way synchronization between local Ubuntu machine and RunPod instance. Syncs `/workspace/models` and `/workspace/Niodoo-Final` directories, including trained model snapshots and checkpoints, while excluding build artifacts and cache files.
+
+#### Implementation
+
+**Installation Scripts:**
+- `scripts/install_syncthing_local.sh` - Install Syncthing on local machine with systemd service
+- `scripts/install_syncthing_runpod.sh` - Install Syncthing on RunPod instance with systemd service
+- `scripts/create_stignore_files.sh` - Create `.stignore` files for sync directories
+- `scripts/setup_syncthing_sync.sh` - Interactive setup guide with step-by-step instructions
+
+**Sync Configuration:**
+- **Folder 1**: `/workspace/models` → Local (syncs all model files)
+- **Folder 2**: `/workspace/Niodoo-Final` → Local (syncs codebase and trained models)
+
+**Exclusions (.stignore):**
+- `.git/` directories (all instances)
+- Rust build artifacts (`target/`, `build/`, `*.o`, `*.so`, `Cargo.lock`, etc.)
+- Python artifacts (`__pycache__/`, `venv/`, `.pytest_cache/`)
+- Compiler cache (`.ccache/`)
+- Cache directories (`.cache/`, `hf_cache/`)
+- Temporary files (`*.log`, `*.tmp`, `logs/`)
+- Test artifacts and coverage files
+- Archive and backup directories (`archive/`, `backupversions/`, `backups/`, `models_backup_*/`)
+- Large directories (`niodoo-ai/`, `third_party/`, `tmp/`, `deployment/`, `docs/`, `figures/`)
+- Database/storage (`qdrant_storage/`, `storage/`, `data/`)
+- Documentation files (`*.md`, `*.tex`, `*.html`, `*.pdf` - except essential ones)
+- `ollama/` folder (models directory only)
+
+**Inclusions (explicitly synced):**
+- **ALL model files** in `/workspace/models` (Qwen-Embedding, Qwen2*, Qwen2.5*, granite*, qwen25-coder-topology*)
+- **ALL legacy code** (`.legacy_code/`, `.legacy/`, `legacy/`)
+- Trained model outputs (`outputs/qwen25-coder-topology-*/`)
+- Source code (`src/`, `niodoo_real_integrated/`)
+- Essential config files (`Cargo.toml`, `README.md`, `CHANGELOG.md`, `LICENSE`)
+- The symlink in Niodoo-Final syncs as a symlink (prevents double downloading)
+
+#### Usage
+
+1. **Install Syncthing:**
+   - Local: `bash scripts/install_syncthing_local.sh`
+   - RunPod: SSH in and run `bash scripts/install_syncthing_runpod.sh`
+
+2. **Create ignore files:**
+   - On RunPod: `bash scripts/create_stignore_files.sh`
+
+3. **Pair devices and configure folders:**
+   - Run `bash scripts/setup_syncthing_sync.sh` for detailed instructions
+   - Access local UI: `http://localhost:8384/`
+   - Access RunPod UI via SSH tunnel: `ssh -L 9090:127.0.0.1:8384 root@38.80.152.77 -p 32054 -i ~/.ssh/id_ed25519` then `http://localhost:9090/`
+
+#### Technical Details
+
+- Syncthing runs as systemd service on both machines (auto-start on boot)
+- Web UI accessible locally only (default security)
+- SSH tunnel required for RunPod web UI access
+- Symlinks sync as symlink files (not dereferenced), preventing duplicate downloads
+- Two-way sync: changes on either side propagate automatically
+- Conflict resolution: Syncthing automatically renames older files with "sync-conflict" suffix
+
+#### Files Created
+- `scripts/install_syncthing_local.sh` - Local installation script
+- `scripts/install_syncthing_runpod.sh` - RunPod installation script
+- `scripts/create_stignore_files.sh` - Creates `.stignore` files on RunPod
+- `scripts/setup_syncthing_sync.sh` - Interactive setup guide
+- `scripts/runpod_web_terminal_setup.sh` - Complete RunPod setup script
+- `scripts/auto_setup_syncthing.py` - Automated REST API configuration script
+- `/workspace/models/.stignore` - Ignore patterns for models directory
+- `/workspace/Niodoo-Final/.stignore` - Ignore patterns for Niodoo-Final directory
+
+#### Configuration Details
+- Devices automatically paired via REST API
+- Folders configured via REST API (runpod-models, niodoo-final)
+- `.stignore` files exclude ~280GB+ of unnecessary data (build artifacts, cache, venv, etc.)
+- All models and legacy code preserved
+- Sync configured for two-way synchronization via relay connections
+
 ### 2025-01-XX – Fixed Training Job Deserialization and ERAG Retrieval Issues ✅
 
 #### Summary
