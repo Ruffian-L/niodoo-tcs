@@ -1,0 +1,6 @@
+[
+  "tests/test_encoder.py::test_encoder_runs_on_cpu",
+  "tests/test_features.py::test_betti_curve_returns_expected_shape",
+  "tests/test_features.py::test_feature_extractor_outputs_flat_vector",
+  "tests/test_features.py::test_hidden_state_feature_adapter_matches_expected_dim"
+]

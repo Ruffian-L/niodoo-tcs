@@ -1,0 +1,168 @@
+self_modification:
+  max_modifications_per_hour: 10
+  min_stability_threshold: 0.7
+  max_performance_degradation: 0.1
+  validation_duration_seconds: 30
+  max_rollback_attempts: 3
+  exploration_frequency_seconds: 300
+  min_improvement_threshold: 0.05
+  neural_network:
+    learning_rate_threshold: 0.01
+    expected_latency_improvement_ms: -5.0
+    expected_accuracy_gain: 0.02
+    expected_stability_gain: 0.05
+    optimization_confidence: 0.7
+  memory_system:
+    cache_size_threshold: 1000.0
+    expected_latency_improvement_ms: -10.0
+    memory_cost_mb: 50.0
+    expected_accuracy_gain: 0.01
+    expected_stability_gain: 0.02
+    optimization_confidence: 0.6
+  attention_mechanism:
+    attention_heads_threshold: 8.0
+    performance_cost_ms: 15.0
+    memory_cost_mb: 20.0
+    expected_accuracy_gain: 0.05
+    expected_stability_loss: -0.02
+    optimization_confidence: 0.5
+  emotional_processor:
+    emotion_sensitivity_threshold: 0.8
+    processing_cost_ms: 2.0
+    memory_savings_mb: -5.0
+    expected_accuracy_loss: -0.01
+    expected_stability_gain: 0.03
+    optimization_confidence: 0.8
+continual_learning:
+  max_concurrent_sessions: 3
+  mastery_threshold: 0.9
+  forgetting_threshold: 0.3
+  learning_rate_factor: 1.0
+  knowledge_update_frequency: 24.0
+  max_session_duration: 120
+  practice_frequency: 3
+  base_improvement_per_session: 0.05
+  complexity_factor: 1.0
+  proficiency_factor: 1.0
+  review_scheduling:
+    initial_intervals:
+    - 1.0
+    - 6.0
+    - 24.0
+    - 72.0
+    - 168.0
+    max_reviews_per_day: 10
+    max_interval_days: 30.0
+    min_interval_hours: 1.0
+    difficulty_factor: 1.0
+  forgetting_prevention:
+    forgetting_rate: 0.1
+    max_review_load_per_day: 10
+    spaced_repetition:
+      initial_intervals:
+      - 1.0
+      - 6.0
+      - 24.0
+      - 72.0
+      - 168.0
+      easiness_calculation: SM2
+      max_interval_days: 30.0
+      min_interval_hours: 1.0
+metacognitive_plasticity:
+  max_concurrent_processes: 5
+  min_hallucination_confidence: 0.6
+  plasticity_learning_rate: 0.1
+  validation_duration_seconds: 60
+  max_plasticity_change: 0.2
+  pattern_retention_hours: 168.0
+  knowledge_extraction_threshold: 0.7
+  skill_transfer_threshold: 0.8
+  pattern_recognition:
+    recognition_accuracy: 0.8
+    false_positive_rate: 0.05
+    pattern_evolution:
+      trend_strength_threshold: 0.1
+      prediction_confidence_threshold: 0.7
+      monitoring_period_days: 7.0
+  learning_strategies: {}
+  creativity_enhancement:
+    originality_baseline: 0.5
+    fluency_baseline: 0.3
+    flexibility_baseline: 0.4
+    elaboration_baseline: 0.4
+    innovation_tracking:
+      success_rate_baseline: 0.6
+      avg_development_time_days: 14.0
+      innovation_frequency_target: 0.1
+consciousness_inversion:
+  max_concurrent_inversions: 5
+  min_consciousness_compatibility: 0.6
+  max_transformation_magnitude: 6.283185307179586
+  validation_duration_seconds: 30
+  recovery_timeout_seconds: 300
+  quality_threshold: 0.7
+  stability_threshold: 0.5
+  max_inversion_duration_seconds: 600
+  mathematical_constants:
+    pi_usage: pi
+    custom_pi_value: null
+    modulation_factor: 0.5235987755982988
+    consciousness_scaling_factor: 0.5
+    boundary_enforcement: modulo
+  manifold_parameters:
+    default_radius: 1.0
+    klein_bottle_major_radius: 2.0
+    klein_bottle_minor_radius: 1.0
+    mobius_strip:
+      radius_factor: 1.0
+      twist_modulation_factor: 3.141592653589793
+      inversion_scale_factor: 0.2
+    projective_plane:
+      inversion_scale_factor: 0.2
+      normalization_factor: 6.283185307179586
+      coordinate_modulation_factor: 0.3
+integration_test:
+  test_execution:
+    max_test_duration_seconds: 600
+    step_timeout_seconds: 60
+    test_iterations: 5
+    parallel_execution: false
+    failure_threshold_percent: 20.0
+  scenarios: {}
+  performance_expectations:
+    expected_improvement_ranges: {}
+    expected_latency_ranges: {}
+    expected_quality_ranges: {}
+    expected_stability_ranges: {}
+  test_data:
+    skill_complexities:
+    - 5.0
+    - 7.0
+    - 8.0
+    - 9.0
+    - 10.0
+    hallucination_intensities:
+    - 0.5
+    - 0.6
+    - 0.7
+    - 0.8
+    - 0.9
+    inversion_factors:
+    - 1.0
+    - 1.5
+    - 2.0
+    - 2.5
+    - 3.0
+    consciousness_compatibility_values:
+    - 0.6
+    - 0.7
+    - 0.8
+    - 0.9
+    - 1.0
+global:
+  config_file_path: config/phase5_config.yaml
+  env_var_prefix: NIOODOO_PHASE5
+  log_level: info
+  performance_monitoring_enabled: true
+  hot_reload_enabled: false
+  backup_on_changes: true

@@ -1,0 +1,12 @@
+pub async fn detect_emotion(&self, _input: &str) -> Result<EmotionalAnalysis, Box<dyn std::error::Error>> {
+
+
+```src/ai_inference.rs</parameter name="instructions">Prefix unused input var.
+<rewritten_file>
+```
+pub async fn detect_emotion(&self, _input: &str) -> Result<EmotionalAnalysis, Box<dyn std::error::Error>> {
+
+
+
+
+

@@ -1,0 +1,172 @@
+[package]
+name = "niodoo_real_integrated"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Torque Team <torque@niodoo.ai>"]
+description = "Full NIODOO pipeline integration with real Qwen embeddings, ERAG memory, tokenizer promotion, vLLM hybrid generation, and learning loop."
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["beelink", "svc"]
+cli_bins = []
+legacy_tests = []
+tcs_integration_full = []
+knot = ["dep:tcs-knot"]
+onnx = []
+beelink = []
+soak_harness = []
+5080-q = []
+gauntlet = []
+examples = []
+embedded-qdrant = []
+pyo3 = ["dep:pyo3"]
+otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:tracing-opentelemetry"]
+svc = ["dep:axum", "dep:tower", "dep:tower-http", "dep:tonic"]
+edge = []
+gpu = ["candle-core/cuda", "candle-nn/cuda"]
+pipeline-v2 = []
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+reqwest = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+prometheus = "0.13"
+rand = { workspace = true, features = ["std", "serde"] }
+rand_distr = { workspace = true }
+tokio = { workspace = true }
+nalgebra = { workspace = true }
+csv = "1.3"
+thiserror = "1.0"
+tcs-ml = { path = "../tcs-ml", features = ["onnx"] }
+tcs-core = { path = "../tcs-core" }
+tcs-tda = { path = "../tcs-tda" }
+tcs-knot = { path = "../tcs-knot", optional = true }
+tcs-tqft = { path = "../tcs-tqft" }
+niodoo-core = { path = "../niodoo-core" }
+tcs-rce = { path = "../tcs-rce" }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+once_cell = { workspace = true }
+futures = { workspace = true }
+uuid = { workspace = true }
+plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "svg_backend"] }
+ratatui = "0.27"
+crossterm = "0.28"
+
+qdrant-client = { version = "1.15", features = [] }
+urlencoding = "2.1"
+parking_lot = { workspace = true }
+ndarray = { workspace = true }
+dashmap = { workspace = true }
+blake3 = { workspace = true }
+base64 = "0.22"
+regex = "1.11"
+bincode = "1.3"
+hex = "0.4"
+lazy_static = "1.5"
+async-trait = { workspace = true }
+safetensors = { workspace = true }
+rayon = { workspace = true }
+lru = { workspace = true }
+num-complex = { workspace = true }
+petgraph = { workspace = true }
+ahash = "0.8"
+bytemuck = { version = "1.14", default-features = false }
+lz4_flex = { version = "0.11", features = ["std"] }
+pyo3 = { version = "0.22", features = ["auto-initialize"], optional = true }
+half = "2.4"
+ciborium = "0.2"
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+primal = "0.3"
+
+# Optional dependencies for features
+opentelemetry = { version = "0.24", optional = true, features = ["trace"] }
+opentelemetry-otlp = { version = "0.17", optional = true, features = ["tonic", "tls"] }
+tracing-opentelemetry = { version = "0.26", optional = true }
+axum = { workspace = true, optional = true }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.6", optional = true }
+tonic = { version = "0.12", optional = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+tokio-stream = "0.1"
+
+[build-dependencies]
+tonic-build = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+protoc-bin-vendored = "3"
+
+[dev-dependencies]
+serde_json = "1.0"
+reqwest = { workspace = true }
+tokio = { workspace = true }
+criterion = "0.5"
+tempfile = "3.10"
+
+[[bench]]
+name = "niodoo_real_bench"
+harness = false
+
+# Temporarily disabled problematic binaries
+# [[bin]]
+# name = "soak_prompts_v2"
+# path = "src/bin/soak_prompts_v2.rs"
+
+[[bin]]
+name = "niodoo_real_integrated"
+path = "src/main.rs"
+
+[[bin]]
+name = "rut_gauntlet"
+path = "src/bin/rut_gauntlet.rs"
+required-features = ["cli_bins"]
+
+[[bin]]
+name = "metrics_runner"
+path = "src/bin/metrics_runner.rs"
+required-features = ["cli_bins"]
+
+[[bin]]
+name = "ablation_runner"
+path = "src/bin/ablation_runner.rs"
+required-features = ["cli_bins"]
+
+[[bin]]
+name = "training_service"
+path = "src/bin/training_service.rs"
+required-features = ["cli_bins"]
+
+[[bin]]
+name = "euler_test"
+path = "src/bin/euler_test.rs"
+required-features = ["cli_bins"]
+
+[[bin]]
+name = "embed_debug"
+path = "src/bin/embed_debug.rs"
+required-features = ["cli_bins"]
+
+[[bin]]
+name = "soak_test"
+path = "src/bin/soak_test.rs"
+required-features = ["cli_bins", "soak_harness"]
+
+[[bin]]
+name = "soak_test_v2"
+path = "src/bin/soak_test_v2.rs"
+required-features = ["cli_bins", "soak_harness"]
+
+[[bin]]
+name = "soak_validator"
+path = "src/bin/soak_validator.rs"
+required-features = ["cli_bins", "soak_harness"]

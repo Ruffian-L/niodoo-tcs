@@ -1,0 +1,6 @@
+pub fn search_similar_mobius(&mut self, _query: &str, k: usize) -> Result<Vec<(Document, f32)>> {
+
+
+
+
+

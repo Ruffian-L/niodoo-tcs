@@ -1,0 +1,130 @@
+# Syncthing ignore patterns for Niodoo-Final directory
+# Exclude build artifacts and .git, but KEEP legacy code
+
+# Git directories (EXCLUDE)
+.git/
+**/.git/
+
+# Build artifacts (EXCLUDE)
+target/
+**/target/
+build/
+**/build/
+dist/
+out/
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+*.exe
+Cargo.lock
+*.rs.bk
+.cargo-target/
+.cargo-tmp/
+target-ci/
+target-cursor/
+target_old_*/
+target_local/
+cpp-qt-brain-integration/build/
+
+# Compiler cache (EXCLUDE)
+.ccache/
+**/.ccache/
+
+# Python artifacts (EXCLUDE)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+venv/
+venv_new/
+env/
+.venv/
+*.pyc
+*.whl
+.pytest_cache/
+**/.pytest_cache/
+
+# Temporary files (EXCLUDE)
+*.tmp
+*.temp
+*.log
+*.bak
+*.orig
+*.backup
+logs/
+*.out
+*.pid
+
+# Cache directories (EXCLUDE)
+.cache/
+**/.cache/
+hf_cache/
+models_backup_*/.cache/
+
+# Database/storage (EXCLUDE)
+qdrant_storage/
+qdrant_data/
+storage/
+data/
+.qdrant-initialized
+
+# Test artifacts (EXCLUDE)
+test-results/
+testresults/
+tests/test_reports/
+temporal_tda_test_suite/
+e2e_test_results_*/
+e2e_validation_results_*/
+ablation_results/
+validation_results/
+coverage/
+*.gcda
+*.gcno
+test_*
+*_test
+*_demo
+
+# Archive and backup directories (EXCLUDE)
+archive/
+backupversions/
+backups/
+models_backup_*/
+*-backup/
+*-old/
+.archive_old/
+
+# Large directories (EXCLUDE)
+niodoo-ai/
+third_party/
+tmp/
+deployment/
+docs/
+figures/
+
+# Documentation files (EXCLUDE - except essential)
+*.md
+!README.md
+!CHANGELOG.md
+!LICENSE
+!CONTRIBUTING.md
+*.tex
+*.html
+*.pdf
+
+# Syncthing metadata
+.stfolder/
+.stversions/
+
+# KEEP THESE (DO NOT EXCLUDE):
+# - .legacy_code/ (KEEP - user needs legacy code)
+# - .legacy/ (KEEP)
+# - legacy/ (KEEP)
+# - outputs/qwen25-coder-topology-*/ (KEEP - trained models)
+# - outputs/qwen25-coder-topology-trained/ (KEEP)
+# - niodoo_real_integrated/ (KEEP - main code)
+# - src/ (KEEP - source code)
+# - Cargo.toml, Cargo.lock (KEEP)
+# - All model directories in models/ (KEEP)
