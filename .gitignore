@@ -247,6 +247,7 @@ emotion_training_data_mock.json
 !CHANGELOG.md
 !LICENSE
 !CONTRIBUTING.md
+!research_logs/**/*.md
 !docs/H200_PRIMING_GUIDE.md
 !docs/README.md
 !niodoo_real_integrated/README.md

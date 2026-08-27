@@ -47,7 +47,7 @@ tcs-core = { path = "../tcs-core" }
 tcs-tda = { path = "../tcs-tda" }
 tcs-knot = { path = "../tcs-knot", optional = true }
 tcs-tqft = { path = "../tcs-tqft" }
-niodoo-core = { path = "../niodoo-core" }
+# niodoo-core = { path = "../niodoo-core" }  # MOVED TO .legacy - missing Cargo.toml
 tcs-rce = { path = "../tcs-rce" }
 candle-core = { workspace = true }
 candle-nn = { workspace = true }

@@ -1,3 +1,15 @@
+# Changelog
+
+## 2026-08-27 — drop missing niodoo-core workspace member
+
+We did: commented `niodoo-core` out of `[workspace].members` and dropped the path dep from `niodoo_real_integrated/Cargo.toml`. GitHub Actions run 32641220052 (`tcs-ml CI` on PR #7) died at `cargo check -p tcs-ml --lib --features onnx` because `/niodoo-core/Cargo.toml` does not exist (Phase 5 cleanup 2025-11-10 moved stubs to `.legacy/niodoo-core-deps/`). After that, cargo-bless pre-commit died on yanked `ort = "^1.16"` (all 1.16.x yanked, pykeio/ort#501); pinned `ort` to git tag `v1.16.3` and patched crates.io. Did not restore niodoo-core. Did not migrate to ort 2.0. Did not merge PR #7.
+
+We think: the README PR was blocked by a pre-existing workspace hole on `main`, not by the README edit. Cargo has to load every workspace member before `-p tcs-ml` can run. Yanked ort would have been the next CI fail.
+
+Next: let `tcs-ml CI` re-run on PR #7. If check still fails, it is a real tcs-ml compile error.
+
+---
+
 ## [Unreleased]
 
 ### 2025-01-XX – Fixed Training Job Deserialization and ERAG Retrieval Issues ✅
