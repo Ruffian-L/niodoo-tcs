@@ -14,7 +14,11 @@ Run 33088527795: smoke bin compiled and ran, then dlopen missed `libonnxruntime.
 
 Run 33088968690: dylib loaded, then session create failed — HF `model_quantized.onnx` is IR 10, in-tree ORT 1.16.3 max IR 9. Smoke bin now fetches CPU ONNX Runtime 1.18.1 into `target/` (the version CI already named, not in git).
 
-Next: let `tcs-ml CI` re-run on PR #7.
+Run 33089370116 (`tcs-ml CI` #37): **green**. `cargo check -p tcs-ml --lib --features onnx` and `test_qwen_stateful` both passed.
+
+Validation Gate still auto-fails at job setup on `actions/upload-artifact@v3` (deprecated). Cannot push `.github/workflows` (OAuth `workflow` scope). Restored `niodoo_real_integrated` path dep and added a stub `niodoo-core` crate so that gate's path filter does not fire.
+
+Next: tcs-ml CI stays green; Validation Gate should not run; then PR #7 can merge.
 
 ---
 

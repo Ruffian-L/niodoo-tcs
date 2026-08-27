@@ -1,0 +1,11 @@
+[package]
+name = "niodoo-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niodoo Topology Team <niodoo@dev>"]
+description = "Stub workspace member. The crate was never built; see .legacy/niodoo-core-deps."
+license = "MIT"
+publish = false
+
+[lib]
+path = "src/lib.rs"

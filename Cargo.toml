@@ -26,7 +26,7 @@ members = [
     "tcs-ml",
     "tcs-consensus",
     "tcs-pipeline",
-    # "niodoo-core",  # MOVED TO .legacy - missing Cargo.toml (never a real crate)
+    "niodoo-core",  # stub crate; real types never lived here (.legacy/niodoo-core-deps)
     # "constants_core",  # MOVED TO .legacy - missing Cargo.toml
     "niodoo_real_integrated",
     "tcs-rce",

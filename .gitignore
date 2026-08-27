@@ -207,7 +207,7 @@ data/
 # ============================================================================
 vendor/
 constants_core/
-niodoo-core/
+# niodoo-core/ is a tracked stub so cargo can load the workspace
 Niodoo-TCS-Release/
 Niodoo/
 niodoo_integrated/

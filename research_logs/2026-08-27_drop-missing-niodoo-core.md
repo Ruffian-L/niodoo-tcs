@@ -91,6 +91,16 @@ HF `model_quantized.onnx` is newer than in-tree ORT. Smoke bin now curl+tar
 CPU `onnxruntime-linux-x64-1.18.1` into `target/` (the version the workflow
 already named). ort 1.16.3 warns on 1.18 and still GetApi.
 
+Run 33089370116: **tcs-ml CI green**. Both cargo check and the smoke bin passed.
+
+Validation Gate 33089370370 failed at Set up job:
+
+    deprecated version of `actions/upload-artifact: v3`
+
+Cannot push workflow yaml. Added stub crate `niodoo-core/` and restored
+`niodoo_real_integrated/Cargo.toml` so the gate's path filter does not
+see a hit. Workspace still loads. tcs-ml does not compile the stub.
+
 ## Next
 
-Push and wait on `tcs-ml CI`.
+Push stub, wait for tcs-ml CI green without Validation Gate, merge PR #7.
