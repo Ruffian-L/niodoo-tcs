@@ -6,7 +6,9 @@ We did: commented `niodoo-core` out of `[workspace].members` and dropped the pat
 
 We think: the README PR was blocked by a pre-existing workspace hole on `main`, not by the README edit. Cargo has to load every workspace member before `-p tcs-ml` can run. Yanked ort would have been the next CI fail.
 
-Next: let `tcs-ml CI` re-run on PR #7. If check still fails, it is a real tcs-ml compile error.
+Run 33087426272 then died compiling `openblas-build` 0.10.16 (`rustls`/`native-tls` required). tcs-ml listed unused `ndarray-linalg` and inherited workspace ndarray `blas`. Dropped both so `-p tcs-ml` does not pull OpenBLAS.
+
+Next: let `tcs-ml CI` re-run on PR #7.
 
 ---
 

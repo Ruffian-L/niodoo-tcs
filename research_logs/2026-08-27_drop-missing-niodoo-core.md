@@ -55,6 +55,18 @@ We think this is enough for `cargo check -p tcs-ml --lib --features onnx` to get
 workspace load and yanked-ort resolution. If CI still fails, the next error is
 inside tcs-ml itself (or candle fetch from other members).
 
+## Follow-up (same session)
+
+Pushed `b8d8d1de`. Workspace loaded. Run 33087426272 then failed compiling
+`openblas-build` 0.10.16: `openblas-build requires the rustls or native-tls
+feature`. tcs-ml never `use`s `ndarray_linalg`; it inherited workspace
+`ndarray` `blas` + `ndarray-linalg` `openblas-system`. Dropped both from
+`tcs-ml/Cargo.toml` so `cargo check -p tcs-ml --features onnx` stays off
+OpenBLAS.
+
+Validation Gate 33087426405 failed at "Set up job" in ~2s. Same shape as
+the Nov 2025 failures. Not this mutation.
+
 ## Next
 
-Push to `readme/drop-hire-disclaimer` so PR #7 re-fires CI.
+Push the tcs-ml ndarray cut and wait on `tcs-ml CI`.
