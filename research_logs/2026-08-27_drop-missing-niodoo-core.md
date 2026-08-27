@@ -83,6 +83,14 @@ with only `libonnxruntime.so.1.16.3`. Pushing `.github/workflows/ci.yml` was
 rejected (OAuth app lacks `workflow` scope). Instead the smoke bin sets
 `ORT_DYLIB_PATH` to that 1.16.3 SONAME before the first ort lazy_static.
 
+Run 33088968690: ORT 1.16.3 loaded, then:
+
+    Unsupported model IR version: 10, max supported IR version: 9
+
+HF `model_quantized.onnx` is newer than in-tree ORT. Smoke bin now curl+tar
+CPU `onnxruntime-linux-x64-1.18.1` into `target/` (the version the workflow
+already named). ort 1.16.3 warns on 1.18 and still GetApi.
+
 ## Next
 
-Push the smoke-bin dylib locator and wait on `tcs-ml CI`.
+Push and wait on `tcs-ml CI`.

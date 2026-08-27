@@ -12,6 +12,8 @@ Run 33088092423: `cargo check -p tcs-ml --lib --features onnx` passed. Smoke bin
 
 Run 33088527795: smoke bin compiled and ran, then dlopen missed `libonnxruntime.so`. Workflow `LD_LIBRARY_PATH` still names a 1.18.1 tree that is not in git; cannot push `.github/workflows` (OAuth `workflow` scope). Smoke bin now sets `ORT_DYLIB_PATH` to repo `onnxruntime-linux-x64-1.16.3/lib/libonnxruntime.so.1.16.3` before the first ort call.
 
+Run 33088968690: dylib loaded, then session create failed — HF `model_quantized.onnx` is IR 10, in-tree ORT 1.16.3 max IR 9. Smoke bin now fetches CPU ONNX Runtime 1.18.1 into `target/` (the version CI already named, not in git).
+
 Next: let `tcs-ml CI` re-run on PR #7.
 
 ---
