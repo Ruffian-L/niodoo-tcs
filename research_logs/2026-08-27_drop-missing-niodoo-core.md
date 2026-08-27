@@ -67,6 +67,12 @@ OpenBLAS.
 Validation Gate 33087426405 failed at "Set up job" in ~2s. Same shape as
 the Nov 2025 failures. Not this mutation.
 
+Run 33088092423: cargo check passed (the original fail is gone). Smoke test
+`test_qwen_stateful` failed compiling: `e.source()` on `QwenError` without
+`use std::error::Error`. Rustc 1.98 is strict about Error not being in the
+prelude. Added the import.
+
 ## Next
 
-Push the tcs-ml ndarray cut and wait on `tcs-ml CI`.
+Push the import and wait on `tcs-ml CI`. Runtime of the smoke test (ORT .so
+path) is the remaining risk.

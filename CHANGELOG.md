@@ -8,6 +8,8 @@ We think: the README PR was blocked by a pre-existing workspace hole on `main`, 
 
 Run 33087426272 then died compiling `openblas-build` 0.10.16 (`rustls`/`native-tls` required). tcs-ml listed unused `ndarray-linalg` and inherited workspace ndarray `blas`. Dropped both so `-p tcs-ml` does not pull OpenBLAS.
 
+Run 33088092423: `cargo check -p tcs-ml --lib --features onnx` passed. Smoke bin `test_qwen_stateful` failed: `QwenError::source` needs `use std::error::Error`. Added the import.
+
 Next: let `tcs-ml CI` re-run on PR #7.
 
 ---

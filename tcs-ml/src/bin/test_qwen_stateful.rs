@@ -1,6 +1,7 @@
 #![cfg(feature = "onnx-with-tokenizers")]
 
 use anyhow::Result;
+use std::error::Error;
 use tcs_ml::QwenEmbedder;
 
 fn main() -> Result<()> {
