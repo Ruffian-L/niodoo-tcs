@@ -72,7 +72,17 @@ Run 33088092423: cargo check passed (the original fail is gone). Smoke test
 `use std::error::Error`. Rustc 1.98 is strict about Error not being in the
 prelude. Added the import.
 
+Run 33088527795: smoke bin compiled, then:
+
+    could not load the library at `libonnxruntime.so`: DlOpen
+    No such file or directory
+
+CI `LD_LIBRARY_PATH` pointed at `third_party/onnxruntime-linux-x64-1.18.1`,
+which is not in the tree. Repo has CPU `onnxruntime-linux-x64-1.16.3/lib/`
+with only `libonnxruntime.so.1.16.3`. Pushing `.github/workflows/ci.yml` was
+rejected (OAuth app lacks `workflow` scope). Instead the smoke bin sets
+`ORT_DYLIB_PATH` to that 1.16.3 SONAME before the first ort lazy_static.
+
 ## Next
 
-Push the import and wait on `tcs-ml CI`. Runtime of the smoke test (ORT .so
-path) is the remaining risk.
+Push the smoke-bin dylib locator and wait on `tcs-ml CI`.

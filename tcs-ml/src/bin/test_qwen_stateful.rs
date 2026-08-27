@@ -2,9 +2,35 @@
 
 use anyhow::Result;
 use std::error::Error;
+use std::path::{Path, PathBuf};
 use tcs_ml::QwenEmbedder;
 
+/// ort 1.16 load-dynamic reads `ORT_DYLIB_PATH` once (lazy_static). CI still
+/// points `LD_LIBRARY_PATH` at a missing 1.18.1 tree; the repo ships 1.16.3.
+fn ensure_ort_dylib() {
+    if std::env::var_os("ORT_DYLIB_PATH")
+        .filter(|v| !v.is_empty())
+        .is_some()
+    {
+        return;
+    }
+    let mut roots = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd);
+    }
+    roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."));
+    let rel = Path::new("onnxruntime-linux-x64-1.16.3/lib/libonnxruntime.so.1.16.3");
+    for root in roots {
+        let dylib = root.join(rel);
+        if dylib.is_file() {
+            std::env::set_var("ORT_DYLIB_PATH", &dylib);
+            return;
+        }
+    }
+}
+
 fn main() -> Result<()> {
+    ensure_ort_dylib();
     println!("🚀 Testing QwenEmbedder with stateful KV cache...");
 
     let model_path = std::env::var("QWEN_MODEL_PATH").unwrap_or_else(|_| {

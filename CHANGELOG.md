@@ -10,6 +10,8 @@ Run 33087426272 then died compiling `openblas-build` 0.10.16 (`rustls`/`native-t
 
 Run 33088092423: `cargo check -p tcs-ml --lib --features onnx` passed. Smoke bin `test_qwen_stateful` failed: `QwenError::source` needs `use std::error::Error`. Added the import.
 
+Run 33088527795: smoke bin compiled and ran, then dlopen missed `libonnxruntime.so`. Workflow `LD_LIBRARY_PATH` still names a 1.18.1 tree that is not in git; cannot push `.github/workflows` (OAuth `workflow` scope). Smoke bin now sets `ORT_DYLIB_PATH` to repo `onnxruntime-linux-x64-1.16.3/lib/libonnxruntime.so.1.16.3` before the first ort call.
+
 Next: let `tcs-ml CI` re-run on PR #7.
 
 ---
