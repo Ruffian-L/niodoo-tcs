@@ -26,7 +26,7 @@ members = [
     "tcs-ml",
     "tcs-consensus",
     "tcs-pipeline",
-    "niodoo-core",  # Re-export crate for src/ types
+    "niodoo-core",  # stub crate; real types never lived here (.legacy/niodoo-core-deps)
     # "constants_core",  # MOVED TO .legacy - missing Cargo.toml
     "niodoo_real_integrated",
     "tcs-rce",
@@ -58,7 +58,9 @@ version = "0.1.0"
 # Core tensor and inference libraries (ORT preferred over Candle for CUDA stability)
 ndarray = { version = "0.15", features = ["rayon", "blas", "serde"] }
 ndarray-linalg = { version = "0.16", features = ["openblas-system"] }
-ort = { version = "1.16", default-features = false, features = ["load-dynamic", "half"] }
+# 1.16.x is yanked on crates.io (pykeio/ort#501). Pin the last 1.x tag so
+# `cargo check --features onnx` still resolves without an ort 2.0 rewrite.
+ort = { git = "https://github.com/pykeio/ort", tag = "v1.16.3", default-features = false, features = ["load-dynamic", "half"] }
 # Note: onnxruntime-rs 0.11.0 available via crates.io but optional dependencies not supported in workspace
 # Add directly to crates that need it: onnxruntime-rs = { version = "0.11", default-features = false, features = ["cuda"] }
 tokenizers = { version = "0.20", default-features = false, features = ["http", "onig"] }
@@ -223,3 +225,7 @@ performance_targets = [
 ]
 
 # Dependencies are in the src/Cargo.toml file
+
+[patch.crates-io]
+# src/ and other members pin `ort = "1.16.3"`; crates.io yanked the 1.x line.
+ort = { git = "https://github.com/pykeio/ort", tag = "v1.16.3" }

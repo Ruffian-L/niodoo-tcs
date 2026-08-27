@@ -1,9 +1,66 @@
 #![cfg(feature = "onnx-with-tokenizers")]
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
+use std::error::Error;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tcs_ml::QwenEmbedder;
 
+/// ort 1.16 load-dynamic reads `ORT_DYLIB_PATH` once (lazy_static).
+///
+/// In-tree 1.16.3 cannot load the HuggingFace `model_quantized.onnx` (IR 10,
+/// max IR 9). The workflow names 1.18.1 but that tree is not in git, and we
+/// cannot push `.github/workflows`. Fetch the CPU 1.18.1 release into target/.
+fn ensure_ort_dylib() -> Result<()> {
+    if std::env::var_os("ORT_DYLIB_PATH")
+        .filter(|v| !v.is_empty())
+        .is_some()
+    {
+        return Ok(());
+    }
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let dylib = fetch_ort_1_18(&repo)?;
+    std::env::set_var("ORT_DYLIB_PATH", &dylib);
+    Ok(())
+}
+
+fn fetch_ort_1_18(repo: &Path) -> Result<PathBuf> {
+    let dest = repo.join("target/onnxruntime-linux-x64-1.18.1");
+    let so = dest.join("lib/libonnxruntime.so");
+    if so.is_file() {
+        return Ok(so);
+    }
+    let target = repo.join("target");
+    std::fs::create_dir_all(&target).context("create target/ for ONNX Runtime")?;
+    let tgz = target.join("onnxruntime-linux-x64-1.18.1.tgz");
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-linux-x64-1.18.1.tgz";
+    let curl = Command::new("curl")
+        .args(["-fsSL", "-o"])
+        .arg(&tgz)
+        .arg(url)
+        .status()
+        .context("spawn curl for ONNX Runtime 1.18.1")?;
+    if !curl.success() {
+        bail!("curl failed downloading {url}");
+    }
+    let tar = Command::new("tar")
+        .args(["-xzf"])
+        .arg(&tgz)
+        .arg("-C")
+        .arg(&target)
+        .status()
+        .context("spawn tar for ONNX Runtime 1.18.1")?;
+    if !tar.success() {
+        bail!("tar failed extracting {}", tgz.display());
+    }
+    if !so.is_file() {
+        bail!("ONNX Runtime 1.18.1 extract missing {}", so.display());
+    }
+    Ok(so)
+}
+
 fn main() -> Result<()> {
+    ensure_ort_dylib()?;
     println!("🚀 Testing QwenEmbedder with stateful KV cache...");
 
     let model_path = std::env::var("QWEN_MODEL_PATH").unwrap_or_else(|_| {

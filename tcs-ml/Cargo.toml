@@ -16,8 +16,10 @@ legacy-examples = []
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-ndarray = { workspace = true }
-ndarray-linalg = { workspace = true }
+# Do not inherit workspace ndarray `blas` / ndarray-linalg `openblas-system`.
+# Those pull openblas-build, which 0.10.16 fails without rustls/native-tls
+# (`cargo check -p tcs-ml --features onnx` on GitHub Actions).
+ndarray = { version = "0.15", features = ["rayon", "serde"] }
 ort = { workspace = true, optional = true }
 tokenizers = { workspace = true, optional = true }
 half = { version = "2.3", optional = true }
